@@ -72,9 +72,9 @@
   --popover-foreground: 210 40% 98%;
   --popover-border: 220 25% 18%;
 
-  --primary: 142 100% 42%;
-  --primary-foreground: 0 0% 5%;
-  --primary-border: 142 100% 42%;
+  --primary: 142 72% 36%;
+  --primary-foreground: 0 0% 100%;
+  --primary-border: 142 72% 36%;
 
   --secondary: 220 30% 15%;
   --secondary-foreground: 210 40% 98%;
@@ -92,14 +92,14 @@
   --destructive-foreground: 0 0% 98%;
   --destructive-border: 0 84% 60%;
 
-  --success: 142 100% 42%;
-  --success-foreground: 0 0% 5%;
+  --success: 142 72% 36%;
+  --success-foreground: 0 0% 100%;
 
   --border: 220 25% 18%;
   --input: 220 30% 14%;
-  --ring: 142 100% 42%;
+  --ring: 142 72% 36%;
 
-  --chart-1: 142 100% 42%;
+  --chart-1: 142 72% 36%;
   --chart-2: 142 71% 45%;
   --chart-3: 280 65% 60%;
   --chart-4: 38 90% 55%;
@@ -119,12 +119,12 @@
   }
 
   ::selection {
-    background: hsl(142 100% 42% / 0.2);
+    background: hsl(142 72% 36% / 0.2);
     color: hsl(210 40% 98%);
   }
 
   :focus-visible {
-    outline: 2px solid hsl(142 100% 42% / 0.5);
+    outline: 2px solid hsl(142 72% 36% / 0.5);
     outline-offset: 2px;
     border-radius: 2px;
   }
