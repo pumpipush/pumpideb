@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
+import { useEffect, useRef } from 'react';
 import NotFound from '@/pages/not-found';
 import Dashboard from '@/pages/Dashboard';
 import AppInterface from '@/pages/AppInterface';
@@ -29,6 +30,12 @@ const AUTH_PATHS = ['/signin', '/signup'];
 function AppShell() {
   const [location] = useLocation();
   const isAuth = AUTH_PATHS.some((p) => location.startsWith(p));
+  const mainRef = useRef<HTMLElement>(null);
+
+  // Scroll main content area to top on every route/query change
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, behavior: "instant" });
+  }, [location]);
 
   if (isAuth) {
     return (
@@ -44,7 +51,7 @@ function AppShell() {
       <Sidebar />
       <div className="flex-1 flex flex-col md:ml-[220px] min-w-0">
         <Navbar />
-        <main className="flex-1 overflow-y-auto overflow-x-hidden pb-16 md:pb-0">
+        <main ref={mainRef} className="flex-1 overflow-y-auto overflow-x-hidden pb-16 md:pb-0">
           <Switch>
             <Route path="/" component={Dashboard} />
             <Route path="/dashboard"><Redirect to="/" /></Route>
