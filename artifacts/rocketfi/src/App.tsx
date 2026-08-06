@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
-import { Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
+import { Route, Switch, Router as WouterRouter, useLocation, useSearch } from 'wouter';
 import { useEffect, useRef } from 'react';
 import NotFound from '@/pages/not-found';
 import Dashboard from '@/pages/Dashboard';
@@ -29,13 +29,14 @@ const AUTH_PATHS = ['/signin', '/signup'];
 
 function AppShell() {
   const [location] = useLocation();
+  const search = useSearch();
   const isAuth = AUTH_PATHS.some((p) => location.startsWith(p));
   const mainRef = useRef<HTMLElement>(null);
 
-  // Scroll main content area to top on every route/query change
+  // Scroll main content area to top on every route/query change (including ?token= param)
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0, behavior: "instant" });
-  }, [location]);
+  }, [location, search]);
 
   if (isAuth) {
     return (
