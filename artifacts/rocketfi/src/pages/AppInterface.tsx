@@ -486,9 +486,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   background: indicators.length ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
                   border: "1px solid " + (indicators.length ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
                 }}>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <path d="M2 10.5 C2 10.5 2.5 7 4 6 C5 5.3 6 6 6 7 L6 9 C6 10 7 11 8 10 L12 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M9 9 L12 12 M12 9 L9 12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 19a2 2 0 0 0 2 2c2 0 2 -4 3 -9s1 -9 3 -9a2 2 0 0 1 2 2"/><path d="M5 12h6"/><path d="M15 12l6 6"/><path d="M15 18l6 -6"/>
                 </svg>
                 Indicators
                 {indicators.length > 0 && (
@@ -498,9 +497,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               </span>
               {/* mobile: bare icon only */}
               <span className="sm:hidden flex items-center justify-center w-8 h-8 relative">
-                <svg width="16" height="16" viewBox="0 0 14 14" fill="none">
-                  <path d="M2 10.5 C2 10.5 2.5 7 4 6 C5 5.3 6 6 6 7 L6 9 C6 10 7 11 8 10 L12 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M9 9 L12 12 M12 9 L9 12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 19a2 2 0 0 0 2 2c2 0 2 -4 3 -9s1 -9 3 -9a2 2 0 0 1 2 2"/><path d="M5 12h6"/><path d="M15 12l6 6"/><path d="M15 18l6 -6"/>
                 </svg>
                 {indicators.length > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full text-[8px] font-bold flex items-center justify-center"
