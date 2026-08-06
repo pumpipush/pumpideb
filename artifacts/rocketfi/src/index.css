@@ -279,3 +279,29 @@
   background: hsl(142 100% 45%);
   animation: slideInLeft 0.15s ease-out forwards;
 }
+
+/* Auto-hide scrollbars — show thin bar only while scrolling / on hover */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover {
+  scrollbar-color: rgba(255,255,255,0.15) transparent;
+}
+*::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+}
+*:hover::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.28);
+}
