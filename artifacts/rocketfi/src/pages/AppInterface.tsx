@@ -24,7 +24,7 @@ import { ethers } from "ethers";
 import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, cn, timeAgo } from "@/lib/utils";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { ShareModal } from "@/components/shared/ShareModal";
-import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink } from "lucide-react";
+import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp } from "lucide-react";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { formatSol, formatTokenAmount } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -296,7 +296,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [timeframe, setTimeframe] = useState<Timeframe>("1h");
   const [shareOpen, setShareOpen] = useState(false);
   // Bug fix: React state for tx/holders sub-tab instead of imperative DOM manipulation
-  const [activeSubTab, setActiveSubTab] = useState<"tx" | "holders">("tx");
+  const [activeSubTab, setActiveSubTab] = useState<"tx" | "holders" | "positions">("tx");
 
   // New chart state
   const [chartTf, setChartTf] = useState<ChartTimeframe>("15m");
@@ -769,6 +769,17 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 >
                   <Users className="h-3.5 w-3.5" /> Holders
                 </button>
+                <button
+                  onClick={() => setActiveSubTab("positions")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all"
+                  style={{
+                    background: activeSubTab === "positions" ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+                    color: activeSubTab === "positions" ? "#e2e8f0" : "#64748b",
+                    border: "1px solid " + (activeSubTab === "positions" ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
+                  }}
+                >
+                  <TrendingUp className="h-3.5 w-3.5" /> Positions
+                </button>
               </div>
 
               {/* Transactions panel */}
@@ -869,6 +880,108 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   </tbody>
                 </table>
               </div>
+
+              {/* Positions panel */}
+              {activeSubTab === "positions" && (() => {
+                if (!wallet) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-lg"
+                      style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
+                      <TrendingUp className="h-8 w-8" style={{ color: "#334155" }} />
+                      <p className="text-[14px] font-medium" style={{ color: "#64748b" }}>Connect wallet to see your position</p>
+                    </div>
+                  );
+                }
+
+                // Compute position from all trades by this wallet
+                const allTrades = [
+                  ...liveTrades,
+                  ...(history ?? []).filter(h => !liveTrades.find(l => l.txHash === h.txHash)),
+                ].filter(t => t.traderAddress === wallet);
+
+                if (allTrades.length === 0) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-lg"
+                      style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
+                      <TrendingUp className="h-8 w-8" style={{ color: "#334155" }} />
+                      <p className="text-[14px] font-medium" style={{ color: "#64748b" }}>No position in this token</p>
+                    </div>
+                  );
+                }
+
+                let tokensBought = 0, tokensSold = 0;
+                let solSpent = 0, solReceived = 0;
+
+                allTrades.forEach(t => {
+                  const tok = parseFloat(t.tokenAmount ?? "0") || 0;
+                  const sol = parseFloat(t.ethAmount   ?? "0") || 0;
+                  if (t.isBuy) { tokensBought += tok; solSpent    += sol; }
+                  else          { tokensSold   += tok; solReceived += sol; }
+                });
+
+                const netTokens      = Math.max(0, tokensBought - tokensSold);
+                const avgBuyPriceSol = tokensBought > 0 ? solSpent / tokensBought : 0;
+                const currentPriceSol = priceStats.currentPrice;
+                const currentValueSol = netTokens * currentPriceSol;
+                const totalPnlSol     = (solReceived + currentValueSol) - solSpent;
+                const totalPnlPct     = solSpent > 0 ? (totalPnlSol / solSpent) * 100 : 0;
+                const isProfit        = totalPnlSol >= 0;
+
+                const fmtSol = (v: number) => v.toFixed(4) + " SOL";
+                const fmtUsd = (v: number) => solPrice ? formatUSD(v * solPrice) : null;
+                const pnlColor = isProfit ? "#4ade80" : "#f87171";
+
+                const rows: { label: string; value: string; sub?: string | null }[] = [
+                  { label: "Tokens Held",   value: netTokens > 0 ? netTokens.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "0", sub: token.symbol },
+                  { label: "Avg Buy Price", value: avgBuyPriceSol > 0 ? avgBuyPriceSol.toExponential(4) + " SOL" : "—", sub: fmtUsd(avgBuyPriceSol) },
+                  { label: "Current Price", value: currentPriceSol > 0 ? currentPriceSol.toExponential(4) + " SOL" : "—", sub: fmtUsd(currentPriceSol) },
+                  { label: "Current Value", value: fmtSol(currentValueSol), sub: fmtUsd(currentValueSol) },
+                  { label: "SOL Spent",     value: fmtSol(solSpent),     sub: fmtUsd(solSpent) },
+                  { label: "SOL Received",  value: fmtSol(solReceived),  sub: fmtUsd(solReceived) },
+                ];
+
+                return (
+                  <div className="rounded-lg overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
+                    {/* P&L Hero */}
+                    <div className="flex items-center justify-between px-4 py-4"
+                      style={{ background: isProfit ? "rgba(74,222,128,0.06)" : "rgba(248,113,113,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                      <div>
+                        <p className="text-[12px] font-medium mb-0.5" style={{ color: "#64748b" }}>Unrealized P&L</p>
+                        <p className="text-[22px] font-bold font-mono" style={{ color: pnlColor }}>
+                          {isProfit ? "+" : ""}{fmtSol(totalPnlSol)}
+                        </p>
+                        {fmtUsd(totalPnlSol) && (
+                          <p className="text-[13px] font-mono" style={{ color: pnlColor }}>
+                            {isProfit ? "+" : ""}{fmtUsd(totalPnlSol)}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <span className="text-[11px] font-medium mb-1" style={{ color: "#64748b" }}>Return</span>
+                        <span className="text-[20px] font-bold font-mono" style={{ color: pnlColor }}>
+                          {isProfit ? "+" : ""}{totalPnlPct.toFixed(2)}%
+                        </span>
+                      </div>
+                    </div>
+                    {/* Stats grid */}
+                    {rows.map(({ label, value, sub }, i) => (
+                      <div key={label} className="flex items-center justify-between px-4 py-2.5"
+                        style={{ borderTop: i > 0 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+                        <span className="text-[13px]" style={{ color: "#64748b" }}>{label}</span>
+                        <div className="text-right">
+                          <span className="text-[13px] font-mono font-semibold" style={{ color: "#e2e8f0" }}>{value}</span>
+                          {sub && sub !== token.symbol && (
+                            <p className="text-[11px] font-mono" style={{ color: "#475569" }}>{sub}</p>
+                          )}
+                          {sub === token.symbol && (
+                            <p className="text-[11px]" style={{ color: "#475569" }}>{sub}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {/* Holders panel */}
               <div className={`overflow-x-auto rounded-b-sm border-x border-b border-border/40 ${activeSubTab !== "holders" ? "hidden" : ""}`}>
