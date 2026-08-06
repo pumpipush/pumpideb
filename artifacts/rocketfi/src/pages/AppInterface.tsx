@@ -474,10 +474,17 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             <div className="flex items-center gap-1.5 mt-1.5">
               <button className="h-6 w-6 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Twitter"><Twitter className="h-3 w-3" /></button>
               <button className="h-6 w-6 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Website"><Globe className="h-3 w-3" /></button>
-              <button className="h-6 w-6 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Share" onClick={() => setShareOpen(true)}><Share2 className="h-3 w-3" /></button>
               <button className="h-6 w-6 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Copy address" onClick={() => copyToClipboard(token.address)}><Copy className="h-3 w-3" /></button>
             </div>
           </div>
+          {/* Share button — top-right, aligned with coin name */}
+          <button
+            className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground shrink-0"
+            title="Share"
+            onClick={() => setShareOpen(true)}
+          >
+            <Share2 className="h-4 w-4" />
+          </button>
         </div>
 
         {/* Description */}
