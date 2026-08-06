@@ -410,7 +410,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   style={{
                     height: 28,
                     ...(chartTf === t
-                      ? { background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 20, color: "#e2e8f0" }
+                      ? { background: "rgba(255,255,255,0.10)", border: "1px solid transparent", borderRadius: 20, color: "#e2e8f0" }
                       : { borderRadius: 20, border: "1px solid transparent", color: "#64748b" })
                   }}>
                   {t}
