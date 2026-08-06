@@ -399,6 +399,36 @@ export const ChartCanvas = memo(function ChartCanvas({
   // In-chart OHLCV overlay — updated imperatively, zero re-renders
   const innerOhlcRef = useRef<HTMLDivElement>(null);
 
+  // Stable writer — reads latest refs, callable from bars effect AND crosshair handler
+  const writeInnerOhlc = useCallback((bar: { open: number; high: number; low: number; close: number } | null) => {
+    const el = innerOhlcRef.current;
+    if (!el) return;
+    if (!bar) { el.style.opacity = "0"; return; }
+    const sp = solPriceRef.current;
+    const fmt = (n: number): string => {
+      if (sp && n > 0) {
+        const u = n * sp;
+        if (u >= 1)      return `$${u.toFixed(2)}`;
+        if (u >= 0.01)   return `$${u.toFixed(4)}`;
+        if (u >= 0.0001) return `$${u.toFixed(6)}`;
+        return `$${u.toExponential(3)}`;
+      }
+      return n < 0.00001 ? n.toExponential(3) : n.toPrecision(4);
+    };
+    const isUp = bar.close >= bar.open;
+    const UP   = "#4ade80";
+    const DN   = "#f87171";
+    const VAL  = isUp ? UP : DN;
+    el.style.opacity = "1";
+    el.innerHTML =
+      `<span style="color:#94a3b8">O</span><span style="color:${VAL}"> ${fmt(bar.open)}</span> ` +
+      `<span style="color:#94a3b8">H</span><span style="color:${UP}"> ${fmt(bar.high)}</span> ` +
+      `<span style="color:#94a3b8">L</span><span style="color:${DN}"> ${fmt(bar.low)}</span> ` +
+      `<span style="color:#94a3b8">C</span><span style="color:${VAL}"> ${fmt(bar.close)}</span>`;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const writeInnerOhlcRef = useRef(writeInnerOhlc);
+  useEffect(() => { writeInnerOhlcRef.current = writeInnerOhlc; }, [writeInnerOhlc]);
+
   // When solPrice loads or changes, update the chart's axis formatter in-place
   // (no chart recreation needed — applyOptions is cheap)
   useEffect(() => {
@@ -515,36 +545,9 @@ export const ChartCanvas = memo(function ChartCanvas({
     chart.subscribeCrosshairMove(param => {
       const cb = onCrosshairMoveRef.current;
 
-      // Helper: format a price as USD (reads live refs, no stale closure)
-      const fmtUsd = (n: number): string => {
-        const sp = solPriceRef.current;
-        if (sp && n > 0) {
-          const u = n * sp;
-          if (u >= 1)      return `$${u.toFixed(2)}`;
-          if (u >= 0.01)   return `$${u.toFixed(4)}`;
-          if (u >= 0.0001) return `$${u.toFixed(6)}`;
-          return `$${u.toExponential(3)}`;
-        }
-        return n < 0.00001 ? n.toExponential(3) : n.toPrecision(4);
-      };
+      const writeOhlc = writeInnerOhlcRef.current;
 
-      // Update inner in-chart OHLC overlay
-      const inner = innerOhlcRef.current;
-      const updateInner = (bar: { open: number; high: number; low: number; close: number } | null) => {
-        if (!inner) return;
-        if (!bar) { inner.style.opacity = "0"; return; }
-        inner.style.opacity = "1";
-        const UP_COL   = "#4ade80";
-        const DOWN_COL = "#f87171";
-        const isUp     = bar.close >= bar.open;
-        inner.innerHTML =
-          `<span style="color:#64748b;font-size:10px">O</span><span style="color:${isUp ? UP_COL : DOWN_COL};font-size:10px"> ${fmtUsd(bar.open)}</span> ` +
-          `<span style="color:#64748b;font-size:10px">H</span><span style="color:${UP_COL};font-size:10px"> ${fmtUsd(bar.high)}</span> ` +
-          `<span style="color:#64748b;font-size:10px">L</span><span style="color:${DOWN_COL};font-size:10px"> ${fmtUsd(bar.low)}</span> ` +
-          `<span style="color:#64748b;font-size:10px">C</span><span style="color:${isUp ? UP_COL : DOWN_COL};font-size:10px"> ${fmtUsd(bar.close)}</span>`;
-      };
-
-      if (!param.time) { cb?.(null); updateInner(null); return; }
+      if (!param.time) { cb?.(null); writeOhlc(null); return; }
       if (candleRef.current) {
         const cd = param.seriesData.get(candleRef.current as never) as { open: number; high: number; low: number; close: number } | undefined;
         if (cd) {
@@ -554,7 +557,7 @@ export const ChartCanvas = memo(function ChartCanvas({
             if (vd) vol = vd.value;
           }
           cb?.({ open: cd.open, high: cd.high, low: cd.low, close: cd.close, volume: vol });
-          updateInner(cd);
+          writeOhlc(cd);
           return;
         }
       }
@@ -562,7 +565,7 @@ export const ChartCanvas = memo(function ChartCanvas({
         const ld = param.seriesData.get(lineRef.current as never) as { value: number } | undefined;
         if (ld) {
           cb?.({ open: ld.value, high: ld.value, low: ld.value, close: ld.value });
-          updateInner({ open: ld.value, high: ld.value, low: ld.value, close: ld.value });
+          writeOhlc({ open: ld.value, high: ld.value, low: ld.value, close: ld.value });
         }
       }
     });
@@ -646,6 +649,8 @@ export const ChartCanvas = memo(function ChartCanvas({
       requestAnimationFrame(() => readyAfterMin());
 
       lastBarRef.current = clean[clean.length - 1]!;
+      // Populate OHLC overlay immediately from the last bar (visible before any hover)
+      requestAnimationFrame(() => writeInnerOhlcRef.current(clean[clean.length - 1]!));
       if (clean.length >= 2) {
         barBucketSecRef.current = (clean[1]!.time - clean[0]!.time) || 60;
       }
@@ -894,8 +899,8 @@ export const ChartCanvas = memo(function ChartCanvas({
         {/* Pair label */}
         {symbol && (
           <span
-            className="font-semibold tracking-wide"
-            style={{ fontSize: 11, color: "rgba(148,163,184,0.7)" }}
+            className="font-bold tracking-wide"
+            style={{ fontSize: 12, color: "#e2e8f0", letterSpacing: "0.03em" }}
           >
             {symbol.toUpperCase()}/USD
           </span>
@@ -903,9 +908,8 @@ export const ChartCanvas = memo(function ChartCanvas({
         {/* OHLC — updated imperatively via DOM ref, zero re-renders */}
         <div
           ref={innerOhlcRef}
-          data-active="0"
-          className="flex items-center gap-1.5 font-mono"
-          style={{ fontSize: 10, opacity: 0, transition: "opacity 0.12s" }}
+          className="flex items-center gap-2 font-mono font-medium"
+          style={{ fontSize: 11, opacity: 1, transition: "opacity 0.12s" }}
         />
       </div>
 
