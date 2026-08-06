@@ -547,7 +547,7 @@ export const ChartCanvas = memo(function ChartCanvas({
 
       const writeOhlc = writeInnerOhlcRef.current;
 
-      if (!param.time) { cb?.(null); writeOhlc(null); return; }
+      if (!param.time) { cb?.(null); writeOhlc(lastBarRef.current); return; }
       if (candleRef.current) {
         const cd = param.seriesData.get(candleRef.current as never) as { open: number; high: number; low: number; close: number } | undefined;
         if (cd) {
