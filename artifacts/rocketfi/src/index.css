@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@keyframes chartSpinnerRotate { to { transform: rotate(360deg); } }
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
 

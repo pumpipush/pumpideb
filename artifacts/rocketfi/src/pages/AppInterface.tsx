@@ -14,7 +14,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { TradingViewChart } from "@/components/shared/TradingViewChart";
+import { ChartCanvas, type ChartType, type Indicator, type OHLCSnapshot } from "@/components/chart/ChartCanvas";
+import { IndicatorModal } from "@/components/chart/IndicatorModal";
+import { tradesFromLocalBars, syntheticBars, type ChartTimeframe } from "@/lib/ohlcv";
 import { tradesFromLocal, syntheticCandles, Timeframe } from "@/lib/ohlcv";
 import { useTokenStream } from "@/hooks/useTokenStream";
 
@@ -294,6 +296,17 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // Bug fix: React state for tx/holders sub-tab instead of imperative DOM manipulation
   const [activeSubTab, setActiveSubTab] = useState<"tx" | "holders">("tx");
 
+  // New chart state
+  const [chartTf, setChartTf] = useState<ChartTimeframe>("15m");
+  const [chartType, setChartType] = useState<ChartType>("candle");
+  const [indicators, setIndicators] = useState<Indicator[]>([]);
+  const [indOpen, setIndOpen] = useState(false);
+  const [hoveredOHLC, setHoveredOHLC] = useState<OHLCSnapshot | null>(null);
+  const CHART_TIMEFRAMES: ChartTimeframe[] = ["1m", "5m", "15m", "1H", "4H", "1D", "1W"];
+  function toggleIndicator(ind: Indicator) {
+    setIndicators(prev => prev.includes(ind) ? prev.filter(i => i !== ind) : [...prev, ind]);
+  }
+
   const handleTrade = async () => {
     if (!wallet) {
       toast({ title: "Wallet required", description: "Connect your wallet to trade.", variant: "destructive" });
@@ -506,9 +519,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           )}
         </div>
 
-        {/* Chart Area — tall in full-bleed layout */}
+        {/* Chart Area — DexGems-style with toolbar */}
         {(() => {
-          // Merge live stream trades with server history for real-time candles
           const liveAsHistory = liveTrades.map(lt => ({
             id: lt.id,
             tokenAddress: lt.tokenAddress,
@@ -522,28 +534,110 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             timestamp: lt.timestamp,
           }));
           const allTrades = [...liveAsHistory, ...(history ?? [])];
-          const localCandles = allTrades.length > 0
-            ? tradesFromLocal(allTrades, timeframe)
+          const localBars = allTrades.length > 0
+            ? tradesFromLocalBars(allTrades, chartTf)
             : [];
-          const candles = localCandles.length > 0
-            ? localCandles
-            : syntheticCandles(
-                token.priceEth ? parseFloat(token.priceEth) : 0.00001,
-                48
-              );
+          const bars = localBars.length > 0
+            ? localBars
+            : syntheticBars(token.priceEth ? parseFloat(token.priceEth) : 0.00001, 48);
           return (
-            <div className="h-[260px] sm:h-[340px] lg:h-[400px] xl:h-[440px] mb-0">
-              <TradingViewChart
-                candles={candles}
-                timeframe={timeframe}
-                onTimeframeChange={setTimeframe}
-                live={connected}
-                loading={!connected}
-                symbol={token.symbol}
-              />
+            <div className="border border-border/20 rounded-sm overflow-hidden mb-0" style={{ background: "#0B1220" }}>
+              {/* Toolbar */}
+              <div className="flex items-stretch overflow-x-auto" style={{ background: "#0d1726", borderBottom: "1px solid rgba(255,255,255,0.08)", scrollbarWidth: "none" }}>
+                {/* Candle / Line toggle */}
+                <div className="hidden sm:flex items-stretch shrink-0" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
+                  {(["candle", "line"] as ChartType[]).map((type, i, arr) => (
+                    <button key={type} onClick={() => setChartType(type)}
+                      className="px-3 flex items-center gap-1.5 text-[11px] font-semibold transition-all"
+                      style={{
+                        height: 36,
+                        background: chartType === type ? "rgba(255,255,255,0.08)" : "transparent",
+                        color: chartType === type ? "#fff" : "#64748b",
+                        borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                      }}>
+                      {type === "candle" ? "Candle" : "Line"}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Indicators trigger */}
+                <button onClick={() => setIndOpen(true)}
+                  className="hidden sm:flex px-3 items-center gap-1.5 text-[11px] font-semibold transition-all shrink-0"
+                  style={{
+                    height: 36,
+                    background: indicators.length ? "rgba(255,255,255,0.08)" : "transparent",
+                    color: indicators.length ? "#fff" : "#64748b",
+                    borderRight: "1px solid rgba(255,255,255,0.08)",
+                  }}>
+                  Indicators
+                  {indicators.length > 0 && (
+                    <span className="h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center"
+                      style={{ background: "#3b82f6", color: "#fff" }}>{indicators.length}</span>
+                  )}
+                </button>
+
+                {/* Live badge */}
+                {connected && (
+                  <div className="hidden sm:flex items-center px-3 shrink-0" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
+                    <span className="relative inline-flex items-center gap-1.5 text-[10px] font-bold text-primary">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping absolute" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary relative" />
+                      <span className="ml-2.5">LIVE</span>
+                    </span>
+                  </div>
+                )}
+
+                {/* Hovered OHLC info */}
+                {hoveredOHLC && (
+                  <div className="hidden md:flex items-center gap-3 px-3 text-[10px] font-mono shrink-0">
+                    <span className="text-slate-500">O <span className="text-slate-300">{hoveredOHLC.open.toPrecision(4)}</span></span>
+                    <span className="text-slate-500">H <span className="text-green-400">{hoveredOHLC.high.toPrecision(4)}</span></span>
+                    <span className="text-slate-500">L <span className="text-red-400">{hoveredOHLC.low.toPrecision(4)}</span></span>
+                    <span className="text-slate-500">C <span className="text-slate-200">{hoveredOHLC.close.toPrecision(4)}</span></span>
+                  </div>
+                )}
+
+                {/* Timeframe pills — pushed right */}
+                <div className="flex items-center ml-auto shrink-0 px-2" style={{ borderLeft: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 24, padding: 3, display: "flex", gap: 2 }}>
+                    {CHART_TIMEFRAMES.map(t => (
+                      <button key={t} onClick={() => setChartTf(t)}
+                        className="px-2.5 text-[11px] font-semibold transition-all shrink-0 whitespace-nowrap flex items-center"
+                        style={{
+                          height: 28,
+                          ...(chartTf === t
+                            ? { background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.22)", borderRadius: 20, color: "#fff" }
+                            : { borderRadius: 20, border: "1px solid transparent", color: "#64748b" })
+                        }}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Canvas */}
+              <div className="h-[260px] sm:h-[340px] lg:h-[400px] xl:h-[440px]">
+                <ChartCanvas
+                  bars={bars}
+                  address={token.address}
+                  loading={!connected}
+                  chartType={chartType}
+                  indicators={indicators}
+                  onCrosshairMove={setHoveredOHLC}
+                />
+              </div>
             </div>
           );
         })()}
+
+        {/* Indicator picker modal */}
+        <IndicatorModal
+          open={indOpen}
+          onClose={() => setIndOpen(false)}
+          active={indicators}
+          onToggle={toggleIndicator}
+        />
 
         {/* Bonding Curve — thin bar immediately below chart */}
         <div className="py-2 px-3 md:px-0 border-b border-border/20 mb-4">
