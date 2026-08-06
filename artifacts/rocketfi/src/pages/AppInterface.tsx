@@ -738,7 +738,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             title="Share"
             onClick={() => setShareOpen(true)}
           >
-            <Share2 className="h-4 w-4" />
+            <Share2 className="h-5 w-5" />
           </button>
         </div>
 
