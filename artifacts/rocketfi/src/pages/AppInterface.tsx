@@ -1067,14 +1067,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
               {/* Holders panel */}
               <div className={`overflow-x-auto rounded-b-sm border-x border-b border-border/40 ${activeSubTab !== "holders" ? "hidden" : ""}`}>
-                <table className="w-full text-xs font-mono">
-                  <thead className="text-muted-foreground border-b border-border/40 bg-muted/20 text-[10px]">
+                <table className="w-full text-[14px] font-mono">
+                  <thead className="text-muted-foreground border-b border-border/40 bg-muted/20 text-[14px]">
                     <tr>
-                      <th className="text-left px-3 py-2 font-normal uppercase tracking-wider">#</th>
-                      <th className="text-left px-3 py-2 font-normal uppercase tracking-wider">Address</th>
-                      <th className="text-right px-3 py-2 font-normal uppercase tracking-wider">{token.symbol}</th>
-                      <th className="text-right px-3 py-2 font-normal uppercase tracking-wider">Share</th>
-                      <th className="px-3 py-2 w-24"></th>
+                      <th className="text-left px-3 py-2.5 font-medium" style={{ color: "#94a3b8" }}>#</th>
+                      <th className="text-left px-3 py-2.5 font-medium" style={{ color: "#94a3b8" }}>Address</th>
+                      <th className="text-right px-3 py-2.5 font-medium" style={{ color: "#94a3b8" }}>{token.symbol}</th>
+                      <th className="text-right px-3 py-2.5 font-medium" style={{ color: "#94a3b8" }}>Share</th>
+                      <th className="px-3 py-2.5 w-24"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/20">
@@ -1090,8 +1090,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       const pct = (bal / totalSupply) * 100;
                       return (
                         <tr key={addr} className="hover:bg-white/[0.025] transition-colors">
-                          <td className="px-3 py-2 text-muted-foreground/50">{idx + 1}</td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-2.5 text-[14px]" style={{ color: "#64748b" }}>{idx + 1}</td>
+                          <td className="px-3 py-2.5 text-[14px]">
                             <div className="flex items-center gap-2">
                               <TokenAvatar symbol={addr.slice(2, 6)} size={20} shape="circle" />
                               <span
@@ -1105,9 +1105,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               )}
                             </div>
                           </td>
-                          <td className="px-3 py-2 text-right text-foreground">{bal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                          <td className="px-3 py-2 text-right text-primary font-bold">{pct.toFixed(1)}%</td>
-                          <td className="px-3 py-2">
+                          <td className="px-3 py-2.5 text-right text-[14px] text-foreground">{formatTokenAmount(bal.toString())}</td>
+                          <td className="px-3 py-2.5 text-right text-[14px] text-primary font-bold">{pct.toFixed(1)}%</td>
+                          <td className="px-3 py-2.5">
                             <div className="h-1.5 w-20 bg-muted/50 rounded-full overflow-hidden">
                               <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
                             </div>
