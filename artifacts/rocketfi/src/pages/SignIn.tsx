@@ -1,19 +1,13 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { Eye, EyeOff, Wallet, Rocket, ArrowRight, Loader2 } from "lucide-react";
-import { useWallet } from "@/contexts/WalletContext";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { WalletSelectModal } from "@/components/shared/WalletSelectModal";
 
-/* ─── tiny helpers ─────────────────────────────────────────────────────────── */
+/* ─── helpers ────────────────────────────────────────────────────────────────── */
 function isValidEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
-}
-function fakeAddress(seed: string) {
-  // deterministic-ish hex from email seed (demo only)
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
-  return "0x" + Math.abs(h).toString(16).padStart(8, "0") + seed.replace(/\W/g, "").slice(0, 32).padEnd(32, "0");
 }
 
 /* ─── Social button ─────────────────────────────────────────────────────────── */
@@ -30,7 +24,7 @@ function SocialBtn({ icon, label, onClick }: { icon: React.ReactNode; label: str
   );
 }
 
-/* ─── Input ─────────────────────────────────────────────────────────────────── */
+/* ─── Input ──────────────────────────────────────────────────────────────────── */
 function Field({
   label, id, type = "text", value, onChange, error, placeholder,
   suffix,
@@ -70,23 +64,23 @@ function Field({
   );
 }
 
-/* ─── Page ──────────────────────────────────────────────────────────────────── */
+/* ─── Page ───────────────────────────────────────────────────────────────────── */
 export default function SignIn() {
   const [, navigate] = useLocation();
-  const { connect } = useWallet();
   const { toast } = useToast();
 
-  const [email, setEmail]       = useState("");
-  const [password, setPassword] = useState("");
-  const [showPw, setShowPw]     = useState(false);
-  const [loading, setLoading]   = useState(false);
-  const [errors, setErrors]     = useState<{ email?: string; password?: string }>({});
+  const [email, setEmail]         = useState("");
+  const [password, setPassword]   = useState("");
+  const [showPw, setShowPw]       = useState(false);
+  const [loading, setLoading]     = useState(false);
+  const [walletModal, setWalletModal] = useState(false);
+  const [errors, setErrors]       = useState<{ email?: string; password?: string }>({});
 
   function validate() {
     const e: typeof errors = {};
-    if (!email)               e.email    = "Email is required";
+    if (!email)                 e.email    = "Email is required";
     else if (!isValidEmail(email)) e.email = "Enter a valid email address";
-    if (!password)            e.password = "Password is required";
+    if (!password)              e.password = "Password is required";
     else if (password.length < 6) e.password = "Password must be at least 6 characters";
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -96,18 +90,13 @@ export default function SignIn() {
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
-    // Simulate network request (replace with real auth call)
-    await new Promise((r) => setTimeout(r, 1100));
-    connect(fakeAddress(email));
-    toast({ title: "Welcome back!", description: "You're now signed in." });
-    navigate("/");
-  }
-
-  function handleWallet() {
-    const addr = `0x${Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`;
-    connect(addr);
-    toast({ title: "Wallet connected", description: "Signed in with your wallet." });
-    navigate("/");
+    // Email auth is coming soon — no fake addresses generated
+    await new Promise((r) => setTimeout(r, 900));
+    setLoading(false);
+    toast({
+      title: "Email sign-in coming soon",
+      description: "Use the Connect Wallet option below to sign in now.",
+    });
   }
 
   function handleGoogle() {
@@ -119,7 +108,6 @@ export default function SignIn() {
 
       {/* ── Left branding panel (desktop only) ── */}
       <div className="hidden lg:flex lg:w-[480px] xl:w-[520px] shrink-0 flex-col relative overflow-hidden">
-        {/* Background layers */}
         <div className="absolute inset-0 bg-gradient-to-br from-[#0a1628] via-[#060d1a] to-[#050b18]" />
         <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[120px] -translate-x-1/3 -translate-y-1/3" />
         <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-violet-500/8 rounded-full blur-[100px] translate-x-1/3 translate-y-1/3" />
@@ -138,7 +126,7 @@ export default function SignIn() {
           <div className="mt-auto mb-12">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary/30 bg-primary/10 mb-6">
               <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-              <span className="text-xs font-semibold text-primary">Live on Base Network</span>
+              <span className="text-xs font-semibold text-primary">Live on Solana</span>
             </div>
             <h1 className="text-4xl xl:text-5xl font-bold text-white leading-tight tracking-tight mb-4">
               Launch tokens.<br />
@@ -155,8 +143,8 @@ export default function SignIn() {
           <div className="grid grid-cols-3 gap-4 p-5 rounded-2xl border border-white/[0.06] bg-white/[0.03] backdrop-blur-sm">
             {[
               { label: "Tokens launched", value: "12,400+" },
-              { label: "Total volume", value: "$4.8M" },
-              { label: "Active traders", value: "38K" },
+              { label: "Total volume",    value: "$4.8M" },
+              { label: "Active traders",  value: "38K" },
             ].map(({ label, value }) => (
               <div key={label} className="text-center">
                 <div className="text-lg font-bold text-white">{value}</div>
@@ -169,7 +157,6 @@ export default function SignIn() {
 
       {/* ── Right form panel ── */}
       <div className="flex-1 flex flex-col items-center justify-center p-5 sm:p-8 relative">
-        {/* Subtle top glow */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[400px] h-[1px] bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
 
         {/* Mobile logo */}
@@ -187,8 +174,18 @@ export default function SignIn() {
             <p className="text-sm text-white/40">Sign in to your account to continue</p>
           </div>
 
+          {/* ── Wallet button (primary CTA) ── */}
+          <button
+            type="button"
+            onClick={() => setWalletModal(true)}
+            className="w-full h-12 rounded-xl bg-primary text-white text-sm font-semibold flex items-center justify-center gap-2.5 hover:bg-primary/90 active:scale-[0.98] transition-all duration-150 shadow-[0_0_24px_rgba(59,130,246,0.3)] mb-4"
+          >
+            <Wallet className="w-4.5 h-4.5" />
+            Connect Wallet
+          </button>
+
           {/* Social buttons */}
-          <div className="flex gap-3 mb-6">
+          <div className="flex gap-3 mb-5">
             <SocialBtn
               label="Google"
               onClick={handleGoogle}
@@ -213,9 +210,9 @@ export default function SignIn() {
           </div>
 
           {/* Divider */}
-          <div className="relative flex items-center gap-3 mb-6">
+          <div className="relative flex items-center gap-3 mb-5">
             <div className="flex-1 h-px bg-white/[0.08]" />
-            <span className="text-[11px] text-white/30 font-medium uppercase tracking-widest shrink-0">or</span>
+            <span className="text-[11px] text-white/30 font-medium uppercase tracking-widest shrink-0">or sign in with email</span>
             <div className="flex-1 h-px bg-white/[0.08]" />
           </div>
 
@@ -246,31 +243,14 @@ export default function SignIn() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-11 rounded-lg bg-primary text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-primary/90 active:scale-[0.98] transition-all duration-150 shadow-[0_0_20px_rgba(59,130,246,0.25)] disabled:opacity-60 disabled:cursor-not-allowed mt-2"
+              className="w-full h-11 rounded-lg border border-white/10 bg-white/[0.04] text-white/80 text-sm font-medium flex items-center justify-center gap-2 hover:bg-white/[0.07] hover:text-white hover:border-white/20 active:scale-[0.98] transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
             >
               {loading
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing in…</>
-                : <><span>Sign in</span><ArrowRight className="w-4 h-4" /></>
+                : <><span>Sign in with Email</span><ArrowRight className="w-4 h-4" /></>
               }
             </button>
           </form>
-
-          {/* Wallet divider */}
-          <div className="relative flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-white/[0.06]" />
-            <span className="text-[11px] text-white/20 font-medium uppercase tracking-widest shrink-0">or connect</span>
-            <div className="flex-1 h-px bg-white/[0.06]" />
-          </div>
-
-          {/* Wallet button */}
-          <button
-            type="button"
-            onClick={handleWallet}
-            className="w-full h-11 rounded-lg border border-white/10 bg-white/[0.04] text-sm text-white/70 font-medium flex items-center justify-center gap-2.5 hover:bg-white/[0.08] hover:text-white hover:border-white/20 transition-all duration-150 active:scale-[0.98]"
-          >
-            <Wallet className="w-4 h-4 text-primary" />
-            Connect Wallet
-          </button>
 
           {/* Footer */}
           <p className="text-center text-sm text-white/30 mt-8">
@@ -281,6 +261,13 @@ export default function SignIn() {
           </p>
         </div>
       </div>
+
+      {/* Wallet selection modal */}
+      <WalletSelectModal
+        open={walletModal}
+        onOpenChange={setWalletModal}
+        onSuccess={() => navigate("/")}
+      />
     </div>
   );
 }

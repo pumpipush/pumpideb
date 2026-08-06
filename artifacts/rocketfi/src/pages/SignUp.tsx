@@ -1,18 +1,13 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { Eye, EyeOff, Wallet, Rocket, Check, ArrowRight, Loader2, X } from "lucide-react";
-import { useWallet } from "@/contexts/WalletContext";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { WalletSelectModal } from "@/components/shared/WalletSelectModal";
 
 /* ─── helpers ───────────────────────────────────────────────────────────────── */
 function isValidEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
-}
-function fakeAddress(seed: string) {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
-  return "0x" + Math.abs(h).toString(16).padStart(8, "0") + seed.replace(/\W/g, "").slice(0, 32).padEnd(32, "0");
 }
 
 /* ─── Password strength ─────────────────────────────────────────────────────── */
@@ -122,21 +117,21 @@ function SocialBtn({ icon, label, onClick }: { icon: React.ReactNode; label: str
   );
 }
 
-/* ─── Page ──────────────────────────────────────────────────────────────────── */
+/* ─── Page ───────────────────────────────────────────────────────────────────── */
 export default function SignUp() {
-  const [, navigate] = useLocation();
-  const { connect }  = useWallet();
-  const { toast }    = useToast();
+  const [, navigate]  = useLocation();
+  const { toast }     = useToast();
 
-  const [email,     setEmail]     = useState("");
-  const [username,  setUsername]  = useState("");
-  const [password,  setPassword]  = useState("");
-  const [confirm,   setConfirm]   = useState("");
-  const [showPw,    setShowPw]    = useState(false);
-  const [showCfm,   setShowCfm]   = useState(false);
-  const [agreed,    setAgreed]    = useState(false);
-  const [loading,   setLoading]   = useState(false);
-  const [errors,    setErrors]    = useState<Record<string, string>>({});
+  const [email,       setEmail]     = useState("");
+  const [username,    setUsername]  = useState("");
+  const [password,    setPassword]  = useState("");
+  const [confirm,     setConfirm]   = useState("");
+  const [showPw,      setShowPw]    = useState(false);
+  const [showCfm,     setShowCfm]   = useState(false);
+  const [agreed,      setAgreed]    = useState(false);
+  const [loading,     setLoading]   = useState(false);
+  const [walletModal, setWalletModal] = useState(false);
+  const [errors,      setErrors]    = useState<Record<string, string>>({});
 
   const strengthScore = useMemo(() => RULES.filter((r) => r.test(password)).length, [password]);
 
@@ -160,17 +155,13 @@ export default function SignUp() {
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    connect(fakeAddress(email));
-    toast({ title: "Account created!", description: `Welcome to Mintix, @${username}` });
-    navigate("/");
-  }
-
-  function handleWallet() {
-    const addr = `0x${Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`;
-    connect(addr);
-    toast({ title: "Wallet connected", description: "Account created with your wallet." });
-    navigate("/");
+    // Email-based registration is coming soon — no fake addresses generated
+    await new Promise((r) => setTimeout(r, 900));
+    setLoading(false);
+    toast({
+      title: "Email registration coming soon",
+      description: "Use the Connect Wallet option below to get started now.",
+    });
   }
 
   function handleGoogle() {
@@ -202,7 +193,7 @@ export default function SignUp() {
               <p className="text-white/40 text-xs font-semibold uppercase tracking-widest mb-4">Why join Mintix?</p>
               {[
                 { title: "Launch in seconds", desc: "Deploy a bonding curve token with one click — no presale, no team allocation." },
-                { title: "Trade fairly", desc: "Every token starts equal. Price is set by the curve, not insiders." },
+                { title: "Trade fairly",      desc: "Every token starts equal. Price is set by the curve, not insiders." },
                 { title: "Earn from the curve", desc: "Creators earn fees when their token trades. Holders capture upside." },
               ].map(({ title, desc }) => (
                 <div key={title} className="flex gap-3 py-3 border-b border-white/[0.06] last:border-0">
@@ -248,13 +239,23 @@ export default function SignUp() {
 
         <div className="w-full max-w-[400px] py-4">
           {/* Header */}
-          <div className="mb-7">
+          <div className="mb-6">
             <h2 className="text-2xl font-bold text-white mb-1.5">Create an account</h2>
             <p className="text-sm text-white/40">Start trading and launching tokens today</p>
           </div>
 
+          {/* ── Wallet button (primary CTA) ── */}
+          <button
+            type="button"
+            onClick={() => setWalletModal(true)}
+            className="w-full h-12 rounded-xl bg-primary text-white text-sm font-semibold flex items-center justify-center gap-2.5 hover:bg-primary/90 active:scale-[0.98] transition-all duration-150 shadow-[0_0_24px_rgba(59,130,246,0.3)] mb-4"
+          >
+            <Wallet className="w-4 h-4" />
+            Continue with Wallet
+          </button>
+
           {/* Social buttons */}
-          <div className="flex gap-3 mb-6">
+          <div className="flex gap-3 mb-5">
             <SocialBtn
               label="Google"
               onClick={handleGoogle}
@@ -279,9 +280,9 @@ export default function SignUp() {
           </div>
 
           {/* Divider */}
-          <div className="relative flex items-center gap-3 mb-5">
+          <div className="relative flex items-center gap-3 mb-4">
             <div className="flex-1 h-px bg-white/[0.08]" />
-            <span className="text-[11px] text-white/30 font-medium uppercase tracking-widest shrink-0">or</span>
+            <span className="text-[11px] text-white/30 font-medium uppercase tracking-widest shrink-0">or sign up with email</span>
             <div className="flex-1 h-px bg-white/[0.08]" />
           </div>
 
@@ -348,33 +349,17 @@ export default function SignUp() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-11 rounded-lg bg-primary text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-primary/90 active:scale-[0.98] transition-all duration-150 shadow-[0_0_20px_rgba(59,130,246,0.25)] disabled:opacity-60 disabled:cursor-not-allowed mt-1"
+              className="w-full h-11 rounded-lg border border-white/10 bg-white/[0.04] text-white/80 text-sm font-medium flex items-center justify-center gap-2 hover:bg-white/[0.07] hover:text-white hover:border-white/20 active:scale-[0.98] transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed mt-1"
             >
               {loading
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating account…</>
-                : <><span>Create account</span><ArrowRight className="w-4 h-4" /></>
+                : <><span>Create account with Email</span><ArrowRight className="w-4 h-4" /></>
               }
             </button>
           </form>
 
-          {/* Wallet option */}
-          <div className="relative flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-white/[0.06]" />
-            <span className="text-[11px] text-white/20 font-medium uppercase tracking-widest shrink-0">or connect</span>
-            <div className="flex-1 h-px bg-white/[0.06]" />
-          </div>
-
-          <button
-            type="button"
-            onClick={handleWallet}
-            className="w-full h-11 rounded-lg border border-white/10 bg-white/[0.04] text-sm text-white/70 font-medium flex items-center justify-center gap-2.5 hover:bg-white/[0.08] hover:text-white hover:border-white/20 transition-all duration-150 active:scale-[0.98]"
-          >
-            <Wallet className="w-4 h-4 text-primary" />
-            Continue with Wallet
-          </button>
-
           {/* Footer */}
-          <p className="text-center text-sm text-white/30 mt-7">
+          <p className="text-center text-sm text-white/30 mt-6">
             Already have an account?{" "}
             <a href="/signin" className="text-primary hover:text-primary/80 font-semibold transition-colors">
               Sign in
@@ -382,6 +367,13 @@ export default function SignUp() {
           </p>
         </div>
       </div>
+
+      {/* Wallet selection modal */}
+      <WalletSelectModal
+        open={walletModal}
+        onOpenChange={setWalletModal}
+        onSuccess={() => navigate("/")}
+      />
     </div>
   );
 }

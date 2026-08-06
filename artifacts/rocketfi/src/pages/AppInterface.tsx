@@ -69,7 +69,7 @@ export default function AppInterface() {
   const searchParams = new URLSearchParams(window.location.search);
   const tokenParam = searchParams.get("token");
 
-  const { wallet, connect } = useWallet();
+  const { wallet } = useWallet();
   const [activeTab, setActiveTab] = useState<string>(tokenParam ? "trade" : "launch");
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(tokenParam);
 

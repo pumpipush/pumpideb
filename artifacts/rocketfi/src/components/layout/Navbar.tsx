@@ -6,11 +6,12 @@ import { formatAddress } from "@/lib/utils";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Link } from "wouter";
 import { openSearch } from "@/components/shared/SearchDialog";
-
-const MOCK_WALLET = "0x71C7656EC7ab88b098defB751B7401B5f6d8976F";
+import { useState } from "react";
+import { WalletSelectModal } from "@/components/shared/WalletSelectModal";
 
 function WalletButton() {
-  const { wallet, connect, disconnect } = useWallet();
+  const { wallet, walletName, disconnect } = useWallet();
+  const [walletModal, setWalletModal] = useState(false);
 
   const { data: profile } = useGetProfile(wallet ?? "", {
     query: { enabled: !!wallet, retry: false, queryKey: getGetProfileQueryKey(wallet ?? "") },
@@ -20,25 +21,25 @@ function WalletButton() {
     return (
       <>
         {/* Mobile: icon only */}
-        <Link href="/signin">
-          <button
-            className="md:hidden flex items-center justify-center h-8 w-8 rounded-sm border border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
-            aria-label="Sign In"
-          >
-            <Wallet className="h-4 w-4" />
-          </button>
-        </Link>
+        <button
+          onClick={() => setWalletModal(true)}
+          className="md:hidden flex items-center justify-center h-8 w-8 rounded-sm border border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
+          aria-label="Connect Wallet"
+        >
+          <Wallet className="h-4 w-4" />
+        </button>
 
         {/* Desktop: text button */}
-        <Link href="/signin">
-          <Button
-            variant="outline"
-            size="sm"
-            className="hidden md:flex h-8 text-xs font-semibold rounded-sm border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
-          >
-            Sign In
-          </Button>
-        </Link>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setWalletModal(true)}
+          className="hidden md:flex h-8 text-xs font-semibold rounded-sm border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
+        >
+          Connect Wallet
+        </Button>
+
+        <WalletSelectModal open={walletModal} onOpenChange={setWalletModal} />
       </>
     );
   }
@@ -46,9 +47,12 @@ function WalletButton() {
   return (
     <div className="flex items-center gap-2 shrink-0">
       {/* Address pill — desktop only */}
-      <div className="hidden sm:flex items-center gap-1.5 h-8 px-2.5 bg-card border border-border/50 rounded-sm">
-        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+      <div className="hidden sm:flex items-center gap-1.5 h-8 px-2.5 bg-card border border-border/50 rounded-sm" title={wallet}>
+        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
         <span className="text-xs font-mono text-muted-foreground">{formatAddress(wallet)}</span>
+        {walletName && (
+          <span className="text-[10px] text-white/30 font-medium">{walletName}</span>
+        )}
       </div>
 
       {/* Profile avatar — always visible */}
@@ -58,7 +62,7 @@ function WalletButton() {
             <img src={profile.avatarUrl} alt={profile.username} className="w-full h-full object-cover" />
           ) : (
             <TokenAvatar
-              symbol={profile?.username || wallet.slice(2, 6)}
+              symbol={profile?.username || wallet.slice(0, 4)}
               size={32}
               shape="circle"
             />
@@ -71,7 +75,7 @@ function WalletButton() {
         variant="ghost"
         size="sm"
         className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground transition-colors hidden sm:flex"
-        onClick={disconnect}
+        onClick={() => void disconnect()}
       >
         Disconnect
       </Button>
