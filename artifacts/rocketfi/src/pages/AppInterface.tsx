@@ -299,6 +299,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // Bug fix: React state for tx/holders sub-tab instead of imperative DOM manipulation
   const [activeSubTab, setActiveSubTab] = useState<"tx" | "holders" | "positions">("tx");
   const [walletModalOpen, setWalletModalOpen] = useState(false);
+  const [descExpanded, setDescExpanded] = useState(false);
 
   // New chart state
   const [chartTf, setChartTf] = useState<ChartTimeframe>("15m");
@@ -671,9 +672,28 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         </div>
 
         {/* Description */}
-        {token.description && (
-          <p className="text-[11px] text-muted-foreground leading-relaxed mb-2 line-clamp-2 px-3 md:px-0">{token.description}</p>
-        )}
+        {token.description && (() => {
+          const LIMIT = 120;
+          const isLong = token.description.length > LIMIT;
+          return (
+            <div className="mb-2 px-3 md:px-0">
+              <p className="text-[14px] text-muted-foreground leading-relaxed">
+                {isLong && !descExpanded
+                  ? token.description.slice(0, LIMIT).trimEnd() + "…"
+                  : token.description}
+              </p>
+              {isLong && (
+                <button
+                  onClick={() => setDescExpanded(v => !v)}
+                  className="text-[13px] font-semibold mt-0.5 transition-colors"
+                  style={{ color: "#4ade80" }}
+                >
+                  {descExpanded ? "Show less" : "Read more"}
+                </button>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Market Cap Row */}
         <div className="flex items-center gap-2.5 mb-2 px-3 md:px-0">
