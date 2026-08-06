@@ -96,7 +96,7 @@ function WalletButton() {
 
 export function Navbar() {
   return (
-    <nav className="h-[48px] fixed top-0 left-0 right-0 md:left-[220px] border-b border-border/30 bg-background/95 backdrop-blur-sm flex items-center px-3 md:px-4 gap-3 z-40">
+    <nav className="h-[60px] fixed top-0 left-0 right-0 md:left-[220px] border-b border-border/30 bg-background/95 backdrop-blur-sm flex items-center px-4 md:px-6 gap-3 z-40">
 
       {/* Logo — mobile only (desktop logo lives in Sidebar) */}
       <Link href="/" className="md:hidden flex items-center gap-2 shrink-0 select-none">
