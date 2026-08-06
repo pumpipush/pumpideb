@@ -14,9 +14,12 @@ import {
 const router: IRouter = Router();
 
 // GET /profiles/:address
-router.get("/profiles/:address", async (req, res) => {
+router.get("/profiles/:address", async (req, res): Promise<void> => {
   const parsed = GetProfileParams.safeParse(req.params);
-  if (!parsed.success) return res.status(400).json({ error: "Invalid address" });
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid address" });
+    return;
+  }
 
   const [profile] = await db
     .select()
@@ -24,17 +27,26 @@ router.get("/profiles/:address", async (req, res) => {
     .where(eq(profilesTable.address, parsed.data.address))
     .limit(1);
 
-  if (!profile) return res.status(404).json({ error: "Profile not found" });
+  if (!profile) {
+    res.status(404).json({ error: "Profile not found" });
+    return;
+  }
 
   const response = GetProfileResponse.safeParse(profile);
-  if (!response.success) return res.status(500).json({ error: "Response parse error" });
+  if (!response.success) {
+    res.status(500).json({ error: "Response parse error" });
+    return;
+  }
   res.json(response.data);
 });
 
 // POST /profiles — create or upsert profile
-router.post("/profiles", async (req, res) => {
+router.post("/profiles", async (req, res): Promise<void> => {
   const parsed = CreateProfileBody.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
 
   const { address, username, ...rest } = parsed.data;
 
@@ -50,8 +62,12 @@ router.post("/profiles", async (req, res) => {
 
   if (existing.length > 0) {
     const response = CreateProfileResponse.safeParse(existing[0]);
-    if (!response.success) return res.status(500).json({ error: "Response parse error" });
-    return res.status(200).json(response.data);
+    if (!response.success) {
+      res.status(500).json({ error: "Response parse error" });
+      return;
+    }
+    res.status(200).json(response.data);
+    return;
   }
 
   const [profile] = await db
@@ -60,17 +76,26 @@ router.post("/profiles", async (req, res) => {
     .returning();
 
   const response = CreateProfileResponse.safeParse(profile);
-  if (!response.success) return res.status(500).json({ error: "Response parse error" });
+  if (!response.success) {
+    res.status(500).json({ error: "Response parse error" });
+    return;
+  }
   res.status(201).json(response.data);
 });
 
 // PATCH /profiles/:address
-router.patch("/profiles/:address", async (req, res) => {
+router.patch("/profiles/:address", async (req, res): Promise<void> => {
   const paramsParsed = UpdateProfileParams.safeParse(req.params);
-  if (!paramsParsed.success) return res.status(400).json({ error: "Invalid address" });
+  if (!paramsParsed.success) {
+    res.status(400).json({ error: "Invalid address" });
+    return;
+  }
 
   const bodyParsed = UpdateProfileBody.safeParse(req.body);
-  if (!bodyParsed.success) return res.status(400).json({ error: bodyParsed.error.message });
+  if (!bodyParsed.success) {
+    res.status(400).json({ error: bodyParsed.error.message });
+    return;
+  }
 
   const [updated] = await db
     .update(profilesTable)
@@ -78,10 +103,16 @@ router.patch("/profiles/:address", async (req, res) => {
     .where(eq(profilesTable.address, paramsParsed.data.address))
     .returning();
 
-  if (!updated) return res.status(404).json({ error: "Profile not found" });
+  if (!updated) {
+    res.status(404).json({ error: "Profile not found" });
+    return;
+  }
 
   const response = UpdateProfileResponse.safeParse(updated);
-  if (!response.success) return res.status(500).json({ error: "Response parse error" });
+  if (!response.success) {
+    res.status(500).json({ error: "Response parse error" });
+    return;
+  }
   res.json(response.data);
 });
 

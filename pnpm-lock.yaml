@@ -185,6 +185,9 @@ importers:
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@types/pg@8.20.0)(pg@8.22.0)
+      ethers:
+        specifier: ^6.17.0
+        version: 6.17.0
       express:
         specifier: ^5.2.1
         version: 5.2.1

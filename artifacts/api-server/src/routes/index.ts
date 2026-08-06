@@ -4,6 +4,7 @@ import tokensRouter from "./tokens";
 import tradesRouter from "./trades";
 import statsRouter from "./stats";
 import profilesRouter from "./profiles";
+import indexerRouter from "./indexer";
 
 const router: IRouter = Router();
 
@@ -12,5 +13,6 @@ router.use(tokensRouter);
 router.use(tradesRouter);
 router.use(statsRouter);
 router.use(profilesRouter);
+router.use(indexerRouter);
 
 export default router;
