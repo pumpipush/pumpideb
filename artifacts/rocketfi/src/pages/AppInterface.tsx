@@ -1031,7 +1031,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             <div className="rounded-xl overflow-hidden" style={{ border: DIV, background: "rgba(255,255,255,0.03)" }}>
               {rows.map(({ label, total, buy, sell, net, netUp, buyPct }, i) => (
                 <div key={label} style={{ borderTop: i > 0 ? DIV : "none" }}>
-                  <div className="grid grid-cols-4 items-start px-3 pt-2.5 pb-1.5 gap-1">
+                  <div className="grid grid-cols-3 items-start px-3 pt-2.5 pb-1.5 gap-1">
                     {/* Label + total */}
                     <div className="flex flex-col">
                       <span className="text-[11px] font-medium mb-0.5" style={{ color: "#64748b" }}>{label}</span>
@@ -1042,8 +1042,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       <span className="text-[11px] font-medium mb-0.5" style={{ color: "#64748b" }}>Buy</span>
                       <span className="text-[13px] font-mono font-bold" style={{ color: "#4ade80" }}>{buy}</span>
                     </div>
-                    {/* Sell */}
-                    <div className="flex flex-col items-center">
+                    {/* Sell — right-aligned */}
+                    <div className="flex flex-col items-end">
                       <span className="text-[11px] font-medium mb-0.5" style={{ color: "#64748b" }}>Sell</span>
                       <span className="text-[13px] font-mono font-bold" style={{ color: "#f87171" }}>{sell}</span>
                     </div>
