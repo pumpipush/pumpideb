@@ -287,14 +287,8 @@ function Row({
         </span>
       </div>
 
-      {/* Right: short label badge + checkmark */}
+      {/* Right: checkmark */}
       <div className="flex items-center gap-2.5">
-        <span
-          className="text-[11px] font-mono transition-colors"
-          style={{ color: isActive ? def.color : "rgba(255,255,255,0.2)" }}
-        >
-          {def.shortLabel}
-        </span>
         <span
           className="flex items-center justify-center w-5 h-5 rounded transition-all"
           style={{
