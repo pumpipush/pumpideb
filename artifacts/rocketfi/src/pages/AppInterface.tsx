@@ -471,10 +471,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               <span className="text-border">•</span>
               <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{timeAgo(token.createdAt || Date.now())}</span>
             </div>
-            <div className="flex items-center gap-1.5 mt-1.5">
-              <button className="h-6 w-6 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Twitter"><Twitter className="h-3 w-3" /></button>
-              <button className="h-6 w-6 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Website"><Globe className="h-3 w-3" /></button>
-              <button className="h-6 w-6 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Copy address" onClick={() => copyToClipboard(token.address)}><Copy className="h-3 w-3" /></button>
+            <div className="flex items-center gap-2 mt-2">
+              <button className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Twitter"><Twitter className="h-4 w-4" /></button>
+              <button className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Website"><Globe className="h-4 w-4" /></button>
+              <button className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Copy address" onClick={() => copyToClipboard(token.address)}><Copy className="h-4 w-4" /></button>
             </div>
           </div>
           {/* Share button — top-right, aligned with coin name */}
