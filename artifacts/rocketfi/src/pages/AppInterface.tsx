@@ -509,21 +509,25 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           </div>
 
 
-          {/* Timeframe — dropdown on mobile, pills on desktop */}
-          <div className="flex items-center ml-auto shrink-0 px-2" style={{ borderLeft: "1px solid rgba(255,255,255,0.08)" }}>
-            {/* Mobile dropdown */}
-            <select
-              className="sm:hidden text-[13px] font-semibold rounded-lg px-2 py-1 outline-none cursor-pointer"
-              style={{ background: "rgba(255,255,255,0.06)", color: "#e2e8f0", border: "1px solid rgba(255,255,255,0.12)" }}
-              value={chartTf}
-              onChange={e => setChartTf(e.target.value as ChartTimeframe)}
-            >
-              {CHART_TIMEFRAMES.map(t => (
-                <option key={t} value={t} style={{ background: "#0d1726" }}>{t}</option>
+          {/* Timeframe — horizontal pills on mobile (no 1W), pills on desktop */}
+          <div className="flex items-center ml-auto shrink-0" style={{ borderLeft: "1px solid rgba(255,255,255,0.08)" }}>
+            {/* Mobile: horizontal scrollable, hide 1W */}
+            <div className="sm:hidden flex items-center overflow-x-auto px-1.5" style={{ gap: 2, scrollbarWidth: "none" }}>
+              {CHART_TIMEFRAMES.filter(t => t !== "1W").map(t => (
+                <button key={t} onClick={() => setChartTf(t)}
+                  className="px-2 text-[13px] font-semibold transition-all shrink-0 whitespace-nowrap flex items-center"
+                  style={{
+                    height: 28,
+                    ...(chartTf === t
+                      ? { background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 20, color: "#e2e8f0" }
+                      : { borderRadius: 20, border: "1px solid transparent", color: "#64748b" })
+                  }}>
+                  {t}
+                </button>
               ))}
-            </select>
+            </div>
             {/* Desktop pills */}
-            <div className="hidden sm:flex" style={{ background: "rgba(255,255,255,0.03)", borderRadius: 24, padding: 3, gap: 2 }}>
+            <div className="hidden sm:flex px-2" style={{ background: "rgba(255,255,255,0.03)", borderRadius: 24, padding: 3, gap: 2 }}>
               {CHART_TIMEFRAMES.map(t => (
                 <button key={t} onClick={() => setChartTf(t)}
                   className="px-2.5 text-[14px] font-semibold transition-all shrink-0 whitespace-nowrap flex items-center"
