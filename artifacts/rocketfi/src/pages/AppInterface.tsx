@@ -84,6 +84,11 @@ export default function AppInterface() {
     if (tokenParam) {
       setActiveTab("trade");
       setSelectedTokenId(tokenParam);
+      // Scroll both the outer <main> and any inner scrollable panel to top
+      requestAnimationFrame(() => {
+        document.querySelector("main")?.scrollTo({ top: 0, behavior: "instant" });
+        document.querySelector("[data-token-panel]")?.scrollTo({ top: 0, behavior: "instant" });
+      });
     } else {
       setSelectedTokenId(null);
     }
@@ -716,7 +721,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     <div className="flex flex-col md:flex-row w-full animate-slideDown md:h-[calc(100dvh-96px)]">
 
       {/* ── LEFT: scrollable chart + info ── */}
-      <div className="flex-1 min-w-0 overflow-y-auto border-r border-border/20 px-0 md:px-5 py-0 md:py-4 pb-20 md:pb-6">
+      <div data-token-panel className="flex-1 min-w-0 overflow-y-auto border-r border-border/20 px-0 md:px-5 py-0 md:py-4 pb-20 md:pb-6">
 
         {/* Compact Token Header */}
         <div className="flex gap-3 items-start mb-2 px-3 pt-3 md:px-0 md:pt-0">
