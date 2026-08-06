@@ -54,6 +54,24 @@ export function formatMC(lamportStr: string | null | undefined): string {
   return `◎${sol.toFixed(2)}`;
 }
 
+/** Format a USD value → "$1.23", "$45.6K", "$4.56M" */
+export function formatUSD(usd: number): string {
+  if (usd <= 0) return "$0";
+  if (usd >= 1_000_000_000) return `$${(usd / 1_000_000_000).toFixed(2)}B`;
+  if (usd >= 1_000_000)     return `$${(usd / 1_000_000).toFixed(2)}M`;
+  if (usd >= 1_000)         return `$${(usd / 1_000).toFixed(1)}K`;
+  if (usd >= 1)             return `$${usd.toFixed(2)}`;
+  if (usd >= 0.01)          return `$${usd.toFixed(4)}`;
+  return `$${usd.toExponential(3)}`;
+}
+
+/** Format market cap stored as lamports → USD given a SOL/USD price */
+export function formatMCUsd(lamportStr: string | null | undefined, solPrice: number | null): string {
+  if (!solPrice) return formatMC(lamportStr); // fallback to SOL while loading
+  const sol = lamportsToSol(lamportStr);
+  return formatUSD(sol * solPrice);
+}
+
 /** Format a lamport amount as SOL — for trade ethAmount, volumeEth, etc. */
 export function formatSol(lamportStr: string | null | undefined): string {
   const sol = lamportsToSol(lamportStr);

@@ -21,13 +21,14 @@ import { tradesFromLocal, syntheticCandles, Timeframe } from "@/lib/ohlcv";
 import { useTokenStream } from "@/hooks/useTokenStream";
 
 import { ethers } from "ethers";
-import { formatEth, formatAddress, parseEth, formatMC, cn, timeAgo } from "@/lib/utils";
+import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, cn, timeAgo } from "@/lib/utils";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { ShareModal } from "@/components/shared/ShareModal";
 import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink } from "lucide-react";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { formatSol, formatTokenAmount } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useSolPrice } from "@/hooks/useSolPrice";
 import { copyToClipboard as fireClipboard } from "@/components/shared/CopyToast";
 import { useLocation } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -285,6 +286,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const recordTrade = useRecordTrade();
   const updateToken = useUpdateToken();
   const { toast } = useToast();
+  const solPrice = useSolPrice();
 
   // Live SSE stream — real-time trade events
   const { liveTrades, liveToken, connected } = useTokenStream(selectedAddress);
@@ -632,7 +634,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         <div className="flex items-center gap-2.5 mb-2 px-3 md:px-0">
           <span className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Market Cap</span>
           <span className="text-xl font-bold text-foreground font-mono tabular-nums">
-            {formatMC(liveToken?.marketCapEth ?? token.marketCapEth)}
+            {formatMCUsd(liveToken?.marketCapEth ?? token.marketCapEth, solPrice)}
           </span>
           {liveToken && (
             <span className="flex items-center gap-1 text-[10px] text-primary font-semibold">
@@ -876,15 +878,17 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 <div>
                   <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-0.5">Price</div>
                   <div className="font-mono font-bold text-lg text-foreground leading-none">
-                    {currentPrice > 0 ? currentPrice.toExponential(4) : "—"}
-                    <span className="text-[11px] font-normal text-muted-foreground ml-1">SOL</span>
+                    {solPrice && currentPrice > 0
+                      ? formatUSD(currentPrice * solPrice)
+                      : currentPrice > 0 ? currentPrice.toExponential(4) : "—"}
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-0.5">Vol 24h</div>
                   <div className="font-mono font-bold text-sm text-foreground leading-none">
-                    {vol24h > 0 ? vol24h.toFixed(4) : "0.0000"}
-                    <span className="text-[11px] font-normal text-muted-foreground ml-1">SOL</span>
+                    {solPrice && vol24h > 0
+                      ? formatUSD(vol24h * solPrice)
+                      : vol24h > 0 ? vol24h.toFixed(4) : "0.0000"}
                   </div>
                 </div>
               </div>
@@ -981,6 +985,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
 function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSelectToken: (addr: string) => void }) {
   const { data: myTokens, isLoading } = useListTokens({}, { query: { enabled: !!wallet, queryKey: getListTokensQueryKey({}) } });
+  const solPrice = useSolPrice();
 
   if (!wallet) {
     return <div className="text-center py-20 text-muted-foreground font-mono text-sm animate-slideDown">Connect wallet to view your tokens.</div>;
@@ -1005,7 +1010,7 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
                 <TokenAvatar symbol={token.symbol} imageUrl={token.imageUrl} size={40} shape="square" />
                 <div>
                   <div className="font-bold text-sm text-foreground group-hover:text-primary transition-colors">{token.name}</div>
-                  <div className="text-[10px] font-mono text-muted-foreground mt-0.5">MC: {formatMC(token.marketCapEth)}</div>
+                  <div className="text-[10px] font-mono text-muted-foreground mt-0.5">MC: {formatMCUsd(token.marketCapEth, solPrice)}</div>
                 </div>
               </div>
               <div className="text-right">
@@ -1022,6 +1027,7 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
 
 function TrendingSidebar({ onSelectToken }: { onSelectToken: (addr: string) => void }) {
   const { data: trending, isLoading } = useGetTrendingTokens({ limit: 5 });
+  const solPrice = useSolPrice();
   
   return (
     <div className="bg-card border border-border/50 rounded-sm p-4 animate-slideDown shadow-sm">
@@ -1037,7 +1043,7 @@ function TrendingSidebar({ onSelectToken }: { onSelectToken: (addr: string) => v
             <TokenAvatar symbol={token.symbol} imageUrl={token.imageUrl} size={32} shape="square" className="group-hover:ring-1 group-hover:ring-primary/40 transition-all" />
             <div className="min-w-0 flex-1">
               <div className="font-bold text-xs text-foreground truncate group-hover:text-primary transition-colors">{token.name}</div>
-              <div className="text-[10px] font-mono text-muted-foreground mt-0.5 truncate">${token.symbol} • {formatMC(token.marketCapEth)}</div>
+              <div className="text-[10px] font-mono text-muted-foreground mt-0.5 truncate">${token.symbol} • {formatMCUsd(token.marketCapEth, solPrice)}</div>
             </div>
           </div>
         ))}
