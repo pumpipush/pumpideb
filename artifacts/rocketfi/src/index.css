@@ -6,6 +6,7 @@
 
 @theme inline {
   --font-sans: 'Plus Jakarta Sans', sans-serif;
+  --font-mono: 'Inter', sans-serif;
 
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
