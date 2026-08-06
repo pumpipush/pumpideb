@@ -401,13 +401,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           </button>
 
 
-          {/* OHLC crosshair display — updated via DOM ref, zero re-renders */}
-          <div
-            ref={ohlcDisplayRef}
-            className="hidden md:flex items-center gap-3 px-3 text-[10px] font-mono shrink-0"
-            style={{ opacity: 0, transition: "opacity 0.1s", gap: 12 }}
-          />
-
           {/* Timeframe pills — pushed right */}
           <div className="flex items-center ml-auto shrink-0 px-2" style={{ borderLeft: "1px solid rgba(255,255,255,0.08)" }}>
             <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 24, padding: 3, display: "flex", gap: 2 }}>
