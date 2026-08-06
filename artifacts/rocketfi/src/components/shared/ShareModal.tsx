@@ -8,7 +8,7 @@ import {
   X, Copy, Twitter, Send, Link2, ExternalLink,
 } from "lucide-react";
 import { TokenAvatar, getGradient } from "@/components/shared/TokenAvatar";
-import { formatMC, formatEth } from "@/lib/utils";
+import { formatMCUsd, formatUSD, formatEth } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { copyToClipboard } from "@/components/shared/CopyToast";
 
@@ -28,9 +28,10 @@ interface ShareModalProps {
   token: ShareToken;
   open: boolean;
   onClose: () => void;
+  solPrice?: number | null;
 }
 
-export function ShareModal({ token, open, onClose }: ShareModalProps) {
+export function ShareModal({ token, open, onClose, solPrice }: ShareModalProps) {
   const url = `${window.location.origin}/app?token=${token.address}`;
   const tweetText = `🚀 Just found $${token.symbol} on Mintix fun!\n\nMC: ${formatMC(token.marketCapEth)} · ${token.graduated ? "Graduated ✓" : "Bonding curve"}\n\n${url}`;
   const telegramText = encodeURIComponent(`🔥 $${token.symbol} on Mintix fun — ${formatMC(token.marketCapEth)} MC\n${url}`);
@@ -123,21 +124,24 @@ export function ShareModal({ token, open, onClose }: ShareModalProps) {
           {/* Card stats — dark base */}
           <div className="bg-[#0d1626] px-5 py-4 grid grid-cols-3 divide-x divide-white/10">
             {[
-              { label: "Market Cap", value: formatMC(token.marketCapEth) },
+              { label: "Market Cap", value: formatMCUsd(token.marketCapEth, solPrice ?? null) },
               {
                 label: "Price",
                 value: (() => {
                   const p = token.priceEth ? parseFloat(token.priceEth) : 0;
                   if (!p) return "—";
-                  if (p < 0.0001) return p.toExponential(3);
-                  return p.toFixed(6);
+                  const usd = solPrice ? p * solPrice : null;
+                  if (usd) return usd < 0.0001 ? `$${usd.toExponential(2)}` : formatUSD(usd);
+                  return p < 0.0001 ? p.toExponential(3) : p.toFixed(6);
                 })(),
               },
               {
                 label: "Vol 24h",
-                value: token.volumeEth
-                  ? `${parseFloat(formatEth(token.volumeEth)).toFixed(2)} SOL`
-                  : "—",
+                value: (() => {
+                  if (!token.volumeEth) return "—";
+                  const sol = parseFloat(formatEth(token.volumeEth));
+                  return solPrice ? formatUSD(sol * solPrice) : `${sol.toFixed(2)} SOL`;
+                })(),
               },
             ].map(({ label, value }) => (
               <div key={label} className="flex flex-col items-center gap-0.5 px-3">

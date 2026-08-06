@@ -1317,6 +1317,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         token={token}
         open={shareOpen}
         onClose={() => setShareOpen(false)}
+        solPrice={solPrice}
       />
       <WalletSelectModal
         open={walletModalOpen}
