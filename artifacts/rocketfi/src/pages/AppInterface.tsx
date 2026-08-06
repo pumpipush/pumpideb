@@ -851,43 +851,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           </div>
         </div>
 
-        {/* Bonding Curve (right panel) */}
-        <div className="bg-card border border-border/60 rounded-sm p-3 shadow-sm">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Bonding curve</span>
-            <span className={`text-[10px] font-bold font-mono ${isGraduated ? "text-amber-400" : "text-primary"}`}>{progressPercent.toFixed(1)}%</span>
-          </div>
-          <div className="h-2 w-full bg-muted/60 rounded-full overflow-hidden mb-1.5">
-            <div
-              className={`h-full rounded-full bar-fill ${isGraduated ? "bg-amber-400 shadow-[0_0_8px_hsl(45_100%_60%/0.5)]" : "bg-primary shadow-[0_0_8px_hsl(142_100%_45%/0.4)]"}`}
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <div className="text-[10px] font-mono text-muted-foreground/70">
-            {isGraduated
-              ? <span className="text-amber-400 font-bold">Graduated to Uniswap ✓</span>
-              : <span>{realSolInCurve.toFixed(2)} / 85 SOL</span>
-            }
-          </div>
-        </div>
-
-        {/* Token Stats — live values from SSE when connected */}
-        <div className="bg-card border border-border/60 rounded-sm overflow-hidden shadow-sm">
-          {[
-            { label: "Ticker", value: `$${token.symbol}`, accent: true },
-            { label: "Total supply", value: "1,000,000,000" },
-            { label: "Market cap", value: formatMC(liveToken?.marketCapEth ?? token.marketCapEth) },
-            { label: "Virtual liquidity", value: `${parseFloat(liveToken?.virtualEthReserves ?? token.virtualEthReserves ?? "0").toFixed(2)} SOL` },
-            { label: "Volume", value: formatSol(liveToken?.volumeEth ?? token.volumeEth ?? "0") },
-            { label: "Trades", value: String(liveToken?.tradeCount ?? token.tradeCount) },
-          ].map(({ label, value, accent }, i, arr) => (
-            <div key={label} className={`flex justify-between items-center px-3 py-2 text-xs ${i < arr.length - 1 ? "border-b border-border/30" : ""}`}>
-              <span className="text-muted-foreground">{label}</span>
-              <span className={`font-mono font-medium ${accent ? "text-primary font-bold" : "text-foreground"}`}>{value}</span>
-            </div>
-          ))}
-        </div>
-
       </div>
 
       {/* Share Modal */}
