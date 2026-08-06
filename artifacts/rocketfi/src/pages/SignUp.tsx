@@ -338,9 +338,9 @@ export default function SignUp() {
                 </div>
                 <span className="text-xs text-white/40 leading-relaxed">
                   I agree to the{" "}
-                  <a href="#" className="text-primary/80 hover:text-primary transition-colors underline underline-offset-2">Terms of Service</a>
+                  <button type="button" onClick={() => toast({ title: "Coming soon", description: "Terms of Service will be published before launch." })} className="text-primary/80 hover:text-primary transition-colors underline underline-offset-2 cursor-pointer">Terms of Service</button>
                   {" "}and{" "}
-                  <a href="#" className="text-primary/80 hover:text-primary transition-colors underline underline-offset-2">Privacy Policy</a>
+                  <button type="button" onClick={() => toast({ title: "Coming soon", description: "Privacy Policy will be published before launch." })} className="text-primary/80 hover:text-primary transition-colors underline underline-offset-2 cursor-pointer">Privacy Policy</button>
                 </span>
               </label>
               {errors.terms && <p className="text-[11px] text-red-400 pl-7">{errors.terms}</p>}

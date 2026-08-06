@@ -154,8 +154,12 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       return;
     }
     
-    if (!name || !symbol) {
-      toast({ title: "Error", description: "Name and symbol required", variant: "destructive" });
+    if (!name.trim() || !symbol.trim()) {
+      toast({ title: "Error", description: "Name and ticker cannot be empty or blank", variant: "destructive" });
+      return;
+    }
+    if (symbol.trim().length > 10) {
+      toast({ title: "Error", description: "Ticker must be 10 characters or fewer", variant: "destructive" });
       return;
     }
 
@@ -417,6 +421,18 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   }
 
   if (loadingToken && !token) return <TokenDetailSkeleton />;
+  if (tokenError) return (
+    <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
+      <span className="text-3xl">⚠️</span>
+      <p className="text-muted-foreground font-mono text-sm">Failed to load token data.</p>
+      <button
+        onClick={() => refetchToken()}
+        className="mt-1 px-4 py-1.5 rounded-sm bg-primary/10 text-primary text-xs font-bold border border-primary/20 hover:bg-primary hover:text-black transition-all"
+      >
+        Retry
+      </button>
+    </div>
+  );
   if (!token) return <div className="text-center py-20 text-muted-foreground font-mono">Token not found.</div>;
 
   const realEthReserves = Math.max(0, parseFloat(formatEth(token.virtualEthReserves || "0")) - 3);
