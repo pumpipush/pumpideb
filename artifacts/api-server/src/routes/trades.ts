@@ -9,6 +9,7 @@ import {
   RecordTradeResponse,
 } from "@workspace/api-zod";
 import { emitTrade, tradeEmitter, type TradeEvent } from "../lib/tradeEmitter";
+import type { NewTokenEvent } from "../lib/tradeEmitter"; // imported for type completeness
 
 const router: IRouter = Router();
 
@@ -26,10 +27,13 @@ router.get("/tokens/:address/stream", (req: Request, res: Response) => {
   res.setHeader("X-Accel-Buffering", "no"); // disable nginx buffering if present
   res.flushHeaders();
 
-  // Send a heartbeat comment every 20s so the connection stays alive
+  // Initial ping to confirm connection is live
+  res.write(": ping\n\n");
+
+  // Send a heartbeat comment every 25s so the connection stays alive through proxies
   const heartbeat = setInterval(() => {
-    res.write(": heartbeat\n\n");
-  }, 20_000);
+    res.write(": ping\n\n");
+  }, 25_000);
 
   const handler = (event: TradeEvent) => {
     res.write(`data: ${JSON.stringify(event)}\n\n`);
@@ -101,7 +105,7 @@ router.post("/tokens/:address/trades", async (req, res): Promise<void> => {
 
   const response = RecordTradeResponse.parse(trade);
 
-  // Broadcast to SSE subscribers
+  // Broadcast to SSE subscribers (per-token channel + global feed)
   if (token) {
     emitTrade({
       type: "trade",
@@ -114,16 +118,21 @@ router.post("/tokens/:address/trades", async (req, res): Promise<void> => {
         tokenAmount: trade.tokenAmount,
         priceEth: trade.priceEth,
         txHash: trade.txHash,
+        platform: trade.platform,
         timestamp: trade.timestamp.toISOString(),
       },
       token: {
         address: token.address,
+        name: token.name,
+        symbol: token.symbol,
         priceEth: token.priceEth,
         marketCapEth: token.marketCapEth,
         volumeEth: token.volumeEth,
         virtualEthReserves: token.virtualEthReserves,
         virtualTokenReserves: token.virtualTokenReserves,
         tradeCount: Number(token.tradeCount),
+        platform: token.platform,
+        chain: token.chain,
       },
     });
   }

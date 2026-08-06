@@ -16,7 +16,7 @@
 import { eq, sql } from "drizzle-orm";
 import { db, tokensTable, tradesTable } from "@workspace/db";
 import { logger } from "../logger";
-import { emitTrade } from "../tradeEmitter";
+import { emitTrade, emitNewToken } from "../tradeEmitter";
 
 // Default LetsBONK program ID — update via env var if the program migrates
 const DEFAULT_PROGRAM_ID = "LBUZKhRxPF3XUpBCjp4YzTKgLLjJfPswEmNxclZs1pe";
@@ -207,6 +207,22 @@ async function processLog(
         .onConflictDoNothing();
 
       log.info({ mint }, "letsbonk: new token detected");
+
+      // Broadcast to global feed (placeholder name until metadata enrichment)
+      emitNewToken({
+        type: "newToken",
+        token: {
+          address: mint,
+          name: mint.slice(0, 8) + "...",
+          symbol: "???",
+          imageUrl: null,
+          priceEth: null,
+          marketCapEth: null,
+          platform: PLATFORM,
+          chain: CHAIN,
+          createdAt: new Date().toISOString(),
+        },
+      });
     } else {
       // Swap (buy or sell)
       const [trade] = await db
@@ -252,16 +268,21 @@ async function processLog(
           tokenAmount: trade.tokenAmount,
           priceEth: trade.priceEth,
           txHash: trade.txHash,
+          platform: PLATFORM,
           timestamp: trade.timestamp.toISOString(),
         },
         token: {
           address: mint,
+          name: null,
+          symbol: null,
           priceEth: trade.priceEth,
           marketCapEth: null,
           volumeEth: solLamports,
           virtualEthReserves: "0",
           virtualTokenReserves: "0",
           tradeCount: 0,
+          platform: PLATFORM,
+          chain: CHAIN,
         },
       });
     }

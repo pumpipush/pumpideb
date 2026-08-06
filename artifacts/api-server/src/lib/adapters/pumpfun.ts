@@ -12,7 +12,7 @@
 import { eq, sql } from "drizzle-orm";
 import { db, tokensTable, tradesTable } from "@workspace/db";
 import { logger } from "../logger";
-import { emitTrade } from "../tradeEmitter";
+import { emitTrade, emitNewToken } from "../tradeEmitter";
 
 const PUMPPORTAL_WS = "wss://pumpportal.fun/api/data";
 const RECONNECT_DELAY_MS = 5_000;
@@ -90,6 +90,25 @@ async function handleNewToken(payload: PumpNewToken): Promise<void> {
 
     log.info({ name: payload.name, symbol: payload.symbol }, "pump_fun: new token ingested");
 
+    // Broadcast to global feed
+    const priceEth = payload.tokenAmount > 0
+      ? (payload.solAmount / payload.tokenAmount).toFixed(12)
+      : null;
+    emitNewToken({
+      type: "newToken",
+      token: {
+        address: payload.mint,
+        name: payload.name,
+        symbol: payload.symbol,
+        imageUrl: null,
+        priceEth,
+        marketCapEth: solToLamports(payload.marketCapSol),
+        platform: PLATFORM,
+        chain: CHAIN,
+        createdAt: new Date().toISOString(),
+      },
+    });
+
     // Optionally fetch metadata from IPFS in background (fire-and-forget)
     if (payload.uri) {
       fetchAndUpdateMetadata(payload.mint, payload.uri).catch(() => undefined);
@@ -144,7 +163,7 @@ async function handleTrade(payload: PumpTrade): Promise<void> {
 
     log.debug({ isBuy, sol: payload.solAmount }, "pump_fun: trade ingested");
 
-    // Emit SSE for any subscribers on this token
+    // Emit SSE for per-token subscribers AND global feed
     emitTrade({
       type: "trade",
       trade: {
@@ -156,16 +175,21 @@ async function handleTrade(payload: PumpTrade): Promise<void> {
         tokenAmount: trade.tokenAmount,
         priceEth: trade.priceEth,
         txHash: trade.txHash,
+        platform: PLATFORM,
         timestamp: trade.timestamp.toISOString(),
       },
       token: {
         address: payload.mint,
+        name: null,
+        symbol: null,
         priceEth,
         marketCapEth: solToLamports(payload.marketCapSol),
         volumeEth: lamports,
         virtualEthReserves: Math.round(payload.vSolInBondingCurve).toString(),
         virtualTokenReserves: Math.round(payload.vTokensInBondingCurve).toString(),
-        tradeCount: 0, // incremented above, client will refresh
+        tradeCount: 0,
+        platform: PLATFORM,
+        chain: CHAIN,
       },
     });
   } catch (err) {

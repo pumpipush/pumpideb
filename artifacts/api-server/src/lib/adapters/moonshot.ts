@@ -17,6 +17,7 @@
 import { eq, sql } from "drizzle-orm";
 import { db, tokensTable } from "@workspace/db";
 import { logger } from "../logger";
+import { emitNewToken } from "../tradeEmitter";
 
 const POLL_INTERVAL_MS = 30_000;
 const PLATFORM = "moonshot";
@@ -129,6 +130,24 @@ async function poll(): Promise<void> {
           })
           .onConflictDoNothing();
         inserted++;
+
+        // Broadcast new token to global feed
+        emitNewToken({
+          type: "newToken",
+          token: {
+            address: addr,
+            name: pair.baseToken.name,
+            symbol: pair.baseToken.symbol,
+            imageUrl: pair.info?.imageUrl ?? null,
+            priceEth: price,
+            marketCapEth: null,
+            platform: PLATFORM,
+            chain: CHAIN,
+            createdAt: pair.pairCreatedAt
+              ? new Date(pair.pairCreatedAt).toISOString()
+              : new Date().toISOString(),
+          },
+        });
       } else {
         // Update live stats
         await db
