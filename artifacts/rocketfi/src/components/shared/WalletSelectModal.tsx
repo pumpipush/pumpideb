@@ -119,8 +119,8 @@ export function WalletSelectModal({ open, onOpenChange, onSuccess }: WalletSelec
                     <img src={descriptor.icon} alt={descriptor.name} className="w-9 h-9 rounded-xl shrink-0" />
                     <span className="flex-1 text-[14px] font-semibold" style={{ color: "#e2e8f0" }}>{descriptor.name}</span>
                     {installed && !isConnecting && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md mr-1" style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.2)" }}>
-                        INSTALLED
+                      <span className="text-[12px] font-medium mr-1" style={{ color: "#4ade80" }}>
+                        Installed
                       </span>
                     )}
                     {isConnecting
