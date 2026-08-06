@@ -308,17 +308,28 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     setIndicators(prev => prev.includes(ind) ? prev.filter(i => i !== ind) : [...prev, ind]);
   }, []);
 
+  // Keep a ref so the crosshair callback always reads the latest solPrice without re-creating
+  const solPriceRef = useRef<number | null>(solPrice);
+  solPriceRef.current = solPrice;
+
   // OHLC crosshair display — written directly to DOM so mouse moves never trigger re-renders
   const ohlcDisplayRef = useRef<HTMLDivElement>(null);
   const onCrosshairMove = useCallback((bar: OHLCSnapshot | null) => {
     const el = ohlcDisplayRef.current;
     if (!el) return;
-    if (!bar) {
-      el.style.opacity = "0";
-      return;
-    }
+    if (!bar) { el.style.opacity = "0"; return; }
     el.style.opacity = "1";
-    const fmt = (n: number) => n < 0.00001 ? n.toExponential(3) : n.toPrecision(4);
+    const sp = solPriceRef.current;
+    const fmt = (n: number): string => {
+      if (sp && n > 0) {
+        const usd = n * sp;
+        if (usd >= 1)       return `$${usd.toFixed(2)}`;
+        if (usd >= 0.01)    return `$${usd.toFixed(4)}`;
+        if (usd >= 0.0001)  return `$${usd.toFixed(6)}`;
+        return `$${usd.toExponential(3)}`;
+      }
+      return n < 0.00001 ? n.toExponential(3) : n.toPrecision(4);
+    };
     el.innerHTML = `
       <span style="color:#64748b">O <span style="color:#cbd5e1">${fmt(bar.open)}</span></span>
       <span style="color:#64748b">H <span style="color:#4ade80">${fmt(bar.high)}</span></span>
@@ -424,13 +435,15 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             loading={!connected}
             chartType={chartType}
             indicators={indicators}
+            solPrice={solPrice}
+            symbol={token.symbol}
             onCrosshairMove={onCrosshairMove}
           />
         </div>
       </div>
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartBars, chartType, chartTf, indicators, indOpen, connected, token?.address, onCrosshairMove]);
+  }, [chartBars, chartType, chartTf, indicators, indOpen, connected, token?.address, onCrosshairMove, solPrice]);
 
   const handleTrade = async () => {
     if (!wallet) {

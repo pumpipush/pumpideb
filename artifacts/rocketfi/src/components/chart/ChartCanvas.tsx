@@ -39,8 +39,26 @@ interface ChartCanvasProps {
   loading?:         boolean;
   chartType?:       ChartType;
   indicators?:      Indicator[];
+  solPrice?:        number | null;
+  symbol?:          string;
   priceFormatter?:  (price: number) => string;
   onCrosshairMove?: (bar: OHLCSnapshot | null) => void;
+}
+
+/** Build a USD price formatter for lightweight-charts axis labels */
+function makeUsdFormatter(solPrice: number | null): (p: number) => string {
+  return (p: number) => {
+    if (!solPrice || !p || !Number.isFinite(p)) {
+      return p < 0.0001 ? p.toExponential(3) : p.toPrecision(5);
+    }
+    const usd = p * solPrice;
+    if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(2)}M`;
+    if (usd >= 1_000)     return `$${(usd / 1_000).toFixed(1)}K`;
+    if (usd >= 1)         return `$${usd.toFixed(2)}`;
+    if (usd >= 0.01)      return `$${usd.toFixed(4)}`;
+    if (usd >= 0.000_1)   return `$${usd.toFixed(6)}`;
+    return `$${usd.toExponential(3)}`;
+  };
 }
 
 /* ── Constants ─────────────────────────────────────────────────────── */
@@ -356,7 +374,7 @@ function ChartSkeleton({ visible }: { visible: boolean }) {
 
 /* ── Main component ────────────────────────────────────────────────── */
 export const ChartCanvas = memo(function ChartCanvas({
-  bars, address, loading, chartType = "candle", indicators = [], priceFormatter, onCrosshairMove,
+  bars, address, loading, chartType = "candle", indicators = [], solPrice, symbol, priceFormatter, onCrosshairMove,
 }: ChartCanvasProps) {
   const mainRef    = useRef<HTMLDivElement>(null);
   const chartRef   = useRef<IChartApi | null>(null);
@@ -371,6 +389,24 @@ export const ChartCanvas = memo(function ChartCanvas({
   const lastBarIdxRef = useRef<number>(-1);
   const onCrosshairMoveRef = useRef(onCrosshairMove);
   useEffect(() => { onCrosshairMoveRef.current = onCrosshairMove; }, [onCrosshairMove]);
+
+  // Mutable refs so crosshair handler always reads latest values without closure staleness
+  const solPriceRef = useRef<number | null>(solPrice ?? null);
+  solPriceRef.current = solPrice ?? null;
+  const symbolRef = useRef<string | undefined>(symbol);
+  symbolRef.current = symbol;
+
+  // In-chart OHLCV overlay — updated imperatively, zero re-renders
+  const innerOhlcRef = useRef<HTMLDivElement>(null);
+
+  // When solPrice loads or changes, update the chart's axis formatter in-place
+  // (no chart recreation needed — applyOptions is cheap)
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const fmt = priceFormatter ?? makeUsdFormatter(solPrice ?? null);
+    chart.applyOptions({ localization: { priceFormatter: fmt } });
+  }, [solPrice, priceFormatter]);
 
   const rsiRef   = useRef<HTMLDivElement>(null);
   const macdRef  = useRef<HTMLDivElement>(null);
@@ -450,7 +486,7 @@ export const ChartCanvas = memo(function ChartCanvas({
     const el = mainRef.current;
     if (!el) return;
 
-    const chart = makeChart(el, { timeVisible: true, rightScale: true, priceFormatter });
+    const chart = makeChart(el, { timeVisible: true, rightScale: true, priceFormatter: priceFormatter ?? makeUsdFormatter(solPrice ?? null) });
     chart.priceScale("right").applyOptions({ scaleMargins: { top: 0.10, bottom: 0.05 } });
 
     if (chartType === "candle") {
@@ -478,8 +514,37 @@ export const ChartCanvas = memo(function ChartCanvas({
 
     chart.subscribeCrosshairMove(param => {
       const cb = onCrosshairMoveRef.current;
-      if (!cb) return;
-      if (!param.time) { cb(null); return; }
+
+      // Helper: format a price as USD (reads live refs, no stale closure)
+      const fmtUsd = (n: number): string => {
+        const sp = solPriceRef.current;
+        if (sp && n > 0) {
+          const u = n * sp;
+          if (u >= 1)      return `$${u.toFixed(2)}`;
+          if (u >= 0.01)   return `$${u.toFixed(4)}`;
+          if (u >= 0.0001) return `$${u.toFixed(6)}`;
+          return `$${u.toExponential(3)}`;
+        }
+        return n < 0.00001 ? n.toExponential(3) : n.toPrecision(4);
+      };
+
+      // Update inner in-chart OHLC overlay
+      const inner = innerOhlcRef.current;
+      const updateInner = (bar: { open: number; high: number; low: number; close: number } | null) => {
+        if (!inner) return;
+        if (!bar) { inner.style.opacity = "0"; return; }
+        inner.style.opacity = "1";
+        const UP_COL   = "#4ade80";
+        const DOWN_COL = "#f87171";
+        const isUp     = bar.close >= bar.open;
+        inner.innerHTML =
+          `<span style="color:#64748b;font-size:10px">O</span><span style="color:${isUp ? UP_COL : DOWN_COL};font-size:10px"> ${fmtUsd(bar.open)}</span> ` +
+          `<span style="color:#64748b;font-size:10px">H</span><span style="color:${UP_COL};font-size:10px"> ${fmtUsd(bar.high)}</span> ` +
+          `<span style="color:#64748b;font-size:10px">L</span><span style="color:${DOWN_COL};font-size:10px"> ${fmtUsd(bar.low)}</span> ` +
+          `<span style="color:#64748b;font-size:10px">C</span><span style="color:${isUp ? UP_COL : DOWN_COL};font-size:10px"> ${fmtUsd(bar.close)}</span>`;
+      };
+
+      if (!param.time) { cb?.(null); updateInner(null); return; }
       if (candleRef.current) {
         const cd = param.seriesData.get(candleRef.current as never) as { open: number; high: number; low: number; close: number } | undefined;
         if (cd) {
@@ -488,13 +553,17 @@ export const ChartCanvas = memo(function ChartCanvas({
             const vd = param.seriesData.get(volRef.current as never) as { value: number } | undefined;
             if (vd) vol = vd.value;
           }
-          cb({ open: cd.open, high: cd.high, low: cd.low, close: cd.close, volume: vol });
+          cb?.({ open: cd.open, high: cd.high, low: cd.low, close: cd.close, volume: vol });
+          updateInner(cd);
           return;
         }
       }
       if (lineRef.current) {
         const ld = param.seriesData.get(lineRef.current as never) as { value: number } | undefined;
-        if (ld) cb({ open: ld.value, high: ld.value, low: ld.value, close: ld.value });
+        if (ld) {
+          cb?.({ open: ld.value, high: ld.value, low: ld.value, close: ld.value });
+          updateInner({ open: ld.value, high: ld.value, low: ld.value, close: ld.value });
+        }
       }
     });
 
@@ -817,6 +886,28 @@ export const ChartCanvas = memo(function ChartCanvas({
       <ChartSkeleton visible={!chartReady} />
       <ChartNoData visible={chartReady && !bars.length} />
       <div ref={mainRef} style={{ flex: 1, minHeight: 0 }} />
+
+      {/* ── In-chart symbol + OHLC overlay ── */}
+      <div
+        className="absolute top-2 left-2 z-10 pointer-events-none select-none flex flex-col gap-0.5"
+      >
+        {/* Pair label */}
+        {symbol && (
+          <span
+            className="font-semibold tracking-wide"
+            style={{ fontSize: 11, color: "rgba(148,163,184,0.7)" }}
+          >
+            {symbol.toUpperCase()}/USD
+          </span>
+        )}
+        {/* OHLC — updated imperatively via DOM ref, zero re-renders */}
+        <div
+          ref={innerOhlcRef}
+          data-active="0"
+          className="flex items-center gap-1.5 font-mono"
+          style={{ fontSize: 10, opacity: 0, transition: "opacity 0.12s" }}
+        />
+      </div>
 
       {/* Zoom / scroll controls */}
       <div
