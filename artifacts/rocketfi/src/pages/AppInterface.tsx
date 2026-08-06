@@ -1047,11 +1047,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       <span className="text-[11px] font-medium mb-0.5" style={{ color: "#64748b" }}>Sell</span>
                       <span className="text-[13px] font-mono font-bold" style={{ color: "#f87171" }}>{sell}</span>
                     </div>
-                    {/* Net */}
-                    <div className="flex flex-col items-center">
-                      <span className="text-[11px] font-medium mb-0.5" style={{ color: "#64748b" }}>Net</span>
-                      <span className="text-[13px] font-mono font-bold" style={{ color: netUp ? "#4ade80" : "#f87171" }}>{net}</span>
-                    </div>
                   </div>
                   {/* Buy/Sell progress bar */}
                   <div className="flex h-1 mx-3 mb-2.5 rounded-full overflow-hidden" style={{ background: "rgba(248,113,113,0.35)" }}>
