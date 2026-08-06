@@ -115,7 +115,7 @@ export default function SignIn() {
   }
 
   return (
-    <div className="min-h-[100dvh] flex bg-[#060d1a]">
+    <div className="min-h-[100dvh] w-full max-w-full overflow-x-hidden flex bg-[#060d1a]">
 
       {/* ── Left branding panel (desktop only) ── */}
       <div className="hidden lg:flex lg:w-[480px] xl:w-[520px] shrink-0 flex-col relative overflow-hidden">

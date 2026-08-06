@@ -178,7 +178,7 @@ export default function SignUp() {
   }
 
   return (
-    <div className="min-h-[100dvh] flex bg-[#060d1a]">
+    <div className="min-h-[100dvh] w-full max-w-full overflow-x-hidden flex bg-[#060d1a]">
 
       {/* ── Left branding panel ── */}
       <div className="hidden lg:flex lg:w-[440px] xl:w-[480px] shrink-0 flex-col relative overflow-hidden">
