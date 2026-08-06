@@ -25,7 +25,7 @@ import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, c
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { ShareModal } from "@/components/shared/ShareModal";
 import { WalletSelectModal } from "@/components/shared/WalletSelectModal";
-import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, LineChart, SlidersHorizontal } from "lucide-react";
+import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare } from "lucide-react";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { formatSol, formatTokenAmount } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -433,7 +433,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 }}>
                 {type === "candle"
                   ? <><CandlestickChart className="h-3.5 w-3.5" /> Candle</>
-                  : <><LineChart className="h-3.5 w-3.5" /> Line</>}
+                  : <><Activity className="h-3.5 w-3.5" /> Line</>}
               </button>
             ))}
             <button onClick={() => setIndOpen(true)}
@@ -443,7 +443,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 color: indicators.length ? "#e2e8f0" : "#64748b",
                 border: "1px solid " + (indicators.length ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
               }}>
-              <SlidersHorizontal className="h-3.5 w-3.5" />
+              <FunctionSquare className="h-3.5 w-3.5" />
               Indicators
               {indicators.length > 0 && (
                 <span className="h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center"
