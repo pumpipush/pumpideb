@@ -431,9 +431,23 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   color: chartType === type ? "#e2e8f0" : "#64748b",
                   border: "1px solid " + (chartType === type ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
                 }}>
-                {type === "candle"
-                  ? <><CandlestickChart className="h-3.5 w-3.5" /> Candle</>
-                  : <><Activity className="h-3.5 w-3.5" /> Line</>}
+                {type === "candle" ? <>
+                  {/* OHLC candlestick icon */}
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <line x1="3" y1="1" x2="3" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                    <rect x="1.5" y="3.5" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
+                    <line x1="10" y1="1" x2="10" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                    <rect x="8.5" y="6" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
+                  </svg>
+                  Candle
+                </> : <>
+                  {/* Area/mountain chart icon */}
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <polyline points="1,11 4,6 7,8 10,3 13,5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    <polygon points="1,11 4,6 7,8 10,3 13,5 13,12 1,12" fill="currentColor" fillOpacity="0.18"/>
+                  </svg>
+                  Line
+                </>}
               </button>
             ))}
             <button onClick={() => setIndOpen(true)}
@@ -443,7 +457,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 color: indicators.length ? "#e2e8f0" : "#64748b",
                 border: "1px solid " + (indicators.length ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
               }}>
-              <FunctionSquare className="h-3.5 w-3.5" />
+              {/* fx icon */}
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M2 10.5 C2 10.5 2.5 7 4 6 C5 5.3 6 6 6 7 L6 9 C6 10 7 11 8 10 L12 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M9 9 L12 12 M12 9 L9 12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
               Indicators
               {indicators.length > 0 && (
                 <span className="h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center"
