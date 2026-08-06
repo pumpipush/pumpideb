@@ -486,10 +486,17 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         )}
 
         {/* Market Cap Row */}
-        <div className="flex items-center gap-2 mb-2 px-3 md:px-0">
-          <span className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Market cap</span>
-          <span className="text-xl font-bold text-foreground font-mono">{formatMC(token.marketCapEth)}</span>
-          <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-[10px] font-bold border border-primary/20">+0.0% ($0.0) 24h</span>
+        <div className="flex items-center gap-2.5 mb-2 px-3 md:px-0">
+          <span className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Market Cap</span>
+          <span className="text-xl font-bold text-foreground font-mono tabular-nums">
+            {formatMC(liveToken?.marketCapEth ?? token.marketCapEth)}
+          </span>
+          {liveToken && (
+            <span className="flex items-center gap-1 text-[10px] text-primary font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse inline-block" />
+              LIVE
+            </span>
+          )}
         </div>
 
         {/* Chart Area — tall in full-bleed layout */}
