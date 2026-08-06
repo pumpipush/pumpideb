@@ -406,7 +406,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 24, padding: 3, display: "flex", gap: 2 }}>
               {CHART_TIMEFRAMES.map(t => (
                 <button key={t} onClick={() => setChartTf(t)}
-                  className="px-2.5 text-[11px] font-semibold transition-all shrink-0 whitespace-nowrap flex items-center"
+                  className="px-2.5 text-[14px] font-semibold transition-all shrink-0 whitespace-nowrap flex items-center"
                   style={{
                     height: 28,
                     ...(chartTf === t
