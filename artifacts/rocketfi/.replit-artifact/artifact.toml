@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "RocketFi"
+description = "RocketFi is an EVM token launchpad with a bonding curve — a pump.fun clone for Ethereum-compatible chains. Users can launch meme tokens in one click, trade on the bonding curve (buy/sell), and watch live price discovery on a monitoring dashboard. The app has three surfaces: a marketing landing page, a dApp for wallet-connected trading, and a live dashboard showing all launched tokens."
+version = "1.0.0"
+id = "artifacts/rocketfi"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25132
+
+[services.development]
+run = "pnpm --filter @workspace/rocketfi run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/rocketfi", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/rocketfi/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25132"
+BASE_PATH = "/"

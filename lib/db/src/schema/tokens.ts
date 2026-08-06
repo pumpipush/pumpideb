@@ -1,0 +1,35 @@
+import { pgTable, text, serial, timestamp, boolean, numeric } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
+
+export const tokensTable = pgTable("tokens", {
+  id: serial("id").primaryKey(),
+  address: text("address").notNull().unique(),
+  name: text("name").notNull(),
+  symbol: text("symbol").notNull(),
+  description: text("description"),
+  imageUrl: text("image_url"),
+  creatorAddress: text("creator_address").notNull(),
+  virtualTokenReserves: text("virtual_token_reserves").notNull().default("1000000000000000000000000000"),
+  virtualEthReserves: text("virtual_eth_reserves").notNull().default("3000000000000000000000"),
+  realTokenReserves: text("real_token_reserves").notNull().default("1000000000000000000000000000"),
+  realEthReserves: text("real_eth_reserves").notNull().default("0"),
+  totalSupply: text("total_supply").notNull().default("1000000000000000000000000000"),
+  marketCapEth: text("market_cap_eth"),
+  priceEth: text("price_eth"),
+  graduated: boolean("graduated").notNull().default(false),
+  volumeEth: text("volume_eth").notNull().default("0"),
+  tradeCount: numeric("trade_count").notNull().default("0"),
+  holderCount: numeric("holder_count").notNull().default("0"),
+  twitterUrl: text("twitter_url"),
+  telegramUrl: text("telegram_url"),
+  websiteUrl: text("website_url"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertTokenSchema = createInsertSchema(tokensTable).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertToken = z.infer<typeof insertTokenSchema>;
+export type Token = typeof tokensTable.$inferSelect;

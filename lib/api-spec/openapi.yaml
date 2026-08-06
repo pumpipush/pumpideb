@@ -1,22 +1,28 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
+  # Do not change the title — it controls generated filenames
   title: Api
   version: 0.1.0
-  description: API specification
+  description: RocketFi API — Token Launchpad Backend
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: tokens
+    description: Launched token operations
+  - name: trades
+    description: Trade history operations
+  - name: stats
+    description: Platform statistics
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +30,282 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /tokens:
+    get:
+      operationId: listTokens
+      tags: [tokens]
+      summary: List all launched tokens
+      parameters:
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [newest, trending, volume, marketcap]
+          required: false
+        - in: query
+          name: limit
+          schema:
+            type: number
+            default: 20
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: number
+            default: 0
+          required: false
+        - in: query
+          name: search
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: graduated
+          schema:
+            type: boolean
+          required: false
+      responses:
+        "200":
+          description: List of tokens
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Token"
+    post:
+      operationId: createToken
+      tags: [tokens]
+      summary: Register a newly launched token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenInput"
+      responses:
+        "201":
+          description: Token registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Token"
+
+  /tokens/trending:
+    get:
+      operationId: getTrendingTokens
+      tags: [tokens]
+      summary: Get trending tokens by 24h volume
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: number
+            default: 10
+          required: false
+      responses:
+        "200":
+          description: Trending tokens
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Token"
+
+  /tokens/{address}:
+    get:
+      operationId: getToken
+      tags: [tokens]
+      summary: Get token details by contract address
+      parameters:
+        - in: path
+          name: address
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Token details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Token"
+        "404":
+          description: Token not found
+    patch:
+      operationId: updateToken
+      tags: [tokens]
+      summary: Update token bonding curve state (called after on-chain events)
+      parameters:
+        - in: path
+          name: address
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenUpdate"
+      responses:
+        "200":
+          description: Updated token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Token"
+
+  /tokens/{address}/trades:
+    get:
+      operationId: tradeHistory
+      tags: [trades]
+      summary: Get trade history for a token
+      parameters:
+        - in: path
+          name: address
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Trade history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Trade"
+    post:
+      operationId: recordTrade
+      tags: [trades]
+      summary: Record a new on-chain trade event
+      parameters:
+        - in: path
+          name: address
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TradeInput"
+      responses:
+        "201":
+          description: Trade recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+
+  /stats:
+    get:
+      operationId: getPlatformStats
+      tags: [stats]
+      summary: Get overall platform statistics
+      responses:
+        "200":
+          description: Platform stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformStats"
+
+  /profiles/{address}:
+    get:
+      operationId: getProfile
+      tags: [profiles]
+      summary: Get user profile by wallet address
+      parameters:
+        - in: path
+          name: address
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Profile found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "404":
+          description: Profile not found
+    patch:
+      operationId: updateProfile
+      tags: [profiles]
+      summary: Update user profile
+      parameters:
+        - in: path
+          name: address
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+
+  /profiles:
+    post:
+      operationId: createProfile
+      tags: [profiles]
+      summary: Create or return existing profile for a wallet address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileInput"
+      responses:
+        "200":
+          description: Profile already exists (returned as-is)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "201":
+          description: Profile created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+
+  /stats/recent-activity:
+    get:
+      operationId: getRecentActivity
+      tags: [stats]
+      summary: Get recent trades across all tokens
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: number
+            default: 20
+          required: false
+      responses:
+        "200":
+          description: Recent activity feed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +316,323 @@ components:
       required:
         - status
 
+    Token:
+      type: object
+      required:
+        - id
+        - address
+        - name
+        - symbol
+        - creatorAddress
+        - virtualTokenReserves
+        - virtualEthReserves
+        - realTokenReserves
+        - realEthReserves
+        - totalSupply
+        - graduated
+        - volumeEth
+        - tradeCount
+        - holderCount
+        - createdAt
+      properties:
+        id:
+          type: number
+        address:
+          type: string
+        name:
+          type: string
+        symbol:
+          type: string
+        description:
+          type: ["string", "null"]
+        imageUrl:
+          type: ["string", "null"]
+        creatorAddress:
+          type: string
+        virtualTokenReserves:
+          type: string
+          description: BigInt as string
+        virtualEthReserves:
+          type: string
+          description: BigInt as string
+        realTokenReserves:
+          type: string
+          description: BigInt as string
+        realEthReserves:
+          type: string
+          description: BigInt as string
+        totalSupply:
+          type: string
+          description: BigInt as string
+        marketCapEth:
+          type: ["string", "null"]
+        priceEth:
+          type: ["string", "null"]
+        graduated:
+          type: boolean
+        volumeEth:
+          type: string
+        tradeCount:
+          type: number
+        holderCount:
+          type: number
+        twitterUrl:
+          type: ["string", "null"]
+        telegramUrl:
+          type: ["string", "null"]
+        websiteUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    TokenInput:
+      type: object
+      required:
+        - address
+        - name
+        - symbol
+        - creatorAddress
+        - totalSupply
+        - virtualTokenReserves
+        - virtualEthReserves
+      properties:
+        address:
+          type: string
+        name:
+          type: string
+        symbol:
+          type: string
+        description:
+          type: string
+        imageUrl:
+          type: string
+        creatorAddress:
+          type: string
+        totalSupply:
+          type: string
+        virtualTokenReserves:
+          type: string
+        virtualEthReserves:
+          type: string
+        twitterUrl:
+          type: string
+        telegramUrl:
+          type: string
+        websiteUrl:
+          type: string
+
+    TokenUpdate:
+      type: object
+      properties:
+        virtualTokenReserves:
+          type: string
+        virtualEthReserves:
+          type: string
+        realTokenReserves:
+          type: string
+        realEthReserves:
+          type: string
+        marketCapEth:
+          type: string
+        priceEth:
+          type: string
+        graduated:
+          type: boolean
+        volumeEth:
+          type: string
+        tradeCount:
+          type: number
+        holderCount:
+          type: number
+
+    Trade:
+      type: object
+      required:
+        - id
+        - tokenAddress
+        - traderAddress
+        - isBuy
+        - ethAmount
+        - tokenAmount
+        - txHash
+        - timestamp
+      properties:
+        id:
+          type: number
+        tokenAddress:
+          type: string
+        tokenName:
+          type: ["string", "null"]
+        tokenSymbol:
+          type: ["string", "null"]
+        traderAddress:
+          type: string
+        isBuy:
+          type: boolean
+        ethAmount:
+          type: string
+        tokenAmount:
+          type: string
+        priceEth:
+          type: ["string", "null"]
+        txHash:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    TradeInput:
+      type: object
+      required:
+        - traderAddress
+        - isBuy
+        - ethAmount
+        - tokenAmount
+        - txHash
+        - timestamp
+      properties:
+        traderAddress:
+          type: string
+        isBuy:
+          type: boolean
+        ethAmount:
+          type: string
+        tokenAmount:
+          type: string
+        priceEth:
+          type: string
+        txHash:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    PlatformStats:
+      type: object
+      required:
+        - totalTokens
+        - totalGraduated
+        - totalVolumeEth
+        - totalTrades
+        - tokensLast24h
+        - volumeLast24h
+        - tradesLast24h
+      properties:
+        totalTokens:
+          type: number
+        totalGraduated:
+          type: number
+        totalVolumeEth:
+          type: string
+        totalTrades:
+          type: number
+        tokensLast24h:
+          type: number
+        volumeLast24h:
+          type: string
+        tradesLast24h:
+          type: number
+
+    Profile:
+      type: object
+      required:
+        - address
+        - username
+        - followersCount
+        - followingCount
+        - createdAt
+        - updatedAt
+      properties:
+        address:
+          type: string
+        username:
+          type: string
+        bio:
+          type: ["string", "null"]
+        avatarUrl:
+          type: ["string", "null"]
+        twitterHandle:
+          type: ["string", "null"]
+        websiteUrl:
+          type: ["string", "null"]
+        followersCount:
+          type: number
+        followingCount:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProfileInput:
+      type: object
+      required:
+        - address
+      properties:
+        address:
+          type: string
+        username:
+          type: string
+        bio:
+          type: string
+        avatarUrl:
+          type: string
+        twitterHandle:
+          type: string
+        websiteUrl:
+          type: string
+
+    ProfileUpdate:
+      type: object
+      properties:
+        username:
+          type: string
+        bio:
+          type: string
+        avatarUrl:
+          type: string
+        twitterHandle:
+          type: string
+        websiteUrl:
+          type: string
+
+    ActivityItem:
+      type: object
+      required:
+        - id
+        - tokenAddress
+        - tokenName
+        - tokenSymbol
+        - traderAddress
+        - isBuy
+        - ethAmount
+        - tokenAmount
+        - txHash
+        - timestamp
+      properties:
+        id:
+          type: number
+        tokenAddress:
+          type: string
+        tokenName:
+          type: string
+        tokenSymbol:
+          type: string
+        tokenImageUrl:
+          type: ["string", "null"]
+        traderAddress:
+          type: string
+        isBuy:
+          type: boolean
+        ethAmount:
+          type: string
+        tokenAmount:
+          type: string
+        txHash:
+          type: string
+        timestamp:
+          type: string
+          format: date-time

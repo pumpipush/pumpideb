@@ -1,0 +1,562 @@
+import { useState, useMemo } from "react";
+import {
+  useListTokens,
+  useGetTrendingTokens,
+  ListTokensSort,
+  Token
+} from "@workspace/api-client-react";
+
+import { formatMC, cn, timeAgo } from "@/lib/utils";
+import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
+import { Link } from "wouter";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import {
+  LayoutGrid,
+  List,
+  Search,
+  X,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
+  Image as ImageIcon,
+  GraduationCap,
+  SlidersHorizontal,
+  ArrowRight,
+  Filter,
+} from "lucide-react";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+type SortTab = "New" | "Trending" | "Volume" | "Graduated";
+type ViewMode = "grid" | "table";
+type TableSortKey = "rank" | "marketCap" | "price" | "age" | "name";
+type TableSortDir = "asc" | "desc";
+
+// ─── Skeletons ────────────────────────────────────────────────────────────────
+function TokenCardSkeleton() {
+  return (
+    <div className="flex flex-col bg-card border border-border rounded-sm overflow-hidden">
+      <Skeleton className="aspect-square w-full rounded-none" />
+      <div className="p-3 flex flex-col gap-2">
+        <Skeleton className="h-4 w-2/3" />
+        <div className="flex justify-between">
+          <Skeleton className="h-3 w-1/4" />
+          <Skeleton className="h-3 w-1/3" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TableRowSkeleton() {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 border-b border-border/20">
+      <Skeleton className="h-3 w-5 shrink-0" />
+      <Skeleton className="h-8 w-8 rounded-sm shrink-0" />
+      <div className="flex-1 flex flex-col gap-1">
+        <Skeleton className="h-3.5 w-32" />
+        <Skeleton className="h-2.5 w-16" />
+      </div>
+      <Skeleton className="h-3.5 w-20 hidden sm:block" />
+      <Skeleton className="h-3.5 w-16 hidden md:block" />
+      <Skeleton className="h-3.5 w-14 hidden lg:block" />
+      <Skeleton className="h-3.5 w-16 hidden xl:block" />
+      <Skeleton className="h-6 w-12 rounded-sm" />
+    </div>
+  );
+}
+
+// ─── Table sort header ────────────────────────────────────────────────────────
+function SortTh({
+  col, label, active, dir, onSort, className,
+}: {
+  col: TableSortKey; label: string; active: boolean; dir: TableSortDir;
+  onSort: (k: TableSortKey) => void; className?: string;
+}) {
+  return (
+    <th
+      className={cn(
+        "px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap",
+        className
+      )}
+      onClick={() => onSort(col)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active ? (
+          dir === "desc" ? <ChevronDown className="w-3 h-3 text-primary" /> : <ChevronUp className="w-3 h-3 text-primary" />
+        ) : (
+          <ChevronsUpDown className="w-3 h-3 opacity-30" />
+        )}
+      </span>
+    </th>
+  );
+}
+
+// ─── Table view ───────────────────────────────────────────────────────────────
+function TableView({ tokens }: { tokens: Token[] }) {
+  const [sortKey, setSortKey] = useState<TableSortKey>("rank");
+  const [sortDir, setSortDir] = useState<TableSortDir>("asc");
+
+  const handleSort = (key: TableSortKey) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("desc"); }
+  };
+
+  const sorted = useMemo(() => {
+    const copy = [...tokens];
+    const dir = sortDir === "asc" ? 1 : -1;
+    copy.sort((a, b) => {
+      switch (sortKey) {
+        case "marketCap": return dir * ((parseFloat(a.marketCapEth ?? "0") || 0) - (parseFloat(b.marketCapEth ?? "0") || 0));
+        case "price":     return dir * ((parseFloat(a.priceEth ?? "0") || 0) - (parseFloat(b.priceEth ?? "0") || 0));
+        case "age":       return dir * (new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        case "name":      return dir * a.name.localeCompare(b.name);
+        default:          return 0;
+      }
+    });
+    return copy;
+  }, [tokens, sortKey, sortDir]);
+
+  const th = (col: TableSortKey, label: string, cls?: string) => (
+    <SortTh col={col} label={label} active={sortKey === col} dir={sortDir} onSort={handleSort} className={cls} />
+  );
+
+  return (
+    <div className="overflow-x-auto rounded-sm border border-border/40 bg-card">
+      <table className="w-full border-collapse min-w-[640px]">
+        <thead>
+          <tr className="border-b border-border/40 bg-muted/30">
+            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground w-10">#</th>
+            {th("name",      "Token",      "min-w-[160px]")}
+            {th("marketCap", "Mkt Cap",    "hidden sm:table-cell")}
+            {th("price",     "Price",      "hidden md:table-cell")}
+            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground hidden lg:table-cell">Creator</th>
+            {th("age",       "Age",        "hidden xl:table-cell")}
+            <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((token, idx) => {
+            const mc = parseFloat(token.marketCapEth ?? "0") || 0;
+            const price = parseFloat(token.priceEth ?? "0") || 0;
+            return (
+              <tr
+                key={token.id}
+                className="border-b border-border/20 last:border-0 hover:bg-primary/[0.04] transition-all duration-150 group border-l-2 border-l-transparent hover:border-l-primary/40"
+              >
+                {/* Rank */}
+                <td className="px-3 py-3 text-xs text-muted-foreground/50 font-mono tabular-nums">{idx + 1}</td>
+
+                {/* Token */}
+                <td className="px-3 py-3">
+                  <Link href={`/app?token=${token.address}`} className="flex items-center gap-2.5 min-w-0">
+                    <div className="relative shrink-0">
+                      <div className="w-9 h-9 rounded-sm overflow-hidden">
+                        {token.imageUrl ? (
+                          <img src={token.imageUrl} alt={token.symbol} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center font-bold text-base text-white/80" style={{ background: tokenCardBackground(token.symbol) }}>
+                            {token.symbol.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      {token.graduated && (
+                        <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-primary rounded-full flex items-center justify-center" title="Graduated">
+                          <GraduationCap className="w-2 h-2 text-black" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors truncate max-w-[120px]">{token.name}</div>
+                      <div className="text-[11px] font-mono text-primary">${token.symbol}</div>
+                    </div>
+                  </Link>
+                </td>
+
+                {/* Market Cap */}
+                <td className="px-3 py-3 hidden sm:table-cell">
+                  <span className="text-sm font-bold text-foreground font-mono tabular-nums">{formatMC(token.marketCapEth)}</span>
+                </td>
+
+                {/* Price */}
+                <td className="px-3 py-3 hidden md:table-cell">
+                  <span className="text-xs font-mono text-muted-foreground tabular-nums">
+                    {price < 1e-6
+                      ? price.toExponential(2)
+                      : price < 0.001
+                      ? price.toFixed(6)
+                      : price.toFixed(4)}{" "}ETH
+                  </span>
+                </td>
+
+                {/* Creator */}
+                <td className="px-3 py-3 hidden lg:table-cell">
+                  <Link
+                    href={`/profile/${token.creatorAddress}`}
+                    className="text-xs font-mono text-muted-foreground hover:text-primary transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {(token.creatorAddress ?? "").slice(0, 6)}…{(token.creatorAddress ?? "").slice(-4)}
+                  </Link>
+                </td>
+
+                {/* Age */}
+                <td className="px-3 py-3 hidden xl:table-cell">
+                  <span className="text-xs text-muted-foreground font-mono">{timeAgo(token.createdAt)}</span>
+                </td>
+
+                {/* Action */}
+                <td className="px-3 py-3 text-right">
+                  <Link
+                    href={`/app?token=${token.address}`}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-sm bg-primary/10 text-primary text-xs font-bold hover:bg-primary hover:text-black transition-all duration-150"
+                  >
+                    Trade <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── Grid card ────────────────────────────────────────────────────────────────
+function TokenCard({ token, rank }: { token: Token; rank: number }) {
+  return (
+    <Link
+      href={`/app?token=${token.address}`}
+      className="flex flex-col bg-card border border-border/60 rounded-sm cursor-pointer group relative card-lift hover:border-primary/50"
+    >
+      <div className="aspect-square w-full bg-muted border-b border-border/50 relative overflow-hidden rounded-t-sm">
+        {token.imageUrl ? (
+          <img src={token.imageUrl} alt={token.symbol} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500 ease-out" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center font-bold text-5xl text-white/80 group-hover:scale-105 transition-transform duration-300" style={{ background: tokenCardBackground(token.symbol) }}>
+            {token.symbol.charAt(0).toUpperCase()}
+          </div>
+        )}
+        {/* Hover overlay shimmer */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-sm text-[10px] font-mono text-muted-foreground px-1.5 py-0.5 rounded-sm">#{rank}</div>
+        {token.graduated && (
+          <div className="absolute top-2 right-2 bg-primary/20 border border-primary/50 text-primary text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-sm backdrop-blur-md animate-pulseGlow">
+            Grad
+          </div>
+        )}
+      </div>
+      <div className="p-3 flex flex-col gap-1.5">
+        <span className="font-bold text-foreground text-sm truncate leading-tight group-hover:text-primary transition-colors duration-200">{token.name}</span>
+        <div className="flex justify-between items-center">
+          <span className="text-muted-foreground font-mono text-xs">${token.symbol}</span>
+          <span className="text-primary font-mono text-xs font-bold">{formatMC(token.marketCapEth)}</span>
+        </div>
+        <div className="text-[10px] text-muted-foreground/50 font-mono">{timeAgo(token.createdAt)}</div>
+      </div>
+    </Link>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+export default function Dashboard() {
+  // ── State ─────────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab]   = useState<SortTab>("Trending");
+  const [viewMode, setViewMode]     = useState<ViewMode>("grid");
+  const [search, setSearch]         = useState("");
+  const [minMcap, setMinMcap]       = useState("");
+  const [onlyGraduated, setOnlyGraduated] = useState(false);
+  const [onlyWithImage, setOnlyWithImage] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+
+  // ── Data ──────────────────────────────────────────────────────────────────
+  const sortMap: Record<SortTab, ListTokensSort> = {
+    "New":       ListTokensSort.newest,
+    "Trending":  ListTokensSort.trending,
+    "Volume":    ListTokensSort.volume,
+    "Graduated": ListTokensSort.newest,
+  };
+
+  const { data: rawTokens, isLoading: loadingTokens } = useListTokens({
+    sort: sortMap[activeTab],
+    graduated: activeTab === "Graduated" ? true : undefined,
+    limit: 100,
+  });
+
+  const { data: trending, isLoading: loadingTrending } = useGetTrendingTokens({ limit: 4 });
+
+  // ── Client-side filter ────────────────────────────────────────────────────
+  const tokens = useMemo(() => {
+    if (!rawTokens) return undefined;
+    let list = rawTokens;
+
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(
+        (t) => t.name.toLowerCase().includes(q) || t.symbol.toLowerCase().includes(q)
+      );
+    }
+    if (onlyGraduated) list = list.filter((t) => t.graduated);
+    if (onlyWithImage)  list = list.filter((t) => !!t.imageUrl);
+    if (minMcap.trim()) {
+      const min = parseFloat(minMcap) || 0;
+      list = list.filter((t) => (parseFloat(t.marketCapEth ?? "0") || 0) >= min);
+    }
+    return list;
+  }, [rawTokens, search, onlyGraduated, onlyWithImage, minMcap]);
+
+  const activeFilterCount = [
+    !!search.trim(),
+    onlyGraduated,
+    onlyWithImage,
+    !!minMcap.trim(),
+  ].filter(Boolean).length;
+
+  const clearFilters = () => {
+    setSearch("");
+    setMinMcap("");
+    setOnlyGraduated(false);
+    setOnlyWithImage(false);
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  return (
+    <div className="flex flex-col min-h-full bg-background text-foreground">
+
+      <div className="w-full max-w-[1400px] mx-auto pt-2 md:pt-4 px-3 md:px-5 flex-1">
+
+        <div className="flex flex-col min-w-0">
+
+          {/* Trending strip */}
+          <section className="mb-3 md:mb-5">
+            <div className="flex items-center justify-between mb-2 md:mb-3">
+              <h2 className="text-sm font-bold text-foreground uppercase tracking-widest">Trending now</h2>
+              <Link href="/app" className="text-xs text-primary hover:underline transition-all">See all</Link>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1 md:pb-2 scrollbar-hide snap-x -mx-3 px-3 md:mx-0 md:px-0">
+              {loadingTrending ? (
+                <>
+                  {[1,2,3,4].map(i => <Skeleton key={i} className="snap-start shrink-0 w-[220px] h-[160px] rounded-sm" />)}
+                </>
+              ) : trending?.slice(0, 4).map((token, i) => (
+                <Link
+                  key={token.id}
+                  href={`/app?token=${token.address}`}
+                  style={{ animationDelay: `${i * 60}ms` }}
+                  className="snap-start shrink-0 group relative w-[160px] h-[120px] md:w-[220px] md:h-[160px] rounded-sm overflow-hidden bg-muted border border-border/60 transition-all duration-300 animate-scaleIn hover:-translate-y-1 hover:border-primary/60 hover:shadow-[0_8px_24px_hsl(142_100%_45%/0.2)]"
+                >
+                  {token.imageUrl ? (
+                    <img src={token.imageUrl} alt={token.symbol} className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.06] transition-transform duration-500 ease-out" />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center font-bold text-5xl text-white/80 group-hover:scale-105 transition-transform duration-300" style={{ background: tokenCardBackground(token.symbol) }}>
+                      {token.symbol.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent group-hover:from-black/70 transition-all duration-300" />
+                  <div className="absolute bottom-3 left-3 right-3">
+                    <span className="text-primary font-mono text-sm font-bold drop-shadow-md block">{formatMC(token.marketCapEth)}</span>
+                    <span className="text-foreground/90 text-xs font-medium truncate block drop-shadow-md group-hover:text-white transition-colors duration-200">{token.name}</span>
+                  </div>
+                  {token.graduated && (
+                    <div className="absolute top-2 right-2 bg-primary/20 border border-primary/50 text-primary text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-sm backdrop-blur-md animate-pulseGlow">
+                      Grad
+                    </div>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </section>
+
+          {/* ── Explore header + filter bar ── */}
+          <section className="flex flex-col gap-2">
+            
+            {/* Row 1: title + sort tabs + view toggle */}
+            <div className="flex flex-wrap items-center gap-2 justify-between">
+              <h2 className="text-sm font-bold text-foreground uppercase tracking-widest shrink-0">Explore coins</h2>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Sort tabs */}
+                <div className="flex gap-1 bg-card border border-border/40 rounded-sm p-0.5">
+                  {(["New", "Trending", "Volume", "Graduated"] as SortTab[]).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      className={cn(
+                        "px-3 py-1 text-xs font-bold rounded-[3px] transition-all duration-150",
+                        activeTab === tab
+                          ? "bg-primary text-black shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Filter toggle */}
+                <button
+                  onClick={() => setShowFilters((v) => !v)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-sm border text-xs font-medium transition-all duration-150",
+                    showFilters || activeFilterCount > 0
+                      ? "bg-primary/10 border-primary/40 text-primary"
+                      : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
+                  )}
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  Filters
+                  {activeFilterCount > 0 && (
+                    <span className="bg-primary text-black text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{activeFilterCount}</span>
+                  )}
+                </button>
+
+                {/* Grid/Table toggle */}
+                <div className="flex bg-card border border-border/40 rounded-sm p-0.5 gap-0.5">
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={cn(
+                      "p-1.5 rounded-[3px] transition-all duration-150",
+                      viewMode === "grid" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
+                    )}
+                    title="Grid view"
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode("table")}
+                    className={cn(
+                      "p-1.5 rounded-[3px] transition-all duration-150",
+                      viewMode === "table" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
+                    )}
+                    title="Table view"
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: expandable filter panel */}
+            {showFilters && (
+              <div className="flex flex-wrap items-center gap-2 p-3 bg-card border border-border/40 rounded-sm animate-slideDown">
+                {/* Search */}
+                <div className="relative flex-1 min-w-[160px] max-w-xs">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search name or ticker…"
+                    className="pl-8 h-8 text-xs rounded-sm bg-background border-border/50"
+                  />
+                  {search && (
+                    <button className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setSearch("")}>
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Min Market Cap */}
+                <div className="relative min-w-[140px]">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs pointer-events-none">Min MC</span>
+                  <Input
+                    value={minMcap}
+                    onChange={(e) => setMinMcap(e.target.value)}
+                    placeholder=""
+                    type="number"
+                    min="0"
+                    step="0.001"
+                    className="pl-14 h-8 text-xs rounded-sm bg-background border-border/50 font-mono"
+                  />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none">ETH</span>
+                </div>
+
+                {/* Toggle: Graduated */}
+                <button
+                  onClick={() => setOnlyGraduated((v) => !v)}
+                  className={cn(
+                    "flex items-center gap-1.5 h-8 px-3 rounded-sm border text-xs font-medium transition-all duration-150",
+                    onlyGraduated
+                      ? "bg-primary/15 border-primary/50 text-primary"
+                      : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
+                  )}
+                >
+                  <GraduationCap className="w-3.5 h-3.5" />
+                  Graduated
+                </button>
+
+                {/* Toggle: Has Image */}
+                <button
+                  onClick={() => setOnlyWithImage((v) => !v)}
+                  className={cn(
+                    "flex items-center gap-1.5 h-8 px-3 rounded-sm border text-xs font-medium transition-all duration-150",
+                    onlyWithImage
+                      ? "bg-primary/15 border-primary/50 text-primary"
+                      : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
+                  )}
+                >
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  Has image
+                </button>
+
+                {/* Clear */}
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={clearFilters}
+                    className="flex items-center gap-1 h-8 px-3 rounded-sm text-xs text-muted-foreground hover:text-destructive transition-colors ml-auto"
+                  >
+                    <X className="w-3.5 h-3.5" /> Clear all
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Result count bar */}
+            {!loadingTokens && tokens && (
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <Filter className="w-3 h-3" />
+                <span>{tokens.length} coin{tokens.length !== 1 ? "s" : ""}</span>
+                {activeFilterCount > 0 && (
+                  <span className="text-muted-foreground/50">· filtered</span>
+                )}
+              </div>
+            )}
+
+            {/* ── Token grid or table ── */}
+            {loadingTokens ? (
+              viewMode === "grid" ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-3 mt-1 stagger-grid">
+                  {[...Array(10)].map((_, i) => <TokenCardSkeleton key={i} />)}
+                </div>
+              ) : (
+                <div className="rounded-sm border border-border/40 bg-card overflow-hidden mt-1">
+                  {[...Array(8)].map((_, i) => <TableRowSkeleton key={i} />)}
+                </div>
+              )
+            ) : !tokens || tokens.length === 0 ? (
+              <div className="py-20 text-center text-muted-foreground border border-border/30 border-dashed rounded-sm bg-card/30 mt-1">
+                <Search className="w-8 h-8 mx-auto mb-3 opacity-20" />
+                <p className="text-sm">No coins match your filters.</p>
+                {activeFilterCount > 0 && (
+                  <button onClick={clearFilters} className="mt-3 text-xs text-primary hover:underline">Clear filters</button>
+                )}
+              </div>
+            ) : viewMode === "grid" ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-3 mt-1">
+                {tokens.map((token, idx) => (
+                  <TokenCard key={token.id} token={token} rank={idx + 1} />
+                ))}
+              </div>
+            ) : (
+              <div className="mt-1">
+                <TableView tokens={tokens} />
+              </div>
+            )}
+          </section>
+        </div>
+
+      </div>
+    </div>
+  );
+}

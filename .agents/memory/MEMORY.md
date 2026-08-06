@@ -1,0 +1,1 @@
+- [AppInterface patterns](appinterface-patterns.md) — token sync, BigInt safety, React state over DOM imperative, dead hook patterns
