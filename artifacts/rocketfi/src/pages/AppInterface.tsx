@@ -628,7 +628,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               </div>
                             </td>
                             <td className="px-3 py-2">
-                              <span className={`font-bold uppercase text-[11px] ${trade.isBuy ? "text-primary" : "text-destructive"}`}>
+                              <span className={`font-bold uppercase text-[11px] ${trade.isBuy ? "text-emerald-400" : "text-red-400"}`}>
                                 {trade.isBuy ? "Buy" : "Sell"}
                               </span>
                             </td>
