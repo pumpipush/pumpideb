@@ -867,7 +867,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               {/* Trades panel */}
               <div className={`overflow-x-auto rounded-lg ${activeSubTab !== "tx" ? "hidden" : ""}`}
                 style={{ border: "1px solid rgba(255,255,255,0.06)", WebkitOverflowScrolling: "touch" }}>
-                <table className="text-[13px]" style={{ minWidth: "520px", width: "100%" }}>
+                <table className="text-[14px]" style={{ minWidth: "520px", width: "100%" }}>
                   <thead style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
                     <tr>
                       <th className="text-left px-3 py-2.5 font-medium text-[14px]" style={{ color: "#94a3b8" }}>Type</th>
@@ -911,13 +911,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                             {/* Type */}
                             <td className="px-3 py-2.5">
                               <div className="flex items-center gap-2">
-                                <span
-                                  className="inline-flex items-center px-2 py-0.5 rounded text-[12px] font-semibold"
-                                  style={{
-                                    background: isBuy ? "rgba(74,222,128,0.12)" : "rgba(248,113,113,0.12)",
-                                    color: isBuy ? "#4ade80" : "#f87171",
-                                  }}
-                                >
+                                <span className="text-[14px] font-semibold"
+                                  style={{ color: isBuy ? "#4ade80" : "#f87171" }}>
                                   {isBuy ? "Buy" : "Sell"}
                                 </span>
                                 {isLive && (
@@ -929,15 +924,15 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               </div>
                             </td>
                             {/* Amount SOL */}
-                            <td className="px-3 py-2.5 text-right font-mono text-[13px]" style={{ color: "#e2e8f0" }}>
+                            <td className="px-3 py-2.5 text-right font-mono text-[14px]" style={{ color: "#e2e8f0" }}>
                               {formatSol(trade.ethAmount)}
                             </td>
                             {/* Token amount */}
-                            <td className="px-3 py-2.5 text-right font-mono text-[13px]" style={{ color: "#94a3b8" }}>
+                            <td className="px-3 py-2.5 text-right font-mono text-[14px]" style={{ color: "#94a3b8" }}>
                               {formatTokenAmount(trade.tokenAmount)}
                             </td>
                             {/* Time */}
-                            <td className="px-3 py-2.5 text-right text-[12px]" style={{ color: "#64748b" }}>
+                            <td className="px-3 py-2.5 text-right text-[14px]" style={{ color: "#64748b" }}>
                               {timeAgo(trade.timestamp)}
                             </td>
                             {/* Txn */}
