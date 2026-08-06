@@ -966,30 +966,97 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           </div>
         </div>
 
-        {/* Vol 24h + Txns breakdown card */}
+        {/* 24h Vol + Txns card — Birdeye style */}
         {(() => {
           const { vol24hBuy, vol24hSell, txns24hBuy, txns24hSell } = priceStats;
           const totalTxns = txns24hBuy + txns24hSell;
-          const fmtV = (v: number) => solPrice && v > 0 ? formatUSD(v * solPrice) : v > 0 ? v.toFixed(3) : "—";
+          const sp = solPrice ?? 0;
+
+          // Short-format: $1.23M, $57K, 153K, etc.
+          const shortUsd = (sol: number) => {
+            const u = sol * sp;
+            if (!sp || u === 0) return "—";
+            if (u >= 1_000_000) return `$${(u / 1_000_000).toFixed(2)}M`;
+            if (u >= 1_000)     return `$${Math.round(u / 1_000)}K`;
+            return `$${u.toFixed(2)}`;
+          };
+          const shortNum = (n: number) => {
+            if (n === 0) return "—";
+            if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+            if (n >= 1_000)     return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}K`;
+            return `${n}`;
+          };
+          const signedUsd = (sol: number) => {
+            const u = sol * sp;
+            if (!sp) return "—";
+            const abs = Math.abs(u);
+            const sign = u >= 0 ? "+" : "-";
+            if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+            if (abs >= 1_000)     return `${sign}$${Math.round(abs / 1_000)}K`;
+            return `${sign}$${abs.toFixed(2)}`;
+          };
+          const signedNum = (n: number) => {
+            if (n === 0) return "—";
+            const sign = n >= 0 ? "+" : "-";
+            const abs = Math.abs(n);
+            if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(2)}M`;
+            if (abs >= 1_000)     return `${sign}${Math.round(abs / 1_000)}K`;
+            return `${sign}${abs}`;
+          };
+
           const DIV = "1px solid rgba(255,255,255,0.07)";
+
           const rows = [
-            { label: "24h Vol",  buy: fmtV(vol24hBuy),  sell: fmtV(vol24hSell) },
-            { label: "24h Txns", buy: totalTxns > 0 ? txns24hBuy.toLocaleString() : "—", sell: totalTxns > 0 ? txns24hSell.toLocaleString() : "—" },
+            {
+              label: "24h Vol",
+              total: shortUsd(vol24hBuy + vol24hSell),
+              buy:   shortUsd(vol24hBuy),
+              sell:  shortUsd(vol24hSell),
+              net:   signedUsd(vol24hBuy - vol24hSell),
+              netUp: vol24hBuy >= vol24hSell,
+              buyPct: (vol24hBuy + vol24hSell) > 0 ? (vol24hBuy / (vol24hBuy + vol24hSell)) * 100 : 50,
+            },
+            {
+              label: "24h Txns",
+              total: shortNum(txns24hBuy + txns24hSell),
+              buy:   shortNum(txns24hBuy),
+              sell:  shortNum(txns24hSell),
+              net:   signedNum(txns24hBuy - txns24hSell),
+              netUp: txns24hBuy >= txns24hSell,
+              buyPct: totalTxns > 0 ? (txns24hBuy / totalTxns) * 100 : 50,
+            },
           ];
+
           return (
             <div className="rounded-xl overflow-hidden" style={{ border: DIV, background: "rgba(255,255,255,0.03)" }}>
-              {/* Header */}
-              <div className="grid grid-cols-3 px-3 py-2" style={{ borderBottom: DIV }}>
-                <span className="text-[12px] font-medium" style={{ color: "#475569" }} />
-                <span className="text-[12px] font-semibold text-center" style={{ color: "#4ade80" }}>Buy</span>
-                <span className="text-[12px] font-semibold text-center" style={{ color: "#f87171" }}>Sell</span>
-              </div>
-              {rows.map(({ label, buy, sell }, i) => (
-                <div key={label} className="grid grid-cols-3 items-center px-3 py-2.5"
-                  style={{ borderTop: i > 0 ? DIV : "none" }}>
-                  <span className="text-[13px] font-medium" style={{ color: "#94a3b8" }}>{label}</span>
-                  <span className="text-[13px] font-mono font-semibold text-center" style={{ color: "#4ade80" }}>{buy}</span>
-                  <span className="text-[13px] font-mono font-semibold text-center" style={{ color: "#f87171" }}>{sell}</span>
+              {rows.map(({ label, total, buy, sell, net, netUp, buyPct }, i) => (
+                <div key={label} style={{ borderTop: i > 0 ? DIV : "none" }}>
+                  <div className="grid grid-cols-4 items-start px-3 pt-2.5 pb-1.5 gap-1">
+                    {/* Label + total */}
+                    <div className="flex flex-col">
+                      <span className="text-[11px] font-medium mb-0.5" style={{ color: "#64748b" }}>{label}</span>
+                      <span className="text-[13px] font-mono font-bold" style={{ color: "#e2e8f0" }}>{total}</span>
+                    </div>
+                    {/* Buy */}
+                    <div className="flex flex-col items-center">
+                      <span className="text-[11px] font-medium mb-0.5" style={{ color: "#64748b" }}>Buy</span>
+                      <span className="text-[13px] font-mono font-bold" style={{ color: "#4ade80" }}>{buy}</span>
+                    </div>
+                    {/* Sell */}
+                    <div className="flex flex-col items-center">
+                      <span className="text-[11px] font-medium mb-0.5" style={{ color: "#64748b" }}>Sell</span>
+                      <span className="text-[13px] font-mono font-bold" style={{ color: "#f87171" }}>{sell}</span>
+                    </div>
+                    {/* Net */}
+                    <div className="flex flex-col items-center">
+                      <span className="text-[11px] font-medium mb-0.5" style={{ color: "#64748b" }}>Net</span>
+                      <span className="text-[13px] font-mono font-bold" style={{ color: netUp ? "#4ade80" : "#f87171" }}>{net}</span>
+                    </div>
+                  </div>
+                  {/* Buy/Sell progress bar */}
+                  <div className="flex h-1 mx-3 mb-2.5 rounded-full overflow-hidden" style={{ background: "rgba(248,113,113,0.35)" }}>
+                    <div className="h-full transition-all duration-500" style={{ width: `${buyPct}%`, background: "#4ade80" }} />
+                  </div>
                 </div>
               ))}
             </div>
