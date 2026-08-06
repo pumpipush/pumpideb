@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { copyToClipboard } from "@/components/shared/CopyToast";
 import { useWallet } from "@/contexts/WalletContext";
-import { formatAddress, formatMC, formatEth, timeAgo, cn } from "@/lib/utils";
+import { formatAddress, formatMC, formatEth, formatSol, timeAgo, cn } from "@/lib/utils";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { Link } from "wouter";
 import {
@@ -403,7 +403,7 @@ export default function ProfilePage() {
         <div className="flex gap-2 sm:gap-3 mb-6">
           <StatCard label="Tokens" value={tokens?.length ?? "—"} icon={Coins} />
           <StatCard label="Trades" value={totalTrades || "—"} icon={Activity} />
-          <StatCard label="Volume" value={totalVolume > 0 ? `${totalVolume.toFixed(3)} ETH` : "—"} icon={TrendingUp} />
+          <StatCard label="Volume" value={totalVolume > 0 ? formatSol(totalVolume.toFixed(0)) : "—"} icon={TrendingUp} />
         </div>
 
         {/* ── Tabs ── */}

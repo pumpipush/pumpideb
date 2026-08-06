@@ -24,6 +24,7 @@ import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvata
 import { ShareModal } from "@/components/shared/ShareModal";
 import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink } from "lucide-react";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
+import { formatSol, formatTokenAmount } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { copyToClipboard as fireClipboard } from "@/components/shared/CopyToast";
 import { useLocation } from "wouter";
@@ -233,7 +234,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                {createToken.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "create coin"}
              </Button>
              <div className="text-center mt-2 text-xs font-mono text-muted-foreground">
-               Cost to deploy: ~0.02 ETH
+               Cost to deploy: ~0.02 SOL
              </div>
           </div>
         </form>
@@ -344,7 +345,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         throw new Error("Insufficient token reserves");
       }
       if (tradeMode === "sell" && ve < ethAmtBI) {
-        throw new Error("Insufficient ETH reserves");
+        throw new Error("Insufficient SOL reserves");
       }
 
       let newVt = vt;
@@ -435,8 +436,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   );
   if (!token) return <div className="text-center py-20 text-muted-foreground font-mono">Token not found.</div>;
 
-  const realEthReserves = Math.max(0, parseFloat(formatEth(token.virtualEthReserves || "0")) - 3);
-  const progressPercent = Math.min(100, (realEthReserves / 85) * 100);
+  // virtualEthReserves stores integer SOL (Pump.fun: starts with 30 virtual SOL, graduates at +85 real SOL)
+  const vSolInt = parseFloat((liveToken?.virtualEthReserves ?? token.virtualEthReserves) || "0");
+  const realSolInCurve = Math.max(0, vSolInt - 30);
+  const progressPercent = Math.min(100, (realSolInCurve / 85) * 100);
   const isGraduated = token.graduated || progressPercent >= 100;
 
   return (
@@ -539,7 +542,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           <div className="mt-1 text-[10px] font-mono text-muted-foreground/70">
             {isGraduated
               ? <span className="text-primary font-bold">Graduated — liquidity added to Uniswap ✓</span>
-              : <span>{realEthReserves.toFixed(3)} ETH / 85 ETH goal</span>
+              : <span>{realSolInCurve.toFixed(2)} / 85 SOL goal</span>
             }
           </div>
         </div>
@@ -583,7 +586,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     <tr>
                       <th className="text-left px-3 py-2 font-normal uppercase tracking-wider">Account</th>
                       <th className="text-left px-3 py-2 font-normal uppercase tracking-wider">Type</th>
-                      <th className="text-left px-3 py-2 font-normal uppercase tracking-wider">ETH</th>
+                      <th className="text-left px-3 py-2 font-normal uppercase tracking-wider">SOL</th>
                       <th className="text-left px-3 py-2 font-normal uppercase tracking-wider">{token.symbol}</th>
                       <th className="text-right px-3 py-2 font-normal uppercase tracking-wider">Time</th>
                     </tr>
@@ -628,8 +631,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                                 {trade.isBuy ? "Buy" : "Sell"}
                               </span>
                             </td>
-                            <td className="px-3 py-2 text-foreground">{formatEth(trade.ethAmount)}</td>
-                            <td className="px-3 py-2 text-foreground">{formatEth(trade.tokenAmount)}</td>
+                            <td className="px-3 py-2 text-foreground">{formatSol(trade.ethAmount)}</td>
+                            <td className="px-3 py-2 text-foreground">{formatTokenAmount(trade.tokenAmount)}</td>
                             <td className="px-3 py-2 text-right text-muted-foreground/80">{timeAgo(trade.timestamp)}</td>
                           </tr>
                         );
@@ -750,14 +753,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-0.5">Price</div>
                   <div className="font-mono font-bold text-lg text-foreground leading-none">
                     {currentPrice > 0 ? currentPrice.toExponential(4) : "—"}
-                    <span className="text-[11px] font-normal text-muted-foreground ml-1">ETH</span>
+                    <span className="text-[11px] font-normal text-muted-foreground ml-1">SOL</span>
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-0.5">Vol 24h</div>
                   <div className="font-mono font-bold text-sm text-foreground leading-none">
                     {vol24h > 0 ? vol24h.toFixed(4) : "0.0000"}
-                    <span className="text-[11px] font-normal text-muted-foreground ml-1">ETH</span>
+                    <span className="text-[11px] font-normal text-muted-foreground ml-1">SOL</span>
                   </div>
                 </div>
               </div>
@@ -823,7 +826,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 onChange={e => setAmount(e.target.value)}
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                <span className="font-bold text-muted-foreground font-mono text-sm transition-all duration-200">{tradeMode === "buy" ? "ETH" : token.symbol}</span>
+                <span className="font-bold text-muted-foreground font-mono text-sm transition-all duration-200">{tradeMode === "buy" ? "SOL" : token.symbol}</span>
               </div>
             </div>
 
@@ -855,7 +858,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           <div className="text-[10px] font-mono text-muted-foreground/70">
             {isGraduated
               ? <span className="text-amber-400 font-bold">Graduated to Uniswap ✓</span>
-              : <span>{realEthReserves.toFixed(2)} / 85 ETH</span>
+              : <span>{realSolInCurve.toFixed(2)} / 85 SOL</span>
             }
           </div>
         </div>
@@ -866,8 +869,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             { label: "Ticker", value: `$${token.symbol}`, accent: true },
             { label: "Total supply", value: "1,000,000,000" },
             { label: "Market cap", value: formatMC(liveToken?.marketCapEth ?? token.marketCapEth) },
-            { label: "Virtual liquidity", value: `${parseFloat(formatEth(liveToken?.virtualEthReserves ?? token.virtualEthReserves ?? "0")).toFixed(2)} ETH` },
-            { label: "Volume", value: `${formatEth(liveToken?.volumeEth ?? token.volumeEth ?? "0")} ETH` },
+            { label: "Virtual liquidity", value: `${parseFloat(liveToken?.virtualEthReserves ?? token.virtualEthReserves ?? "0").toFixed(2)} SOL` },
+            { label: "Volume", value: formatSol(liveToken?.volumeEth ?? token.volumeEth ?? "0") },
             { label: "Trades", value: String(liveToken?.tradeCount ?? token.tradeCount) },
           ].map(({ label, value, accent }, i, arr) => (
             <div key={label} className={`flex justify-between items-center px-3 py-2 text-xs ${i < arr.length - 1 ? "border-b border-border/30" : ""}`}>
@@ -920,7 +923,7 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
               </div>
               <div className="text-right">
                 <div className="font-mono text-xs font-bold text-primary">${token.symbol}</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">Vol: {formatEth(token.volumeEth)} ETH</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">Vol: {formatSol(token.volumeEth)}</div>
               </div>
             </div>
           ))}

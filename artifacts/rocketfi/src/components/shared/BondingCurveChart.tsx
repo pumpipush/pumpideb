@@ -69,7 +69,7 @@ export function BondingCurveChart({ token }: { token: Token }) {
         <Tooltip 
           contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
           itemStyle={{ color: 'hsl(var(--primary))' }}
-          formatter={(value: number) => [value.toFixed(8) + ' ETH', 'Price']}
+          formatter={(value: number) => [value.toFixed(8) + ' SOL', 'Price']}
           labelStyle={{ color: 'hsl(var(--muted-foreground))' }}
         />
         <Line 
