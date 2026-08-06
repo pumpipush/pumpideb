@@ -306,6 +306,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [chartType, setChartType] = useState<ChartType>("candle");
   const [indicators, setIndicators] = useState<Indicator[]>([]);
   const [indOpen, setIndOpen] = useState(false);
+  const [chartTypeOpen, setChartTypeOpen] = useState(false);
   const CHART_TIMEFRAMES: ChartTimeframe[] = ["1m", "5m", "15m", "1H", "4H", "1D", "1W"];
   const toggleIndicator = useCallback((ind: Indicator) => {
     setIndicators(prev => prev.includes(ind) ? prev.filter(i => i !== ind) : [...prev, ind]);
@@ -423,16 +424,18 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         <div className="flex items-stretch overflow-x-auto" style={{ background: "#0d1726", borderBottom: "1px solid rgba(255,255,255,0.08)", scrollbarWidth: "none" }}>
           {/* Candle / Line / Indicators — tab style */}
           <div className="flex items-center gap-1.5 px-2 shrink-0" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
-            {(["candle", "line"] as ChartType[]).map((type) => (
-              <button key={type} onClick={() => setChartType(type)}
+
+            {/* Mobile: single merged button with dropdown */}
+            <div className="relative sm:hidden">
+              <button
+                onClick={() => setChartTypeOpen(v => !v)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all"
                 style={{
-                  background: chartType === type ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
-                  color: chartType === type ? "#e2e8f0" : "#64748b",
-                  border: "1px solid " + (chartType === type ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
+                  background: "rgba(255,255,255,0.10)",
+                  color: "#e2e8f0",
+                  border: "1px solid rgba(255,255,255,0.14)",
                 }}>
-                {type === "candle" ? <>
-                  {/* OHLC candlestick icon */}
+                {chartType === "candle" ? <>
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                     <line x1="3" y1="1" x2="3" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
                     <rect x="1.5" y="3.5" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
@@ -441,7 +444,68 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   </svg>
                   Candle
                 </> : <>
-                  {/* Area/mountain chart icon */}
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <polyline points="1,11 4,6 7,8 10,3 13,5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    <polygon points="1,11 4,6 7,8 10,3 13,5 13,12 1,12" fill="currentColor" fillOpacity="0.18"/>
+                  </svg>
+                  Line
+                </>}
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="ml-0.5">
+                  <path d="M2 3.5 L5 6.5 L8 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+              {chartTypeOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setChartTypeOpen(false)} />
+                  <div className="absolute left-0 top-full mt-1 z-50 rounded-lg overflow-hidden shadow-xl"
+                    style={{ background: "#0d1726", border: "1px solid rgba(255,255,255,0.12)", minWidth: 120 }}>
+                    {(["candle", "line"] as ChartType[]).map(type => (
+                      <button key={type} onClick={() => { setChartType(type); setChartTypeOpen(false); }}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 text-[14px] font-semibold transition-all"
+                        style={{
+                          background: chartType === type ? "rgba(255,255,255,0.08)" : "transparent",
+                          color: chartType === type ? "#e2e8f0" : "#94a3b8",
+                        }}>
+                        {type === "candle" ? <>
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                            <line x1="3" y1="1" x2="3" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                            <rect x="1.5" y="3.5" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
+                            <line x1="10" y1="1" x2="10" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                            <rect x="8.5" y="6" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
+                          </svg>
+                          Candle
+                        </> : <>
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                            <polyline points="1,11 4,6 7,8 10,3 13,5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                            <polygon points="1,11 4,6 7,8 10,3 13,5 13,12 1,12" fill="currentColor" fillOpacity="0.18"/>
+                          </svg>
+                          Line
+                        </>}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Desktop: separate Candle + Line buttons */}
+            {(["candle", "line"] as ChartType[]).map((type) => (
+              <button key={type} onClick={() => setChartType(type)}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all"
+                style={{
+                  background: chartType === type ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+                  color: chartType === type ? "#e2e8f0" : "#64748b",
+                  border: "1px solid " + (chartType === type ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
+                }}>
+                {type === "candle" ? <>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <line x1="3" y1="1" x2="3" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                    <rect x="1.5" y="3.5" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
+                    <line x1="10" y1="1" x2="10" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                    <rect x="8.5" y="6" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
+                  </svg>
+                  Candle
+                </> : <>
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                     <polyline points="1,11 4,6 7,8 10,3 13,5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
                     <polygon points="1,11 4,6 7,8 10,3 13,5 13,12 1,12" fill="currentColor" fillOpacity="0.18"/>
