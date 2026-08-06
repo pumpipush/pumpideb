@@ -31,22 +31,6 @@ function getMobileDeepLink(descriptor: WalletDescriptor): string {
   return descriptor.deepLinkBase ? `${descriptor.deepLinkBase}${dappUrl}` : descriptor.installUrl;
 }
 
-// Simple inline SVG icons for EVM wallets
-const METAMASK_ICON = `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" rx="20" fill="#1c1c1c"/><path d="M73.8 18L51.5 34.3l4.2-9.9L73.8 18z" fill="#E2761B" stroke="#E2761B" stroke-linecap="round" stroke-linejoin="round"/><path d="M22.2 18l22.1 16.5-4-10L22.2 18zm42.1 41.6l-5.9 9.1 12.7 3.5 3.6-12.4-10.4-.2zm-54 .2l3.6 12.4 12.7-3.5-5.9-9.1-10.4.2z" fill="#E4761B" stroke="#E4761B" stroke-linecap="round" stroke-linejoin="round"/><path d="M37.8 41.5l-3.5 5.3 12.5.6-.4-13.5-8.6 7.6zm20.4 0l-8.7-7.8-.3 13.7 12.5-.6-3.5-5.3zm-20.9 27l7.5-3.7-6.5-5-1 8.7zm13.2-3.7l7.5 3.7-1-8.7-6.5 5z" fill="#E4761B" stroke="#E4761B" stroke-linecap="round" stroke-linejoin="round"/></svg>`)}`;
-
-const WALLETCONNECT_ICON = `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" rx="20" fill="#1c1c1c"/><path d="M28.5 38.6c10.8-10.6 28.2-10.6 39 0l1.3 1.3c.5.5.5 1.4 0 1.9l-4.4 4.3c-.3.3-.7.3-1 0l-1.8-1.7c-7.5-7.4-19.7-7.4-27.2 0l-1.9 1.9c-.3.3-.7.3-1 0L27 41.9c-.5-.5-.5-1.4 0-1.9l1.5-1.4zm48.1 9l3.9 3.8c.5.5.5 1.4 0 1.9L62.2 70.6c-.5.5-1.4.5-1.9 0L48 58.5 35.7 70.6c-.5.5-1.4.5-1.9 0L15.5 52.3c-.5-.5-.5-1.4 0-1.9l3.9-3.8c.5-.5 1.4-.5 1.9 0L33.7 58.7l12.3-12.1c.5-.5 1.4-.5 1.9 0l12.3 12.1 12.5-12.1c.5-.5 1.4-.5 1.9 0z" fill="#3B99FC"/></svg>`)}`;
-
-interface EvmWallet {
-  name: string;
-  icon: string;
-  installUrl: string;
-  badge?: string;
-}
-
-const EVM_WALLETS: EvmWallet[] = [
-  { name: "MetaMask",      icon: METAMASK_ICON,      installUrl: "https://metamask.io/download/" },
-  { name: "WalletConnect", icon: WALLETCONNECT_ICON, installUrl: "https://walletconnect.com/",   badge: "QR CODE" },
-];
 
 export function WalletSelectModal({ open, onOpenChange, onSuccess }: WalletSelectModalProps) {
   const { connectWallet } = useWallet();
@@ -154,34 +138,6 @@ export function WalletSelectModal({ open, onOpenChange, onSuccess }: WalletSelec
             </div>
           </div>
 
-          {/* ETHEREUM / BSC section */}
-          <div className="px-5 pt-3 pb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[11px] font-semibold tracking-widest" style={{ color: "#475569" }}>ETHEREUM / BSC</span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: "rgba(255,255,255,0.07)", color: "#64748b" }}>EVM</span>
-            </div>
-            <div className="space-y-1">
-              {EVM_WALLETS.map((w) => (
-                <button
-                  key={w.name}
-                  onClick={() => window.open(w.installUrl, "_blank", "noopener,noreferrer")}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left"
-                  style={{ background: "rgba(255,255,255,0.03)" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.07)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
-                >
-                  <img src={w.icon} alt={w.name} className="w-9 h-9 rounded-xl shrink-0" />
-                  <span className="flex-1 text-[14px] font-semibold" style={{ color: "#e2e8f0" }}>{w.name}</span>
-                  {w.badge && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md mr-1" style={{ background: "rgba(255,255,255,0.07)", color: "#64748b", border: "1px solid rgba(255,255,255,0.10)" }}>
-                      {w.badge}
-                    </span>
-                  )}
-                  <ChevronRight className="w-4 h-4 shrink-0" style={{ color: "#334155" }} />
-                </button>
-              ))}
-            </div>
-          </div>
 
           {/* Error */}
           {error && (
