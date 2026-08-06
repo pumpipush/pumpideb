@@ -30,7 +30,7 @@ const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
     bg: "bg-emerald-500/10",
     border: "border-emerald-500/20",
     dot: "#34d399",
-    icon: <span role="img" aria-label="pump.fun">🐸</span>,
+    icon: <img src="/pumpfun.png" alt="pump.fun" className="w-4 h-4 rounded-sm object-cover" />,
     sourceUrlTemplate: "https://pump.fun/coin/{address}",
   },
   moonshot: {
