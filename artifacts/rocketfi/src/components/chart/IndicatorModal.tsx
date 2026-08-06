@@ -277,18 +277,11 @@ function Row({
       onMouseEnter={() => onHover(def.id)}
       onMouseLeave={() => onHover(null)}
     >
-      {/* Left: color dot + name */}
+      {/* Left: name */}
       <div className="flex items-center gap-3">
         <span
-          className="w-2 h-2 rounded-full shrink-0 transition-all"
-          style={{
-            background:  isActive ? def.color : "rgba(255,255,255,0.15)",
-            boxShadow:   isActive ? `0 0 6px ${def.color}80` : "none",
-          }}
-        />
-        <span
           className="text-[13px] transition-colors"
-          style={{ color: isActive ? "#fff" : isHovered ? "#cbd5e1" : "#94a3b8" }}
+          style={{ color: isActive ? "#fff" : isHovered ? "#e2e8f0" : "#cbd5e1" }}
         >
           {def.name}
         </span>
