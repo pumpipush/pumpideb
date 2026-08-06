@@ -425,68 +425,16 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           {/* Candle / Line / Indicators — tab style */}
           <div className="flex items-center gap-1.5 px-2 shrink-0" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
 
-            {/* Mobile: single merged button with dropdown */}
-            <div className="relative sm:hidden">
-              <button
-                onClick={() => setChartTypeOpen(v => !v)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all"
-                style={{
-                  background: "rgba(255,255,255,0.10)",
-                  color: "#e2e8f0",
-                  border: "1px solid rgba(255,255,255,0.14)",
-                }}>
-                {chartType === "candle" ? <>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <line x1="3" y1="1" x2="3" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                    <rect x="1.5" y="3.5" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
-                    <line x1="10" y1="1" x2="10" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                    <rect x="8.5" y="6" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
-                  </svg>
-                  Candle
-                </> : <>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <polyline points="1,11 4,6 7,8 10,3 13,5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                    <polygon points="1,11 4,6 7,8 10,3 13,5 13,12 1,12" fill="currentColor" fillOpacity="0.18"/>
-                  </svg>
-                  Line
-                </>}
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="ml-0.5">
-                  <path d="M2 3.5 L5 6.5 L8 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-              {chartTypeOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setChartTypeOpen(false)} />
-                  <div className="absolute left-0 top-full mt-1 z-50 rounded-lg overflow-hidden shadow-xl"
-                    style={{ background: "#0d1726", border: "1px solid rgba(255,255,255,0.12)", minWidth: 120 }}>
-                    {(["candle", "line"] as ChartType[]).map(type => (
-                      <button key={type} onClick={() => { setChartType(type); setChartTypeOpen(false); }}
-                        className="w-full flex items-center gap-2 px-3 py-2.5 text-[14px] font-semibold transition-all"
-                        style={{
-                          background: chartType === type ? "rgba(255,255,255,0.08)" : "transparent",
-                          color: chartType === type ? "#e2e8f0" : "#94a3b8",
-                        }}>
-                        {type === "candle" ? <>
-                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                            <line x1="3" y1="1" x2="3" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                            <rect x="1.5" y="3.5" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
-                            <line x1="10" y1="1" x2="10" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                            <rect x="8.5" y="6" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
-                          </svg>
-                          Candle
-                        </> : <>
-                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                            <polyline points="1,11 4,6 7,8 10,3 13,5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                            <polygon points="1,11 4,6 7,8 10,3 13,5 13,12 1,12" fill="currentColor" fillOpacity="0.18"/>
-                          </svg>
-                          Line
-                        </>}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+            {/* Mobile: native select (no clipping issues) */}
+            <select
+              className="sm:hidden text-[13px] font-semibold rounded-lg px-2 py-1.5 outline-none cursor-pointer appearance-none"
+              style={{ background: "rgba(255,255,255,0.08)", color: "#e2e8f0", border: "1px solid rgba(255,255,255,0.14)" }}
+              value={chartType}
+              onChange={e => setChartType(e.target.value as ChartType)}
+            >
+              <option value="candle" style={{ background: "#0d1726" }}>Candle</option>
+              <option value="line" style={{ background: "#0d1726" }}>Line</option>
+            </select>
 
             {/* Desktop: separate Candle + Line buttons */}
             {(["candle", "line"] as ChartType[]).map((type) => (
@@ -514,23 +462,37 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 </>}
               </button>
             ))}
-            <button onClick={() => setIndOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all"
-              style={{
-                background: indicators.length ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
-                color: indicators.length ? "#e2e8f0" : "#64748b",
-                border: "1px solid " + (indicators.length ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
-              }}>
-              {/* fx icon */}
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M2 10.5 C2 10.5 2.5 7 4 6 C5 5.3 6 6 6 7 L6 9 C6 10 7 11 8 10 L12 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M9 9 L12 12 M12 9 L9 12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-              </svg>
-              Indicators
-              {indicators.length > 0 && (
-                <span className="h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center"
-                  style={{ background: "#3b82f6", color: "#fff" }}>{indicators.length}</span>
-              )}
+
+            {/* Indicators — icon+text on desktop, icon-only bare on mobile */}
+            <button onClick={() => setIndOpen(true)} className="flex items-center gap-1.5 transition-all"
+              style={{ color: indicators.length ? "#e2e8f0" : "#64748b" }}>
+              {/* desktop: full tab button */}
+              <span className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold"
+                style={{
+                  background: indicators.length ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+                  border: "1px solid " + (indicators.length ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
+                }}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M2 10.5 C2 10.5 2.5 7 4 6 C5 5.3 6 6 6 7 L6 9 C6 10 7 11 8 10 L12 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M9 9 L12 12 M12 9 L9 12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                </svg>
+                Indicators
+                {indicators.length > 0 && (
+                  <span className="h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center"
+                    style={{ background: "#3b82f6", color: "#fff" }}>{indicators.length}</span>
+                )}
+              </span>
+              {/* mobile: bare icon only */}
+              <span className="sm:hidden flex items-center justify-center w-8 h-8 relative">
+                <svg width="16" height="16" viewBox="0 0 14 14" fill="none">
+                  <path d="M2 10.5 C2 10.5 2.5 7 4 6 C5 5.3 6 6 6 7 L6 9 C6 10 7 11 8 10 L12 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M9 9 L12 12 M12 9 L9 12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                </svg>
+                {indicators.length > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full text-[8px] font-bold flex items-center justify-center"
+                    style={{ background: "#3b82f6", color: "#fff" }}>{indicators.length}</span>
+                )}
+              </span>
             </button>
           </div>
 
