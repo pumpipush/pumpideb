@@ -24,6 +24,7 @@ import { ethers } from "ethers";
 import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, cn, timeAgo } from "@/lib/utils";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { ShareModal } from "@/components/shared/ShareModal";
+import { WalletSelectModal } from "@/components/shared/WalletSelectModal";
 import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp } from "lucide-react";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { formatSol, formatTokenAmount } from "@/lib/utils";
@@ -297,6 +298,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [shareOpen, setShareOpen] = useState(false);
   // Bug fix: React state for tx/holders sub-tab instead of imperative DOM manipulation
   const [activeSubTab, setActiveSubTab] = useState<"tx" | "holders" | "positions">("tx");
+  const [walletModalOpen, setWalletModalOpen] = useState(false);
 
   // New chart state
   const [chartTf, setChartTf] = useState<ChartTimeframe>("15m");
@@ -885,10 +887,15 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               {activeSubTab === "positions" && (() => {
                 if (!wallet) {
                   return (
-                    <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-lg"
+                    <div className="flex flex-col items-center justify-center py-16 gap-4 rounded-lg"
                       style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
-                      <TrendingUp className="h-8 w-8" style={{ color: "#334155" }} />
-                      <p className="text-[14px] font-medium" style={{ color: "#64748b" }}>Connect wallet to see your position</p>
+                      <button
+                        onClick={() => setWalletModalOpen(true)}
+                        className="px-8 py-2.5 rounded-md text-[14px] font-semibold tracking-wide transition-all hover:opacity-90 active:scale-95"
+                        style={{ background: "transparent", border: "1px solid #f59e0b", color: "#f59e0b" }}
+                      >
+                        CONNECT WALLET
+                      </button>
                     </div>
                   );
                 }
@@ -1235,6 +1242,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         token={token}
         open={shareOpen}
         onClose={() => setShareOpen(false)}
+      />
+      <WalletSelectModal
+        open={walletModalOpen}
+        onOpenChange={setWalletModalOpen}
       />
     </div>
   );
