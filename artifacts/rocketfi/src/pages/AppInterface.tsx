@@ -969,49 +969,29 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         {/* Vol 24h + Txns breakdown card */}
         {(() => {
           const { vol24hBuy, vol24hSell, txns24hBuy, txns24hSell } = priceStats;
-          const totalVol  = vol24hBuy + vol24hSell;
           const totalTxns = txns24hBuy + txns24hSell;
-          const buyPct = totalVol > 0 ? (vol24hBuy / totalVol) * 100 : 50;
           const fmtV = (v: number) => solPrice && v > 0 ? formatUSD(v * solPrice) : v > 0 ? v.toFixed(3) : "—";
-          const DIV = "1px solid rgba(255,255,255,0.08)";
+          const DIV = "1px solid rgba(255,255,255,0.07)";
+          const rows = [
+            { label: "24h Vol",  buy: fmtV(vol24hBuy),  sell: fmtV(vol24hSell) },
+            { label: "24h Txns", buy: totalTxns > 0 ? txns24hBuy.toLocaleString() : "—", sell: totalTxns > 0 ? txns24hSell.toLocaleString() : "—" },
+          ];
           return (
             <div className="rounded-xl overflow-hidden" style={{ border: DIV, background: "rgba(255,255,255,0.03)" }}>
-              {/* Buy/Sell ratio bar */}
-              <div className="px-4 pt-3 pb-2">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[12px] font-semibold" style={{ color: "#4ade80" }}>
-                    Buy {buyPct.toFixed(0)}%
-                  </span>
-                  <span className="text-[12px] font-semibold" style={{ color: "#f87171" }}>
-                    {(100 - buyPct).toFixed(0)}% Sell
-                  </span>
-                </div>
-                <div className="flex h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(248,113,113,0.25)" }}>
-                  <div className="h-full rounded-full transition-all duration-500" style={{ width: `${buyPct}%`, background: "linear-gradient(90deg,#16a34a,#4ade80)" }} />
-                </div>
+              {/* Header */}
+              <div className="grid grid-cols-3 px-3 py-2" style={{ borderBottom: DIV }}>
+                <span className="text-[12px] font-medium" style={{ color: "#475569" }} />
+                <span className="text-[12px] font-semibold text-center" style={{ color: "#4ade80" }}>Buy</span>
+                <span className="text-[12px] font-semibold text-center" style={{ color: "#f87171" }}>Sell</span>
               </div>
-
-              {/* 24h Vol row */}
-              <div className="grid grid-cols-2 px-4 py-2.5" style={{ borderTop: DIV }}>
-                <div>
-                  <span className="text-[11px] block mb-0.5" style={{ color: "#64748b" }}>24h Vol</span>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[13px] font-mono font-semibold" style={{ color: "#4ade80" }}>B {fmtV(vol24hBuy)}</span>
-                    <span className="text-[13px] font-mono font-semibold" style={{ color: "#f87171" }}>S {fmtV(vol24hSell)}</span>
-                  </div>
+              {rows.map(({ label, buy, sell }, i) => (
+                <div key={label} className="grid grid-cols-3 items-center px-3 py-2.5"
+                  style={{ borderTop: i > 0 ? DIV : "none" }}>
+                  <span className="text-[13px] font-medium" style={{ color: "#94a3b8" }}>{label}</span>
+                  <span className="text-[13px] font-mono font-semibold text-center" style={{ color: "#4ade80" }}>{buy}</span>
+                  <span className="text-[13px] font-mono font-semibold text-center" style={{ color: "#f87171" }}>{sell}</span>
                 </div>
-              </div>
-
-              {/* 24h Txns row */}
-              <div className="grid grid-cols-2 px-4 py-2.5" style={{ borderTop: DIV }}>
-                <div>
-                  <span className="text-[11px] block mb-0.5" style={{ color: "#64748b" }}>24h Txns</span>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[13px] font-mono font-semibold" style={{ color: "#4ade80" }}>B {totalTxns > 0 ? txns24hBuy.toLocaleString() : "—"}</span>
-                    <span className="text-[13px] font-mono font-semibold" style={{ color: "#f87171" }}>S {totalTxns > 0 ? txns24hSell.toLocaleString() : "—"}</span>
-                  </div>
-                </div>
-              </div>
+              ))}
             </div>
           );
         })()}
