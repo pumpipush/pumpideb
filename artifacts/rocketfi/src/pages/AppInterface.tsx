@@ -689,22 +689,22 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           </div>
 
           {/* Right: Price / Vol 24h / 5m / 1h / 6h */}
-          <div className="flex items-stretch rounded-lg overflow-hidden shrink-0"
-            style={{ border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.03)" }}>
+          <div className="flex items-stretch rounded-xl overflow-hidden shrink-0"
+            style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}>
             {([
-              { label: "Price", value: solPrice && priceStats.currentPrice > 0 ? formatUSD(priceStats.currentPrice * solPrice) : priceStats.currentPrice > 0 ? priceStats.currentPrice.toExponential(4) : "—", color: "#e2e8f0" },
+              { label: "Price",   value: solPrice && priceStats.currentPrice > 0 ? formatUSD(priceStats.currentPrice * solPrice) : priceStats.currentPrice > 0 ? priceStats.currentPrice.toExponential(4) : "—", color: "#e2e8f0" },
               { label: "Vol 24h", value: solPrice && priceStats.vol24h > 0 ? formatUSD(priceStats.vol24h * solPrice) : priceStats.vol24h > 0 ? priceStats.vol24h.toFixed(4) : "—", color: "#e2e8f0" },
-              { label: "5m",  value: priceStats.p5m?.val ?? "—", color: priceStats.p5m ? (priceStats.p5m.up ? "#4ade80" : "#f87171") : "#334155" },
-              { label: "1h",  value: priceStats.p1h?.val ?? "—", color: priceStats.p1h ? (priceStats.p1h.up ? "#4ade80" : "#f87171") : "#334155" },
-              { label: "6h",  value: priceStats.p6h?.val ?? "—", color: priceStats.p6h ? (priceStats.p6h.up ? "#4ade80" : "#f87171") : "#334155" },
+              { label: "5m",  value: priceStats.p5m?.val ?? "—", color: priceStats.p5m ? (priceStats.p5m.up ? "#4ade80" : "#f87171") : "#64748b" },
+              { label: "1h",  value: priceStats.p1h?.val ?? "—", color: priceStats.p1h ? (priceStats.p1h.up ? "#4ade80" : "#f87171") : "#64748b" },
+              { label: "6h",  value: priceStats.p6h?.val ?? "—", color: priceStats.p6h ? (priceStats.p6h.up ? "#4ade80" : "#f87171") : "#64748b" },
             ] as { label: string; value: string; color: string }[]).map(({ label, value, color }, i, arr) => (
               <div
                 key={label}
-                className="flex flex-col justify-center px-3 py-1.5"
-                style={{ borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none" }}
+                className="flex flex-col justify-center px-4 py-3"
+                style={{ borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.08)" : "none" }}
               >
-                <span className="text-[11px] font-medium mb-0.5" style={{ color: "#475569" }}>{label}</span>
-                <span className="font-mono font-bold text-[13px]" style={{ color }}>{value}</span>
+                <span className="text-[14px] font-medium mb-1" style={{ color: "#94a3b8" }}>{label}</span>
+                <span className="font-mono font-bold text-[14px]" style={{ color }}>{value}</span>
               </div>
             ))}
           </div>
