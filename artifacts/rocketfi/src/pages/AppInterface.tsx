@@ -312,6 +312,42 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const solPriceRef = useRef<number | null>(solPrice);
   solPriceRef.current = solPrice;
 
+  // ── Price / Vol / % stats (used both above chart and removed from right panel) ──
+  const priceStats = useMemo(() => {
+    const now = Date.now();
+    const livePrice = liveToken?.priceEth ? parseFloat(liveToken.priceEth) : null;
+    const currentPrice = livePrice ?? (token?.priceEth ? parseFloat(token.priceEth) : 0);
+    const allTradesForVol = [...liveTrades, ...(history ?? [])];
+    const vol24h = allTradesForVol.reduce((acc, t) => {
+      const ts = new Date(t.timestamp).getTime();
+      if (!Number.isFinite(ts)) return acc;
+      const amt = parseFloat(t.ethAmount ?? "0");
+      return now - ts <= 86_400_000 ? acc + (Number.isFinite(amt) ? amt : 0) : acc;
+    }, 0);
+    const priceAt = (cutoffMs: number): number | null => {
+      const cutoff = now - cutoffMs;
+      const older = (history ?? [])
+        .filter(t => { const ts = new Date(t.timestamp).getTime(); return Number.isFinite(ts) && ts <= cutoff; })
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      if (!older.length) return null;
+      const p = parseFloat(older[0].priceEth ?? "0");
+      return Number.isFinite(p) && p > 0 ? p : null;
+    };
+    const pct = (old: number | null): { val: string; up: boolean } | null => {
+      if (!old || old === 0 || currentPrice === 0) return null;
+      const diff = ((currentPrice - old) / old) * 100;
+      return { val: (diff >= 0 ? "+" : "") + diff.toFixed(2) + "%", up: diff >= 0 };
+    };
+    return {
+      currentPrice,
+      vol24h,
+      p5m:  pct(priceAt(5   * 60_000)),
+      p1h:  pct(priceAt(60  * 60_000)),
+      p6h:  pct(priceAt(360 * 60_000)),
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveToken, token?.priceEth, liveTrades, history]);
+
   // OHLC crosshair display — written directly to DOM so mouse moves never trigger re-renders
   const ohlcDisplayRef = useRef<HTMLDivElement>(null);
   const onCrosshairMove = useCallback((bar: OHLCSnapshot | null) => {
@@ -650,6 +686,52 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           )}
         </div>
 
+        {/* ── Price / Vol / % stats bar — above chart ── */}
+        <div
+          className="flex items-stretch flex-wrap gap-0 mb-2 px-3 md:px-0 rounded-lg overflow-hidden"
+          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+        >
+          {/* Price */}
+          <div className="flex flex-col justify-center px-4 py-2.5" style={{ borderRight: "1px solid rgba(255,255,255,0.07)" }}>
+            <span className="text-[11px] font-medium mb-0.5" style={{ color: "#475569" }}>Price</span>
+            <span className="font-mono font-bold text-[15px]" style={{ color: "#e2e8f0" }}>
+              {solPrice && priceStats.currentPrice > 0
+                ? formatUSD(priceStats.currentPrice * solPrice)
+                : priceStats.currentPrice > 0 ? priceStats.currentPrice.toExponential(4) : "—"}
+            </span>
+          </div>
+          {/* Vol 24h */}
+          <div className="flex flex-col justify-center px-4 py-2.5" style={{ borderRight: "1px solid rgba(255,255,255,0.07)" }}>
+            <span className="text-[11px] font-medium mb-0.5" style={{ color: "#475569" }}>Vol 24h</span>
+            <span className="font-mono font-bold text-[15px]" style={{ color: "#e2e8f0" }}>
+              {solPrice && priceStats.vol24h > 0
+                ? formatUSD(priceStats.vol24h * solPrice)
+                : priceStats.vol24h > 0 ? priceStats.vol24h.toFixed(4) : "—"}
+            </span>
+          </div>
+          {/* % changes */}
+          {([
+            { label: "5m", data: priceStats.p5m },
+            { label: "1h", data: priceStats.p1h },
+            { label: "6h", data: priceStats.p6h },
+          ] as { label: string; data: { val: string; up: boolean } | null }[]).map(({ label, data }, i, arr) => (
+            <div
+              key={label}
+              className="flex flex-col justify-center px-4 py-2.5"
+              style={{ borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none" }}
+            >
+              <span className="text-[11px] font-medium mb-0.5" style={{ color: "#475569" }}>{label}</span>
+              {data ? (
+                <span className="font-mono font-bold text-[14px]" style={{ color: data.up ? "#4ade80" : "#f87171" }}>
+                  {data.val}
+                </span>
+              ) : (
+                <span className="font-mono text-[14px]" style={{ color: "#334155" }}>—</span>
+              )}
+            </div>
+          ))}
+        </div>
+
         {/* Chart Area — DexGems-style with toolbar */}
         {/* bars is memoized — only recomputes when trades or timeframe change, never on crosshair moves */}
         {ChartSection}
@@ -880,91 +962,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
       {/* ── RIGHT: sticky buy panel ── */}
       <div className="w-full md:w-[280px] xl:w-[300px] shrink-0 md:overflow-y-auto md:h-full px-3 py-3 md:px-4 md:py-4 space-y-3">
-
-        {/* Stats Card — Price / Vol 24h / % changes (live via SSE when connected) */}
-        {(() => {
-          const now = Date.now();
-          // Prefer live token snapshot from SSE, fall back to server data
-          const livePrice = liveToken?.priceEth ? parseFloat(liveToken.priceEth) : null;
-          const currentPrice = livePrice ?? (token.priceEth ? parseFloat(token.priceEth) : 0);
-
-          // Vol 24h — merge live trades with history for accuracy
-          const allTradesForVol = [...liveTrades, ...(history ?? [])];
-          const vol24h = allTradesForVol.reduce((acc, t) => {
-            const ts = new Date(t.timestamp).getTime();
-            if (!Number.isFinite(ts)) return acc;
-            const amt = parseFloat(t.ethAmount ?? "0");
-            return now - ts <= 86_400_000 ? acc + (Number.isFinite(amt) ? amt : 0) : acc;
-          }, 0);
-
-          // Price N minutes ago = priceEth of last trade older than cutoff
-          const priceAt = (cutoffMs: number): number | null => {
-            const cutoff = now - cutoffMs;
-            const older = (history ?? [])
-              .filter(t => {
-                const ts = new Date(t.timestamp).getTime();
-                return Number.isFinite(ts) && ts <= cutoff;
-              })
-              .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-            if (!older.length) return null;
-            const p = parseFloat(older[0].priceEth ?? "0");
-            return Number.isFinite(p) && p > 0 ? p : null;
-          };
-
-          const pct = (old: number | null): { val: string; up: boolean } | null => {
-            if (!old || old === 0 || currentPrice === 0) return null;
-            const diff = ((currentPrice - old) / old) * 100;
-            return { val: (diff >= 0 ? "+" : "") + diff.toFixed(2) + "%", up: diff >= 0 };
-          };
-
-          const p5m  = pct(priceAt(5   * 60_000));
-          const p1h  = pct(priceAt(60  * 60_000));
-          const p6h  = pct(priceAt(360 * 60_000));
-
-          const statCls = (up: boolean) => up ? "text-primary" : "text-destructive";
-
-          return (
-            <div className="bg-card border border-border/60 rounded-sm overflow-hidden shadow-sm">
-              {/* Price row */}
-              <div className="px-3 pt-3 pb-2 border-b border-border/30 flex items-end justify-between gap-2">
-                <div>
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-0.5">Price</div>
-                  <div className="font-mono font-bold text-lg text-foreground leading-none">
-                    {solPrice && currentPrice > 0
-                      ? formatUSD(currentPrice * solPrice)
-                      : currentPrice > 0 ? currentPrice.toExponential(4) : "—"}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-0.5">Vol 24h</div>
-                  <div className="font-mono font-bold text-sm text-foreground leading-none">
-                    {solPrice && vol24h > 0
-                      ? formatUSD(vol24h * solPrice)
-                      : vol24h > 0 ? vol24h.toFixed(4) : "0.0000"}
-                  </div>
-                </div>
-              </div>
-
-              {/* % changes row */}
-              <div className="grid grid-cols-3 divide-x divide-border/30 px-0">
-                {[
-                  { label: "5m",  data: p5m  },
-                  { label: "1h",  data: p1h  },
-                  { label: "6h",  data: p6h  },
-                ].map(({ label, data }) => (
-                  <div key={label} className="flex flex-col items-center py-2 gap-0.5">
-                    <span className="text-[10px] text-muted-foreground/60 uppercase tracking-widest">{label}</span>
-                    {data ? (
-                      <span className={`text-[11px] font-mono font-bold ${statCls(data.up)}`}>{data.val}</span>
-                    ) : (
-                      <span className="text-[11px] font-mono text-muted-foreground/40">—</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
 
         {/* Buy/Sell Panel */}
         <div className="bg-card border border-border/60 rounded-sm overflow-hidden shadow-sm">
