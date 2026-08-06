@@ -724,18 +724,20 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           );
         })()}
 
-        {/* Market Cap Row */}
-        <div className="flex items-center gap-2.5 mb-2 px-3 md:px-0">
-          <span className="text-[14px] text-muted-foreground font-semibold">Market Cap</span>
-          <span className="text-[25px] font-semibold text-foreground font-mono tabular-nums">
+        {/* Market Cap */}
+        <div className="flex flex-col mb-2 px-3 md:px-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[13px] text-muted-foreground font-semibold">Market Cap</span>
+            {liveToken && (
+              <span className="flex items-center gap-1 text-[10px] text-primary font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse inline-block" />
+                LIVE
+              </span>
+            )}
+          </div>
+          <span className="text-[25px] font-semibold text-foreground font-mono tabular-nums leading-tight">
             {formatMCUsd(liveToken?.marketCapEth ?? token.marketCapEth, solPrice)}
           </span>
-          {liveToken && (
-            <span className="flex items-center gap-1 text-[10px] text-primary font-semibold">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse inline-block" />
-              LIVE
-            </span>
-          )}
         </div>
 
         {/* Chart Area — DexGems-style with toolbar */}
