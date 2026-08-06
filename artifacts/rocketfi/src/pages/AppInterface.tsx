@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { 
   useCreateToken, 
   useGetToken, 
@@ -301,11 +301,144 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [chartType, setChartType] = useState<ChartType>("candle");
   const [indicators, setIndicators] = useState<Indicator[]>([]);
   const [indOpen, setIndOpen] = useState(false);
-  const [hoveredOHLC, setHoveredOHLC] = useState<OHLCSnapshot | null>(null);
   const CHART_TIMEFRAMES: ChartTimeframe[] = ["1m", "5m", "15m", "1H", "4H", "1D", "1W"];
-  function toggleIndicator(ind: Indicator) {
+  const toggleIndicator = useCallback((ind: Indicator) => {
     setIndicators(prev => prev.includes(ind) ? prev.filter(i => i !== ind) : [...prev, ind]);
-  }
+  }, []);
+
+  // OHLC crosshair display — written directly to DOM so mouse moves never trigger re-renders
+  const ohlcDisplayRef = useRef<HTMLDivElement>(null);
+  const onCrosshairMove = useCallback((bar: OHLCSnapshot | null) => {
+    const el = ohlcDisplayRef.current;
+    if (!el) return;
+    if (!bar) {
+      el.style.opacity = "0";
+      return;
+    }
+    el.style.opacity = "1";
+    const fmt = (n: number) => n < 0.00001 ? n.toExponential(3) : n.toPrecision(4);
+    el.innerHTML = `
+      <span style="color:#64748b">O <span style="color:#cbd5e1">${fmt(bar.open)}</span></span>
+      <span style="color:#64748b">H <span style="color:#4ade80">${fmt(bar.high)}</span></span>
+      <span style="color:#64748b">L <span style="color:#f87171">${fmt(bar.low)}</span></span>
+      <span style="color:#64748b">C <span style="color:#e2e8f0">${fmt(bar.close)}</span></span>
+    `;
+  }, []);
+
+  // Memoized bars — reference is stable until trades or timeframe actually change
+  const chartBars = useMemo(() => {
+    if (!token) return [];
+    const liveAsHistory = liveTrades.map(lt => ({
+      id: lt.id,
+      tokenAddress: lt.tokenAddress,
+      traderAddress: lt.traderAddress,
+      isBuy: lt.isBuy,
+      ethAmount: lt.ethAmount,
+      tokenAmount: lt.tokenAmount,
+      priceEth: lt.priceEth,
+      txHash: lt.txHash,
+      platform: lt.platform ?? "unknown",
+      timestamp: lt.timestamp,
+    }));
+    const allTrades = [...liveAsHistory, ...(history ?? [])];
+    const localBars = allTrades.length > 0 ? tradesFromLocalBars(allTrades, chartTf) : [];
+    return localBars.length > 0
+      ? localBars
+      : syntheticBars(token.priceEth ? parseFloat(token.priceEth) : 0.00001, 48);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveTrades, history, chartTf, token?.address]);
+
+  // Memoized chart JSX — only re-renders when chart config state changes, not on crosshair moves
+  const ChartSection = useMemo(() => {
+    if (!token) return null;
+    return (
+      <div className="border border-border/20 rounded-sm overflow-hidden mb-0" style={{ background: "#0B1220" }}>
+        {/* Toolbar */}
+        <div className="flex items-stretch overflow-x-auto" style={{ background: "#0d1726", borderBottom: "1px solid rgba(255,255,255,0.08)", scrollbarWidth: "none" }}>
+          {/* Candle / Line toggle */}
+          <div className="hidden sm:flex items-stretch shrink-0" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
+            {(["candle", "line"] as ChartType[]).map((type, i, arr) => (
+              <button key={type} onClick={() => setChartType(type)}
+                className="px-3 flex items-center gap-1.5 text-[11px] font-semibold transition-all"
+                style={{
+                  height: 36,
+                  background: chartType === type ? "rgba(255,255,255,0.08)" : "transparent",
+                  color: chartType === type ? "#fff" : "#64748b",
+                  borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                }}>
+                {type === "candle" ? "Candle" : "Line"}
+              </button>
+            ))}
+          </div>
+
+          {/* Indicators trigger */}
+          <button onClick={() => setIndOpen(true)}
+            className="hidden sm:flex px-3 items-center gap-1.5 text-[11px] font-semibold transition-all shrink-0"
+            style={{
+              height: 36,
+              background: indicators.length ? "rgba(255,255,255,0.08)" : "transparent",
+              color: indicators.length ? "#fff" : "#64748b",
+              borderRight: "1px solid rgba(255,255,255,0.08)",
+            }}>
+            Indicators
+            {indicators.length > 0 && (
+              <span className="h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center"
+                style={{ background: "#3b82f6", color: "#fff" }}>{indicators.length}</span>
+            )}
+          </button>
+
+          {/* Live badge */}
+          {connected && (
+            <div className="hidden sm:flex items-center px-3 shrink-0" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
+              <span className="relative inline-flex items-center gap-1.5 text-[10px] font-bold text-primary">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping absolute" />
+                <span className="w-1.5 h-1.5 rounded-full bg-primary relative" />
+                <span className="ml-2.5">LIVE</span>
+              </span>
+            </div>
+          )}
+
+          {/* OHLC crosshair display — updated via DOM ref, zero re-renders */}
+          <div
+            ref={ohlcDisplayRef}
+            className="hidden md:flex items-center gap-3 px-3 text-[10px] font-mono shrink-0"
+            style={{ opacity: 0, transition: "opacity 0.1s", gap: 12 }}
+          />
+
+          {/* Timeframe pills — pushed right */}
+          <div className="flex items-center ml-auto shrink-0 px-2" style={{ borderLeft: "1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 24, padding: 3, display: "flex", gap: 2 }}>
+              {CHART_TIMEFRAMES.map(t => (
+                <button key={t} onClick={() => setChartTf(t)}
+                  className="px-2.5 text-[11px] font-semibold transition-all shrink-0 whitespace-nowrap flex items-center"
+                  style={{
+                    height: 28,
+                    ...(chartTf === t
+                      ? { background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.22)", borderRadius: 20, color: "#fff" }
+                      : { borderRadius: 20, border: "1px solid transparent", color: "#64748b" })
+                  }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Canvas */}
+        <div className="h-[260px] sm:h-[340px] lg:h-[400px] xl:h-[440px]">
+          <ChartCanvas
+            bars={chartBars}
+            address={token.address}
+            loading={!connected}
+            chartType={chartType}
+            indicators={indicators}
+            onCrosshairMove={onCrosshairMove}
+          />
+        </div>
+      </div>
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartBars, chartType, chartTf, indicators, indOpen, connected, token?.address, onCrosshairMove]);
 
   const handleTrade = async () => {
     if (!wallet) {
@@ -520,116 +653,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         </div>
 
         {/* Chart Area — DexGems-style with toolbar */}
-        {(() => {
-          const liveAsHistory = liveTrades.map(lt => ({
-            id: lt.id,
-            tokenAddress: lt.tokenAddress,
-            traderAddress: lt.traderAddress,
-            isBuy: lt.isBuy,
-            ethAmount: lt.ethAmount,
-            tokenAmount: lt.tokenAmount,
-            priceEth: lt.priceEth,
-            txHash: lt.txHash,
-            platform: lt.platform ?? "unknown",
-            timestamp: lt.timestamp,
-          }));
-          const allTrades = [...liveAsHistory, ...(history ?? [])];
-          const localBars = allTrades.length > 0
-            ? tradesFromLocalBars(allTrades, chartTf)
-            : [];
-          const bars = localBars.length > 0
-            ? localBars
-            : syntheticBars(token.priceEth ? parseFloat(token.priceEth) : 0.00001, 48);
-          return (
-            <div className="border border-border/20 rounded-sm overflow-hidden mb-0" style={{ background: "#0B1220" }}>
-              {/* Toolbar */}
-              <div className="flex items-stretch overflow-x-auto" style={{ background: "#0d1726", borderBottom: "1px solid rgba(255,255,255,0.08)", scrollbarWidth: "none" }}>
-                {/* Candle / Line toggle */}
-                <div className="hidden sm:flex items-stretch shrink-0" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
-                  {(["candle", "line"] as ChartType[]).map((type, i, arr) => (
-                    <button key={type} onClick={() => setChartType(type)}
-                      className="px-3 flex items-center gap-1.5 text-[11px] font-semibold transition-all"
-                      style={{
-                        height: 36,
-                        background: chartType === type ? "rgba(255,255,255,0.08)" : "transparent",
-                        color: chartType === type ? "#fff" : "#64748b",
-                        borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
-                      }}>
-                      {type === "candle" ? "Candle" : "Line"}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Indicators trigger */}
-                <button onClick={() => setIndOpen(true)}
-                  className="hidden sm:flex px-3 items-center gap-1.5 text-[11px] font-semibold transition-all shrink-0"
-                  style={{
-                    height: 36,
-                    background: indicators.length ? "rgba(255,255,255,0.08)" : "transparent",
-                    color: indicators.length ? "#fff" : "#64748b",
-                    borderRight: "1px solid rgba(255,255,255,0.08)",
-                  }}>
-                  Indicators
-                  {indicators.length > 0 && (
-                    <span className="h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center"
-                      style={{ background: "#3b82f6", color: "#fff" }}>{indicators.length}</span>
-                  )}
-                </button>
-
-                {/* Live badge */}
-                {connected && (
-                  <div className="hidden sm:flex items-center px-3 shrink-0" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
-                    <span className="relative inline-flex items-center gap-1.5 text-[10px] font-bold text-primary">
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping absolute" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary relative" />
-                      <span className="ml-2.5">LIVE</span>
-                    </span>
-                  </div>
-                )}
-
-                {/* Hovered OHLC info */}
-                {hoveredOHLC && (
-                  <div className="hidden md:flex items-center gap-3 px-3 text-[10px] font-mono shrink-0">
-                    <span className="text-slate-500">O <span className="text-slate-300">{hoveredOHLC.open.toPrecision(4)}</span></span>
-                    <span className="text-slate-500">H <span className="text-green-400">{hoveredOHLC.high.toPrecision(4)}</span></span>
-                    <span className="text-slate-500">L <span className="text-red-400">{hoveredOHLC.low.toPrecision(4)}</span></span>
-                    <span className="text-slate-500">C <span className="text-slate-200">{hoveredOHLC.close.toPrecision(4)}</span></span>
-                  </div>
-                )}
-
-                {/* Timeframe pills — pushed right */}
-                <div className="flex items-center ml-auto shrink-0 px-2" style={{ borderLeft: "1px solid rgba(255,255,255,0.08)" }}>
-                  <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 24, padding: 3, display: "flex", gap: 2 }}>
-                    {CHART_TIMEFRAMES.map(t => (
-                      <button key={t} onClick={() => setChartTf(t)}
-                        className="px-2.5 text-[11px] font-semibold transition-all shrink-0 whitespace-nowrap flex items-center"
-                        style={{
-                          height: 28,
-                          ...(chartTf === t
-                            ? { background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.22)", borderRadius: 20, color: "#fff" }
-                            : { borderRadius: 20, border: "1px solid transparent", color: "#64748b" })
-                        }}>
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Canvas */}
-              <div className="h-[260px] sm:h-[340px] lg:h-[400px] xl:h-[440px]">
-                <ChartCanvas
-                  bars={bars}
-                  address={token.address}
-                  loading={!connected}
-                  chartType={chartType}
-                  indicators={indicators}
-                  onCrosshairMove={setHoveredOHLC}
-                />
-              </div>
-            </div>
-          );
-        })()}
+        {/* bars is memoized — only recomputes when trades or timeframe change, never on crosshair moves */}
+        {ChartSection}
 
         {/* Indicator picker modal */}
         <IndicatorModal
