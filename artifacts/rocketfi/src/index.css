@@ -72,9 +72,9 @@
   --popover-foreground: 210 40% 98%;
   --popover-border: 220 25% 18%;
 
-  --primary: 217 91% 60%;
-  --primary-foreground: 0 0% 100%;
-  --primary-border: 217 91% 60%;
+  --primary: 142 100% 42%;
+  --primary-foreground: 0 0% 5%;
+  --primary-border: 142 100% 42%;
 
   --secondary: 220 30% 15%;
   --secondary-foreground: 210 40% 98%;
@@ -84,22 +84,22 @@
   --muted-foreground: 215 20% 65%;
   --muted-border: 220 25% 20%;
 
-  --accent: 217 50% 18%;
-  --accent-foreground: 217 91% 75%;
-  --accent-border: 217 60% 30%;
+  --accent: 142 40% 12%;
+  --accent-foreground: 142 80% 65%;
+  --accent-border: 142 60% 22%;
 
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 98%;
   --destructive-border: 0 84% 60%;
 
-  --success: 142 71% 45%;
-  --success-foreground: 0 0% 100%;
+  --success: 142 100% 42%;
+  --success-foreground: 0 0% 5%;
 
   --border: 220 25% 18%;
   --input: 220 30% 14%;
-  --ring: 217 91% 60%;
+  --ring: 142 100% 42%;
 
-  --chart-1: 217 91% 60%;
+  --chart-1: 142 100% 42%;
   --chart-2: 142 71% 45%;
   --chart-3: 280 65% 60%;
   --chart-4: 38 90% 55%;
@@ -119,12 +119,12 @@
   }
 
   ::selection {
-    background: hsl(217 91% 60% / 0.2);
+    background: hsl(142 100% 42% / 0.2);
     color: hsl(210 40% 98%);
   }
 
   :focus-visible {
-    outline: 2px solid hsl(217 91% 60% / 0.5);
+    outline: 2px solid hsl(142 100% 42% / 0.5);
     outline-offset: 2px;
     border-radius: 2px;
   }
