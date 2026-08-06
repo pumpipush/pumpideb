@@ -653,11 +653,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             <h1 className="text-lg font-bold text-foreground leading-tight">{token.name}</h1>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               <span className="text-primary font-mono text-sm font-bold">${token.symbol}</span>
-              <PlatformBadge
-                platform={token.platform as PlatformId}
-                size="md"
-                href={getPlatformUrl(token.platform as PlatformId, token.address) ?? undefined}
-              />
             </div>
             <div className="flex items-center gap-2 mt-1 flex-wrap text-[11px] font-mono text-muted-foreground">
               <span>by</span>
