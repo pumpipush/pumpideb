@@ -492,7 +492,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
   const handleTrade = async () => {
     if (!wallet) {
-      toast({ title: "Wallet required", description: "Connect your wallet to trade.", variant: "destructive" });
+      setWalletModalOpen(true);
       return;
     }
     if (!token || !amount) return;
