@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startAdapters } from "./lib/adapters/index";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,8 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // Start all platform data adapters (Pump.fun, Moonshot, LetsBONK)
+  // Each adapter is isolated — a crash in one will not affect the server
+  void startAdapters();
 });
