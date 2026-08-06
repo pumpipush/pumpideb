@@ -82,12 +82,12 @@ export function formatSol(lamportStr: string | null | undefined): string {
 
 /** Format raw token amount (Pump.fun tokenAmount is in whole token units) */
 export function formatTokenAmount(amt: string | null | undefined): string {
-  const n = Math.round(parseFloat(amt ?? "0"));
+  const n = parseFloat(amt ?? "0");
   if (!n || !Number.isFinite(n)) return "0";
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}b`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}m`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 // ── General utilities ──────────────────────────────────────────────────────────
