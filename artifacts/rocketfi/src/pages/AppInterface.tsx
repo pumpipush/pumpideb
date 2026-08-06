@@ -454,8 +454,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         <div className="flex gap-3 items-start mb-2 px-3 pt-3 md:px-0 md:pt-0">
           <TokenAvatar symbol={token.symbol} imageUrl={token.imageUrl} size={52} shape="square" className="border border-border/40 shadow-sm" />
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg font-bold text-foreground leading-tight">{token.name}</h1>
+            <h1 className="text-lg font-bold text-foreground leading-tight">{token.name}</h1>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               <span className="text-primary font-mono text-sm font-bold">${token.symbol}</span>
               <PlatformBadge
                 platform={token.platform as PlatformId}
@@ -463,7 +463,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 href={getPlatformUrl(token.platform as PlatformId, token.address) ?? undefined}
               />
             </div>
-            <div className="flex items-center gap-2 mt-0.5 flex-wrap text-[11px] font-mono text-muted-foreground">
+            <div className="flex items-center gap-2 mt-1 flex-wrap text-[11px] font-mono text-muted-foreground">
               <span>by</span>
               <span className="cursor-pointer hover:text-foreground transition-colors" onClick={() => copyToClipboard(token.creatorAddress)}>
                 {formatAddress(token.creatorAddress)}
