@@ -151,16 +151,16 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const handleLaunch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wallet) {
-      toast({ title: "Error", description: "Connect wallet first", variant: "destructive" });
+      toast({ title: "Wallet required", description: "Connect your wallet to launch a token.", variant: "destructive" });
       return;
     }
     
     if (!name.trim() || !symbol.trim()) {
-      toast({ title: "Error", description: "Name and ticker cannot be empty or blank", variant: "destructive" });
+      toast({ title: "Missing fields", description: "Token name and ticker cannot be blank.", variant: "destructive" });
       return;
     }
     if (symbol.trim().length > 10) {
-      toast({ title: "Error", description: "Ticker must be 10 characters or fewer", variant: "destructive" });
+      toast({ title: "Ticker too long", description: "Ticker symbol must be 10 characters or fewer.", variant: "destructive" });
       return;
     }
 
@@ -185,13 +185,14 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       });
 
       toast({
-        title: "Token Launched",
-        description: `${symbol.toUpperCase()} is now live on the curve.`,
+        title: "Token launched! 🚀",
+        description: `$${symbol.toUpperCase()} is live on the bonding curve.`,
       });
       
       onLaunch(res.address);
-    } catch (err: any) {
-      toast({ title: "Launch Failed", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+      toast({ title: "Launch failed", description: msg, variant: "destructive" });
     }
   };
 
@@ -295,7 +296,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
   const handleTrade = async () => {
     if (!wallet) {
-      toast({ title: "Error", description: "Connect wallet first", variant: "destructive" });
+      toast({ title: "Wallet required", description: "Connect your wallet to trade.", variant: "destructive" });
       return;
     }
     if (!token || !amount) return;
@@ -370,8 +371,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       });
 
       toast({
-        title: "Trade Executed",
-        description: `Successfully ${tradeMode === "buy" ? "bought" : "sold"} ${token.symbol}.`
+        title: tradeMode === "buy" ? "Buy order filled" : "Sell order filled",
+        description: `${amount} SOL ${tradeMode === "buy" ? "→" : "←"} ${token.symbol} executed on-chain.`,
       });
 
       setAmount("");
@@ -380,7 +381,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Something went wrong";
-      toast({ title: "Trade Failed", description: msg, variant: "destructive" });
+      toast({ title: "Trade failed", description: msg, variant: "destructive" });
     }
   };
 

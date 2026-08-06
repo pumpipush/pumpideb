@@ -40,7 +40,8 @@ export async function copyToClipboard(text: string, label?: string): Promise<voi
     document.body.removeChild(el);
   }
 
-  const isAddress = /^0x[0-9a-fA-F]{40,}$/.test(text.trim());
+  // Detect Solana base58 public keys (32–44 chars) or Ethereum 0x addresses
+  const isAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(text.trim()) || /^0x[0-9a-fA-F]{40,}$/.test(text.trim());
   const sub = isAddress ? truncate(text) : undefined;
   const resolvedLabel = label ?? (isAddress ? "Address copied" : "Copied to clipboard");
 

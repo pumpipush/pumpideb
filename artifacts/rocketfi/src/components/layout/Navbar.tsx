@@ -8,10 +8,17 @@ import { Link } from "wouter";
 import { openSearch } from "@/components/shared/SearchDialog";
 import { useState } from "react";
 import { WalletSelectModal } from "@/components/shared/WalletSelectModal";
+import { useToast } from "@/hooks/use-toast";
 
 function WalletButton() {
   const { wallet, walletName, disconnect } = useWallet();
   const [walletModal, setWalletModal] = useState(false);
+  const { toast } = useToast();
+
+  async function handleDisconnect() {
+    await disconnect();
+    toast({ title: "Wallet disconnected", description: "See you next time." });
+  }
 
   const { data: profile } = useGetProfile(wallet ?? "", {
     query: { enabled: !!wallet, retry: false, queryKey: getGetProfileQueryKey(wallet ?? "") },
@@ -39,7 +46,11 @@ function WalletButton() {
           Connect Wallet
         </Button>
 
-        <WalletSelectModal open={walletModal} onOpenChange={setWalletModal} />
+        <WalletSelectModal
+          open={walletModal}
+          onOpenChange={setWalletModal}
+          onSuccess={() => toast({ title: "Wallet connected", description: "You're ready to trade on Solana." })}
+        />
       </>
     );
   }
@@ -75,7 +86,7 @@ function WalletButton() {
         variant="ghost"
         size="sm"
         className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground transition-colors hidden sm:flex"
-        onClick={() => void disconnect()}
+        onClick={() => void handleDisconnect()}
       >
         Disconnect
       </Button>

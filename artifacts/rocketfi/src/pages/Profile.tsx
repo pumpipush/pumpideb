@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { copyToClipboard } from "@/components/shared/CopyToast";
 import { useWallet } from "@/contexts/WalletContext";
 import { formatAddress, formatMC, formatEth, formatSol, timeAgo, cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { Link } from "wouter";
 import {
@@ -137,6 +138,7 @@ export default function ProfilePage() {
   } | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   const { data: profile, isLoading, refetch } = useGetProfile(address, {
     query: { enabled: !!address, retry: false, queryKey: getGetProfileQueryKey(address) },
@@ -256,10 +258,11 @@ export default function ProfilePage() {
       setEditOpen(false);
       setEditForm(null);
       refetch();
+      toast({ title: "Profile saved", description: "Your profile has been updated." });
     } catch (e: unknown) {
       // Profile save failed — keep modal open, show error
       const msg = e instanceof Error ? e.message : "Failed to save profile";
-      alert(msg); // simple fallback since useToast isn't available here
+      toast({ title: "Save failed", description: msg, variant: "destructive" });
     }
   };
 
