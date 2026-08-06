@@ -696,18 +696,28 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           return (
             <div className="mt-0 px-3 md:px-0">
               {/* Bug fix: React state-based sub-tabs (no more document.getElementById) */}
-              <div className="flex gap-0 border border-border/40 rounded-sm overflow-hidden mb-0">
+              <div className="flex gap-2 mb-2">
                 <button
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[11px] font-bold uppercase tracking-widest transition-colors border-r border-border/40 ${activeSubTab === "tx" ? "bg-primary/10 text-primary" : "bg-transparent text-muted-foreground"}`}
                   onClick={() => setActiveSubTab("tx")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all"
+                  style={{
+                    background: activeSubTab === "tx" ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+                    color: activeSubTab === "tx" ? "#e2e8f0" : "#64748b",
+                    border: "1px solid " + (activeSubTab === "tx" ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
+                  }}
                 >
-                  <ArrowRightLeft className="h-3 w-3" /> Transactions
+                  <ArrowRightLeft className="h-3.5 w-3.5" /> Transactions
                 </button>
                 <button
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[11px] font-bold uppercase tracking-widest transition-colors ${activeSubTab === "holders" ? "bg-primary/10 text-primary" : "bg-transparent text-muted-foreground"}`}
                   onClick={() => setActiveSubTab("holders")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all"
+                  style={{
+                    background: activeSubTab === "holders" ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+                    color: activeSubTab === "holders" ? "#e2e8f0" : "#64748b",
+                    border: "1px solid " + (activeSubTab === "holders" ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
+                  }}
                 >
-                  <Users className="h-3 w-3" /> Holders
+                  <Users className="h-3.5 w-3.5" /> Holders
                 </button>
               </div>
 
