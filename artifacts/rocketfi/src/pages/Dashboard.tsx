@@ -1,13 +1,14 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   useListTokens,
   useGetTrendingTokens,
   ListTokensSort,
-  Token
 } from "@workspace/api-client-react";
 
 import { formatMC, cn, timeAgo } from "@/lib/utils";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
+import { PlatformBadge, PlatformDot, type PlatformId } from "@/components/shared/PlatformBadge";
+import { useFeedStream, type FeedToken } from "@/hooks/useFeedStream";
 import { Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,8 @@ import {
   SlidersHorizontal,
   ArrowRight,
   Filter,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -31,6 +34,48 @@ type SortTab = "New" | "Trending" | "Volume" | "Graduated";
 type ViewMode = "grid" | "table";
 type TableSortKey = "rank" | "marketCap" | "price" | "age" | "name";
 type TableSortDir = "asc" | "desc";
+
+/** Minimal token shape shared by API tokens and live-feed tokens */
+interface DisplayToken {
+  id: number | string;
+  address: string;
+  name: string;
+  symbol: string;
+  imageUrl?: string | null;
+  marketCapEth?: string | null;
+  priceEth?: string | null;
+  createdAt: string | number;
+  platform: string;
+  graduated: boolean;
+  /** True while the "NEW" badge is showing (live tokens only) */
+  isLive?: boolean;
+}
+
+// ─── Platform filter config ───────────────────────────────────────────────────
+interface PlatformOption {
+  id: string;
+  label: string;
+  emoji: string;
+}
+const PLATFORM_OPTIONS: PlatformOption[] = [
+  { id: "all",       label: "All",       emoji: "⚡" },
+  { id: "pump_fun",  label: "Pump.fun",  emoji: "🐸" },
+  { id: "moonshot",  label: "Moonshot",  emoji: "🌙" },
+  { id: "letsbonk",  label: "LetsBONK", emoji: "🔨" },
+];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+/** Read / write the platform filter to the URL search params without navigation */
+function getPlatformFromUrl(): string {
+  return new URLSearchParams(window.location.search).get("platform") ?? "all";
+}
+function setPlatformInUrl(platform: string) {
+  const params = new URLSearchParams(window.location.search);
+  if (platform === "all") params.delete("platform");
+  else params.set("platform", platform);
+  const qs = params.toString();
+  window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+}
 
 // ─── Skeletons ────────────────────────────────────────────────────────────────
 function TokenCardSkeleton() {
@@ -94,7 +139,7 @@ function SortTh({
 }
 
 // ─── Table view ───────────────────────────────────────────────────────────────
-function TableView({ tokens }: { tokens: Token[] }) {
+function TableView({ tokens }: { tokens: DisplayToken[] }) {
   const [sortKey, setSortKey] = useState<TableSortKey>("rank");
   const [sortDir, setSortDir] = useState<TableSortDir>("asc");
 
@@ -131,7 +176,7 @@ function TableView({ tokens }: { tokens: Token[] }) {
             {th("name",      "Token",      "min-w-[160px]")}
             {th("marketCap", "Mkt Cap",    "hidden sm:table-cell")}
             {th("price",     "Price",      "hidden md:table-cell")}
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground hidden lg:table-cell">Creator</th>
+            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground hidden lg:table-cell">Platform</th>
             {th("age",       "Age",        "hidden xl:table-cell")}
             <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Action</th>
           </tr>
@@ -143,12 +188,14 @@ function TableView({ tokens }: { tokens: Token[] }) {
             return (
               <tr
                 key={token.id}
-                className="border-b border-border/20 last:border-0 hover:bg-primary/[0.04] transition-all duration-150 group border-l-2 border-l-transparent hover:border-l-primary/40"
+                className={cn(
+                  "border-b border-border/20 last:border-0 hover:bg-primary/[0.04] transition-all duration-150 group border-l-2",
+                  token.isLive
+                    ? "border-l-emerald-400/60 bg-emerald-500/[0.03]"
+                    : "border-l-transparent hover:border-l-primary/40"
+                )}
               >
-                {/* Rank */}
                 <td className="px-3 py-3 text-xs text-muted-foreground/50 font-mono tabular-nums">{idx + 1}</td>
-
-                {/* Token */}
                 <td className="px-3 py-3">
                   <Link href={`/app?token=${token.address}`} className="flex items-center gap-2.5 min-w-0">
                     <div className="relative shrink-0">
@@ -162,51 +209,34 @@ function TableView({ tokens }: { tokens: Token[] }) {
                         )}
                       </div>
                       {token.graduated && (
-                        <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-primary rounded-full flex items-center justify-center" title="Graduated">
+                        <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-primary rounded-full flex items-center justify-center">
                           <GraduationCap className="w-2 h-2 text-black" />
                         </div>
                       )}
                     </div>
                     <div className="min-w-0">
-                      <div className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors truncate max-w-[120px]">{token.name}</div>
+                      <div className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors truncate max-w-[120px] flex items-center gap-1.5">
+                        {token.name}
+                        {token.isLive && <span className="text-[9px] font-bold text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 px-1 py-0 rounded-[3px] shrink-0">NEW</span>}
+                      </div>
                       <div className="text-[11px] font-mono text-primary">${token.symbol}</div>
                     </div>
                   </Link>
                 </td>
-
-                {/* Market Cap */}
                 <td className="px-3 py-3 hidden sm:table-cell">
                   <span className="text-sm font-bold text-foreground font-mono tabular-nums">{formatMC(token.marketCapEth)}</span>
                 </td>
-
-                {/* Price */}
                 <td className="px-3 py-3 hidden md:table-cell">
                   <span className="text-xs font-mono text-muted-foreground tabular-nums">
-                    {price < 1e-6
-                      ? price.toExponential(2)
-                      : price < 0.001
-                      ? price.toFixed(6)
-                      : price.toFixed(4)}{" "}ETH
+                    {price < 1e-6 ? price.toExponential(2) : price < 0.001 ? price.toFixed(6) : price.toFixed(4)} SOL
                   </span>
                 </td>
-
-                {/* Creator */}
                 <td className="px-3 py-3 hidden lg:table-cell">
-                  <Link
-                    href={`/profile/${token.creatorAddress}`}
-                    className="text-xs font-mono text-muted-foreground hover:text-primary transition-colors"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {(token.creatorAddress ?? "").slice(0, 6)}…{(token.creatorAddress ?? "").slice(-4)}
-                  </Link>
+                  <PlatformBadge platform={token.platform as PlatformId} size="sm" />
                 </td>
-
-                {/* Age */}
                 <td className="px-3 py-3 hidden xl:table-cell">
                   <span className="text-xs text-muted-foreground font-mono">{timeAgo(token.createdAt)}</span>
                 </td>
-
-                {/* Action */}
                 <td className="px-3 py-3 text-right">
                   <Link
                     href={`/app?token=${token.address}`}
@@ -225,11 +255,16 @@ function TableView({ tokens }: { tokens: Token[] }) {
 }
 
 // ─── Grid card ────────────────────────────────────────────────────────────────
-function TokenCard({ token, rank }: { token: Token; rank: number }) {
+function TokenCard({ token, rank }: { token: DisplayToken; rank: number }) {
   return (
     <Link
       href={`/app?token=${token.address}`}
-      className="flex flex-col bg-card border border-border/60 rounded-sm cursor-pointer group relative card-lift hover:border-primary/50"
+      className={cn(
+        "flex flex-col bg-card border rounded-sm cursor-pointer group relative card-lift",
+        token.isLive
+          ? "border-emerald-500/30 hover:border-emerald-400/60 shadow-[0_0_12px_rgba(52,211,153,0.08)]"
+          : "border-border/60 hover:border-primary/50"
+      )}
     >
       <div className="aspect-square w-full bg-muted border-b border-border/50 relative overflow-hidden rounded-t-sm">
         {token.imageUrl ? (
@@ -239,14 +274,20 @@ function TokenCard({ token, rank }: { token: Token; rank: number }) {
             {token.symbol.charAt(0).toUpperCase()}
           </div>
         )}
-        {/* Hover overlay shimmer */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-sm text-[10px] font-mono text-muted-foreground px-1.5 py-0.5 rounded-sm">#{rank}</div>
-        {token.graduated && (
-          <div className="absolute top-2 right-2 bg-primary/20 border border-primary/50 text-primary text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-sm backdrop-blur-md animate-pulseGlow">
-            Grad
-          </div>
-        )}
+        <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+          {token.isLive && (
+            <span className="text-[9px] font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 px-1.5 py-0.5 rounded-sm backdrop-blur-sm animate-pulse">
+              NEW
+            </span>
+          )}
+          {token.graduated && (
+            <div className="bg-primary/20 border border-primary/50 text-primary text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-sm backdrop-blur-md animate-pulseGlow">
+              Grad
+            </div>
+          )}
+        </div>
       </div>
       <div className="p-3 flex flex-col gap-1.5">
         <span className="font-bold text-foreground text-sm truncate leading-tight group-hover:text-primary transition-colors duration-200">{token.name}</span>
@@ -254,15 +295,86 @@ function TokenCard({ token, rank }: { token: Token; rank: number }) {
           <span className="text-muted-foreground font-mono text-xs">${token.symbol}</span>
           <span className="text-primary font-mono text-xs font-bold">{formatMC(token.marketCapEth)}</span>
         </div>
-        <div className="text-[10px] text-muted-foreground/50 font-mono">{timeAgo(token.createdAt)}</div>
+        <div className="flex items-center justify-between mt-0.5">
+          <span className="text-[10px] text-muted-foreground/50 font-mono">{timeAgo(token.createdAt)}</span>
+          <PlatformBadge platform={token.platform as PlatformId} size="sm" iconOnly />
+        </div>
       </div>
     </Link>
   );
 }
 
+// ─── Platform filter strip ────────────────────────────────────────────────────
+function PlatformFilterStrip({
+  selected,
+  onChange,
+  liveCount,
+  connected,
+}: {
+  selected: string;
+  onChange: (p: string) => void;
+  liveCount: number;
+  connected: boolean;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  return (
+    <div className="flex items-center gap-2 mb-2">
+      {/* Scrollable tab strip */}
+      <div
+        ref={scrollRef}
+        className="flex gap-1.5 overflow-x-auto scrollbar-hide snap-x flex-1 -mx-1 px-1"
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
+        {PLATFORM_OPTIONS.map((opt) => (
+          <button
+            key={opt.id}
+            onClick={() => onChange(opt.id)}
+            className={cn(
+              "snap-start shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 whitespace-nowrap",
+              selected === opt.id
+                ? "bg-primary/15 border-primary/40 text-primary shadow-[0_0_8px_rgba(59,130,246,0.15)]"
+                : "bg-card border-border/40 text-muted-foreground hover:text-foreground hover:border-border"
+            )}
+          >
+            <span className="text-sm leading-none">{opt.emoji}</span>
+            <span>{opt.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Live indicator */}
+      <div className={cn(
+        "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-semibold shrink-0 transition-all duration-500",
+        connected
+          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+          : "bg-card border-border/30 text-muted-foreground/40"
+      )}>
+        {connected
+          ? <Wifi className="w-3 h-3" />
+          : <WifiOff className="w-3 h-3" />
+        }
+        <span className="hidden sm:inline">
+          {connected ? `${liveCount > 0 ? `+${liveCount} live` : "Live"}` : "Offline"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function Dashboard() {
-  // ── State ─────────────────────────────────────────────────────────────────
+  // ── Platform filter (URL-synced) ──────────────────────────────────────────
+  const [platformFilter, setPlatformFilter] = useState<string>(getPlatformFromUrl);
+
+  function handlePlatformChange(p: string) {
+    setPlatformFilter(p);
+    setPlatformInUrl(p);
+    // Reset live token count display when switching platforms
+    setSeenLiveAddresses(new Set());
+  }
+
+  // ── Sort / filter state ───────────────────────────────────────────────────
   const [activeTab, setActiveTab]   = useState<SortTab>("Trending");
   const [viewMode, setViewMode]     = useState<ViewMode>("grid");
   const [search, setSearch]         = useState("");
@@ -271,7 +383,21 @@ export default function Dashboard() {
   const [onlyWithImage, setOnlyWithImage] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
-  // ── Data ──────────────────────────────────────────────────────────────────
+  // ── Live feed ─────────────────────────────────────────────────────────────
+  const { liveTokens, connected } = useFeedStream();
+  // Track which live token addresses have been seen since last platform switch
+  const [seenLiveAddresses, setSeenLiveAddresses] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (liveTokens.length === 0) return;
+    setSeenLiveAddresses((prev) => {
+      const next = new Set(prev);
+      liveTokens.forEach((t) => next.add(t.address));
+      return next;
+    });
+  }, [liveTokens]);
+
+  // ── API data ──────────────────────────────────────────────────────────────
   const sortMap: Record<SortTab, ListTokensSort> = {
     "New":       ListTokensSort.newest,
     "Trending":  ListTokensSort.trending,
@@ -283,29 +409,86 @@ export default function Dashboard() {
     sort: sortMap[activeTab],
     graduated: activeTab === "Graduated" ? true : undefined,
     limit: 100,
+    platform: platformFilter === "all" ? undefined : platformFilter,
   });
 
   const { data: trending, isLoading: loadingTrending } = useGetTrendingTokens({ limit: 4 });
 
-  // ── Client-side filter ────────────────────────────────────────────────────
-  const tokens = useMemo(() => {
-    if (!rawTokens) return undefined;
-    let list = rawTokens;
+  // ── Merge live + API tokens ───────────────────────────────────────────────
+  const tokens = useMemo<DisplayToken[] | undefined>(() => {
+    // Filter live tokens by selected platform
+    const filteredLive: FeedToken[] = platformFilter === "all"
+      ? liveTokens
+      : liveTokens.filter((t) => t.platform === platformFilter);
 
+    // Build a lookup: address → live FeedToken (for merging into API rows)
+    const liveByAddress = new Map<string, FeedToken>(
+      filteredLive.map((t) => [t.address, t])
+    );
+
+    // API tokens as DisplayToken, with live metadata merged in when present
+    let apiDisplay: DisplayToken[] = (rawTokens ?? []).map((t): DisplayToken => {
+      const live = liveByAddress.get(t.address);
+      return {
+        id: t.id,
+        address: t.address,
+        name: t.name,
+        symbol: t.symbol,
+        imageUrl: t.imageUrl,
+        marketCapEth: t.marketCapEth,
+        priceEth: t.priceEth,
+        createdAt: t.createdAt,
+        platform: t.platform,
+        graduated: t.graduated,
+        // Preserve isLive=true if feed still considers this token new
+        isLive: live?.isNew ?? false,
+      };
+    });
+
+    // Live tokens not yet in the API response (very recent launches)
+    const apiAddresses = new Set((rawTokens ?? []).map((t) => t.address));
+    const liveOnly: DisplayToken[] = filteredLive
+      .filter((t) => !apiAddresses.has(t.address))
+      .map((t): DisplayToken => ({
+        id: `live-${t.address}`,
+        address: t.address,
+        name: t.name,
+        symbol: t.symbol,
+        imageUrl: t.imageUrl,
+        marketCapEth: t.marketCapEth,
+        priceEth: t.priceEth,
+        createdAt: t.createdAt,
+        platform: t.platform,
+        graduated: false,
+        isLive: t.isNew,
+      }));
+
+    // Apply client-side filters
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      list = list.filter(
+      apiDisplay = apiDisplay.filter(
         (t) => t.name.toLowerCase().includes(q) || t.symbol.toLowerCase().includes(q)
       );
     }
-    if (onlyGraduated) list = list.filter((t) => t.graduated);
-    if (onlyWithImage)  list = list.filter((t) => !!t.imageUrl);
+    if (onlyGraduated) apiDisplay = apiDisplay.filter((t) => t.graduated);
+    if (onlyWithImage)  apiDisplay = apiDisplay.filter((t) => !!t.imageUrl);
     if (minMcap.trim()) {
       const min = parseFloat(minMcap) || 0;
-      list = list.filter((t) => (parseFloat(t.marketCapEth ?? "0") || 0) >= min);
+      apiDisplay = apiDisplay.filter((t) => (parseFloat(t.marketCapEth ?? "0") || 0) >= min);
     }
-    return list;
-  }, [rawTokens, search, onlyGraduated, onlyWithImage, minMcap]);
+
+    if (!rawTokens) return undefined; // still loading
+    // liveOnly tokens at the top; within apiDisplay, live (isNew) rows sort first
+    const apiLive    = apiDisplay.filter((t) => t.isLive);
+    const apiNonLive = apiDisplay.filter((t) => !t.isLive);
+    return [...liveOnly, ...apiLive, ...apiNonLive];
+  }, [rawTokens, liveTokens, platformFilter, search, onlyGraduated, onlyWithImage, minMcap]);
+
+  // How many live tokens visible for the current platform filter
+  const visibleLiveCount = useMemo(() => {
+    if (platformFilter === "all") return seenLiveAddresses.size;
+    return liveTokens.filter((t) => t.platform === platformFilter && seenLiveAddresses.has(t.address)).length;
+  }, [liveTokens, platformFilter, seenLiveAddresses]);
 
   const activeFilterCount = [
     !!search.trim(),
@@ -324,9 +507,7 @@ export default function Dashboard() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col min-h-full bg-background text-foreground">
-
       <div className="w-full max-w-[1400px] mx-auto pt-2 md:pt-4 px-3 md:px-5 flex-1">
-
         <div className="flex flex-col min-w-0">
 
           {/* Trending strip */}
@@ -337,9 +518,7 @@ export default function Dashboard() {
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1 md:pb-2 scrollbar-hide snap-x -mx-3 px-3 md:mx-0 md:px-0">
               {loadingTrending ? (
-                <>
-                  {[1,2,3,4].map(i => <Skeleton key={i} className="snap-start shrink-0 w-[220px] h-[160px] rounded-sm" />)}
-                </>
+                <>{[1,2,3,4].map(i => <Skeleton key={i} className="snap-start shrink-0 w-[220px] h-[160px] rounded-sm" />)}</>
               ) : trending?.slice(0, 4).map((token, i) => (
                 <Link
                   key={token.id}
@@ -350,14 +529,18 @@ export default function Dashboard() {
                   {token.imageUrl ? (
                     <img src={token.imageUrl} alt={token.symbol} className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.06] transition-transform duration-500 ease-out" />
                   ) : (
-                    <div className="absolute inset-0 flex items-center justify-center font-bold text-5xl text-white/80 group-hover:scale-105 transition-transform duration-300" style={{ background: tokenCardBackground(token.symbol) }}>
+                    <div className="absolute inset-0 flex items-center justify-center font-bold text-5xl text-white/80" style={{ background: tokenCardBackground(token.symbol) }}>
                       {token.symbol.charAt(0).toUpperCase()}
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent group-hover:from-black/70 transition-all duration-300" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                   <div className="absolute bottom-3 left-3 right-3">
                     <span className="text-primary font-mono text-sm font-bold drop-shadow-md block">{formatMC(token.marketCapEth)}</span>
-                    <span className="text-foreground/90 text-xs font-medium truncate block drop-shadow-md group-hover:text-white transition-colors duration-200">{token.name}</span>
+                    <span className="text-foreground/90 text-xs font-medium truncate block drop-shadow-md">{token.name}</span>
+                  </div>
+                  {/* Platform badge on trending cards */}
+                  <div className="absolute top-2 left-2">
+                    <PlatformBadge platform={token.platform as PlatformId} size="sm" iconOnly />
                   </div>
                   {token.graduated && (
                     <div className="absolute top-2 right-2 bg-primary/20 border border-primary/50 text-primary text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-sm backdrop-blur-md animate-pulseGlow">
@@ -369,13 +552,24 @@ export default function Dashboard() {
             </div>
           </section>
 
-          {/* ── Explore header + filter bar ── */}
+          {/* ── Explore section ── */}
           <section className="flex flex-col gap-2">
-            
-            {/* Row 1: title + sort tabs + view toggle */}
-            <div className="flex flex-wrap items-center gap-2 justify-between">
-              <h2 className="text-sm font-bold text-foreground uppercase tracking-widest shrink-0">Explore coins</h2>
 
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-foreground uppercase tracking-widest">Explore coins</h2>
+            </div>
+
+            {/* Platform filter strip */}
+            <PlatformFilterStrip
+              selected={platformFilter}
+              onChange={handlePlatformChange}
+              liveCount={visibleLiveCount}
+              connected={connected}
+            />
+
+            {/* Sort tabs + view controls */}
+            <div className="flex flex-wrap items-center gap-2 justify-between">
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Sort tabs */}
                 <div className="flex gap-1 bg-card border border-border/40 rounded-sm p-0.5">
@@ -411,34 +605,28 @@ export default function Dashboard() {
                     <span className="bg-primary text-black text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{activeFilterCount}</span>
                   )}
                 </button>
+              </div>
 
-                {/* Grid/Table toggle */}
-                <div className="flex bg-card border border-border/40 rounded-sm p-0.5 gap-0.5">
-                  <button
-                    onClick={() => setViewMode("grid")}
-                    className={cn(
-                      "p-1.5 rounded-[3px] transition-all duration-150",
-                      viewMode === "grid" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
-                    )}
-                    title="Grid view"
-                  >
-                    <LayoutGrid className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setViewMode("table")}
-                    className={cn(
-                      "p-1.5 rounded-[3px] transition-all duration-150",
-                      viewMode === "table" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
-                    )}
-                    title="Table view"
-                  >
-                    <List className="w-4 h-4" />
-                  </button>
-                </div>
+              {/* Grid/Table toggle */}
+              <div className="flex bg-card border border-border/40 rounded-sm p-0.5 gap-0.5">
+                <button
+                  onClick={() => setViewMode("grid")}
+                  className={cn("p-1.5 rounded-[3px] transition-all duration-150", viewMode === "grid" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
+                  title="Grid view"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode("table")}
+                  className={cn("p-1.5 rounded-[3px] transition-all duration-150", viewMode === "table" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
+                  title="Table view"
+                >
+                  <List className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
-            {/* Row 2: expandable filter panel */}
+            {/* Expandable filter panel */}
             {showFilters && (
               <div className="flex flex-wrap items-center gap-2 p-3 bg-card border border-border/40 rounded-sm animate-slideDown">
                 {/* Search */}
@@ -469,7 +657,7 @@ export default function Dashboard() {
                     step="0.001"
                     className="pl-14 h-8 text-xs rounded-sm bg-background border-border/50 font-mono"
                   />
-                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none">ETH</span>
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none">SOL</span>
                 </div>
 
                 {/* Toggle: Graduated */}
@@ -517,13 +705,17 @@ export default function Dashboard() {
               <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                 <Filter className="w-3 h-3" />
                 <span>{tokens.length} coin{tokens.length !== 1 ? "s" : ""}</span>
-                {activeFilterCount > 0 && (
-                  <span className="text-muted-foreground/50">· filtered</span>
+                {activeFilterCount > 0 && <span className="text-muted-foreground/50">· filtered</span>}
+                {tokens.filter((t) => t.isLive).length > 0 && (
+                  <span className="flex items-center gap-1 text-emerald-400/70">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
+                    {tokens.filter((t) => t.isLive).length} new
+                  </span>
                 )}
               </div>
             )}
 
-            {/* ── Token grid or table ── */}
+            {/* Token grid or table */}
             {loadingTokens ? (
               viewMode === "grid" ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-3 mt-1 stagger-grid">
@@ -554,8 +746,8 @@ export default function Dashboard() {
               </div>
             )}
           </section>
-        </div>
 
+        </div>
       </div>
     </div>
   );

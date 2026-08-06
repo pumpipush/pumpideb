@@ -27,7 +27,8 @@ export const ListTokensQueryParams = zod.object({
   "limit": zod.coerce.number().default(listTokensQueryLimitDefault),
   "offset": zod.coerce.number().default(listTokensQueryOffsetDefault),
   "search": zod.coerce.string().optional(),
-  "graduated": zod.coerce.boolean().optional()
+  "graduated": zod.coerce.boolean().optional(),
+  "platform": zod.enum(['pump_fun', 'moonshot', 'letsbonk']).optional(),
 })
 
 export const ListTokensResponseItem = zod.object({

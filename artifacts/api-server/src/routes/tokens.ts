@@ -25,7 +25,7 @@ router.get("/tokens", async (req, res): Promise<void> => {
     return;
   }
 
-  const { sort = "newest", limit = 20, offset = 0, search, graduated } = parsed.data;
+  const { sort = "newest", limit = 20, offset = 0, search, graduated, platform } = parsed.data;
 
   let query = db.select().from(tokensTable).$dynamic();
 
@@ -37,6 +37,9 @@ router.get("/tokens", async (req, res): Promise<void> => {
   }
   if (graduated !== undefined) {
     conditions.push(eq(tokensTable.graduated, graduated));
+  }
+  if (platform) {
+    conditions.push(eq(tokensTable.platform, platform));
   }
   if (conditions.length > 0) {
     query = query.where(and(...conditions));

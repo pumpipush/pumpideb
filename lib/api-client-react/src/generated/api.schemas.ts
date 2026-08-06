@@ -178,6 +178,8 @@ limit?: number;
 offset?: number;
 search?: string;
 graduated?: boolean;
+/** Filter by source platform: pump_fun | moonshot | letsbonk */
+platform?: string;
 };
 
 export type ListTokensSort = typeof ListTokensSort[keyof typeof ListTokensSort];

@@ -13,6 +13,7 @@ export interface LiveTrade {
   tokenAmount: string;
   priceEth: string | null;
   txHash: string;
+  platform: string;
   timestamp: string;
 }
 

@@ -22,7 +22,8 @@ import { ethers } from "ethers";
 import { formatEth, formatAddress, parseEth, formatMC, cn, timeAgo } from "@/lib/utils";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { ShareModal } from "@/components/shared/ShareModal";
-import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users } from "lucide-react";
+import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink } from "lucide-react";
+import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { useToast } from "@/hooks/use-toast";
 import { copyToClipboard as fireClipboard } from "@/components/shared/CopyToast";
 import { useLocation } from "wouter";
@@ -436,7 +437,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-lg font-bold text-foreground leading-tight">{token.name}</h1>
               <span className="text-primary font-mono text-sm font-bold">${token.symbol}</span>
-              <span className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-bold text-muted-foreground">Base</span>
+              <PlatformBadge
+                platform={token.platform as PlatformId}
+                size="md"
+                href={getPlatformUrl(token.platform as PlatformId, token.address) ?? undefined}
+              />
             </div>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap text-[11px] font-mono text-muted-foreground">
               <span>by</span>
@@ -479,6 +484,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             tokenAmount: lt.tokenAmount,
             priceEth: lt.priceEth,
             txHash: lt.txHash,
+            platform: lt.platform ?? "unknown",
             timestamp: lt.timestamp,
           }));
           const allTrades = [...liveAsHistory, ...(history ?? [])];
