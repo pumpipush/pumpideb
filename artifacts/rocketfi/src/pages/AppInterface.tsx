@@ -421,37 +421,33 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       <div className="border border-border/20 rounded-sm overflow-hidden mb-0" style={{ background: "#0B1220" }}>
         {/* Toolbar */}
         <div className="flex items-stretch overflow-x-auto" style={{ background: "#0d1726", borderBottom: "1px solid rgba(255,255,255,0.08)", scrollbarWidth: "none" }}>
-          {/* Candle / Line toggle */}
-          <div className="hidden sm:flex items-stretch shrink-0" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
-            {(["candle", "line"] as ChartType[]).map((type, i, arr) => (
+          {/* Candle / Line / Indicators — tab style */}
+          <div className="hidden sm:flex items-center gap-1.5 px-2 shrink-0" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
+            {(["candle", "line"] as ChartType[]).map((type) => (
               <button key={type} onClick={() => setChartType(type)}
-                className="px-3 flex items-center gap-1.5 text-[14px] font-semibold transition-all"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all"
                 style={{
-                  height: 36,
-                  background: chartType === type ? "rgba(255,255,255,0.08)" : "transparent",
-                  color: chartType === type ? "#fff" : "#64748b",
-                  borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                  background: chartType === type ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+                  color: chartType === type ? "#e2e8f0" : "#64748b",
+                  border: "1px solid " + (chartType === type ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
                 }}>
                 {type === "candle" ? "Candle" : "Line"}
               </button>
             ))}
+            <button onClick={() => setIndOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all"
+              style={{
+                background: indicators.length ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+                color: indicators.length ? "#e2e8f0" : "#64748b",
+                border: "1px solid " + (indicators.length ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
+              }}>
+              Indicators
+              {indicators.length > 0 && (
+                <span className="h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center"
+                  style={{ background: "#3b82f6", color: "#fff" }}>{indicators.length}</span>
+              )}
+            </button>
           </div>
-
-          {/* Indicators trigger */}
-          <button onClick={() => setIndOpen(true)}
-            className="hidden sm:flex px-3 items-center gap-1.5 text-[14px] font-semibold transition-all shrink-0"
-            style={{
-              height: 36,
-              background: indicators.length ? "rgba(255,255,255,0.08)" : "transparent",
-              color: indicators.length ? "#fff" : "#64748b",
-              borderRight: "1px solid rgba(255,255,255,0.08)",
-            }}>
-            Indicators
-            {indicators.length > 0 && (
-              <span className="h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center"
-                style={{ background: "#3b82f6", color: "#fff" }}>{indicators.length}</span>
-            )}
-          </button>
 
 
           {/* Timeframe pills — pushed right */}
