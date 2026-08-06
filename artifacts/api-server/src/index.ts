@@ -1,6 +1,5 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { startIndexer } from "./lib/indexer";
 
 const rawPort = process.env["PORT"];
 
@@ -23,7 +22,4 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
-
-  // Start onchain indexer (no-ops gracefully if env vars are not set)
-  startIndexer();
 });

@@ -122,7 +122,7 @@ router.post("/tokens/:address/trades", async (req, res): Promise<void> => {
         volumeEth: token.volumeEth,
         virtualEthReserves: token.virtualEthReserves,
         virtualTokenReserves: token.virtualTokenReserves,
-        tradeCount: token.tradeCount,
+        tradeCount: Number(token.tradeCount),
       },
     });
   }
