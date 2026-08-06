@@ -372,7 +372,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           <div className="hidden sm:flex items-stretch shrink-0" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
             {(["candle", "line"] as ChartType[]).map((type, i, arr) => (
               <button key={type} onClick={() => setChartType(type)}
-                className="px-3 flex items-center gap-1.5 text-[16px] font-semibold transition-all"
+                className="px-3 flex items-center gap-1.5 text-[14px] font-semibold transition-all"
                 style={{
                   height: 36,
                   background: chartType === type ? "rgba(255,255,255,0.08)" : "transparent",
@@ -386,7 +386,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
           {/* Indicators trigger */}
           <button onClick={() => setIndOpen(true)}
-            className="hidden sm:flex px-3 items-center gap-1.5 text-[16px] font-semibold transition-all shrink-0"
+            className="hidden sm:flex px-3 items-center gap-1.5 text-[14px] font-semibold transition-all shrink-0"
             style={{
               height: 36,
               background: indicators.length ? "rgba(255,255,255,0.08)" : "transparent",
