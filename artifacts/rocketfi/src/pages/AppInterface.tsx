@@ -1038,7 +1038,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       <span className="text-[13px] font-mono font-bold" style={{ color: "#e2e8f0" }}>{total}</span>
                     </div>
                     {/* Buy */}
-                    <div className="flex flex-col items-center">
+                    <div className="flex flex-col items-start pl-4">
                       <span className="text-[11px] font-medium mb-0.5" style={{ color: "#64748b" }}>Buy</span>
                       <span className="text-[13px] font-mono font-bold" style={{ color: "#4ade80" }}>{buy}</span>
                     </div>
@@ -1049,7 +1049,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     </div>
                   </div>
                   {/* Buy/Sell progress bar */}
-                  <div className="flex h-1 mx-3 mb-2.5 rounded-full overflow-hidden" style={{ background: "rgba(248,113,113,0.35)" }}>
+                  <div className="flex h-1 mx-3 mb-2.5 rounded-full overflow-hidden" style={{ background: "#f6583c" }}>
                     <div className="h-full transition-all duration-500" style={{ width: `${buyPct}%`, background: "#4ade80" }} />
                   </div>
                 </div>
