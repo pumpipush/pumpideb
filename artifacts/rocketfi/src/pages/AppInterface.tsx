@@ -758,7 +758,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     border: "1px solid " + (activeSubTab === "tx" ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
                   }}
                 >
-                  <ArrowRightLeft className="h-3.5 w-3.5" /> Transactions
+                  <ArrowRightLeft className="h-3.5 w-3.5" /> Trades
                 </button>
                 <button
                   onClick={() => setActiveSubTab("holders")}
@@ -784,10 +784,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 </button>
               </div>
 
-              {/* Transactions panel */}
+              {/* Trades panel */}
               <div className={`overflow-x-auto rounded-lg ${activeSubTab !== "tx" ? "hidden" : ""}`}
-                style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
-                <table className="w-full text-[13px]">
+                style={{ border: "1px solid rgba(255,255,255,0.06)", WebkitOverflowScrolling: "touch" }}>
+                <table className="text-[13px]" style={{ minWidth: "520px", width: "100%" }}>
                   <thead style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
                     <tr>
                       <th className="text-left px-3 py-2.5 font-medium text-[14px]" style={{ color: "#94a3b8" }}>Type</th>
