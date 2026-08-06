@@ -101,12 +101,7 @@ export function WalletSelectModal({ open, onOpenChange, onSuccess }: WalletSelec
 
           {/* SOLANA section */}
           <div className="px-5 pb-1">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[11px] font-semibold tracking-widest" style={{ color: "#475569" }}>SOLANA</span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: "rgba(255,255,255,0.07)", color: "#64748b" }}>
-                {WALLET_DESCRIPTORS.length}+
-              </span>
-            </div>
+            <div className="mb-2" />
             <div className="space-y-1">
               {WALLET_DESCRIPTORS.map((descriptor) => {
                 const installed = mobile || isWalletInstalled(descriptor);
@@ -130,7 +125,7 @@ export function WalletSelectModal({ open, onOpenChange, onSuccess }: WalletSelec
                     )}
                     {isConnecting
                       ? <Loader2 className="w-4 h-4 animate-spin shrink-0" style={{ color: "#4ade80" }} />
-                      : <ChevronRight className="w-4 h-4 shrink-0" style={{ color: "#334155" }} />
+                      : <ChevronRight className="w-4 h-4 shrink-0" style={{ color: "#64748b" }} />
                     }
                   </button>
                 );
@@ -146,12 +141,6 @@ export function WalletSelectModal({ open, onOpenChange, onSuccess }: WalletSelec
             </div>
           )}
 
-          {/* Footer */}
-          <div className="px-5 pb-5 pt-1">
-            <p className="text-[11px] text-center" style={{ color: "#334155" }}>
-              Your wallet keys are never stored on our servers
-            </p>
-          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
