@@ -727,11 +727,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 <table className="w-full text-[13px]">
                   <thead style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
                     <tr>
-                      <th className="text-left px-3 py-2.5 font-medium text-[12px]" style={{ color: "#475569" }}>Type</th>
-                      <th className="text-right px-3 py-2.5 font-medium text-[12px]" style={{ color: "#475569" }}>Amount SOL</th>
-                      <th className="text-right px-3 py-2.5 font-medium text-[12px]" style={{ color: "#475569" }}>{token.symbol}</th>
-                      <th className="text-right px-3 py-2.5 font-medium text-[12px]" style={{ color: "#475569" }}>Time</th>
-                      <th className="text-right px-3 py-2.5 font-medium text-[12px]" style={{ color: "#475569" }}>Txn</th>
+                      <th className="text-left px-3 py-2.5 font-medium text-[14px]" style={{ color: "#94a3b8" }}>Type</th>
+                      <th className="text-right px-3 py-2.5 font-medium text-[14px]" style={{ color: "#94a3b8" }}>Amount SOL</th>
+                      <th className="text-right px-3 py-2.5 font-medium text-[14px]" style={{ color: "#94a3b8" }}>{token.symbol}</th>
+                      <th className="text-right px-3 py-2.5 font-medium text-[14px]" style={{ color: "#94a3b8" }}>Time</th>
+                      <th className="text-right px-3 py-2.5 font-medium text-[14px]" style={{ color: "#94a3b8" }}>Txn</th>
                     </tr>
                   </thead>
                   <tbody>
