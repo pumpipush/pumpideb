@@ -387,16 +387,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             )}
           </button>
 
-          {/* Live badge */}
-          {connected && (
-            <div className="hidden sm:flex items-center px-3 shrink-0" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
-              <span className="relative inline-flex items-center gap-1.5 text-[10px] font-bold text-primary">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping absolute" />
-                <span className="w-1.5 h-1.5 rounded-full bg-primary relative" />
-                <span className="ml-2.5">LIVE</span>
-              </span>
-            </div>
-          )}
 
           {/* OHLC crosshair display — updated via DOM ref, zero re-renders */}
           <div
