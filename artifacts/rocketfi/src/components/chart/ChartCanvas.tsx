@@ -893,8 +893,11 @@ export const ChartCanvas = memo(function ChartCanvas({
       <div ref={mainRef} style={{ flex: 1, minHeight: 0 }} />
 
       {/* ── In-chart symbol + OHLC overlay — single row ── */}
-      <div className="absolute top-2 left-2 z-10 pointer-events-none select-none flex items-center gap-3">
-        {/* Pair label */}
+      <div
+        className="absolute top-2 left-2 z-10 select-none flex items-center gap-3 pointer-events-none"
+        style={{ maxWidth: "calc(100% - 80px)" }}
+      >
+        {/* Pair label — always visible, never scrolls away */}
         {symbol && (
           <span
             className="font-bold tracking-wide shrink-0"
@@ -903,12 +906,17 @@ export const ChartCanvas = memo(function ChartCanvas({
             {symbol.toUpperCase()}/USD
           </span>
         )}
-        {/* OHLC — updated imperatively via DOM ref, zero re-renders */}
+        {/* OHLC — horizontally scrollable on mobile, pointer-events re-enabled for touch */}
         <div
-          ref={innerOhlcRef}
-          className="flex items-center gap-2 font-mono font-medium"
-          style={{ fontSize: 11, opacity: 1, transition: "opacity 0.12s" }}
-        />
+          className="overflow-x-auto pointer-events-auto"
+          style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" } as React.CSSProperties}
+        >
+          <div
+            ref={innerOhlcRef}
+            className="flex items-center gap-2 font-mono font-medium whitespace-nowrap"
+            style={{ fontSize: 11, opacity: 1, transition: "opacity 0.12s" }}
+          />
+        </div>
       </div>
 
       {/* Zoom / scroll controls */}
