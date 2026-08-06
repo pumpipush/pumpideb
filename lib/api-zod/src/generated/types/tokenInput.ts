@@ -19,4 +19,8 @@ export interface TokenInput {
   twitterUrl?: string;
   telegramUrl?: string;
   websiteUrl?: string;
+  /** Source platform: pump_fun | moonshot | letsbonk | unknown */
+  platform?: string;
+  /** Chain: solana | base */
+  chain?: string;
 }

@@ -24,6 +24,8 @@ export const tokensTable = pgTable("tokens", {
   twitterUrl: text("twitter_url"),
   telegramUrl: text("telegram_url"),
   websiteUrl: text("website_url"),
+  platform: text("platform").notNull().default("unknown"),
+  chain: text("chain").notNull().default("base"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

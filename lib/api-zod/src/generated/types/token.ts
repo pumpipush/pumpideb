@@ -40,5 +40,9 @@ export interface Token {
   telegramUrl?: string | null;
   /** @nullable */
   websiteUrl?: string | null;
+  /** Source platform: pump_fun | moonshot | letsbonk | unknown */
+  platform: string;
+  /** Chain: solana | base */
+  chain: string;
   createdAt: Date;
 }

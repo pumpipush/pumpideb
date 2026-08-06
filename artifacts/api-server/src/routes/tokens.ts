@@ -85,6 +85,8 @@ router.post("/tokens", async (req, res): Promise<void> => {
       twitterUrl: parsed.data.twitterUrl ?? null,
       telegramUrl: parsed.data.telegramUrl ?? null,
       websiteUrl: parsed.data.websiteUrl ?? null,
+      platform: parsed.data.platform ?? "unknown",
+      chain: parsed.data.chain ?? "base",
     })
     .returning();
 

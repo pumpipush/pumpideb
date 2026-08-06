@@ -13,5 +13,7 @@ export interface TradeInput {
   tokenAmount: string;
   priceEth?: string;
   txHash: string;
+  /** Source platform: pump_fun | moonshot | letsbonk | unknown */
+  platform?: string;
   timestamp: Date;
 }

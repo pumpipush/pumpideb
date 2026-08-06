@@ -94,6 +94,7 @@ router.post("/tokens/:address/trades", async (req, res): Promise<void> => {
       tokenAmount: parsed.data.tokenAmount,
       priceEth: parsed.data.priceEth ?? null,
       txHash: parsed.data.txHash,
+      platform: parsed.data.platform ?? token?.platform ?? "unknown",
       timestamp: new Date(parsed.data.timestamp),
     })
     .returning();

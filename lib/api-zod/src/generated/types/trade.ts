@@ -20,5 +20,7 @@ export interface Trade {
   /** @nullable */
   priceEth?: string | null;
   txHash: string;
+  /** Source platform: pump_fun | moonshot | letsbonk | unknown */
+  platform: string;
   timestamp: Date;
 }

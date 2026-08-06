@@ -13,6 +13,7 @@ export const tradesTable = pgTable("trades", {
   tokenAmount: text("token_amount").notNull(),
   priceEth: text("price_eth"),
   txHash: text("tx_hash").notNull().unique(),
+  platform: text("platform").notNull().default("unknown"),
   timestamp: timestamp("timestamp", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -52,6 +52,8 @@ export const ListTokensResponseItem = zod.object({
   "twitterUrl": zod.string().nullish(),
   "telegramUrl": zod.string().nullish(),
   "websiteUrl": zod.string().nullish(),
+  "platform": zod.string().default('unknown'),
+  "chain": zod.string().default('base'),
   "createdAt": zod.coerce.date()
 })
 export const ListTokensResponse = zod.array(ListTokensResponseItem)
@@ -72,7 +74,9 @@ export const CreateTokenBody = zod.object({
   "virtualEthReserves": zod.string(),
   "twitterUrl": zod.string().optional(),
   "telegramUrl": zod.string().optional(),
-  "websiteUrl": zod.string().optional()
+  "websiteUrl": zod.string().optional(),
+  "platform": zod.string().optional(),
+  "chain": zod.string().optional()
 })
 
 export const CreateTokenResponse = zod.object({
@@ -97,6 +101,8 @@ export const CreateTokenResponse = zod.object({
   "twitterUrl": zod.string().nullish(),
   "telegramUrl": zod.string().nullish(),
   "websiteUrl": zod.string().nullish(),
+  "platform": zod.string().default('unknown'),
+  "chain": zod.string().default('base'),
   "createdAt": zod.coerce.date()
 })
 
@@ -132,6 +138,8 @@ export const GetTrendingTokensResponseItem = zod.object({
   "twitterUrl": zod.string().nullish(),
   "telegramUrl": zod.string().nullish(),
   "websiteUrl": zod.string().nullish(),
+  "platform": zod.string().default('unknown'),
+  "chain": zod.string().default('base'),
   "createdAt": zod.coerce.date()
 })
 export const GetTrendingTokensResponse = zod.array(GetTrendingTokensResponseItem)
@@ -166,6 +174,8 @@ export const GetTokenResponse = zod.object({
   "twitterUrl": zod.string().nullish(),
   "telegramUrl": zod.string().nullish(),
   "websiteUrl": zod.string().nullish(),
+  "platform": zod.string().default('unknown'),
+  "chain": zod.string().default('base'),
   "createdAt": zod.coerce.date()
 })
 
@@ -212,6 +222,8 @@ export const UpdateTokenResponse = zod.object({
   "twitterUrl": zod.string().nullish(),
   "telegramUrl": zod.string().nullish(),
   "websiteUrl": zod.string().nullish(),
+  "platform": zod.string().default('unknown'),
+  "chain": zod.string().default('base'),
   "createdAt": zod.coerce.date()
 })
 
@@ -234,6 +246,7 @@ export const TradeHistoryResponseItem = zod.object({
   "tokenAmount": zod.string(),
   "priceEth": zod.string().nullish(),
   "txHash": zod.string(),
+  "platform": zod.string().default('unknown'),
   "timestamp": zod.coerce.date()
 })
 export const TradeHistoryResponse = zod.array(TradeHistoryResponseItem)
@@ -253,6 +266,7 @@ export const RecordTradeBody = zod.object({
   "tokenAmount": zod.string(),
   "priceEth": zod.string().optional(),
   "txHash": zod.string(),
+  "platform": zod.string().optional(),
   "timestamp": zod.coerce.date()
 })
 
@@ -267,6 +281,7 @@ export const RecordTradeResponse = zod.object({
   "tokenAmount": zod.string(),
   "priceEth": zod.string().nullish(),
   "txHash": zod.string(),
+  "platform": zod.string().default('unknown'),
   "timestamp": zod.coerce.date()
 })
 

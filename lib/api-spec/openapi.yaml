@@ -382,6 +382,14 @@ components:
           type: ["string", "null"]
         websiteUrl:
           type: ["string", "null"]
+        platform:
+          type: string
+          description: "Source platform: pump_fun | moonshot | letsbonk | unknown"
+          default: "unknown"
+        chain:
+          type: string
+          description: "Chain: solana | base"
+          default: "base"
         createdAt:
           type: string
           format: date-time
@@ -421,6 +429,12 @@ components:
           type: string
         websiteUrl:
           type: string
+        platform:
+          type: string
+          description: "Source platform: pump_fun | moonshot | letsbonk | unknown"
+        chain:
+          type: string
+          description: "Chain: solana | base"
 
     TokenUpdate:
       type: object
@@ -478,6 +492,10 @@ components:
           type: ["string", "null"]
         txHash:
           type: string
+        platform:
+          type: string
+          description: "Source platform: pump_fun | moonshot | letsbonk | unknown"
+          default: "unknown"
         timestamp:
           type: string
           format: date-time
@@ -504,6 +522,9 @@ components:
           type: string
         txHash:
           type: string
+        platform:
+          type: string
+          description: "Source platform: pump_fun | moonshot | letsbonk | unknown"
         timestamp:
           type: string
           format: date-time

@@ -43,6 +43,10 @@ export interface Token {
   telegramUrl?: string | null;
   /** @nullable */
   websiteUrl?: string | null;
+  /** Source platform: pump_fun | moonshot | letsbonk | unknown */
+  platform: string;
+  /** Chain: solana | base */
+  chain: string;
   createdAt: string;
 }
 
@@ -59,6 +63,10 @@ export interface TokenInput {
   twitterUrl?: string;
   telegramUrl?: string;
   websiteUrl?: string;
+  /** Source platform: pump_fun | moonshot | letsbonk | unknown */
+  platform?: string;
+  /** Chain: solana | base */
+  chain?: string;
 }
 
 export interface TokenUpdate {
@@ -88,6 +96,8 @@ export interface Trade {
   /** @nullable */
   priceEth?: string | null;
   txHash: string;
+  /** Source platform: pump_fun | moonshot | letsbonk | unknown */
+  platform: string;
   timestamp: string;
 }
 
@@ -98,6 +108,8 @@ export interface TradeInput {
   tokenAmount: string;
   priceEth?: string;
   txHash: string;
+  /** Source platform: pump_fun | moonshot | letsbonk | unknown */
+  platform?: string;
   timestamp: string;
 }
 
