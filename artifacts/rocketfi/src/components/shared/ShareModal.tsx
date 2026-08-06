@@ -136,7 +136,7 @@ export function ShareModal({ token, open, onClose }: ShareModalProps) {
               {
                 label: "Vol 24h",
                 value: token.volumeEth
-                  ? `${parseFloat(formatEth(token.volumeEth)).toFixed(2)} ETH`
+                  ? `${parseFloat(formatEth(token.volumeEth)).toFixed(2)} SOL`
                   : "—",
               },
             ].map(({ label, value }) => (
