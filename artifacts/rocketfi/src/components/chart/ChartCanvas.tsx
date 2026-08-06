@@ -451,7 +451,7 @@ export const ChartCanvas = memo(function ChartCanvas({
     if (!el) return;
 
     const chart = makeChart(el, { timeVisible: true, rightScale: true, priceFormatter });
-    chart.priceScale("right").applyOptions({ scaleMargins: { top: 0.10, bottom: 0.22 } });
+    chart.priceScale("right").applyOptions({ scaleMargins: { top: 0.10, bottom: 0.05 } });
 
     if (chartType === "candle") {
       candleRef.current = chart.addSeries(CandlestickSeries as unknown as typeof CandlestickSeries, {
@@ -459,10 +459,10 @@ export const ChartCanvas = memo(function ChartCanvas({
         priceFormat: { type: "price", precision: 8, minMove: 0.00000001 },
       } as Partial<CandlestickSeriesOptions>);
       volRef.current = chart.addSeries(HistogramSeries as unknown as typeof HistogramSeries, {
-        color: "rgba(8,153,129,0.5)", priceFormat: { type: "volume" }, priceScaleId: "vol",
+        color: "rgba(8,153,129,0.5)", priceFormat: { type: "volume" }, priceScaleId: "left",
         lastValueVisible: false, priceLineVisible: false,
       } as Partial<HistogramSeriesOptions>);
-      chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 }, visible: false });
+      chart.priceScale("left").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 }, visible: false });
     } else {
       lineRef.current = chart.addSeries(AreaSeries as unknown as typeof AreaSeries, {
         lineColor: UP, topColor: "rgba(8,153,129,0.18)", bottomColor: "rgba(8,153,129,0.0)", lineWidth: 2,
