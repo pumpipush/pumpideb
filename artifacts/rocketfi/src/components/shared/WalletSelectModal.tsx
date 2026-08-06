@@ -20,6 +20,12 @@ import {
 import { useWallet } from "@/contexts/WalletContext";
 import { cn } from "@/lib/utils";
 
+const WALLET_ICON_OVERRIDES: Record<string, string> = {
+  Phantom:  "/wallets/phantom.jpeg",
+  Solflare: "/wallets/solflare.jpeg",
+  Backpack: "/wallets/backpack.jpeg",
+};
+
 interface WalletSelectModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -116,7 +122,7 @@ export function WalletSelectModal({ open, onOpenChange, onSuccess }: WalletSelec
                     onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.07)")}
                     onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
                   >
-                    <img src={descriptor.icon} alt={descriptor.name} className="w-9 h-9 rounded-xl shrink-0" />
+                    <img src={WALLET_ICON_OVERRIDES[descriptor.name] ?? descriptor.icon} alt={descriptor.name} className="w-9 h-9 rounded-xl shrink-0 object-cover" />
                     <span className="flex-1 text-[14px] font-semibold" style={{ color: "#e2e8f0" }}>{descriptor.name}</span>
                     {installed && !isConnecting && (
                       <span className="text-[12px] font-medium mr-1" style={{ color: "#4ade80" }}>
