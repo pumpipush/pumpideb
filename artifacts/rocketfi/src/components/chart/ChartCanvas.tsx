@@ -892,14 +892,12 @@ export const ChartCanvas = memo(function ChartCanvas({
       <ChartNoData visible={chartReady && !bars.length} />
       <div ref={mainRef} style={{ flex: 1, minHeight: 0 }} />
 
-      {/* ── In-chart symbol + OHLC overlay ── */}
-      <div
-        className="absolute top-2 left-2 z-10 pointer-events-none select-none flex flex-col gap-0.5"
-      >
+      {/* ── In-chart symbol + OHLC overlay — single row ── */}
+      <div className="absolute top-2 left-2 z-10 pointer-events-none select-none flex items-center gap-3">
         {/* Pair label */}
         {symbol && (
           <span
-            className="font-bold tracking-wide"
+            className="font-bold tracking-wide shrink-0"
             style={{ fontSize: 12, color: "#e2e8f0", letterSpacing: "0.03em" }}
           >
             {symbol.toUpperCase()}/USD
