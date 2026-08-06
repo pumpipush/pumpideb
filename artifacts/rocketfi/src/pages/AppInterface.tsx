@@ -672,42 +672,18 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           <p className="text-[11px] text-muted-foreground leading-relaxed mb-2 line-clamp-2 px-3 md:px-0">{token.description}</p>
         )}
 
-        {/* Market Cap + Price stats — single row */}
-        <div className="flex items-center justify-between gap-3 mb-2 px-3 md:px-0 flex-wrap">
-          {/* Left: Market Cap */}
-          <div className="flex items-center gap-2.5">
-            <span className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Market Cap</span>
-            <span className="text-xl font-bold text-foreground font-mono tabular-nums">
-              {formatMCUsd(liveToken?.marketCapEth ?? token.marketCapEth, solPrice)}
+        {/* Market Cap Row */}
+        <div className="flex items-center gap-2.5 mb-2 px-3 md:px-0">
+          <span className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Market Cap</span>
+          <span className="text-xl font-bold text-foreground font-mono tabular-nums">
+            {formatMCUsd(liveToken?.marketCapEth ?? token.marketCapEth, solPrice)}
+          </span>
+          {liveToken && (
+            <span className="flex items-center gap-1 text-[10px] text-primary font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse inline-block" />
+              LIVE
             </span>
-            {liveToken && (
-              <span className="flex items-center gap-1 text-[10px] text-primary font-semibold">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse inline-block" />
-                LIVE
-              </span>
-            )}
-          </div>
-
-          {/* Right: Price / Vol 24h / 5m / 1h / 6h */}
-          <div className="flex items-stretch rounded-xl overflow-hidden shrink-0"
-            style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}>
-            {([
-              { label: "Price",   value: solPrice && priceStats.currentPrice > 0 ? formatUSD(priceStats.currentPrice * solPrice) : priceStats.currentPrice > 0 ? priceStats.currentPrice.toExponential(4) : "—", color: "#e2e8f0" },
-              { label: "Vol 24h", value: solPrice && priceStats.vol24h > 0 ? formatUSD(priceStats.vol24h * solPrice) : priceStats.vol24h > 0 ? priceStats.vol24h.toFixed(4) : "—", color: "#e2e8f0" },
-              { label: "5m",  value: priceStats.p5m?.val ?? "—", color: priceStats.p5m ? (priceStats.p5m.up ? "#4ade80" : "#f87171") : "#64748b" },
-              { label: "1h",  value: priceStats.p1h?.val ?? "—", color: priceStats.p1h ? (priceStats.p1h.up ? "#4ade80" : "#f87171") : "#64748b" },
-              { label: "6h",  value: priceStats.p6h?.val ?? "—", color: priceStats.p6h ? (priceStats.p6h.up ? "#4ade80" : "#f87171") : "#64748b" },
-            ] as { label: string; value: string; color: string }[]).map(({ label, value, color }, i, arr) => (
-              <div
-                key={label}
-                className="flex flex-col justify-center px-4 py-3"
-                style={{ borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.08)" : "none" }}
-              >
-                <span className="text-[14px] font-medium mb-1" style={{ color: "#94a3b8" }}>{label}</span>
-                <span className="font-mono font-bold text-[14px]" style={{ color }}>{value}</span>
-              </div>
-            ))}
-          </div>
+          )}
         </div>
 
         {/* Chart Area — DexGems-style with toolbar */}
@@ -940,6 +916,41 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
       {/* ── RIGHT: sticky buy panel ── */}
       <div className="w-full md:w-[280px] xl:w-[300px] shrink-0 md:overflow-y-auto md:h-full px-3 py-3 md:px-4 md:py-4 space-y-3">
+
+        {/* Stats: Price / Vol 24h / % changes */}
+        <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}>
+          {/* Price + Vol 24h */}
+          <div className="grid grid-cols-2 divide-x" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)", divideColor: "rgba(255,255,255,0.08)" }}>
+            <div className="flex flex-col px-4 py-3">
+              <span className="text-[13px] font-medium mb-1" style={{ color: "#94a3b8" }}>Price</span>
+              <span className="font-mono font-bold text-[15px]" style={{ color: "#e2e8f0" }}>
+                {solPrice && priceStats.currentPrice > 0 ? formatUSD(priceStats.currentPrice * solPrice) : priceStats.currentPrice > 0 ? priceStats.currentPrice.toExponential(4) : "—"}
+              </span>
+            </div>
+            <div className="flex flex-col px-4 py-3">
+              <span className="text-[13px] font-medium mb-1" style={{ color: "#94a3b8" }}>Vol 24h</span>
+              <span className="font-mono font-bold text-[15px]" style={{ color: "#e2e8f0" }}>
+                {solPrice && priceStats.vol24h > 0 ? formatUSD(priceStats.vol24h * solPrice) : priceStats.vol24h > 0 ? priceStats.vol24h.toFixed(4) : "—"}
+              </span>
+            </div>
+          </div>
+          {/* 5m / 1h / 6h */}
+          <div className="grid grid-cols-3 divide-x" style={{ "--divider": "rgba(255,255,255,0.08)" } as React.CSSProperties}>
+            {([
+              { label: "5m", data: priceStats.p5m },
+              { label: "1h", data: priceStats.p1h },
+              { label: "6h", data: priceStats.p6h },
+            ] as { label: string; data: { val: string; up: boolean } | null }[]).map(({ label, data }, i, arr) => (
+              <div key={label} className="flex flex-col items-center px-2 py-2.5"
+                style={{ borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.08)" : "none" }}>
+                <span className="text-[12px] font-medium mb-1" style={{ color: "#64748b" }}>{label}</span>
+                <span className="font-mono font-bold text-[13px]" style={{ color: data ? (data.up ? "#4ade80" : "#f87171") : "#475569" }}>
+                  {data?.val ?? "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* Buy/Sell Panel */}
         <div className="bg-card border border-border/60 rounded-sm overflow-hidden shadow-sm">
