@@ -20,23 +20,25 @@ function WalletButton() {
     return (
       <>
         {/* Mobile: icon only */}
-        <button
-          onClick={() => connect(MOCK_WALLET)}
-          className="md:hidden flex items-center justify-center h-8 w-8 rounded-sm border border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
-          aria-label="Connect Wallet"
-        >
-          <Wallet className="h-4 w-4" />
-        </button>
+        <Link href="/signin">
+          <button
+            className="md:hidden flex items-center justify-center h-8 w-8 rounded-sm border border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
+            aria-label="Sign In"
+          >
+            <Wallet className="h-4 w-4" />
+          </button>
+        </Link>
 
         {/* Desktop: text button */}
-        <Button
-          variant="outline"
-          size="sm"
-          className="hidden md:flex h-8 text-xs font-semibold rounded-sm border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
-          onClick={() => connect(MOCK_WALLET)}
-        >
-          Connect Wallet
-        </Button>
+        <Link href="/signin">
+          <Button
+            variant="outline"
+            size="sm"
+            className="hidden md:flex h-8 text-xs font-semibold rounded-sm border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
+          >
+            Sign In
+          </Button>
+        </Link>
       </>
     );
   }
