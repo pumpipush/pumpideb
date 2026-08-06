@@ -427,10 +427,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     <div className="flex flex-col md:flex-row w-full animate-slideDown md:h-[calc(100dvh-96px)]">
 
       {/* ── LEFT: scrollable chart + info ── */}
-      <div className="flex-1 min-w-0 overflow-y-auto border-r border-border/20 px-4 md:px-5 py-4 pb-20 md:pb-6">
+      <div className="flex-1 min-w-0 overflow-y-auto border-r border-border/20 px-0 md:px-5 py-0 md:py-4 pb-20 md:pb-6">
 
         {/* Compact Token Header */}
-        <div className="flex gap-3 items-start mb-2">
+        <div className="flex gap-3 items-start mb-2 px-3 pt-3 md:px-0 md:pt-0">
           <TokenAvatar symbol={token.symbol} imageUrl={token.imageUrl} size={52} shape="square" className="border border-border/40 shadow-sm" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -457,11 +457,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
         {/* Description */}
         {token.description && (
-          <p className="text-[11px] text-muted-foreground leading-relaxed mb-2 line-clamp-2">{token.description}</p>
+          <p className="text-[11px] text-muted-foreground leading-relaxed mb-2 line-clamp-2 px-3 md:px-0">{token.description}</p>
         )}
 
         {/* Market Cap Row */}
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-2 px-3 md:px-0">
           <span className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Market cap</span>
           <span className="text-xl font-bold text-foreground font-mono">{formatMC(token.marketCapEth)}</span>
           <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-[10px] font-bold border border-primary/20">+0.0% ($0.0) 24h</span>
@@ -506,7 +506,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         })()}
 
         {/* Bonding Curve — thin bar immediately below chart */}
-        <div className="py-2 px-0 border-b border-border/20 mb-4">
+        <div className="py-2 px-3 md:px-0 border-b border-border/20 mb-4">
           <div className="flex items-center justify-between mb-1">
             <span className="text-[10px] text-muted-foreground">Bonding curve progress</span>
             <span className="text-[10px] font-mono font-bold text-primary">{progressPercent.toFixed(1)}%</span>
@@ -537,7 +537,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           const totalSupply = holders.reduce((s, [, b]) => s + b, 0) || 1;
 
           return (
-            <div className="mt-0">
+            <div className="mt-0 px-3 md:px-0">
               {/* Bug fix: React state-based sub-tabs (no more document.getElementById) */}
               <div className="flex gap-0 border border-border/40 rounded-sm overflow-hidden mb-0">
                 <button
@@ -676,7 +676,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       </div>
 
       {/* ── RIGHT: sticky buy panel ── */}
-      <div className="w-full md:w-[280px] xl:w-[300px] shrink-0 md:overflow-y-auto md:h-full px-4 py-4 space-y-3">
+      <div className="w-full md:w-[280px] xl:w-[300px] shrink-0 md:overflow-y-auto md:h-full px-3 py-3 md:px-4 md:py-4 space-y-3">
 
         {/* Stats Card — Price / Vol 24h / % changes (live via SSE when connected) */}
         {(() => {
