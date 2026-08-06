@@ -697,8 +697,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
         {/* Market Cap Row */}
         <div className="flex items-center gap-2.5 mb-2 px-3 md:px-0">
-          <span className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Market Cap</span>
-          <span className="text-xl font-bold text-foreground font-mono tabular-nums">
+          <span className="text-[14px] text-muted-foreground uppercase font-semibold tracking-wider">Market Cap</span>
+          <span className="text-[25px] font-semibold text-foreground font-mono tabular-nums">
             {formatMCUsd(liveToken?.marketCapEth ?? token.marketCapEth, solPrice)}
           </span>
           {liveToken && (
