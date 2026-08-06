@@ -672,64 +672,42 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           <p className="text-[11px] text-muted-foreground leading-relaxed mb-2 line-clamp-2 px-3 md:px-0">{token.description}</p>
         )}
 
-        {/* Market Cap Row */}
-        <div className="flex items-center gap-2.5 mb-2 px-3 md:px-0">
-          <span className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Market Cap</span>
-          <span className="text-xl font-bold text-foreground font-mono tabular-nums">
-            {formatMCUsd(liveToken?.marketCapEth ?? token.marketCapEth, solPrice)}
-          </span>
-          {liveToken && (
-            <span className="flex items-center gap-1 text-[10px] text-primary font-semibold">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse inline-block" />
-              LIVE
+        {/* Market Cap + Price stats — single row */}
+        <div className="flex items-center justify-between gap-3 mb-2 px-3 md:px-0 flex-wrap">
+          {/* Left: Market Cap */}
+          <div className="flex items-center gap-2.5">
+            <span className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Market Cap</span>
+            <span className="text-xl font-bold text-foreground font-mono tabular-nums">
+              {formatMCUsd(liveToken?.marketCapEth ?? token.marketCapEth, solPrice)}
             </span>
-          )}
-        </div>
+            {liveToken && (
+              <span className="flex items-center gap-1 text-[10px] text-primary font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse inline-block" />
+                LIVE
+              </span>
+            )}
+          </div>
 
-        {/* ── Price / Vol / % stats bar — above chart ── */}
-        <div
-          className="flex items-stretch flex-wrap gap-0 mb-2 px-3 md:px-0 rounded-lg overflow-hidden"
-          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
-        >
-          {/* Price */}
-          <div className="flex flex-col justify-center px-4 py-2.5" style={{ borderRight: "1px solid rgba(255,255,255,0.07)" }}>
-            <span className="text-[11px] font-medium mb-0.5" style={{ color: "#475569" }}>Price</span>
-            <span className="font-mono font-bold text-[15px]" style={{ color: "#e2e8f0" }}>
-              {solPrice && priceStats.currentPrice > 0
-                ? formatUSD(priceStats.currentPrice * solPrice)
-                : priceStats.currentPrice > 0 ? priceStats.currentPrice.toExponential(4) : "—"}
-            </span>
+          {/* Right: Price / Vol 24h / 5m / 1h / 6h */}
+          <div className="flex items-stretch rounded-lg overflow-hidden shrink-0"
+            style={{ border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.03)" }}>
+            {([
+              { label: "Price", value: solPrice && priceStats.currentPrice > 0 ? formatUSD(priceStats.currentPrice * solPrice) : priceStats.currentPrice > 0 ? priceStats.currentPrice.toExponential(4) : "—", color: "#e2e8f0" },
+              { label: "Vol 24h", value: solPrice && priceStats.vol24h > 0 ? formatUSD(priceStats.vol24h * solPrice) : priceStats.vol24h > 0 ? priceStats.vol24h.toFixed(4) : "—", color: "#e2e8f0" },
+              { label: "5m",  value: priceStats.p5m?.val ?? "—", color: priceStats.p5m ? (priceStats.p5m.up ? "#4ade80" : "#f87171") : "#334155" },
+              { label: "1h",  value: priceStats.p1h?.val ?? "—", color: priceStats.p1h ? (priceStats.p1h.up ? "#4ade80" : "#f87171") : "#334155" },
+              { label: "6h",  value: priceStats.p6h?.val ?? "—", color: priceStats.p6h ? (priceStats.p6h.up ? "#4ade80" : "#f87171") : "#334155" },
+            ] as { label: string; value: string; color: string }[]).map(({ label, value, color }, i, arr) => (
+              <div
+                key={label}
+                className="flex flex-col justify-center px-3 py-1.5"
+                style={{ borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none" }}
+              >
+                <span className="text-[11px] font-medium mb-0.5" style={{ color: "#475569" }}>{label}</span>
+                <span className="font-mono font-bold text-[13px]" style={{ color }}>{value}</span>
+              </div>
+            ))}
           </div>
-          {/* Vol 24h */}
-          <div className="flex flex-col justify-center px-4 py-2.5" style={{ borderRight: "1px solid rgba(255,255,255,0.07)" }}>
-            <span className="text-[11px] font-medium mb-0.5" style={{ color: "#475569" }}>Vol 24h</span>
-            <span className="font-mono font-bold text-[15px]" style={{ color: "#e2e8f0" }}>
-              {solPrice && priceStats.vol24h > 0
-                ? formatUSD(priceStats.vol24h * solPrice)
-                : priceStats.vol24h > 0 ? priceStats.vol24h.toFixed(4) : "—"}
-            </span>
-          </div>
-          {/* % changes */}
-          {([
-            { label: "5m", data: priceStats.p5m },
-            { label: "1h", data: priceStats.p1h },
-            { label: "6h", data: priceStats.p6h },
-          ] as { label: string; data: { val: string; up: boolean } | null }[]).map(({ label, data }, i, arr) => (
-            <div
-              key={label}
-              className="flex flex-col justify-center px-4 py-2.5"
-              style={{ borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none" }}
-            >
-              <span className="text-[11px] font-medium mb-0.5" style={{ color: "#475569" }}>{label}</span>
-              {data ? (
-                <span className="font-mono font-bold text-[14px]" style={{ color: data.up ? "#4ade80" : "#f87171" }}>
-                  {data.val}
-                </span>
-              ) : (
-                <span className="font-mono text-[14px]" style={{ color: "#334155" }}>—</span>
-              )}
-            </div>
-          ))}
         </div>
 
         {/* Chart Area — DexGems-style with toolbar */}
