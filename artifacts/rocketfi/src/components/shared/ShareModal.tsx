@@ -33,8 +33,8 @@ interface ShareModalProps {
 
 export function ShareModal({ token, open, onClose, solPrice }: ShareModalProps) {
   const url = `${window.location.origin}/app?token=${token.address}`;
-  const tweetText = `🚀 Just found $${token.symbol} on Mintix fun!\n\nMC: ${formatMC(token.marketCapEth)} · ${token.graduated ? "Graduated ✓" : "Bonding curve"}\n\n${url}`;
-  const telegramText = encodeURIComponent(`🔥 $${token.symbol} on Mintix fun — ${formatMC(token.marketCapEth)} MC\n${url}`);
+  const tweetText = `🚀 Just found $${token.symbol} on Mintix fun!\n\nMC: ${formatMCUsd(token.marketCapEth, solPrice ?? null)} · ${token.graduated ? "Graduated ✓" : "Bonding curve"}\n\n${url}`;
+  const telegramText = encodeURIComponent(`🔥 $${token.symbol} on Mintix fun — ${formatMCUsd(token.marketCapEth, solPrice ?? null)} MC\n${url}`);
 
   const [c1, c2] = getGradient(token.symbol);
 
