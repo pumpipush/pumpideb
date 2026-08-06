@@ -425,16 +425,30 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           {/* Candle / Line / Indicators — tab style */}
           <div className="flex items-center gap-1.5 px-2 shrink-0" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
 
-            {/* Mobile: native select (no clipping issues) */}
-            <select
-              className="sm:hidden text-[13px] font-semibold rounded-lg px-2 py-1.5 outline-none cursor-pointer appearance-none"
-              style={{ background: "rgba(255,255,255,0.08)", color: "#e2e8f0", border: "1px solid rgba(255,255,255,0.14)" }}
-              value={chartType}
-              onChange={e => setChartType(e.target.value as ChartType)}
-            >
-              <option value="candle" style={{ background: "#0d1726" }}>Candle</option>
-              <option value="line" style={{ background: "#0d1726" }}>Line</option>
-            </select>
+            {/* Mobile: icon-only chart type picker — native select overlaid for reliability */}
+            <div className="relative sm:hidden flex items-center justify-center w-9 h-9 cursor-pointer"
+              style={{ color: "#e2e8f0" }}>
+              {chartType === "candle"
+                ? <svg width="18" height="18" viewBox="0 0 14 14" fill="none" style={{ pointerEvents: "none" }}>
+                    <line x1="3" y1="1" x2="3" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                    <rect x="1.5" y="3.5" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
+                    <line x1="10" y1="1" x2="10" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                    <rect x="8.5" y="6" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
+                  </svg>
+                : <svg width="18" height="18" viewBox="0 0 14 14" fill="none" style={{ pointerEvents: "none" }}>
+                    <polyline points="1,11 4,6 7,8 10,3 13,5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    <polygon points="1,11 4,6 7,8 10,3 13,5 13,12 1,12" fill="currentColor" fillOpacity="0.18"/>
+                  </svg>
+              }
+              <select
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                value={chartType}
+                onChange={e => setChartType(e.target.value as ChartType)}
+              >
+                <option value="candle">Candle</option>
+                <option value="line">Line</option>
+              </select>
+            </div>
 
             {/* Desktop: separate Candle + Line buttons */}
             {(["candle", "line"] as ChartType[]).map((type) => (
