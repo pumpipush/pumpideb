@@ -654,14 +654,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               <span className="text-primary font-mono text-sm font-bold">${token.symbol}</span>
             </div>
-            <div className="flex items-center gap-2 mt-1 flex-wrap text-[11px] font-mono text-muted-foreground">
-              <span>by</span>
-              <span className="cursor-pointer hover:text-foreground transition-colors" onClick={() => copyToClipboard(token.creatorAddress)}>
-                {formatAddress(token.creatorAddress)}
-              </span>
-              <span className="text-border">•</span>
-              <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{timeAgo(token.createdAt || Date.now())}</span>
-            </div>
             <div className="flex items-center gap-2 mt-2">
               <button className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Twitter"><Twitter className="h-4 w-4" /></button>
               <button className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Website"><Globe className="h-4 w-4" /></button>
