@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { eq, desc } from "drizzle-orm";
 import { db, tradesTable, tokensTable } from "@workspace/db";
 import {
@@ -8,8 +8,41 @@ import {
   RecordTradeBody,
   RecordTradeResponse,
 } from "@workspace/api-zod";
+import { emitTrade, tradeEmitter, type TradeEvent } from "../lib/tradeEmitter";
 
 const router: IRouter = Router();
+
+// GET /tokens/:address/stream  — Server-Sent Events for live trade feed
+router.get("/tokens/:address/stream", (req: Request, res: Response) => {
+  const { address } = req.params;
+  if (!address) {
+    res.status(400).json({ error: "address required" });
+    return;
+  }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // disable nginx buffering if present
+  res.flushHeaders();
+
+  // Send a heartbeat comment every 20s so the connection stays alive
+  const heartbeat = setInterval(() => {
+    res.write(": heartbeat\n\n");
+  }, 20_000);
+
+  const handler = (event: TradeEvent) => {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+
+  const channel = `trade:${address}`;
+  tradeEmitter.on(channel, handler);
+
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    tradeEmitter.off(channel, handler);
+  });
+});
 
 // GET /tokens/:address/trades
 router.get("/tokens/:address/trades", async (req, res): Promise<void> => {
@@ -43,9 +76,9 @@ router.post("/tokens/:address/trades", async (req, res): Promise<void> => {
     return;
   }
 
-  // Look up token name/symbol for denormalization
+  // Look up token for denormalization + SSE payload
   const [token] = await db
-    .select({ name: tokensTable.name, symbol: tokensTable.symbol })
+    .select()
     .from(tokensTable)
     .where(eq(tokensTable.address, params.data.address));
 
@@ -65,7 +98,36 @@ router.post("/tokens/:address/trades", async (req, res): Promise<void> => {
     })
     .returning();
 
-  res.status(201).json(RecordTradeResponse.parse(trade));
+  const response = RecordTradeResponse.parse(trade);
+
+  // Broadcast to SSE subscribers
+  if (token) {
+    emitTrade({
+      type: "trade",
+      trade: {
+        id: trade.id,
+        tokenAddress: trade.tokenAddress,
+        traderAddress: trade.traderAddress,
+        isBuy: trade.isBuy,
+        ethAmount: trade.ethAmount,
+        tokenAmount: trade.tokenAmount,
+        priceEth: trade.priceEth,
+        txHash: trade.txHash,
+        timestamp: trade.timestamp.toISOString(),
+      },
+      token: {
+        address: token.address,
+        priceEth: token.priceEth,
+        marketCapEth: token.marketCapEth,
+        volumeEth: token.volumeEth,
+        virtualEthReserves: token.virtualEthReserves,
+        virtualTokenReserves: token.virtualTokenReserves,
+        tradeCount: token.tradeCount,
+      },
+    });
+  }
+
+  res.status(201).json(response);
 });
 
 export default router;

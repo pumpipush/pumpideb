@@ -21,6 +21,7 @@ interface TradingViewChartProps {
   timeframe: Timeframe;
   onTimeframeChange: (tf: Timeframe) => void;
   loading?: boolean;
+  live?: boolean;
   symbol?: string;
 }
 
@@ -46,6 +47,7 @@ export function TradingViewChart({
   timeframe,
   onTimeframeChange,
   loading = false,
+  live = false,
   symbol,
 }: TradingViewChartProps) {
   const wrapperRef    = useRef<HTMLDivElement>(null);
@@ -119,14 +121,12 @@ export function TradingViewChart({
       chartRef.current  = chart;
       seriesRef.current = series;
 
-      /* Resize observer — keep chart synced to wrapper size */
       ro = new ResizeObserver(() => {
-        if (!wrapper || !chartRef.current) return;
-        const nw = wrapper.clientWidth;
-        const nh = wrapper.clientHeight - TOOLBAR_H;
-        if (nw > 20 && nh > 20) {
-          chartRef.current.applyOptions({ width: nw, height: nh });
-        }
+        const wEl = wrapperRef.current;
+        if (!wEl) return;
+        const newW = Math.max(wEl.clientWidth || 400, 80);
+        const newH = Math.max(wEl.clientHeight || 280, 80) - TOOLBAR_H;
+        chart.applyOptions({ width: newW, height: newH });
       });
       ro.observe(wrapper);
     });
@@ -140,23 +140,25 @@ export function TradingViewChart({
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ── update candles when data changes ── */
+  /* ── update candles whenever data changes ── */
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current || !candles.length) return;
     seriesRef.current.setData(candles);
     chartRef.current.timeScale().fitContent();
   }, [candles]);
 
-  const last  = candles[candles.length - 1];
-  const isUp  = last ? last.close >= last.open : true;
-  const price = hoverClose ?? (last ? last.close : null);
+  const last   = candles[candles.length - 1];
+  const isUp   = last ? last.close >= last.open : true;
+  const price  = hoverClose ?? (last ? last.close : null);
 
   return (
-    <div ref={wrapperRef} className="relative flex flex-col w-full h-full bg-[#0B1220] border border-border/30 rounded-sm overflow-hidden">
-
-      {/* Toolbar — fixed 32px height */}
-      <div className="flex items-center justify-between px-3 border-b border-border/30 bg-[#111827]/80 shrink-0 gap-3" style={{ height: TOOLBAR_H }}>
-        <div className="flex items-center gap-1">
+    <div ref={wrapperRef} className="relative w-full h-full bg-[#0B1220] border border-border/30 rounded-sm overflow-hidden flex flex-col">
+      {/* ── Toolbar ── */}
+      <div
+        className="shrink-0 flex items-center px-2.5 gap-1 border-b border-border/20 bg-[#0B1220]"
+        style={{ height: TOOLBAR_H }}
+      >
+        <div className="flex items-center gap-0.5">
           {TIMEFRAMES.map((tf) => (
             <button
               key={tf}
@@ -187,10 +189,17 @@ export function TradingViewChart({
               {symbol}/ETH
             </span>
           )}
-          {loading && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-primary shrink-0">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-              live
+          {live && (
+            <span className="relative inline-flex items-center gap-1 text-[10px] font-bold text-primary shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping absolute" />
+              <span className="w-1.5 h-1.5 rounded-full bg-primary relative" />
+              <span className="ml-2">LIVE</span>
+            </span>
+          )}
+          {!live && loading && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-pulse" />
+              connecting…
             </span>
           )}
         </div>

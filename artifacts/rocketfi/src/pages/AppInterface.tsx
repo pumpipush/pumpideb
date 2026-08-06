@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { TradingViewChart } from "@/components/shared/TradingViewChart";
 import { tradesFromLocal, syntheticCandles, Timeframe } from "@/lib/ohlcv";
+import { useTokenStream } from "@/hooks/useTokenStream";
 
 import { ethers } from "ethers";
 import { formatEth, formatAddress, parseEth, formatMC, cn, timeAgo } from "@/lib/utils";
@@ -276,6 +277,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const updateToken = useUpdateToken();
   const { toast } = useToast();
 
+  // Live SSE stream — real-time trade events
+  const { liveTrades, liveToken, connected } = useTokenStream(selectedAddress);
+
   const [tradeMode, setTradeMode] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
   const [timeframe, setTimeframe] = useState<Timeframe>("1h");
@@ -465,8 +469,21 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
         {/* Chart Area — tall in full-bleed layout */}
         {(() => {
-          const localCandles = history && history.length > 0
-            ? tradesFromLocal(history, timeframe)
+          // Merge live stream trades with server history for real-time candles
+          const liveAsHistory = liveTrades.map(lt => ({
+            id: lt.id,
+            tokenAddress: lt.tokenAddress,
+            traderAddress: lt.traderAddress,
+            isBuy: lt.isBuy,
+            ethAmount: lt.ethAmount,
+            tokenAmount: lt.tokenAmount,
+            priceEth: lt.priceEth,
+            txHash: lt.txHash,
+            timestamp: lt.timestamp,
+          }));
+          const allTrades = [...liveAsHistory, ...(history ?? [])];
+          const localCandles = allTrades.length > 0
+            ? tradesFromLocal(allTrades, timeframe)
             : [];
           const candles = localCandles.length > 0
             ? localCandles
@@ -480,7 +497,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 candles={candles}
                 timeframe={timeframe}
                 onTimeframeChange={setTimeframe}
-                loading={false}
+                live={connected}
+                loading={!connected}
                 symbol={token.symbol}
               />
             </div>
@@ -553,34 +571,48 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       [...Array(4)].map((_, i) => (
                         <tr key={i}><td colSpan={5} className="px-3 py-2.5"><Skeleton className="h-3.5 w-full" /></td></tr>
                       ))
-                    ) : history?.map(trade => (
-                      <tr key={trade.id} className="hover:bg-white/[0.025] transition-colors">
-                        <td className="px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <TokenAvatar symbol={trade.traderAddress.slice(2, 6)} size={20} shape="circle" />
-                            <span
-                              className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                              onClick={() => copyToClipboard(trade.traderAddress)}
-                            >
-                              {formatAddress(trade.traderAddress)}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className={`font-bold uppercase text-[11px] ${trade.isBuy ? "text-primary" : "text-destructive"}`}>
-                            {trade.isBuy ? "Buy" : "Sell"}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-foreground">{formatEth(trade.ethAmount)}</td>
-                        <td className="px-3 py-2 text-foreground">{formatEth(trade.tokenAmount)}</td>
-                        <td className="px-3 py-2 text-right text-muted-foreground/80">{timeAgo(trade.timestamp)}</td>
-                      </tr>
-                    ))}
-                    {!loadingHistory && !history?.length && (
-                      <tr>
-                        <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground/60 text-[11px]">No trades recorded yet.</td>
-                      </tr>
-                    )}
+                    ) : (() => {
+                      // Dedupe: live trades may overlap with server history (by txHash)
+                      const historyTxHashes = new Set((history ?? []).map(t => t.txHash));
+                      const dedupedLive = liveTrades.filter(lt => !historyTxHashes.has(lt.txHash));
+                      const allRows = [...dedupedLive, ...(history ?? [])];
+                      if (!allRows.length) {
+                        return (
+                          <tr>
+                            <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground/60 text-[11px]">No trades recorded yet.</td>
+                          </tr>
+                        );
+                      }
+                      return allRows.map((trade, idx) => {
+                        const isLive = idx < dedupedLive.length;
+                        return (
+                          <tr key={trade.txHash ?? trade.id} className={`hover:bg-white/[0.025] transition-colors ${isLive ? "animate-pulse-once" : ""}`}>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <TokenAvatar symbol={trade.traderAddress.slice(2, 6)} size={20} shape="circle" />
+                                <span
+                                  className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                                  onClick={() => copyToClipboard(trade.traderAddress)}
+                                >
+                                  {formatAddress(trade.traderAddress)}
+                                </span>
+                                {isLive && (
+                                  <span className="text-[9px] px-1 py-0.5 rounded bg-primary/15 text-primary border border-primary/20 font-bold">NEW</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2">
+                              <span className={`font-bold uppercase text-[11px] ${trade.isBuy ? "text-primary" : "text-destructive"}`}>
+                                {trade.isBuy ? "Buy" : "Sell"}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-foreground">{formatEth(trade.ethAmount)}</td>
+                            <td className="px-3 py-2 text-foreground">{formatEth(trade.tokenAmount)}</td>
+                            <td className="px-3 py-2 text-right text-muted-foreground/80">{timeAgo(trade.timestamp)}</td>
+                          </tr>
+                        );
+                      });
+                    })()}
                   </tbody>
                 </table>
               </div>
@@ -646,13 +678,16 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       {/* ── RIGHT: sticky buy panel ── */}
       <div className="w-full md:w-[280px] xl:w-[300px] shrink-0 md:overflow-y-auto md:h-full px-4 py-4 space-y-3">
 
-        {/* Stats Card — Price / Vol 24h / % changes */}
+        {/* Stats Card — Price / Vol 24h / % changes (live via SSE when connected) */}
         {(() => {
           const now = Date.now();
-          const currentPrice = token.priceEth ? parseFloat(token.priceEth) : 0;
+          // Prefer live token snapshot from SSE, fall back to server data
+          const livePrice = liveToken?.priceEth ? parseFloat(liveToken.priceEth) : null;
+          const currentPrice = livePrice ?? (token.priceEth ? parseFloat(token.priceEth) : 0);
 
-          // Vol 24h = sum ethAmount of trades in last 24h
-          const vol24h = (history ?? []).reduce((acc, t) => {
+          // Vol 24h — merge live trades with history for accuracy
+          const allTradesForVol = [...liveTrades, ...(history ?? [])];
+          const vol24h = allTradesForVol.reduce((acc, t) => {
             const ts = new Date(t.timestamp).getTime();
             if (!Number.isFinite(ts)) return acc;
             const amt = parseFloat(t.ethAmount ?? "0");
@@ -803,15 +838,15 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           </div>
         </div>
 
-        {/* Token Stats */}
+        {/* Token Stats — live values from SSE when connected */}
         <div className="bg-card border border-border/60 rounded-sm overflow-hidden shadow-sm">
           {[
             { label: "Ticker", value: `$${token.symbol}`, accent: true },
             { label: "Total supply", value: "1,000,000,000" },
-            { label: "Market cap", value: formatMC(token.marketCapEth) },
-            { label: "Virtual liquidity", value: `${parseFloat(formatEth(token.virtualEthReserves || "0")).toFixed(2)} ETH` },
-            { label: "Volume", value: `${formatEth(token.volumeEth || "0")} ETH` },
-            { label: "Trades", value: String(token.tradeCount) },
+            { label: "Market cap", value: formatMC(liveToken?.marketCapEth ?? token.marketCapEth) },
+            { label: "Virtual liquidity", value: `${parseFloat(formatEth(liveToken?.virtualEthReserves ?? token.virtualEthReserves ?? "0")).toFixed(2)} ETH` },
+            { label: "Volume", value: `${formatEth(liveToken?.volumeEth ?? token.volumeEth ?? "0")} ETH` },
+            { label: "Trades", value: String(liveToken?.tradeCount ?? token.tradeCount) },
           ].map(({ label, value, accent }, i, arr) => (
             <div key={label} className={`flex justify-between items-center px-3 py-2 text-xs ${i < arr.length - 1 ? "border-b border-border/30" : ""}`}>
               <span className="text-muted-foreground">{label}</span>
