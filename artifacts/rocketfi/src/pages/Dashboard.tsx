@@ -687,17 +687,6 @@ export default function Dashboard() {
 
             {/* Result count bar */}
             {!loadingTokens && tokens && (
-              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                <Filter className="w-3 h-3" />
-                <span>{tokens.length} coin{tokens.length !== 1 ? "s" : ""}</span>
-                {activeFilterCount > 0 && <span className="text-muted-foreground/50">· filtered</span>}
-                {tokens.filter((t) => t.isLive).length > 0 && (
-                  <span className="flex items-center gap-1 text-emerald-400/70">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
-                    {tokens.filter((t) => t.isLive).length} new
-                  </span>
-                )}
-              </div>
             )}
 
             {/* Token grid or table */}
