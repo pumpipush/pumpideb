@@ -217,7 +217,7 @@ function TableView({ tokens }: { tokens: DisplayToken[] }) {
                     <div className="min-w-0">
                       <div className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors truncate max-w-[120px] flex items-center gap-1.5">
                         {token.name}
-                        {token.isLive && <span className="text-[9px] font-bold text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 px-1 py-0 rounded-[3px] shrink-0">NEW</span>}
+                        <span className={cn("text-[9px] font-mono px-1 py-0 rounded-[3px] shrink-0", token.isLive ? "text-emerald-400 bg-emerald-400/10 border border-emerald-400/20" : "text-muted-foreground/50")}>{timeAgo(token.createdAt)}</span>
                       </div>
                       <div className="text-[11px] font-mono text-primary">${token.symbol}</div>
                     </div>
@@ -277,11 +277,14 @@ function TokenCard({ token, rank }: { token: DisplayToken; rank: number }) {
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         <div className="absolute top-2 left-2 bg-black/50 backdrop-blur-sm text-[10px] font-mono text-muted-foreground px-1.5 py-0.5 rounded-sm">#{rank}</div>
         <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
-          {token.isLive && (
-            <span className="text-[9px] font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 px-1.5 py-0.5 rounded-sm backdrop-blur-sm animate-pulse">
-              NEW
-            </span>
-          )}
+          <span className={cn(
+            "text-[9px] font-bold px-1.5 py-0.5 rounded-sm backdrop-blur-sm font-mono",
+            token.isLive
+              ? "text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 animate-pulse"
+              : "text-muted-foreground/60 bg-black/40 border border-white/10"
+          )}>
+            {timeAgo(token.createdAt)}
+          </span>
           {token.graduated && (
             <div className="bg-primary/20 border border-primary/50 text-primary text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-sm backdrop-blur-md animate-pulseGlow">
               Grad
@@ -295,8 +298,7 @@ function TokenCard({ token, rank }: { token: DisplayToken; rank: number }) {
           <span className="text-muted-foreground font-mono text-xs">${token.symbol}</span>
           <span className="text-primary font-mono text-xs font-bold">{formatMC(token.marketCapEth)}</span>
         </div>
-        <div className="flex items-center justify-between mt-0.5">
-          <span className="text-[10px] text-muted-foreground/50 font-mono">{timeAgo(token.createdAt)}</span>
+        <div className="flex items-center justify-end mt-0.5">
           <PlatformBadge platform={token.platform as PlatformId} size="sm" iconOnly />
         </div>
       </div>
@@ -360,7 +362,7 @@ export default function Dashboard() {
   }
 
   // ── Sort / filter state ───────────────────────────────────────────────────
-  const [activeTab, setActiveTab]   = useState<SortTab>("Trending");
+  const [activeTab, setActiveTab]   = useState<SortTab>("New");
   const [viewMode, setViewMode]     = useState<ViewMode>("grid");
   const [search, setSearch]         = useState("");
   const [minMcap, setMinMcap]       = useState("");
