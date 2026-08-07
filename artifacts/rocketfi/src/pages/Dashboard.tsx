@@ -557,7 +557,7 @@ export default function Dashboard() {
 
             {/* Header */}
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-foreground uppercase tracking-widest">Explore coins</h2>
+              <h2 className="text-[20px] font-bold text-foreground">Explore coins</h2>
             </div>
 
             {/* Platform filter strip */}
