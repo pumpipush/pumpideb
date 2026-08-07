@@ -72,6 +72,13 @@ export abstract class SolanaRpcIndexer {
   private delay    = 5_000;
   private maxDelay = 120_000;
 
+  // ── Zero-event startup watchdog ────────────────────────────────────────────
+  // If the program ID is wrong, the WebSocket will connect successfully but
+  // zero log events will arrive. We warn after 60s so operators can detect this
+  // without waiting for a trade to be missed.
+  private _eventsSeenThisConnection = 0;
+  private _watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor(opts: {
     programId:   string;
     adapterName: string;
@@ -218,6 +225,7 @@ export abstract class SolanaRpcIndexer {
 
     ws.addEventListener("open", () => {
       this.delay = 5_000;
+      this._eventsSeenThisConnection = 0;
       this.log.info({ programId: this.programId }, `${this.constructor.name}: connected`);
       ws.send(JSON.stringify({
         jsonrpc: "2.0",
@@ -225,6 +233,17 @@ export abstract class SolanaRpcIndexer {
         method: "logsSubscribe",
         params: [{ mentions: [this.programId] }, { commitment: "confirmed" }],
       }));
+
+      // Watchdog: warn if the program ID is wrong (no events after 60 s)
+      this._watchdogTimer = setTimeout(() => {
+        if (this._eventsSeenThisConnection === 0) {
+          this.log.warn(
+            { programId: this.programId },
+            `${this.constructor.name}: 60 s elapsed with zero create events — ` +
+            "program ID may be incorrect. Set the corresponding env var to override."
+          );
+        }
+      }, 60_000);
     });
 
     ws.addEventListener("message", (event) => {
@@ -246,6 +265,13 @@ export abstract class SolanaRpcIndexer {
 
       if (!this.shouldProcess(logs)) return;
 
+      this._eventsSeenThisConnection++;
+      // Cancel watchdog on first valid event
+      if (this._watchdogTimer !== null) {
+        clearTimeout(this._watchdogTimer);
+        this._watchdogTimer = null;
+      }
+
       void this.onEvent({ signature, logs }).catch((err: unknown) => {
         this.log.error({ err, signature }, "error in onEvent");
       });
@@ -256,6 +282,11 @@ export abstract class SolanaRpcIndexer {
     });
 
     ws.addEventListener("close", () => {
+      // Clear watchdog on disconnect (reconnect will start a fresh one)
+      if (this._watchdogTimer !== null) {
+        clearTimeout(this._watchdogTimer);
+        this._watchdogTimer = null;
+      }
       this.log.warn({ retryMs: this.delay }, `${this.constructor.name}: disconnected — reconnecting`);
       setTimeout(() => this.connect(), this.delay);
       this.delay = Math.min(this.delay * 2, this.maxDelay);

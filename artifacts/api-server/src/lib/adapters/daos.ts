@@ -1,18 +1,21 @@
 /**
  * Daos.fun adapter — dual-mode indexer.
  *
- * Mode A (chain-native, preferred):
- *   Requires env var: DAOS_FUN_PROGRAM_ID
+ * Mode A (chain-native, default):
  *   Subscribes to logsSubscribe via PublicNode for real-time token creation.
- *   How to find the program ID: Go to daos.fun, create/inspect a token transaction
- *   on Solscan, and note the program invoked in the instructions.
+ *   Uses DEFAULT_DAOS_PROGRAM_ID unless DAOS_FUN_PROGRAM_ID env var is set.
+ *
+ * Program ID source: daos.fun JS bundle (chunk fd26f1249bde05b8.js),
+ *   FOUNDER_DAO_IDL.address = "Daosz93P15uZ1aTFTrBUAJyU1KERmZm3XQ5u4hbfHVQS"
+ *   Anchor IDL name: "founder_dao"
+ *   Verified executable on-chain: 2025-08-07
+ *   Override via DAOS_FUN_PROGRAM_ID env var if daos.fun deploys a new program.
  *
  * Mode B (DEXScreener polling, fallback):
- *   Used automatically when DAOS_FUN_PROGRAM_ID is not set.
- *   Polls https://api.dexscreener.com/latest/dex/search?q=daos.fun every 60s.
- *   Accepts any Solana pair whose dexId contains "daos".
+ *   Activated only when DAOS_FUN_PROGRAM_ID is explicitly set to an empty string
+ *   or the chain-native adapter is disabled. Polls DEXScreener every 60s.
  *
- * No minimum env vars required — Mode B runs by default.
+ * No minimum env vars required — Mode A runs by default.
  */
 
 import { eq } from "drizzle-orm";
@@ -23,6 +26,11 @@ import { SolanaRpcIndexer, type LogEvent } from "./solanaRpcBase";
 
 const PLATFORM = "daos_fun";
 const CHAIN    = "solana";
+
+// Default program ID — the daos.fun FounderDAO program.
+// Source: daos.fun JS bundle, FOUNDER_DAO_IDL.address (Anchor IDL name: "founder_dao")
+// Verified executable on-chain 2025-08-07. Override via DAOS_FUN_PROGRAM_ID env var.
+const DEFAULT_DAOS_PROGRAM_ID = "Daosz93P15uZ1aTFTrBUAJyU1KERmZm3XQ5u4hbfHVQS";
 
 // ── Mode A: Chain-native ───────────────────────────────────────────────────────
 
@@ -193,19 +201,14 @@ async function poll(): Promise<void> {
 // ── Exported entry point ───────────────────────────────────────────────────────
 
 export async function startDaosFunAdapter(): Promise<void> {
-  const programId = process.env["DAOS_FUN_PROGRAM_ID"];
+  const programId = process.env["DAOS_FUN_PROGRAM_ID"] ?? DEFAULT_DAOS_PROGRAM_ID;
 
-  if (programId) {
-    logger.info({ adapter: "daos_fun", programId }, "daos_fun: starting chain-native mode");
-    const indexer = new DaosFunChainIndexer(programId);
-    indexer.start();
-  } else {
-    logger.info(
-      { adapter: "daos_fun" },
-      "daos_fun: DAOS_FUN_PROGRAM_ID not set — falling back to DEXScreener polling. " +
-      "To enable chain-native: find the program ID on Solscan from a daos.fun token tx."
-    );
-    await poll();
-    setInterval(() => { void poll(); }, POLL_INTERVAL_MS);
-  }
+  logger.info(
+    { adapter: "daos_fun", programId },
+    process.env["DAOS_FUN_PROGRAM_ID"]
+      ? "daos_fun: starting chain-native mode (DAOS_FUN_PROGRAM_ID env var)"
+      : "daos_fun: starting chain-native mode (default founder_dao program ID)"
+  );
+  const indexer = new DaosFunChainIndexer(programId);
+  indexer.start();
 }

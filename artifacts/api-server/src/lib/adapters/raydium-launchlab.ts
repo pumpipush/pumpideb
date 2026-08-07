@@ -7,7 +7,10 @@
  *   RAYDIUM_LAUNCHLAB_PROGRAM_ID — Raydium LaunchLab program address.
  *   How to find it: Go to raydium.io/launchlab, inspect a token launch transaction
  *   on Solscan, and note the main program invoked (not system/token programs).
- *   Falls back to: LanMV9sAd7wArD4vJFi88ioTMQ8viaCSPY9v9oMHDT
+ *   Falls back to: LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj
+ *
+ * Program ID source: raydium-io/raydium-sdk-V2 src/common/programId.ts (LAUNCHPAD_PROGRAM)
+ * Verified executable on-chain: 2025-08-07
  *
  * Token creation events are indexed. Trade indexing is out of scope for this adapter.
  */
@@ -17,8 +20,9 @@ import { logger } from "../logger";
 import { emitNewToken } from "../tradeEmitter";
 import { SolanaRpcIndexer, type LogEvent, type RpcTx } from "./solanaRpcBase";
 
-// Default program ID — override via env var if Raydium migrates the program
-const DEFAULT_PROGRAM_ID = "LanMV9sAd7wArD4vJFi88ioTMQ8viaCSPY9v9oMHDT";
+// Default program ID — sourced from raydium-io/raydium-sdk-V2 (LAUNCHPAD_PROGRAM constant)
+// Verified executable on-chain 2025-08-07. Override via env var if Raydium upgrades the program.
+const DEFAULT_PROGRAM_ID = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj";
 const PLATFORM           = "raydium_launchlab";
 const CHAIN              = "solana";
 
