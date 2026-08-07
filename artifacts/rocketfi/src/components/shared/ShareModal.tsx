@@ -151,12 +151,6 @@ async function generateCardCanvas(
       ctx.beginPath(); ctx.arc(dx, dy, 0.8, 0, Math.PI*2); ctx.fill();
     }
 
-  // Left accent bar from token colour
-  const bar = ctx.createLinearGradient(0, 0, 0, H);
-  bar.addColorStop(0, `rgba(${r1},${g1},${b1},0.9)`);
-  bar.addColorStop(1, `rgba(${r2},${g2},${b2},0.4)`);
-  ctx.fillStyle = bar;
-  ctx.fillRect(0, 0, 4, H);
 
   // ── Load avatar ───────────────────────────────────────────────────────────
   const avatarImg = token.imageUrl ? await loadImage(token.imageUrl) : null;
@@ -436,7 +430,7 @@ export function ShareModal({ token, open, onClose, solPrice, priceStats }: Share
         {/* ── Signal Card Preview ── */}
         <div className="mx-4 mt-4 mb-3 rounded-xl overflow-hidden border border-white/8 shadow-xl" style={{ background: "#080d1a" }}>
           {/* Left accent */}
-          <div className="relative" style={{ borderLeft: `4px solid ${c1}` }}>
+          <div className="relative">
             {/* Colour wash */}
             <div className="absolute inset-0 pointer-events-none" style={{
               background: `linear-gradient(135deg, ${c1}28 0%, ${c2}10 50%, transparent 100%)`,
