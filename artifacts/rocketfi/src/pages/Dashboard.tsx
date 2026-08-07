@@ -5,7 +5,8 @@ import {
   ListTokensSort,
 } from "@workspace/api-client-react";
 
-import { formatMC, cn, timeAgo } from "@/lib/utils";
+import { formatMC, formatMCUsd, cn, timeAgo } from "@/lib/utils";
+import { useSolPrice } from "@/hooks/useSolPrice";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { PlatformBadge, PlatformDot, type PlatformId } from "@/components/shared/PlatformBadge";
 import { useFeedStream, type FeedToken } from "@/hooks/useFeedStream";
@@ -140,7 +141,7 @@ function SortTh({
 }
 
 // ─── Table view ───────────────────────────────────────────────────────────────
-function TableView({ tokens }: { tokens: DisplayToken[] }) {
+function TableView({ tokens, solPrice }: { tokens: DisplayToken[]; solPrice: number | null }) {
   const [sortKey, setSortKey] = useState<TableSortKey>("rank");
   const [sortDir, setSortDir] = useState<TableSortDir>("asc");
 
@@ -224,7 +225,7 @@ function TableView({ tokens }: { tokens: DisplayToken[] }) {
                   </Link>
                 </td>
                 <td className="px-3 py-3 hidden sm:table-cell">
-                  <span className="text-sm font-bold text-foreground font-mono tabular-nums">{formatMC(token.marketCapEth)}</span>
+                  <span className="text-sm font-bold text-foreground font-mono tabular-nums">{formatMCUsd(token.marketCapEth, solPrice)}</span>
                 </td>
                 <td className="px-3 py-3 hidden md:table-cell">
                   <span className="text-xs font-mono text-muted-foreground tabular-nums">
@@ -255,7 +256,7 @@ function TableView({ tokens }: { tokens: DisplayToken[] }) {
 }
 
 // ─── Grid card ────────────────────────────────────────────────────────────────
-function TokenCard({ token, rank }: { token: DisplayToken; rank: number }) {
+function TokenCard({ token, rank, solPrice }: { token: DisplayToken; rank: number; solPrice: number | null }) {
   return (
     <Link
       href={`/app?token=${token.address}`}
@@ -287,7 +288,7 @@ function TokenCard({ token, rank }: { token: DisplayToken; rank: number }) {
         <span className="font-bold text-foreground text-[16px] truncate leading-tight group-hover:text-primary transition-colors duration-200">{token.name}</span>
         <div className="flex justify-between items-center">
           <span className="text-muted-foreground font-mono text-[14px]">${token.symbol}</span>
-          <span className="text-primary font-mono text-xs font-bold">{formatMC(token.marketCapEth)} <span className="text-muted-foreground/60 font-normal">MC</span></span>
+          <span className="text-foreground font-mono text-xs font-bold">{formatMCUsd(token.marketCapEth, solPrice)} <span className="text-muted-foreground/60 font-normal">MC</span></span>
         </div>
         <div className="flex items-center justify-between mt-0.5">
           <span className="flex items-center gap-1 text-[14px] text-emerald-400 font-mono">
@@ -346,6 +347,8 @@ function PlatformFilterStrip({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function Dashboard() {
+  const solPrice = useSolPrice();
+
   // ── Platform filter (URL-synced) ──────────────────────────────────────────
   const [platformFilter, setPlatformFilter] = useState<string>(getPlatformFromUrl);
 
@@ -517,7 +520,7 @@ export default function Dashboard() {
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                   <div className="absolute bottom-3 left-3 right-3">
-                    <span className="text-primary font-mono text-sm font-bold drop-shadow-md block">{formatMC(token.marketCapEth)}</span>
+                    <span className="text-white font-mono text-sm font-bold drop-shadow-md block">{formatMCUsd(token.marketCapEth, solPrice)}</span>
                     <span className="text-foreground/90 text-xs font-medium truncate block drop-shadow-md">{token.name}</span>
                   </div>
                   {/* Platform badge on trending cards */}
@@ -705,12 +708,12 @@ export default function Dashboard() {
             ) : viewMode === "grid" ? (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-3 mt-1">
                 {tokens.map((token, idx) => (
-                  <TokenCard key={token.id} token={token} rank={idx + 1} />
+                  <TokenCard key={token.id} token={token} rank={idx + 1} solPrice={solPrice} />
                 ))}
               </div>
             ) : (
               <div className="mt-1">
-                <TableView tokens={tokens} />
+                <TableView tokens={tokens} solPrice={solPrice} />
               </div>
             )}
           </section>
