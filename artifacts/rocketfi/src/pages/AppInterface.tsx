@@ -32,7 +32,6 @@ import { useSolPrice } from "@/hooks/useSolPrice";
 import { copyToClipboard as fireClipboard } from "@/components/shared/CopyToast";
 import { useLocation, useSearch } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 
 function TokenDetailSkeleton() {
   return (
@@ -333,7 +332,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [shareOpen, setShareOpen] = useState(false);
   // Bug fix: React state for tx/holders sub-tab instead of imperative DOM manipulation
   const [activeSubTab, setActiveSubTab] = useState<"tx" | "holders" | "positions">("tx");
-  const [mobileTradeOpen, setMobileTradeOpen] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
 
   // Reset per-token UI state whenever the viewed token changes
@@ -1309,8 +1307,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           );
         })()}
 
-        {/* Buy/Sell Panel — hidden on mobile, shown in bottom Drawer instead */}
-        <div className="hidden md:block bg-card border border-border/60 rounded-sm overflow-hidden shadow-sm">
+        {/* Buy/Sell Panel */}
+        <div className="bg-card border border-border/60 rounded-sm overflow-hidden shadow-sm">
           <TradePanelForm
             tradeMode={tradeMode}
             setTradeMode={setTradeMode}
@@ -1324,41 +1322,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         </div>
 
       </div>
-
-      {/* Mobile sticky Trade button — visible only below md breakpoint */}
-      <div className="fixed bottom-16 inset-x-0 px-4 pb-2 md:hidden z-30 pointer-events-none">
-        <div className="flex gap-2 pointer-events-auto">
-          <button
-            onClick={() => { setTradeMode("buy"); setMobileTradeOpen(true); }}
-            className="flex-1 h-12 rounded-lg text-sm font-bold text-white shadow-lg transition-all active:scale-[0.97]"
-            style={{ background: "hsl(142 100% 45%)", boxShadow: "0 4px 20px hsl(142 100% 45% / 0.4)" }}
-          >Buy</button>
-          <button
-            onClick={() => { setTradeMode("sell"); setMobileTradeOpen(true); }}
-            className="flex-1 h-12 rounded-lg text-sm font-bold text-white shadow-lg transition-all active:scale-[0.97]"
-            style={{ background: "hsl(0 84% 60%)", boxShadow: "0 4px 20px hsl(0 84% 60% / 0.4)" }}
-          >Sell</button>
-        </div>
-      </div>
-
-      {/* Mobile Trade Drawer (bottom sheet) */}
-      <Drawer open={mobileTradeOpen} onOpenChange={setMobileTradeOpen}>
-        <DrawerContent className="md:hidden bg-card border-border/60 px-0 pb-6">
-          <DrawerTitle className="sr-only">Trade {token.symbol}</DrawerTitle>
-          <div className="px-4 pt-2">
-            <TradePanelForm
-              tradeMode={tradeMode}
-              setTradeMode={setTradeMode}
-              amount={amount}
-              setAmount={setAmount}
-              token={token}
-              wallet={wallet}
-              handleTrade={async () => { await handleTrade(); setMobileTradeOpen(false); }}
-              isPending={recordTrade.isPending || updateToken.isPending}
-            />
-          </div>
-        </DrawerContent>
-      </Drawer>
 
       {/* Share Modal */}
       <ShareModal
