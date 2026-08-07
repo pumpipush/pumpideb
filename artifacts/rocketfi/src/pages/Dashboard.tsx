@@ -72,6 +72,18 @@ const PLATFORM_OPTIONS: PlatformOption[] = [
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** True when a token has not yet been enriched with real name/symbol metadata */
+function isPlaceholder(symbol: string | null | undefined): boolean {
+  return !symbol || symbol === "???" || symbol === "?";
+}
+
+/** Display symbol — hides the "$" prefix for placeholder tokens */
+function displaySymbol(symbol: string | null | undefined): string {
+  if (isPlaceholder(symbol)) return "—";
+  return `$${symbol}`;
+}
+
 /** Read / write the platform filter to the URL search params without navigation */
 function getPlatformFromUrl(): string {
   return new URLSearchParams(window.location.search).get("platform") ?? "all";
@@ -211,7 +223,15 @@ function TableView({ tokens, solPrice }: { tokens: DisplayToken[]; solPrice: num
                           <img src={token.imageUrl} alt={token.symbol} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center font-bold text-base text-white/80" style={{ background: tokenCardBackground(token.symbol) }}>
-                            {token.symbol.charAt(0).toUpperCase()}
+                            {isPlaceholder(token.symbol) ? (
+                              <span className="flex gap-0.5 items-center">
+                                <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce [animation-delay:0ms]" />
+                                <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce [animation-delay:150ms]" />
+                                <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce [animation-delay:300ms]" />
+                              </span>
+                            ) : (
+                              token.symbol.replace(/^\$/, "").charAt(0).toUpperCase()
+                            )}
                           </div>
                         )}
                       </div>
@@ -225,7 +245,7 @@ function TableView({ tokens, solPrice }: { tokens: DisplayToken[]; solPrice: num
                       <div className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors truncate max-w-[120px] flex items-center gap-1.5">
                         {token.name}
                       </div>
-                      <div className="text-[11px] font-mono text-primary">${token.symbol}</div>
+                      <div className="text-[11px] font-mono text-primary">{displaySymbol(token.symbol)}</div>
                     </div>
                   </Link>
                 </td>
@@ -282,7 +302,15 @@ function TokenCard({ token, rank, solPrice }: { token: DisplayToken; rank: numbe
           <img src={token.imageUrl} alt={token.symbol} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500 ease-out" />
         ) : (
           <div className="w-full h-full flex items-center justify-center font-bold text-5xl text-white/80 group-hover:scale-105 transition-transform duration-300" style={{ background: tokenCardBackground(token.symbol) }}>
-            {token.symbol.charAt(0).toUpperCase()}
+            {isPlaceholder(token.symbol) ? (
+              <span className="flex gap-1.5 items-center">
+                <span className="w-2.5 h-2.5 rounded-full bg-white/30 animate-bounce [animation-delay:0ms]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-white/30 animate-bounce [animation-delay:150ms]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-white/30 animate-bounce [animation-delay:300ms]" />
+              </span>
+            ) : (
+              token.symbol.replace(/^\$/, "").charAt(0).toUpperCase()
+            )}
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -297,7 +325,7 @@ function TokenCard({ token, rank, solPrice }: { token: DisplayToken; rank: numbe
       <div className="p-3 flex flex-col gap-1.5">
         <span className="font-semibold text-foreground text-[16px] truncate leading-tight group-hover:text-primary transition-colors duration-200">{token.name}</span>
         <div className="flex justify-between items-center">
-          <span className="text-muted-foreground font-mono text-[14px]">${token.symbol}</span>
+          <span className="text-muted-foreground font-mono text-[14px]">{displaySymbol(token.symbol)}</span>
           <span className="text-foreground font-mono text-[16px] font-semibold">
             {token.lastTradeAt && (
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse mr-1 align-middle" title="Live trade activity" />
@@ -540,7 +568,15 @@ export default function Dashboard() {
                     <img src={token.imageUrl} alt={token.symbol} className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.06] transition-transform duration-500 ease-out" />
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center font-bold text-5xl text-white/80" style={{ background: tokenCardBackground(token.symbol) }}>
-                      {token.symbol.charAt(0).toUpperCase()}
+                      {isPlaceholder(token.symbol) ? (
+                        <span className="flex gap-2 items-center">
+                          <span className="w-3 h-3 rounded-full bg-white/30 animate-bounce [animation-delay:0ms]" />
+                          <span className="w-3 h-3 rounded-full bg-white/30 animate-bounce [animation-delay:150ms]" />
+                          <span className="w-3 h-3 rounded-full bg-white/30 animate-bounce [animation-delay:300ms]" />
+                        </span>
+                      ) : (
+                        token.symbol.replace(/^\$/, "").charAt(0).toUpperCase()
+                      )}
                     </div>
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />

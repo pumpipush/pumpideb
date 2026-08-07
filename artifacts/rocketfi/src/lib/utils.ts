@@ -65,10 +65,13 @@ export function formatUSD(usd: number): string {
   return `$${usd.toExponential(3)}`;
 }
 
-/** Format market cap stored as lamports → USD given a SOL/USD price */
+/** Format market cap stored as lamports → USD given a SOL/USD price.
+ *  Returns "—" when lamportStr is absent or zero (data not yet available). */
 export function formatMCUsd(lamportStr: string | null | undefined, solPrice: number | null): string {
-  if (!solPrice) return formatMC(lamportStr); // fallback to SOL while loading
+  if (!lamportStr || lamportStr === "0") return "—";
+  if (!solPrice) return formatMC(lamportStr); // fallback to SOL while price loads
   const sol = lamportsToSol(lamportStr);
+  if (sol <= 0) return "—";
   return formatUSD(sol * solPrice);
 }
 
