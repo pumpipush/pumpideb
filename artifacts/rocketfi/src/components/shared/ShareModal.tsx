@@ -63,13 +63,22 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 }
 
 async function loadImage(src: string): Promise<HTMLImageElement | null> {
-  return new Promise(resolve => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = src;
-  });
+  // Fetch as blob first to avoid canvas CORS taint
+  try {
+    const res = await fetch(src, { mode: "cors", credentials: "omit" });
+    if (!res.ok) throw new Error("fetch failed");
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload  = () => { URL.revokeObjectURL(blobUrl); resolve(img); };
+      img.onerror = () => { URL.revokeObjectURL(blobUrl); resolve(null); };
+      img.src = blobUrl;
+    });
+  } catch {
+    // Server doesn't support CORS — fall through to gradient fallback
+    return null;
+  }
 }
 
 function drawAvatar(
@@ -117,7 +126,7 @@ async function generateCardCanvas(
   const S = 2;       // retina scale
   const W = 520;
   const H = 180;
-  const R = 20;
+  const R = 8;
 
   const canvas = document.createElement("canvas");
   canvas.width = W * S;
