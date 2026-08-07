@@ -343,21 +343,6 @@ function PlatformFilterStrip({
         ))}
       </div>
 
-      {/* Live indicator */}
-      <div className={cn(
-        "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-semibold shrink-0 transition-all duration-500",
-        connected
-          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-          : "bg-card border-border/30 text-muted-foreground/40"
-      )}>
-        {connected
-          ? <Wifi className="w-3 h-3" />
-          : <WifiOff className="w-3 h-3" />
-        }
-        <span className="hidden sm:inline">
-          {connected ? `${liveCount > 0 ? `+${liveCount} live` : "Live"}` : "Offline"}
-        </span>
-      </div>
     </div>
   );
 }
