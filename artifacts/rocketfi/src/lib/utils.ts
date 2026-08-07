@@ -96,18 +96,19 @@ export function formatTokenAmount(amt: string | null | undefined): string {
 // ── General utilities ──────────────────────────────────────────────────────────
 
 export function timeAgo(dateStr: string | number): string {
-  if (!dateStr) return "0s";
+  if (!dateStr) return "just now";
   const ts = new Date(dateStr).getTime();
-  if (!Number.isFinite(ts)) return "0s";
+  if (!Number.isFinite(ts)) return "just now";
   const diff = Date.now() - ts;
-  if (diff < 0) return "0s";
+  if (diff < 0) return "just now";
   const s = Math.floor(diff / 1000);
-  if (s < 60) return s + 's';
+  if (s < 30) return "just now";
+  if (s < 60) return s + "s ago";
   const m = Math.floor(s / 60);
-  if (m < 60) return m + 'm';
+  if (m < 60) return m + "m ago";
   const h = Math.floor(m / 60);
-  if (h < 24) return h + 'h';
-  return Math.floor(h / 24) + 'd';
+  if (h < 24) return h + "h ago";
+  return Math.floor(h / 24) + "d ago";
 }
 
 export function symbolColor(symbol: string): string {
