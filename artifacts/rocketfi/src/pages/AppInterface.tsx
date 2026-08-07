@@ -24,7 +24,6 @@ import { ethers } from "ethers";
 import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, cn, timeAgo } from "@/lib/utils";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { ShareModal } from "@/components/shared/ShareModal";
-import { WalletSelectModal } from "@/components/shared/WalletSelectModal";
 import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare } from "lucide-react";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { formatSol, formatTokenAmount } from "@/lib/utils";
@@ -33,6 +32,7 @@ import { useSolPrice } from "@/hooks/useSolPrice";
 import { copyToClipboard as fireClipboard } from "@/components/shared/CopyToast";
 import { useLocation, useSearch } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 
 function TokenDetailSkeleton() {
   return (
@@ -159,6 +159,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const imageInputRef = useRef<HTMLInputElement>(null);
   const createToken = useCreateToken();
   const { toast } = useToast();
+  const { openWalletModal } = useWallet();
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -174,7 +175,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const handleLaunch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wallet) {
-      toast({ title: "Wallet required", description: "Connect your wallet to launch a token.", variant: "destructive" });
+      openWalletModal();
       return;
     }
     
@@ -234,7 +235,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
             <Textarea placeholder="What is this token about?" value={desc} onChange={e => setDesc(e.target.value)} className="rounded-sm bg-card border-border min-h-[72px] focus-visible:ring-primary transition-all resize-none" />
           </div>
           
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">name <span className="text-destructive">*</span></label>
               <Input placeholder="Token Name" value={name} onChange={e => setName(e.target.value)} className="rounded-sm bg-card border-border h-9 focus-visible:ring-primary transition-all" required />
@@ -325,13 +326,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // Live SSE stream — real-time trade events
   const { liveTrades, liveToken, connected } = useTokenStream(selectedAddress);
 
+  const { openWalletModal } = useWallet();
   const [tradeMode, setTradeMode] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
   const [timeframe, setTimeframe] = useState<Timeframe>("1h");
   const [shareOpen, setShareOpen] = useState(false);
   // Bug fix: React state for tx/holders sub-tab instead of imperative DOM manipulation
   const [activeSubTab, setActiveSubTab] = useState<"tx" | "holders" | "positions">("tx");
-  const [walletModalOpen, setWalletModalOpen] = useState(false);
+  const [mobileTradeOpen, setMobileTradeOpen] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
 
   // Reset per-token UI state whenever the viewed token changes
@@ -605,7 +607,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
   const handleTrade = async () => {
     if (!wallet) {
-      setWalletModalOpen(true);
+      openWalletModal();
       return;
     }
     if (!token || !amount) return;
@@ -1307,78 +1309,56 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           );
         })()}
 
-        {/* Buy/Sell Panel */}
-        <div className="bg-card border border-border/60 rounded-sm overflow-hidden shadow-sm">
-          {/* Mode tabs — sliding pill */}
-          <div className="relative flex border-b border-border/40 p-1 gap-1 bg-muted/30">
-            {/* Animated sliding background */}
-            <div
-              className={`absolute top-1 bottom-1 w-[calc(50%-6px)] rounded-sm transition-all duration-250 ease-out ${tradeMode === "buy" ? "left-1 bg-primary shadow-[0_0_12px_hsl(142_100%_45%/0.4)]" : "left-[calc(50%+2px)] bg-destructive shadow-[0_0_12px_hsl(0_84%_60%/0.3)]"}`}
-            />
-            <button
-              className={`relative flex-1 py-2 text-sm font-bold transition-colors duration-150 rounded-sm z-10 ${tradeMode === "buy" ? "text-white" : "text-muted-foreground hover:text-foreground"}`}
-              onClick={() => setTradeMode("buy")}
-            >Buy</button>
-            <button
-              className={`relative flex-1 py-2 text-sm font-bold transition-colors duration-150 rounded-sm z-10 ${tradeMode === "sell" ? "text-white" : "text-muted-foreground hover:text-foreground"}`}
-              onClick={() => setTradeMode("sell")}
-            >Sell</button>
-          </div>
-
-          <div className="p-3 space-y-3">
-            {/* Preset amounts — SOL presets for buy, % presets for sell */}
-            <div className="flex gap-2">
-              {tradeMode === "buy"
-                ? [{ label: "$25", val: "0.008" }, { label: "$100", val: "0.033" }, { label: "$250", val: "0.083" }].map(({ label, val }) => (
-                  <button
-                    key={label}
-                    className="flex-1 py-1.5 bg-muted/60 rounded text-xs font-bold text-muted-foreground hover:bg-white/10 hover:text-foreground border border-border/40 transition-all duration-150 active:scale-95 press-feedback"
-                    onClick={() => setAmount(val)}
-                  >{label}</button>
-                ))
-                : [{ label: "25%", pct: 0.25 }, { label: "50%", pct: 0.5 }, { label: "100%", pct: 1 }].map(({ label, pct }) => (
-                  <button
-                    key={label}
-                    className="flex-1 py-1.5 bg-muted/60 rounded text-xs font-bold text-muted-foreground hover:bg-white/10 hover:text-foreground border border-border/40 transition-all duration-150 active:scale-95 press-feedback"
-                    onClick={() => {
-                      // Use virtual token reserves as a proxy for available balance
-                      const reserves = token?.virtualTokenReserves ? parseFloat(token.virtualTokenReserves) : 0;
-                      const estimate = (reserves * pct * 0.0001).toFixed(2);
-                      setAmount(estimate);
-                    }}
-                  >{label}</button>
-                ))
-              }
-            </div>
-
-            {/* Amount input */}
-            <div className="relative">
-              <Input
-                type="number"
-                placeholder="0.0"
-                className="w-full pl-3 pr-14 h-12 bg-background border-border/50 rounded-sm font-mono text-xl text-foreground focus-visible:ring-primary transition-all duration-200 focus-visible:shadow-[0_0_0_3px_hsl(142_100%_45%/0.15)]"
-                value={amount}
-                onChange={e => setAmount(e.target.value)}
-              />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                <span className="font-bold text-muted-foreground font-mono text-sm transition-all duration-200">{tradeMode === "buy" ? "SOL" : token.symbol}</span>
-              </div>
-            </div>
-
-            {/* Trade button */}
-            <Button
-              className={`w-full h-11 text-sm font-bold rounded-sm shadow-none transition-all duration-200 active:scale-[0.98] press-feedback ${tradeMode === "buy" ? "bg-primary hover:bg-primary/90 hover:shadow-[0_0_16px_hsl(142_100%_45%/0.35)] text-white" : "bg-destructive hover:bg-destructive/90 hover:shadow-[0_0_16px_hsl(0_84%_60%/0.3)] text-white"}`}
-              onClick={handleTrade}
-              disabled={recordTrade.isPending || updateToken.isPending}
-            >
-              {recordTrade.isPending || updateToken.isPending
-                ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /></span>
-                : !wallet ? "Connect wallet to trade" : "place trade"}
-            </Button>
-          </div>
+        {/* Buy/Sell Panel — hidden on mobile, shown in bottom Drawer instead */}
+        <div className="hidden md:block bg-card border border-border/60 rounded-sm overflow-hidden shadow-sm">
+          <TradePanelForm
+            tradeMode={tradeMode}
+            setTradeMode={setTradeMode}
+            amount={amount}
+            setAmount={setAmount}
+            token={token}
+            wallet={wallet}
+            handleTrade={handleTrade}
+            isPending={recordTrade.isPending || updateToken.isPending}
+          />
         </div>
 
       </div>
+
+      {/* Mobile sticky Trade button — visible only below md breakpoint */}
+      <div className="fixed bottom-16 inset-x-0 px-4 pb-2 md:hidden z-30 pointer-events-none">
+        <div className="flex gap-2 pointer-events-auto">
+          <button
+            onClick={() => { setTradeMode("buy"); setMobileTradeOpen(true); }}
+            className="flex-1 h-12 rounded-lg text-sm font-bold text-white shadow-lg transition-all active:scale-[0.97]"
+            style={{ background: "hsl(142 100% 45%)", boxShadow: "0 4px 20px hsl(142 100% 45% / 0.4)" }}
+          >Buy</button>
+          <button
+            onClick={() => { setTradeMode("sell"); setMobileTradeOpen(true); }}
+            className="flex-1 h-12 rounded-lg text-sm font-bold text-white shadow-lg transition-all active:scale-[0.97]"
+            style={{ background: "hsl(0 84% 60%)", boxShadow: "0 4px 20px hsl(0 84% 60% / 0.4)" }}
+          >Sell</button>
+        </div>
+      </div>
+
+      {/* Mobile Trade Drawer (bottom sheet) */}
+      <Drawer open={mobileTradeOpen} onOpenChange={setMobileTradeOpen}>
+        <DrawerContent className="md:hidden bg-card border-border/60 px-0 pb-6">
+          <DrawerTitle className="sr-only">Trade {token.symbol}</DrawerTitle>
+          <div className="px-4 pt-2">
+            <TradePanelForm
+              tradeMode={tradeMode}
+              setTradeMode={setTradeMode}
+              amount={amount}
+              setAmount={setAmount}
+              token={token}
+              wallet={wallet}
+              handleTrade={async () => { await handleTrade(); setMobileTradeOpen(false); }}
+              isPending={recordTrade.isPending || updateToken.isPending}
+            />
+          </div>
+        </DrawerContent>
+      </Drawer>
 
       {/* Share Modal */}
       <ShareModal
@@ -1387,11 +1367,93 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         onClose={() => setShareOpen(false)}
         solPrice={solPrice}
       />
-      <WalletSelectModal
-        open={walletModalOpen}
-        onOpenChange={setWalletModalOpen}
-      />
     </div>
+  );
+}
+
+// ── Shared buy/sell form used in both desktop side-panel and mobile drawer ────
+
+interface TradePanelFormProps {
+  tradeMode: "buy" | "sell";
+  setTradeMode: (m: "buy" | "sell") => void;
+  amount: string;
+  setAmount: (v: string) => void;
+  token: { symbol: string; virtualTokenReserves?: string | null };
+  wallet: string | null;
+  handleTrade: () => Promise<void>;
+  isPending: boolean;
+}
+
+function TradePanelForm({
+  tradeMode, setTradeMode, amount, setAmount, token, wallet, handleTrade, isPending,
+}: TradePanelFormProps) {
+  return (
+    <>
+      {/* Mode tabs — sliding pill */}
+      <div className="relative flex border-b border-border/40 p-1 gap-1 bg-muted/30">
+        <div
+          className={`absolute top-1 bottom-1 w-[calc(50%-6px)] rounded-sm transition-all duration-250 ease-out ${tradeMode === "buy" ? "left-1 bg-primary shadow-[0_0_12px_hsl(142_100%_45%/0.4)]" : "left-[calc(50%+2px)] bg-destructive shadow-[0_0_12px_hsl(0_84%_60%/0.3)]"}`}
+        />
+        <button
+          className={`relative flex-1 py-2 text-sm font-bold transition-colors duration-150 rounded-sm z-10 ${tradeMode === "buy" ? "text-white" : "text-muted-foreground hover:text-foreground"}`}
+          onClick={() => setTradeMode("buy")}
+        >Buy</button>
+        <button
+          className={`relative flex-1 py-2 text-sm font-bold transition-colors duration-150 rounded-sm z-10 ${tradeMode === "sell" ? "text-white" : "text-muted-foreground hover:text-foreground"}`}
+          onClick={() => setTradeMode("sell")}
+        >Sell</button>
+      </div>
+
+      <div className="p-3 space-y-3">
+        {/* Preset amounts */}
+        <div className="flex gap-2">
+          {tradeMode === "buy"
+            ? [{ label: "$25", val: "0.008" }, { label: "$100", val: "0.033" }, { label: "$250", val: "0.083" }].map(({ label, val }) => (
+              <button
+                key={label}
+                className="flex-1 py-1.5 bg-muted/60 rounded text-xs font-bold text-muted-foreground hover:bg-white/10 hover:text-foreground border border-border/40 transition-all duration-150 active:scale-95"
+                onClick={() => setAmount(val)}
+              >{label}</button>
+            ))
+            : [{ label: "25%", pct: 0.25 }, { label: "50%", pct: 0.5 }, { label: "100%", pct: 1 }].map(({ label, pct }) => (
+              <button
+                key={label}
+                className="flex-1 py-1.5 bg-muted/60 rounded text-xs font-bold text-muted-foreground hover:bg-white/10 hover:text-foreground border border-border/40 transition-all duration-150 active:scale-95"
+                onClick={() => {
+                  const reserves = token.virtualTokenReserves ? parseFloat(token.virtualTokenReserves) : 0;
+                  setAmount((reserves * pct * 0.0001).toFixed(2));
+                }}
+              >{label}</button>
+            ))
+          }
+        </div>
+
+        {/* Amount input */}
+        <div className="relative">
+          <Input
+            type="number"
+            placeholder="0.0"
+            className="w-full pl-3 pr-14 h-12 bg-background border-border/50 rounded-sm font-mono text-xl text-foreground focus-visible:ring-primary transition-all duration-200 focus-visible:shadow-[0_0_0_3px_hsl(142_100%_45%/0.15)]"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+          />
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+            <span className="font-bold text-muted-foreground font-mono text-sm">{tradeMode === "buy" ? "SOL" : token.symbol}</span>
+          </div>
+        </div>
+
+        {/* Trade button */}
+        <Button
+          className={`w-full h-11 text-sm font-bold rounded-sm shadow-none transition-all duration-200 active:scale-[0.98] ${tradeMode === "buy" ? "bg-primary hover:bg-primary/90 hover:shadow-[0_0_16px_hsl(142_100%_45%/0.35)] text-white" : "bg-destructive hover:bg-destructive/90 hover:shadow-[0_0_16px_hsl(0_84%_60%/0.3)] text-white"}`}
+          onClick={handleTrade}
+          disabled={isPending}
+        >
+          {isPending
+            ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /></span>
+            : !wallet ? "Connect wallet to trade" : "place trade"}
+        </Button>
+      </div>
+    </>
   );
 }
 

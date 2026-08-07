@@ -6,7 +6,7 @@
  * connect/disconnect without needing to know which wallet is active.
  *
  * Usage:
- *   const { wallet, walletName, connectWallet, disconnect } = useWallet();
+ *   const { wallet, walletName, connectWallet, disconnect, openWalletModal } = useWallet();
  */
 
 import {
@@ -20,6 +20,10 @@ import {
 } from "react";
 import { useCreateProfile } from "@workspace/api-client-react";
 import type { SolanaProvider, WalletName } from "@/lib/solana";
+import { WALLET_DESCRIPTORS } from "@/lib/solana";
+import { WalletSelectModal } from "@/components/shared/WalletSelectModal";
+
+const STORAGE_KEY = "mintix_last_wallet";
 
 interface WalletContextValue {
   /** Base58-encoded Solana public key, or null if not connected */
@@ -35,6 +39,8 @@ interface WalletContextValue {
   connectWallet: (provider: SolanaProvider, name: WalletName) => Promise<string>;
   /** Disconnect from the current wallet */
   disconnect: () => Promise<void>;
+  /** Open the Connect Wallet modal from anywhere in the app */
+  openWalletModal: () => void;
 }
 
 const WalletContext = createContext<WalletContextValue>({
@@ -43,11 +49,13 @@ const WalletContext = createContext<WalletContextValue>({
   connected: false,
   connectWallet: async () => { throw new Error("WalletContext not mounted"); },
   disconnect: async () => {},
+  openWalletModal: () => {},
 });
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [wallet, setWallet]         = useState<string | null>(null);
   const [walletName, setWalletName] = useState<WalletName | null>(null);
+  const [modalOpen, setModalOpen]   = useState(false);
   const providerRef = useRef<SolanaProvider | null>(null);
   const createProfile = useCreateProfile();
 
@@ -68,6 +76,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setWallet(null);
     setWalletName(null);
     providerRef.current = null;
+    localStorage.removeItem(STORAGE_KEY);
   }, []);
 
   const handleAccountChanged = useCallback((publicKey: unknown) => {
@@ -106,6 +115,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     providerRef.current = provider;
     setWallet(address);
     setWalletName(name);
+
+    // Persist wallet choice so we can silently reconnect on next load
+    localStorage.setItem(STORAGE_KEY, name);
+
     return address;
   }, [handleDisconnect, handleAccountChanged]);
 
@@ -122,7 +135,43 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setWallet(null);
     setWalletName(null);
     providerRef.current = null;
+    localStorage.removeItem(STORAGE_KEY);
   }, [handleDisconnect, handleAccountChanged]);
+
+  // ── Auto-reconnect on mount (Task 24) ────────────────────────────────────
+  // If the user previously connected a wallet, silently reconnect without
+  // showing a popup — using onlyIfTrusted so the wallet approves automatically.
+
+  useEffect(() => {
+    const savedName = localStorage.getItem(STORAGE_KEY) as WalletName | null;
+    if (!savedName) return;
+
+    const descriptor = WALLET_DESCRIPTORS.find(d => d.name === savedName);
+    if (!descriptor) return;
+
+    const provider = descriptor.getProvider();
+    if (!provider) return;
+
+    // onlyIfTrusted: won't show a popup; resolves only if already trusted
+    provider.connect({ onlyIfTrusted: true })
+      .then(result => {
+        const address = result.publicKey.toBase58();
+        try {
+          provider.on("disconnect", handleDisconnect);
+          provider.on("accountChanged", handleAccountChanged);
+        } catch { /* ignore */ }
+        providerRef.current = provider;
+        setWallet(address);
+        setWalletName(savedName);
+      })
+      .catch(() => {
+        // Wallet not trusted / locked — silently clear stored name
+        localStorage.removeItem(STORAGE_KEY);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const openWalletModal = useCallback(() => setModalOpen(true), []);
 
   return (
     <WalletContext.Provider value={{
@@ -131,8 +180,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       connected: wallet !== null,
       connectWallet,
       disconnect,
+      openWalletModal,
     }}>
       {children}
+      {/* Global wallet modal — accessible from any component via openWalletModal() */}
+      <WalletSelectModal open={modalOpen} onOpenChange={setModalOpen} />
     </WalletContext.Provider>
   );
 }
