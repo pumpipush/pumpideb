@@ -284,9 +284,9 @@ function TokenCard({ token, rank }: { token: DisplayToken; rank: number }) {
         </div>
       </div>
       <div className="p-3 flex flex-col gap-1.5">
-        <span className="font-bold text-foreground text-sm truncate leading-tight group-hover:text-primary transition-colors duration-200">{token.name}</span>
+        <span className="font-bold text-foreground text-[16px] truncate leading-tight group-hover:text-primary transition-colors duration-200">{token.name}</span>
         <div className="flex justify-between items-center">
-          <span className="text-muted-foreground font-mono text-xs">${token.symbol}</span>
+          <span className="text-muted-foreground font-mono text-[14px]">${token.symbol}</span>
           <span className="text-primary font-mono text-xs font-bold">{formatMC(token.marketCapEth)}</span>
         </div>
         <div className="flex items-center justify-between mt-0.5">
