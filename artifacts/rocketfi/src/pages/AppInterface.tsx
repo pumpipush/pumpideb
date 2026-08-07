@@ -342,7 +342,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     setAmount("");
     setActiveSubTab("tx");
     setDescExpanded(false);
-  }, [selectedTokenId]);
+  }, [selectedAddress]);
 
   // New chart state
   const [chartTf, setChartTf] = useState<ChartTimeframe>("15m");
