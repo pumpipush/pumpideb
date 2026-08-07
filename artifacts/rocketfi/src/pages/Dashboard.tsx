@@ -65,6 +65,7 @@ const PLATFORM_OPTIONS: PlatformOption[] = [
   { id: "pump_fun",  label: "Pump.fun",  emoji: "🐸", logoUrl: "/pumpfun.png" },
   { id: "moonshot",  label: "Moonshot",  emoji: "🌙" },
   { id: "letsbonk",  label: "LetsBONK", emoji: "🔨" },
+  { id: "daos_fun",  label: "Daos.fun",  emoji: "🏛️" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

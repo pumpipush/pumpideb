@@ -10,6 +10,7 @@ import { logger } from "../logger";
 import { startPumpFunAdapter } from "./pumpfun";
 import { startMoonshotAdapter } from "./moonshot";
 import { startLetsBonkAdapter } from "./letsbonk";
+import { startDaosFunAdapter } from "./daos";
 
 interface AdapterEntry {
   name: string;
@@ -20,6 +21,7 @@ const ADAPTERS: AdapterEntry[] = [
   { name: "pump_fun", start: startPumpFunAdapter },
   { name: "moonshot", start: startMoonshotAdapter },
   { name: "letsbonk", start: startLetsBonkAdapter },
+  { name: "daos_fun", start: startDaosFunAdapter },
 ];
 
 /** Start all adapters. Each is isolated — a failure in one does not block the others. */

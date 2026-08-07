@@ -51,6 +51,15 @@ const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
     icon: <span role="img" aria-label="letsbonk">🔨</span>,
     sourceUrlTemplate: "https://letsbonk.fun/token/{address}",
   },
+  daos_fun: {
+    label: "Daos.fun",
+    color: "text-violet-300",
+    bg: "bg-violet-500/10",
+    border: "border-violet-500/20",
+    dot: "#a78bfa",
+    icon: <span role="img" aria-label="daos.fun">🏛️</span>,
+    sourceUrlTemplate: "https://daos.fun/token/{address}",
+  },
   unknown: {
     label: "Unknown",
     color: "text-white/40",
