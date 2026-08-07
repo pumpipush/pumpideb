@@ -288,7 +288,7 @@ function TokenCard({ token, rank, solPrice }: { token: DisplayToken; rank: numbe
         <span className="font-semibold text-foreground text-[16px] truncate leading-tight group-hover:text-primary transition-colors duration-200">{token.name}</span>
         <div className="flex justify-between items-center">
           <span className="text-muted-foreground font-mono text-[14px]">${token.symbol}</span>
-          <span className="text-foreground font-mono text-[16px] font-semibold">{formatMCUsd(token.marketCapEth, solPrice)} <span className="text-muted-foreground/60 font-normal">MC</span></span>
+          <span className="text-foreground font-mono text-[16px] font-semibold">{formatMCUsd(token.marketCapEth, solPrice)} <span className="text-muted-foreground/60 font-normal text-[14px]">MC</span></span>
         </div>
         <div className="flex items-center justify-between mt-0.5">
           <span className="flex items-center gap-1 text-[14px] text-emerald-400 font-mono">
