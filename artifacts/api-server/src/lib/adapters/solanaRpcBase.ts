@@ -104,18 +104,47 @@ export abstract class SolanaRpcIndexer {
 
   // ── RPC helpers ────────────────────────────────────────────────────────────
 
-  // ── Concurrency limiter ────────────────────────────────────────────────────
+  // ── Concurrency limiter (semaphore with queue) ─────────────────────────────
   // PublicNode free tier allows ~10 req/s. Cap concurrent getTransaction calls
-  // to avoid rate limits; drop excess events rather than queueing them (the
-  // stream is continuous so new events always arrive).
-  private _rpcInFlight = 0;
+  // to avoid rate limits. Excess calls are queued (up to _rpcQueueMax) so no
+  // event is silently discarded while the RPC is temporarily saturated.
+  // Only if the queue itself is full (sustained overload) are new arrivals
+  // dropped — this is an explicit backpressure boundary, not a silent loss.
+  private _rpcInFlight   = 0;
   private readonly _rpcMaxConcurrent = 4;
+  private readonly _rpcQueueMax      = 64;
+  private _rpcQueue: Array<() => void> = [];
+
+  private _acquireRpcSlot(): Promise<void> {
+    if (this._rpcInFlight < this._rpcMaxConcurrent) {
+      this._rpcInFlight++;
+      return Promise.resolve();
+    }
+    if (this._rpcQueue.length >= this._rpcQueueMax) {
+      // Sustained overload — drop to prevent unbounded memory growth
+      this.log.warn({ queued: this._rpcQueue.length }, "rpc: queue full, dropping event");
+      return Promise.reject(new Error("rpc queue full"));
+    }
+    return new Promise((resolve) => {
+      this._rpcQueue.push(() => {
+        this._rpcInFlight++;
+        resolve();
+      });
+    });
+  }
+
+  private _releaseRpcSlot(): void {
+    this._rpcInFlight--;
+    const next = this._rpcQueue.shift();
+    if (next) next();
+  }
 
   protected async rpcCall<T = unknown>(method: string, params: unknown[]): Promise<T | null> {
-    if (this._rpcInFlight >= this._rpcMaxConcurrent) {
-      return null; // drop — another event will follow shortly
+    try {
+      await this._acquireRpcSlot();
+    } catch {
+      return null; // queue full — explicit drop after warning
     }
-    this._rpcInFlight++;
     try {
       const res = await fetch(this.httpUrl, {
         method: "POST",
@@ -133,7 +162,7 @@ export abstract class SolanaRpcIndexer {
       this.log.warn({ err, method }, "rpc: call failed");
       return null;
     } finally {
-      this._rpcInFlight--;
+      this._releaseRpcSlot();
     }
   }
 

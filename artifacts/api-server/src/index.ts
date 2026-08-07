@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startAdapters } from "./lib/adapters/index";
+import { startEnrichmentLoop } from "./lib/enrichment";
 
 const rawPort = process.env["PORT"];
 
@@ -27,4 +28,8 @@ app.listen(port, (err) => {
   // Start all platform data adapters (Pump.fun, Moonshot, LetsBONK)
   // Each adapter is isolated — a crash in one will not affect the server
   void startAdapters();
+
+  // Start background enrichment loop — retries metadata for tokens that
+  // got placeholder names/symbols because the upstream API wasn't ready yet
+  startEnrichmentLoop();
 });
