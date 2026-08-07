@@ -685,9 +685,6 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Result count bar */}
-            {!loadingTokens && tokens && (
-            )}
 
             {/* Token grid or table */}
             {loadingTokens ? (
