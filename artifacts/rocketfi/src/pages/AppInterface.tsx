@@ -400,9 +400,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       vol24hSell,
       txns24hBuy,
       txns24hSell,
-      p5m:  pct(priceAt(5   * 60_000)),
+      p5m:  pct(priceAt(5    * 60_000)),
       p1h:  pct(priceAt(60  * 60_000)),
       p6h:  pct(priceAt(360 * 60_000)),
+      p24h: pct(priceAt(1440 * 60_000)),
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveToken, token?.priceEth, liveTrades, history]);
@@ -1339,6 +1340,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           p5m: priceStats.p5m,
           p1h: priceStats.p1h,
           p6h: priceStats.p6h,
+          p24h: (priceStats as any).p24h ?? null,
         }}
       />
     </div>

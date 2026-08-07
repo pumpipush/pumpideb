@@ -22,6 +22,7 @@ interface SharePriceStats {
   p5m: PctStat | null;
   p1h: PctStat | null;
   p6h: PctStat | null;
+  p24h: PctStat | null;
 }
 
 interface ShareToken {
@@ -115,7 +116,7 @@ async function generateCardCanvas(
 ): Promise<HTMLCanvasElement> {
   const S = 2;       // retina scale
   const W = 520;
-  const H = 220;
+  const H = 180;
   const R = 20;
 
   const canvas = document.createElement("canvas");
@@ -200,57 +201,31 @@ async function generateCardCanvas(
   ctx.font = `bold 32px -apple-system,BlinkMacSystemFont,sans-serif`;
   ctx.fillText(priceStr, 24, priceY);
 
-  // 1h pill next to price
-  if (stats?.p1h) {
-    const pStr = stats.p1h.val;
-    const pColor = stats.p1h.up ? "#22c55e" : "#f87171";
-    const [pr,pg,pb] = hexToRgb(stats.p1h.up ? "#16a34a" : "#dc2626");
+  // 24h pill next to price
+  const pct24 = stats?.p24h ?? null;
+  if (pct24) {
+    const pStr = pct24.val;
+    const pColor = pct24.up ? "#22c55e" : "#f87171";
+    const [pr,pg,pb] = hexToRgb(pct24.up ? "#16a34a" : "#dc2626");
+    ctx.font = `bold 13px -apple-system,BlinkMacSystemFont,sans-serif`;
     const pw = ctx.measureText(pStr).width + 22;
+    ctx.font = `bold 32px -apple-system,BlinkMacSystemFont,sans-serif`;
     const priceW = ctx.measureText(priceStr).width;
     ctx.font = `bold 13px -apple-system,BlinkMacSystemFont,sans-serif`;
     const pilX = 24 + priceW + 12;
     const pilY = priceY + 8;
     const pilH = 22;
     roundRect(ctx, pilX, pilY, pw, pilH, 6);
-    ctx.fillStyle = `rgba(${pr},${pg},${pb},0.18)`;
-    ctx.fill();
+    ctx.fillStyle = `rgba(${pr},${pg},${pb},0.18)`; ctx.fill();
     roundRect(ctx, pilX, pilY, pw, pilH, 6);
-    ctx.strokeStyle = `rgba(${pr},${pg},${pb},0.5)`;
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    ctx.strokeStyle = `rgba(${pr},${pg},${pb},0.5)`; ctx.lineWidth = 1; ctx.stroke();
     ctx.fillStyle = pColor;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(pStr, pilX+pw/2, pilY+pilH/2);
-    // "1h" label below pill
     ctx.fillStyle = "rgba(255,255,255,0.35)";
     ctx.font = `500 10px -apple-system,BlinkMacSystemFont,sans-serif`;
-    ctx.fillText("1h", pilX+pw/2, pilY+pilH+5);
+    ctx.fillText("24h", pilX+pw/2, pilY+pilH+5);
   }
-
-  // ── Buy/Sell bar ──────────────────────────────────────────────────────────
-  const buyPct = stats && (stats.vol24hBuy+stats.vol24hSell) > 0
-    ? (stats.vol24hBuy/(stats.vol24hBuy+stats.vol24hSell))*100
-    : 50;
-  const barY = priceY + 56;
-  const barH = 5;
-  const barW = W - 48;
-  // background (sell side)
-  roundRect(ctx, 24, barY, barW, barH, 3);
-  ctx.fillStyle = "#f87171";
-  ctx.fill();
-  // buy side
-  roundRect(ctx, 24, barY, barW*(buyPct/100), barH, 3);
-  ctx.fillStyle = "#4ade80";
-  ctx.fill();
-
-  // Buy% / Sell% labels
-  ctx.font = `600 9px -apple-system,BlinkMacSystemFont,sans-serif`;
-  ctx.fillStyle = "#4ade80";
-  ctx.textAlign = "left"; ctx.textBaseline = "top";
-  ctx.fillText(`B ${buyPct.toFixed(0)}%`, 24, barY+8);
-  ctx.fillStyle = "#f87171";
-  ctx.textAlign = "right";
-  ctx.fillText(`S ${(100-buyPct).toFixed(0)}%`, W-24, barY+8);
 
   // ── Footer ────────────────────────────────────────────────────────────────
   const footerY = H - 20;
@@ -275,7 +250,7 @@ async function generateCardCanvas(
 
 export function ShareModal({ token, open, onClose, solPrice, priceStats }: ShareModalProps) {
   const url = `${window.location.origin}/app?token=${token.address}`;
-  const tweetText = `🚀 Just found $${token.symbol} on Mintix fun!\n\nMC: ${formatMCUsd(token.marketCapEth, solPrice ?? null)}${priceStats?.p1h ? ` · 1h ${priceStats.p1h.val}` : ""}\n\n${url}`;
+  const tweetText = `🚀 Just found $${token.symbol} on Mintix fun!\n\nMC: ${formatMCUsd(token.marketCapEth, solPrice ?? null)}${priceStats?.p24h ? ` · 24h ${priceStats.p24h.val}` : ""}\n\n${url}`;
   const telegramText = encodeURIComponent(`🔥 $${token.symbol} on Mintix fun — ${formatMCUsd(token.marketCapEth, solPrice ?? null)} MC\n${url}`);
 
   const [c1, c2] = getGradient(token.symbol);
@@ -285,10 +260,6 @@ export function ShareModal({ token, open, onClose, solPrice, priceStats }: Share
   const priceStr = priceUsd
     ? (priceUsd < 0.0001 ? `$${priceUsd.toExponential(2)}` : formatUSD(priceUsd))
     : token.priceEth ? parseFloat(token.priceEth).toExponential(4)+" SOL" : "—";
-
-  const buyPct = priceStats && (priceStats.vol24hBuy + priceStats.vol24hSell) > 0
-    ? (priceStats.vol24hBuy / (priceStats.vol24hBuy + priceStats.vol24hSell)) * 100
-    : 50;
 
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden";
@@ -364,28 +335,17 @@ export function ShareModal({ token, open, onClose, solPrice, priceStats }: Share
                 )}
               </div>
 
-              {/* Price + 1h pill */}
+              {/* Price + 24h pill */}
               <div className="flex items-end gap-3">
                 <div className="text-[28px] font-bold text-white leading-none">{priceStr}</div>
-                {priceStats?.p1h && (
+                {priceStats?.p24h && (
                   <div className="flex flex-col items-center mb-0.5">
-                    <span className={cn("px-2 py-0.5 rounded text-xs font-bold", priceStats.p1h.up ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400")}>
-                      {priceStats.p1h.val}
+                    <span className={cn("px-2 py-0.5 rounded text-xs font-bold", priceStats.p24h.up ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400")}>
+                      {priceStats.p24h.val}
                     </span>
-                    <span className="text-[9px] text-white/30 mt-0.5">1h</span>
+                    <span className="text-[9px] text-white/30 mt-0.5">24h</span>
                   </div>
                 )}
-              </div>
-
-              {/* Buy / Sell bar */}
-              <div>
-                <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "#f87171" }}>
-                  <div className="h-full rounded-full" style={{ width: `${buyPct}%`, background: "#4ade80" }} />
-                </div>
-                <div className="flex justify-between mt-1">
-                  <span className="text-[9px] font-semibold text-green-400">B {buyPct.toFixed(0)}%</span>
-                  <span className="text-[9px] font-semibold text-red-400">S {(100-buyPct).toFixed(0)}%</span>
-                </div>
               </div>
 
               {/* Footer */}
