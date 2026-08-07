@@ -58,10 +58,11 @@ interface PlatformOption {
   id: string;
   label: string;
   emoji: string;
+  logoUrl?: string;
 }
 const PLATFORM_OPTIONS: PlatformOption[] = [
   { id: "all",       label: "All",       emoji: "⚡" },
-  { id: "pump_fun",  label: "Pump.fun",  emoji: "🐸" },
+  { id: "pump_fun",  label: "Pump.fun",  emoji: "🐸", logoUrl: "/pumpfun.png" },
   { id: "moonshot",  label: "Moonshot",  emoji: "🌙" },
   { id: "letsbonk",  label: "LetsBONK", emoji: "🔨" },
 ];
@@ -295,7 +296,6 @@ function TokenCard({ token, rank, solPrice }: { token: DisplayToken; rank: numbe
             <Clock className="w-3 h-3 text-emerald-400" />
             {timeAgo(token.createdAt)}
           </span>
-          <PlatformBadge platform={token.platform as PlatformId} size="sm" iconOnly />
         </div>
       </div>
     </Link>
@@ -335,7 +335,10 @@ function PlatformFilterStrip({
                 : "bg-card border-border/40 text-muted-foreground hover:text-foreground hover:border-border"
             )}
           >
-            <span className="text-sm leading-none">{opt.emoji}</span>
+            {opt.logoUrl
+              ? <img src={opt.logoUrl} alt={opt.label} className="w-4 h-4 rounded-sm object-cover" />
+              : <span className="text-sm leading-none">{opt.emoji}</span>
+            }
             <span>{opt.label}</span>
           </button>
         ))}
