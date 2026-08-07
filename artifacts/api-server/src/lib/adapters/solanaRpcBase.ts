@@ -97,7 +97,18 @@ export abstract class SolanaRpcIndexer {
 
   // ── RPC helpers ────────────────────────────────────────────────────────────
 
+  // ── Concurrency limiter ────────────────────────────────────────────────────
+  // PublicNode free tier allows ~10 req/s. Cap concurrent getTransaction calls
+  // to avoid rate limits; drop excess events rather than queueing them (the
+  // stream is continuous so new events always arrive).
+  private _rpcInFlight = 0;
+  private readonly _rpcMaxConcurrent = 4;
+
   protected async rpcCall<T = unknown>(method: string, params: unknown[]): Promise<T | null> {
+    if (this._rpcInFlight >= this._rpcMaxConcurrent) {
+      return null; // drop — another event will follow shortly
+    }
+    this._rpcInFlight++;
     try {
       const res = await fetch(this.httpUrl, {
         method: "POST",
@@ -114,6 +125,8 @@ export abstract class SolanaRpcIndexer {
     } catch (err) {
       this.log.warn({ err, method }, "rpc: call failed");
       return null;
+    } finally {
+      this._rpcInFlight--;
     }
   }
 

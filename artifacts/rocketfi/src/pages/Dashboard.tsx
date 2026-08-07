@@ -9,7 +9,7 @@ import { formatMC, formatMCUsd, cn, timeAgo } from "@/lib/utils";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { PlatformBadge, PlatformDot, type PlatformId } from "@/components/shared/PlatformBadge";
-import { useFeedStream, type FeedToken } from "@/hooks/useFeedStream";
+import { useFeedStream, type FeedToken, type FeedTradeStats } from "@/hooks/useFeedStream";
 import { Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -51,6 +51,8 @@ interface DisplayToken {
   graduated: boolean;
   /** True while the "NEW" badge is showing (live tokens only) */
   isLive?: boolean;
+  /** Unix ms of last SSE trade event — drives activity pulse on cards */
+  lastTradeAt?: number;
 }
 
 // ─── Platform filter config ───────────────────────────────────────────────────
@@ -228,7 +230,12 @@ function TableView({ tokens, solPrice }: { tokens: DisplayToken[]; solPrice: num
                   </Link>
                 </td>
                 <td className="px-3 py-3 hidden sm:table-cell">
-                  <span className="text-sm font-bold text-foreground font-mono tabular-nums">{formatMCUsd(token.marketCapEth, solPrice)}</span>
+                  <span className="text-sm font-bold text-foreground font-mono tabular-nums inline-flex items-center gap-1.5">
+                    {token.lastTradeAt && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" title="Live trade activity" />
+                    )}
+                    {formatMCUsd(token.marketCapEth, solPrice)}
+                  </span>
                 </td>
                 <td className="px-3 py-3 hidden md:table-cell">
                   <span className="text-xs font-mono text-muted-foreground tabular-nums">
@@ -291,7 +298,12 @@ function TokenCard({ token, rank, solPrice }: { token: DisplayToken; rank: numbe
         <span className="font-semibold text-foreground text-[16px] truncate leading-tight group-hover:text-primary transition-colors duration-200">{token.name}</span>
         <div className="flex justify-between items-center">
           <span className="text-muted-foreground font-mono text-[14px]">${token.symbol}</span>
-          <span className="text-foreground font-mono text-[16px] font-semibold">{formatMCUsd(token.marketCapEth, solPrice)} <span className="text-muted-foreground/60 font-normal text-[14px]">MC</span></span>
+          <span className="text-foreground font-mono text-[16px] font-semibold">
+            {token.lastTradeAt && (
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse mr-1 align-middle" title="Live trade activity" />
+            )}
+            {formatMCUsd(token.marketCapEth, solPrice)} <span className="text-muted-foreground/60 font-normal text-[14px]">MC</span>
+          </span>
         </div>
         <div className="flex items-center justify-between mt-0.5">
           <span className="flex items-center gap-1 text-[14px] text-emerald-400 font-mono">
@@ -374,7 +386,7 @@ export default function Dashboard() {
   const [showFilters, setShowFilters] = useState(false);
 
   // ── Live feed ─────────────────────────────────────────────────────────────
-  const { liveTokens, connected } = useFeedStream();
+  const { liveTokens, liveTradeStats, connected } = useFeedStream();
   // Track which live token addresses have been seen since last platform switch
   const [seenLiveAddresses, setSeenLiveAddresses] = useState<Set<string>>(new Set());
 
@@ -418,20 +430,23 @@ export default function Dashboard() {
 
     // API tokens as DisplayToken, with live metadata merged in when present
     let apiDisplay: DisplayToken[] = (rawTokens ?? []).map((t): DisplayToken => {
-      const live = liveByAddress.get(t.address);
+      const live      = liveByAddress.get(t.address);
+      const tradeSnap = liveTradeStats.get(t.address);
       return {
-        id: t.id,
-        address: t.address,
-        name: t.name,
-        symbol: t.symbol,
-        imageUrl: t.imageUrl,
-        marketCapEth: t.marketCapEth,
-        priceEth: t.priceEth,
-        createdAt: t.createdAt,
-        platform: t.platform,
-        graduated: t.graduated,
+        id:           t.id,
+        address:      t.address,
+        name:         t.name,
+        symbol:       t.symbol,
+        imageUrl:     t.imageUrl,
+        // Overlay live trade stats when available — keeps cards current without polling
+        marketCapEth: tradeSnap?.marketCapEth ?? t.marketCapEth,
+        priceEth:     tradeSnap?.priceEth     ?? t.priceEth,
+        createdAt:    t.createdAt,
+        platform:     t.platform,
+        graduated:    t.graduated,
         // Preserve isLive=true if feed still considers this token new
-        isLive: live?.isNew ?? false,
+        isLive:       live?.isNew ?? false,
+        lastTradeAt:  tradeSnap?.lastTradeAt,
       };
     });
 
@@ -439,19 +454,23 @@ export default function Dashboard() {
     const apiAddresses = new Set((rawTokens ?? []).map((t) => t.address));
     const liveOnly: DisplayToken[] = filteredLive
       .filter((t) => !apiAddresses.has(t.address))
-      .map((t): DisplayToken => ({
-        id: `live-${t.address}`,
-        address: t.address,
-        name: t.name,
-        symbol: t.symbol,
-        imageUrl: t.imageUrl,
-        marketCapEth: t.marketCapEth,
-        priceEth: t.priceEth,
-        createdAt: t.createdAt,
-        platform: t.platform,
-        graduated: false,
-        isLive: t.isNew,
-      }));
+      .map((t): DisplayToken => {
+        const tradeSnap = liveTradeStats.get(t.address);
+        return {
+          id:           `live-${t.address}`,
+          address:      t.address,
+          name:         t.name,
+          symbol:       t.symbol,
+          imageUrl:     t.imageUrl,
+          marketCapEth: tradeSnap?.marketCapEth ?? t.marketCapEth,
+          priceEth:     tradeSnap?.priceEth     ?? t.priceEth,
+          createdAt:    t.createdAt,
+          platform:     t.platform,
+          graduated:    false,
+          isLive:       t.isNew,
+          lastTradeAt:  tradeSnap?.lastTradeAt,
+        };
+      });
 
     // Apply client-side filters
     if (search.trim()) {
@@ -472,7 +491,8 @@ export default function Dashboard() {
     const apiLive    = apiDisplay.filter((t) => t.isLive);
     const apiNonLive = apiDisplay.filter((t) => !t.isLive);
     return [...liveOnly, ...apiLive, ...apiNonLive];
-  }, [rawTokens, liveTokens, platformFilter, search, onlyGraduated, onlyWithImage, minMcap]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawTokens, liveTokens, liveTradeStats, platformFilter, search, onlyGraduated, onlyWithImage, minMcap]);
 
   // How many live tokens visible for the current platform filter
   const visibleLiveCount = useMemo(() => {

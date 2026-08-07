@@ -1020,7 +1020,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     <div className="flex flex-col items-center justify-center py-16 gap-4 rounded-lg"
                       style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
                       <button
-                        onClick={() => setWalletModalOpen(true)}
+                        onClick={() => openWalletModal()}
                         className="px-8 py-2.5 rounded-md text-[14px] font-semibold tracking-wide transition-all hover:opacity-90 active:scale-95"
                         style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.18)", color: "#e2e8f0" }}
                       >
