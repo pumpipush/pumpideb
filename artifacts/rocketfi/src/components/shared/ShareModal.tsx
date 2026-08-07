@@ -222,9 +222,6 @@ async function generateCardCanvas(
     ctx.fillStyle = pColor;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(pStr, pilX+pw/2, pilY+pilH/2);
-    ctx.fillStyle = "rgba(255,255,255,0.35)";
-    ctx.font = `500 10px -apple-system,BlinkMacSystemFont,sans-serif`;
-    ctx.fillText("24h", pilX+pw/2, pilY+pilH+5);
   }
 
   // ── Footer ────────────────────────────────────────────────────────────────
@@ -343,7 +340,6 @@ export function ShareModal({ token, open, onClose, solPrice, priceStats }: Share
                     <span className={cn("px-2 py-0.5 rounded text-xs font-bold", priceStats.p24h.up ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400")}>
                       {priceStats.p24h.val}
                     </span>
-                    <span className="text-[9px] text-white/30 mt-0.5">24h</span>
                   </div>
                 )}
               </div>
