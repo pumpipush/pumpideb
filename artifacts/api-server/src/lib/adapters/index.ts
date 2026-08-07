@@ -11,6 +11,7 @@ import { startPumpFunAdapter } from "./pumpfun";
 import { startMoonshotAdapter } from "./moonshot";
 import { startLetsBonkAdapter } from "./letsbonk";
 import { startDaosFunAdapter } from "./daos";
+import { startRaydiumLaunchLabAdapter } from "./raydium-launchlab";
 
 interface AdapterEntry {
   name: string;
@@ -18,10 +19,11 @@ interface AdapterEntry {
 }
 
 const ADAPTERS: AdapterEntry[] = [
-  { name: "pump_fun", start: startPumpFunAdapter },
-  { name: "moonshot", start: startMoonshotAdapter },
-  { name: "letsbonk", start: startLetsBonkAdapter },
-  { name: "daos_fun", start: startDaosFunAdapter },
+  { name: "pump_fun",          start: startPumpFunAdapter },
+  { name: "moonshot",          start: startMoonshotAdapter },
+  { name: "letsbonk",          start: startLetsBonkAdapter },
+  { name: "daos_fun",          start: startDaosFunAdapter },
+  { name: "raydium_launchlab", start: startRaydiumLaunchLabAdapter },
 ];
 
 /** Start all adapters. Each is isolated — a failure in one does not block the others. */

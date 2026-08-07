@@ -1,288 +1,261 @@
 /**
- * Pump.fun adapter — connects to PumpPortal WebSocket and ingests real-time
- * token launches and trades into the shared database.
+ * Pump.fun adapter — chain-native real-time indexer.
  *
- * Data source: wss://pumpportal.fun/api/data
- * - subscribeNewToken  → inserts new token row + subscribes to its trades
- * - subscribeTokenTrade → inserts trade row + updates token stats
+ * Data source: wss://solana-rpc.publicnode.com (PublicNode free RPC)
+ * Program:     6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P
  *
- * No env vars required; will connect automatically on startup.
+ * Indexes:
+ *   - Token creation (CreateV2): extracts mint, fetches pump.fun API for metadata
+ *   - Swaps (Buy / Sell): persists trade to DB, updates token stats, emits SSE
+ *
+ * No env vars required — uses PublicNode free RPC.
  */
 
 import { eq, sql } from "drizzle-orm";
 import { db, tokensTable, tradesTable } from "@workspace/db";
-import { logger } from "../logger";
 import { emitTrade, emitNewToken } from "../tradeEmitter";
+import {
+  SolanaRpcIndexer,
+  detectInstructionType,
+  type LogEvent,
+  type RpcTx,
+} from "./solanaRpcBase";
 
-const PUMPPORTAL_WS = "wss://pumpportal.fun/api/data";
-const RECONNECT_DELAY_MS = 5_000;
-const MAX_RECONNECT_DELAY_MS = 60_000;
-const PLATFORM = "pump_fun";
-const CHAIN = "solana";
+const PUMP_PROGRAM = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
+const PUMP_API     = "https://frontend-api.pump.fun/coins";
+const PLATFORM     = "pump_fun";
+const CHAIN        = "solana";
 
-// ── Types mirroring PumpPortal payloads ───────────────────────────────────────
+// ── Pump.fun API metadata ──────────────────────────────────────────────────────
 
-interface PumpNewToken {
-  signature: string;
-  mint: string;
-  traderPublicKey: string;
-  txType: "create";
-  initialBuy: number;
-  solAmount: number;
-  tokenAmount: number;
-  bondingCurveKey: string;
-  vTokensInBondingCurve: number;
-  vSolInBondingCurve: number;
-  marketCapSol: number;
-  name: string;
-  symbol: string;
-  uri?: string;
-  pool?: string;
+interface PumpCoin {
+  mint?:                   string;
+  name?:                   string;
+  symbol?:                 string;
+  description?:            string;
+  image_uri?:              string;
+  twitter?:                string;
+  website?:                string;
+  creator?:                string;
+  market_cap?:             number;
+  virtual_sol_reserves?:   number;
+  virtual_token_reserves?: number;
+  created_timestamp?:      number;
 }
 
-interface PumpTrade {
-  signature: string;
-  mint: string;
-  traderPublicKey: string;
-  txType: "buy" | "sell";
-  tokenAmount: number;
-  solAmount: number;
-  newTokenPrice?: number;
-  bondingCurveKey: string;
-  vTokensInBondingCurve: number;
-  vSolInBondingCurve: number;
-  marketCapSol: number;
-  pool?: string;
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/** Convert SOL float → lamport string (BigInt-safe via string arithmetic) */
-function solToLamports(sol: number): string {
-  return Math.round(sol * 1_000_000_000).toString();
-}
-
-// ── Core adapter ──────────────────────────────────────────────────────────────
-
-async function handleNewToken(payload: PumpNewToken): Promise<void> {
-  const log = logger.child({ adapter: "pump_fun", mint: payload.mint });
+async function fetchPumpMeta(mint: string): Promise<PumpCoin | null> {
   try {
-    await db
-      .insert(tokensTable)
-      .values({
-        address: payload.mint,
-        name: payload.name,
-        symbol: payload.symbol,
-        description: null,
-        imageUrl: null,
-        creatorAddress: payload.traderPublicKey,
-        totalSupply: "1000000000000000", // Pump.fun default 1B tokens (6 decimals)
-        virtualTokenReserves: Math.round(payload.vTokensInBondingCurve).toString(),
-        virtualEthReserves: Math.round(payload.vSolInBondingCurve).toString(),
-        marketCapEth: solToLamports(payload.marketCapSol),
-        priceEth: payload.tokenAmount > 0
-          ? (payload.solAmount / payload.tokenAmount).toFixed(12)
-          : null,
-        platform: PLATFORM,
-        chain: CHAIN,
-      })
-      .onConflictDoNothing();
+    const res = await fetch(`${PUMP_API}/${mint}`, {
+      signal: AbortSignal.timeout(8_000),
+      headers: { "User-Agent": "RocketFi/1.0" },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as PumpCoin;
+  } catch {
+    return null;
+  }
+}
 
-    log.info({ name: payload.name, symbol: payload.symbol }, "pump_fun: new token ingested");
+// ── Indexer ────────────────────────────────────────────────────────────────────
 
-    // Broadcast to global feed
-    const priceEth = payload.tokenAmount > 0
-      ? (payload.solAmount / payload.tokenAmount).toFixed(12)
+class PumpFunChainIndexer extends SolanaRpcIndexer {
+  constructor() {
+    super({ programId: PUMP_PROGRAM, adapterName: "pump_fun" });
+  }
+
+  /** Process create, buy, and sell instructions */
+  protected override shouldProcess(logs: string[]): boolean {
+    const t = detectInstructionType(logs);
+    return t === "create" || t === "buy" || t === "sell";
+  }
+
+  protected override async onEvent(event: LogEvent): Promise<void> {
+    const instrType = detectInstructionType(event.logs);
+
+    if (instrType === "create") {
+      await this.handleCreate(event);
+    } else if (instrType === "buy" || instrType === "sell") {
+      await this.handleTrade(event);
+    }
+  }
+
+  // ── Creation ───────────────────────────────────────────────────────────────
+
+  private async handleCreate(event: LogEvent): Promise<void> {
+    const { signature } = event;
+
+    const tx = await this.getTransaction(signature);
+    if (!tx || tx.meta?.err) return;
+
+    const mint    = this.extractPumpMint(tx);
+    const creator = this.extractSigner(tx);
+    if (!mint) {
+      this.log.debug({ signature }, "pump_fun: could not extract mint — skipping create");
+      return;
+    }
+
+    // Fetch pump.fun API for rich metadata
+    const meta = await fetchPumpMeta(mint);
+
+    const name        = meta?.name        ?? mint.slice(0, 8) + "…";
+    const symbol      = meta?.symbol      ?? "???";
+    const description = meta?.description ?? null;
+    const imageUrl    = meta?.image_uri   ?? null;
+    const twitterUrl  = meta?.twitter     ?? null;
+    const websiteUrl  = meta?.website     ?? null;
+    const creatorAddr = meta?.creator     ?? creator;
+
+    // Convert market cap SOL value to lamports string for storage
+    const mcapSol = meta?.market_cap ?? null;
+    const marketCapEth = mcapSol != null
+      ? Math.round(mcapSol * 1_000_000_000).toString()
       : null;
+
+    await db.insert(tokensTable).values({
+      address:              mint,
+      name,
+      symbol,
+      description,
+      imageUrl,
+      creatorAddress:       creatorAddr,
+      totalSupply:          "1000000000000000",
+      virtualTokenReserves: meta?.virtual_token_reserves?.toString() ?? "1000000000000000",
+      virtualEthReserves:   meta?.virtual_sol_reserves?.toString()   ?? "0",
+      marketCapEth,
+      priceEth:             null,
+      twitterUrl,
+      websiteUrl,
+      platform:             PLATFORM,
+      chain:                CHAIN,
+    }).onConflictDoNothing();
+
+    this.log.info({ mint, name, symbol }, "pump_fun: new token ingested (chain-native)");
+
     emitNewToken({
       type: "newToken",
       token: {
-        address: payload.mint,
-        name: payload.name,
-        symbol: payload.symbol,
-        imageUrl: null,
-        priceEth,
-        marketCapEth: solToLamports(payload.marketCapSol),
-        platform: PLATFORM,
-        chain: CHAIN,
-        createdAt: new Date().toISOString(),
+        address:      mint,
+        name,
+        symbol,
+        imageUrl,
+        priceEth:     null,
+        marketCapEth,
+        platform:     PLATFORM,
+        chain:        CHAIN,
+        createdAt:    tx.blockTime
+          ? new Date(tx.blockTime * 1000).toISOString()
+          : new Date().toISOString(),
       },
     });
-
-    // Optionally fetch metadata from IPFS in background (fire-and-forget)
-    if (payload.uri) {
-      fetchAndUpdateMetadata(payload.mint, payload.uri).catch(() => undefined);
-    }
-  } catch (err) {
-    log.error({ err }, "pump_fun: failed to insert token");
   }
-}
 
-async function handleTrade(payload: PumpTrade): Promise<void> {
-  const log = logger.child({ adapter: "pump_fun", mint: payload.mint, sig: payload.signature });
-  try {
-    const lamports = solToLamports(payload.solAmount);
-    const isBuy = payload.txType === "buy";
-    const priceEth = payload.newTokenPrice != null
-      ? payload.newTokenPrice.toString()
+  // ── Trade (buy / sell) ────────────────────────────────────────────────────
+
+  private async handleTrade(event: LogEvent): Promise<void> {
+    const { signature } = event;
+
+    const tx = await this.getTransaction(signature);
+    if (!tx || tx.meta?.err) return;
+
+    const swap = this.parseSwap(tx);
+    if (!swap) return;
+
+    const { mint, isBuy, solLamports, tokenAmount, traderAddress } = swap;
+
+    const priceEth = tokenAmount !== "0"
+      ? (Number(solLamports) / Number(tokenAmount)).toFixed(12)
       : null;
 
-    // Upsert trade (ignore duplicate signatures)
-    const [trade] = await db
-      .insert(tradesTable)
-      .values({
-        tokenAddress: payload.mint,
-        tokenName: null,
-        tokenSymbol: null,
-        traderAddress: payload.traderPublicKey,
-        isBuy,
-        ethAmount: lamports,
-        tokenAmount: Math.round(payload.tokenAmount).toString(),
-        priceEth,
-        txHash: payload.signature,
-        platform: PLATFORM,
-        timestamp: new Date(),
+    const [trade] = await db.insert(tradesTable).values({
+      tokenAddress:  mint,
+      tokenName:     null,
+      tokenSymbol:   null,
+      traderAddress,
+      isBuy,
+      ethAmount:     solLamports,
+      tokenAmount,
+      priceEth,
+      txHash:        signature,
+      platform:      PLATFORM,
+      timestamp:     new Date(),
+    }).onConflictDoNothing().returning();
+
+    if (!trade) return; // duplicate tx
+
+    // Update token aggregate stats
+    await db.update(tokensTable).set({
+      tradeCount: sql`${tokensTable.tradeCount} + 1`,
+      volumeEth:  sql`CAST(CAST(${tokensTable.volumeEth} AS NUMERIC) + ${solLamports} AS TEXT)`,
+      priceEth,
+    }).where(eq(tokensTable.address, mint));
+
+    this.log.debug({ mint, isBuy, sol: solLamports }, "pump_fun: trade ingested");
+
+    // Fetch latest token state for SSE payload
+    const [tokenRow] = await db
+      .select({
+        name:                 tokensTable.name,
+        symbol:               tokensTable.symbol,
+        marketCapEth:         tokensTable.marketCapEth,
+        volumeEth:            tokensTable.volumeEth,
+        virtualEthReserves:   tokensTable.virtualEthReserves,
+        virtualTokenReserves: tokensTable.virtualTokenReserves,
+        tradeCount:           tokensTable.tradeCount,
       })
-      .onConflictDoNothing()
-      .returning();
+      .from(tokensTable)
+      .where(eq(tokensTable.address, mint))
+      .limit(1);
 
-    if (!trade) return; // duplicate
-
-    // Update token stats (reserves, price, marketcap, tradeCount, volumeEth)
-    await db
-      .update(tokensTable)
-      .set({
-        virtualTokenReserves: Math.round(payload.vTokensInBondingCurve).toString(),
-        virtualEthReserves: Math.round(payload.vSolInBondingCurve).toString(),
-        marketCapEth: solToLamports(payload.marketCapSol),
-        priceEth,
-        tradeCount: sql`${tokensTable.tradeCount} + 1`,
-        volumeEth: sql`CAST(CAST(${tokensTable.volumeEth} AS NUMERIC) + ${lamports} AS TEXT)`,
-      })
-      .where(eq(tokensTable.address, payload.mint));
-
-    log.debug({ isBuy, sol: payload.solAmount }, "pump_fun: trade ingested");
-
-    // Emit SSE for per-token subscribers AND global feed
     emitTrade({
       type: "trade",
       trade: {
-        id: trade.id,
-        tokenAddress: trade.tokenAddress,
+        id:            trade.id,
+        tokenAddress:  trade.tokenAddress,
         traderAddress: trade.traderAddress,
-        isBuy: trade.isBuy,
-        ethAmount: trade.ethAmount,
-        tokenAmount: trade.tokenAmount,
-        priceEth: trade.priceEth,
-        txHash: trade.txHash,
-        platform: PLATFORM,
-        timestamp: trade.timestamp.toISOString(),
+        isBuy:         trade.isBuy,
+        ethAmount:     trade.ethAmount,
+        tokenAmount:   trade.tokenAmount,
+        priceEth:      trade.priceEth,
+        txHash:        trade.txHash,
+        platform:      PLATFORM,
+        timestamp:     trade.timestamp.toISOString(),
       },
       token: {
-        address: payload.mint,
-        name: null,
-        symbol: null,
+        address:              mint,
+        name:                 tokenRow?.name        ?? null,
+        symbol:               tokenRow?.symbol      ?? null,
         priceEth,
-        marketCapEth: solToLamports(payload.marketCapSol),
-        volumeEth: lamports,
-        virtualEthReserves: Math.round(payload.vSolInBondingCurve).toString(),
-        virtualTokenReserves: Math.round(payload.vTokensInBondingCurve).toString(),
-        tradeCount: 0,
-        platform: PLATFORM,
-        chain: CHAIN,
+        marketCapEth:         tokenRow?.marketCapEth ?? null,
+        volumeEth:            tokenRow?.volumeEth    ?? solLamports,
+        virtualEthReserves:   tokenRow?.virtualEthReserves   ?? "0",
+        virtualTokenReserves: tokenRow?.virtualTokenReserves ?? "0",
+        tradeCount:           Number(tokenRow?.tradeCount ?? 0),
+        platform:             PLATFORM,
+        chain:                CHAIN,
       },
     });
-  } catch (err) {
-    log.error({ err }, "pump_fun: failed to insert trade");
   }
-}
 
-/** Fire-and-forget: fetch IPFS/arweave metadata and update imageUrl + description */
-async function fetchAndUpdateMetadata(mint: string, uri: string): Promise<void> {
-  try {
-    const res = await fetch(uri, { signal: AbortSignal.timeout(8_000) });
-    if (!res.ok) return;
-    const meta = await res.json() as { image?: string; description?: string };
-    const updates: Record<string, string> = {};
-    if (meta.image) updates.imageUrl = meta.image;
-    if (meta.description) updates.description = meta.description;
-    if (Object.keys(updates).length > 0) {
-      await db.update(tokensTable).set(updates).where(eq(tokensTable.address, mint));
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  /**
+   * pump.fun mint is reliably at accountKeys[1] (ends in "pump").
+   * Falls back to postTokenBalances diff for safety.
+   */
+  private extractPumpMint(tx: RpcTx): string | null {
+    const keys = tx.transaction?.message?.accountKeys ?? [];
+    const k1   = keys[1];
+    if (k1) {
+      const addr = typeof k1 === "string" ? k1 : k1.pubkey;
+      if (addr?.endsWith("pump")) return addr;
     }
-  } catch {
-    // Non-critical; ignore errors
+    return this.extractNewMint(tx);
   }
 }
 
-function subscribeToTokenTrades(ws: WebSocket, mint: string): void {
-  ws.send(JSON.stringify({ method: "subscribeTokenTrade", keys: [mint] }));
-}
-
-// ── Exported adapter entry point ──────────────────────────────────────────────
+// ── Exported entry point ───────────────────────────────────────────────────────
 
 export async function startPumpFunAdapter(): Promise<void> {
-  let delay = RECONNECT_DELAY_MS;
-
-  // On startup, subscribe to trades for the most recent pump_fun tokens we already have
-  async function loadExistingSubscriptions(ws: WebSocket): Promise<void> {
-    try {
-      const recent = await db
-        .select({ address: tokensTable.address })
-        .from(tokensTable)
-        .where(eq(tokensTable.platform, PLATFORM))
-        .limit(200);
-      for (const { address } of recent) {
-        subscribeToTokenTrades(ws, address);
-      }
-      logger.info({ adapter: "pump_fun", count: recent.length }, "pump_fun: subscribed to existing token trades");
-    } catch (err) {
-      logger.error({ err, adapter: "pump_fun" }, "pump_fun: failed to load existing tokens");
-    }
-  }
-
-  function connect(): void {
-    const ws = new WebSocket(PUMPPORTAL_WS);
-    logger.info({ adapter: "pump_fun" }, "pump_fun: connecting to PumpPortal...");
-
-    ws.addEventListener("open", () => {
-      delay = RECONNECT_DELAY_MS; // reset backoff
-      logger.info({ adapter: "pump_fun" }, "pump_fun: connected — subscribing to new tokens and trades");
-      ws.send(JSON.stringify({ method: "subscribeNewToken" }));
-      void loadExistingSubscriptions(ws);
-    });
-
-    ws.addEventListener("message", (event) => {
-      let data: unknown;
-      try {
-        data = JSON.parse(event.data as string);
-      } catch {
-        return;
-      }
-
-      const msg = data as Record<string, unknown>;
-
-      // Skip acknowledgement messages
-      if (!msg["mint"]) return;
-
-      if (msg["txType"] === "create") {
-        void handleNewToken(msg as unknown as PumpNewToken);
-        // Subscribe to this token's trades now that we know its mint
-        subscribeToTokenTrades(ws, msg["mint"] as string);
-      } else if (msg["txType"] === "buy" || msg["txType"] === "sell") {
-        void handleTrade(msg as unknown as PumpTrade);
-      }
-    });
-
-    ws.addEventListener("error", (err) => {
-      logger.error({ adapter: "pump_fun", err: String(err) }, "pump_fun: WebSocket error");
-    });
-
-    ws.addEventListener("close", () => {
-      logger.warn({ adapter: "pump_fun", retryMs: delay }, "pump_fun: disconnected — reconnecting...");
-      setTimeout(connect, delay);
-      delay = Math.min(delay * 2, MAX_RECONNECT_DELAY_MS);
-    });
-  }
-
-  connect();
+  const indexer = new PumpFunChainIndexer();
+  indexer.start();
 }

@@ -60,6 +60,15 @@ const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
     icon: <span role="img" aria-label="daos.fun">🏛️</span>,
     sourceUrlTemplate: "https://daos.fun/token/{address}",
   },
+  raydium_launchlab: {
+    label: "Raydium",
+    color: "text-cyan-300",
+    bg: "bg-cyan-500/10",
+    border: "border-cyan-500/20",
+    dot: "#67e8f9",
+    icon: <span role="img" aria-label="raydium launchlab">⚡</span>,
+    sourceUrlTemplate: "https://raydium.io/launchlab/{address}",
+  },
   unknown: {
     label: "Unknown",
     color: "text-white/40",
