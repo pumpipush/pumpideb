@@ -63,22 +63,15 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 }
 
 async function loadImage(src: string): Promise<HTMLImageElement | null> {
-  // Fetch as blob first to avoid canvas CORS taint
-  try {
-    const res = await fetch(src, { mode: "cors", credentials: "omit" });
-    if (!res.ok) throw new Error("fetch failed");
-    const blob = await res.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    return new Promise(resolve => {
-      const img = new Image();
-      img.onload  = () => { URL.revokeObjectURL(blobUrl); resolve(img); };
-      img.onerror = () => { URL.revokeObjectURL(blobUrl); resolve(null); };
-      img.src = blobUrl;
-    });
-  } catch {
-    // Server doesn't support CORS — fall through to gradient fallback
-    return null;
-  }
+  if (!src) return null;
+  // Route through our proxy so the canvas never touches a cross-origin pixel
+  const proxied = `/api/proxy-image?url=${encodeURIComponent(src)}`;
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload  = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = proxied;
+  });
 }
 
 function drawAvatar(
