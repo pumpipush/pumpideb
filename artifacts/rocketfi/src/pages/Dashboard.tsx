@@ -593,7 +593,7 @@ export default function Dashboard() {
                 <button
                   onClick={() => setShowFilters((v) => !v)}
                   className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-sm border text-xs font-medium transition-all duration-150",
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-sm border text-[14px] font-medium transition-all duration-150",
                     showFilters || activeFilterCount > 0
                       ? "bg-primary/10 border-primary/40 text-primary"
                       : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
