@@ -1,17 +1,28 @@
 /**
  * ShareModal — professional share sheet for a token.
- * Shows a "signal card" preview + platform share buttons.
- * Card can be downloaded as a PNG image.
+ * Card drawn via Canvas 2D API (no html2canvas, no CORS issues).
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import {
-  X, Copy, Twitter, Send, Link2, ExternalLink, Download, Loader2,
-} from "lucide-react";
-import { TokenAvatar, getGradient } from "@/components/shared/TokenAvatar";
-import { formatMCUsd, formatUSD, formatEth } from "@/lib/utils";
+import { X, Copy, Twitter, Send, Link2, ExternalLink, Download, Loader2 } from "lucide-react";
+import { TokenAvatar, getGradient, GRADIENTS, hashSymbol } from "@/components/shared/TokenAvatar";
+import { formatMCUsd, formatUSD } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { copyToClipboard } from "@/components/shared/CopyToast";
+
+interface PctStat { val: string; up: boolean }
+
+interface SharePriceStats {
+  currentPrice: number;
+  vol24h: number;
+  vol24hBuy: number;
+  vol24hSell: number;
+  txns24hBuy: number;
+  txns24hSell: number;
+  p5m: PctStat | null;
+  p1h: PctStat | null;
+  p6h: PctStat | null;
+}
 
 interface ShareToken {
   name: string;
@@ -30,249 +41,568 @@ interface ShareModalProps {
   open: boolean;
   onClose: () => void;
   solPrice?: number | null;
+  priceStats?: SharePriceStats;
 }
 
-export function ShareModal({ token, open, onClose, solPrice }: ShareModalProps) {
+// ── Canvas helpers ────────────────────────────────────────────────────────────
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y); ctx.arcTo(x+w, y, x+w, y+r, r);
+  ctx.lineTo(x+w, y+h-r); ctx.arcTo(x+w, y+h, x+w-r, y+h, r);
+  ctx.lineTo(x+r, y+h); ctx.arcTo(x, y+h, x, y+h-r, r);
+  ctx.lineTo(x, y+r); ctx.arcTo(x, y, x+r, y, r);
+  ctx.closePath();
+}
+
+async function loadImage(src: string): Promise<HTMLImageElement | null> {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+function drawAvatar(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement | null,
+  symbol: string,
+  x: number, y: number, size: number, radius: number,
+) {
+  ctx.save();
+  roundRect(ctx, x, y, size, size, radius);
+  ctx.clip();
+  if (img) {
+    ctx.drawImage(img, x, y, size, size);
+  } else {
+    const idx = hashSymbol(symbol) % GRADIENTS.length;
+    const [fa, fb] = GRADIENTS[idx];
+    const [far, fag, fab] = hexToRgb(fa);
+    const [fbr, fbg, fbb] = hexToRgb(fb);
+    const g = ctx.createLinearGradient(x, y, x+size, y+size);
+    g.addColorStop(0, `rgb(${far},${fag},${fab})`);
+    g.addColorStop(1, `rgb(${fbr},${fbg},${fbb})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(x, y, size, size);
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.font = `bold ${size*0.44}px -apple-system,BlinkMacSystemFont,sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText((symbol[0] ?? "?").toUpperCase(), x+size/2, y+size/2+1);
+  }
+  ctx.restore();
+  // border
+  ctx.save();
+  roundRect(ctx, x, y, size, size, radius);
+  ctx.strokeStyle = "rgba(255,255,255,0.18)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
+}
+
+async function generateCardCanvas(
+  token: ShareToken,
+  solPrice: number | null,
+  stats?: SharePriceStats,
+): Promise<HTMLCanvasElement> {
+  const S = 2;       // retina scale
+  const W = 520;
+  const H = 310;
+  const R = 20;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = W * S;
+  canvas.height = H * S;
+  const ctx = canvas.getContext("2d")!;
+  ctx.scale(S, S);
+
+  const [c1, c2] = getGradient(token.symbol);
+  const [r1,g1,b1] = hexToRgb(c1);
+  const [r2,g2,b2] = hexToRgb(c2);
+
+  // ── Card background ───────────────────────────────────────────────────────
+  roundRect(ctx, 0, 0, W, H, R);
+  ctx.fillStyle = "#080d1a";
+  ctx.fill();
+
+  // Subtle gradient wash from token colour
+  roundRect(ctx, 0, 0, W, H, R);
+  ctx.clip();
+
+  const wash = ctx.createLinearGradient(0, 0, W, H*0.7);
+  wash.addColorStop(0, `rgba(${r1},${g1},${b1},0.18)`);
+  wash.addColorStop(0.5, `rgba(${r2},${g2},${b2},0.08)`);
+  wash.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = wash;
+  ctx.fillRect(0, 0, W, H);
+
+  // Fine dot grid
+  ctx.fillStyle = "rgba(255,255,255,0.04)";
+  for (let dx = 12; dx < W; dx += 20)
+    for (let dy = 12; dy < H; dy += 20) {
+      ctx.beginPath(); ctx.arc(dx, dy, 0.8, 0, Math.PI*2); ctx.fill();
+    }
+
+  // Left accent bar from token colour
+  const bar = ctx.createLinearGradient(0, 0, 0, H);
+  bar.addColorStop(0, `rgba(${r1},${g1},${b1},0.9)`);
+  bar.addColorStop(1, `rgba(${r2},${g2},${b2},0.4)`);
+  ctx.fillStyle = bar;
+  ctx.fillRect(0, 0, 4, H);
+
+  // ── Load avatar ───────────────────────────────────────────────────────────
+  const avatarImg = token.imageUrl ? await loadImage(token.imageUrl) : null;
+
+  // ── Header row ────────────────────────────────────────────────────────────
+  const AV = 60, AX = 24, AY = 24;
+  drawAvatar(ctx, avatarImg, token.symbol, AX, AY, AV, 12);
+
+  // Token name + symbol
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `bold 22px -apple-system,BlinkMacSystemFont,sans-serif`;
+  ctx.fillText(token.name, AX+AV+16, AY+4);
+
+  ctx.fillStyle = `rgba(${r1},${g1},${b1},1)`;
+  ctx.font = `bold 14px "SFMono-Regular",Consolas,monospace`;
+  ctx.fillText(`$${token.symbol}`, AX+AV+16, AY+32);
+
+  // Graduated badge (top-right)
+  if (token.graduated) {
+    const bText = "✓ GRADUATED";
+    ctx.font = `bold 10px -apple-system,BlinkMacSystemFont,sans-serif`;
+    const bw = ctx.measureText(bText).width + 18;
+    const bh = 22; const bx = W-24-bw; const by = AY+4;
+    roundRect(ctx, bx, by, bw, bh, 11);
+    ctx.fillStyle = `rgba(${r1},${g1},${b1},0.25)`;
+    ctx.fill();
+    roundRect(ctx, bx, by, bw, bh, 11);
+    ctx.strokeStyle = `rgba(${r1},${g1},${b1},0.6)`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = `rgba(${r1},${g1},${b1},1)`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(bText, bx+bw/2, by+bh/2);
+  }
+
+  // ── Price + 1h change ─────────────────────────────────────────────────────
+  const priceY = AY + AV + 20;
+  const priceUsd = stats?.currentPrice && solPrice ? stats.currentPrice * solPrice : null;
+  const priceStr = priceUsd
+    ? (priceUsd < 0.0001 ? `$${priceUsd.toExponential(2)}` : formatUSD(priceUsd))
+    : (token.priceEth ? parseFloat(token.priceEth).toExponential(4)+" SOL" : "—");
+
+  ctx.textAlign = "left"; ctx.textBaseline = "top";
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `bold 32px -apple-system,BlinkMacSystemFont,sans-serif`;
+  ctx.fillText(priceStr, 24, priceY);
+
+  // 1h pill next to price
+  if (stats?.p1h) {
+    const pStr = stats.p1h.val;
+    const pColor = stats.p1h.up ? "#22c55e" : "#f87171";
+    const [pr,pg,pb] = hexToRgb(stats.p1h.up ? "#16a34a" : "#dc2626");
+    const pw = ctx.measureText(pStr).width + 22;
+    const priceW = ctx.measureText(priceStr).width;
+    ctx.font = `bold 13px -apple-system,BlinkMacSystemFont,sans-serif`;
+    const pilX = 24 + priceW + 12;
+    const pilY = priceY + 8;
+    const pilH = 22;
+    roundRect(ctx, pilX, pilY, pw, pilH, 6);
+    ctx.fillStyle = `rgba(${pr},${pg},${pb},0.18)`;
+    ctx.fill();
+    roundRect(ctx, pilX, pilY, pw, pilH, 6);
+    ctx.strokeStyle = `rgba(${pr},${pg},${pb},0.5)`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = pColor;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(pStr, pilX+pw/2, pilY+pilH/2);
+    // "1h" label below pill
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.font = `500 10px -apple-system,BlinkMacSystemFont,sans-serif`;
+    ctx.fillText("1h", pilX+pw/2, pilY+pilH+5);
+  }
+
+  // ── % change pills row (5m / 1h / 6h) ────────────────────────────────────
+  const pctY = priceY + 56;
+  const pctItems = [
+    { label: "5m",  data: stats?.p5m  ?? null },
+    { label: "1h",  data: stats?.p1h  ?? null },
+    { label: "6h",  data: stats?.p6h  ?? null },
+  ];
+  const pilW2 = 80, pilH2 = 34, pilGap = 10;
+  pctItems.forEach(({ label, data }, i) => {
+    const px = 24 + i*(pilW2+pilGap);
+    const py = pctY;
+    roundRect(ctx, px, py, pilW2, pilH2, 8);
+    if (data) {
+      const [dr,dg,db] = hexToRgb(data.up ? "#16a34a" : "#dc2626");
+      ctx.fillStyle = `rgba(${dr},${dg},${db},0.12)`;
+    } else {
+      ctx.fillStyle = "rgba(255,255,255,0.04)";
+    }
+    ctx.fill();
+    roundRect(ctx, px, py, pilW2, pilH2, 8);
+    ctx.strokeStyle = data
+      ? `rgba(${hexToRgb(data.up?"#16a34a":"#dc2626").join(",")},0.3)`
+      : "rgba(255,255,255,0.08)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // label
+    ctx.fillStyle = "rgba(255,255,255,0.4)";
+    ctx.font = `500 10px -apple-system,BlinkMacSystemFont,sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    ctx.fillText(label, px+pilW2/2, py+5);
+    // value
+    ctx.fillStyle = data ? (data.up ? "#4ade80" : "#f87171") : "rgba(255,255,255,0.25)";
+    ctx.font = `bold 13px "SFMono-Regular",Consolas,monospace`;
+    ctx.textBaseline = "bottom";
+    ctx.fillText(data?.val ?? "—", px+pilW2/2, py+pilH2-5);
+  });
+
+  // ── Divider ───────────────────────────────────────────────────────────────
+  const divY = pctY + pilH2 + 16;
+  ctx.strokeStyle = "rgba(255,255,255,0.07)";
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(24, divY); ctx.lineTo(W-24, divY); ctx.stroke();
+
+  // ── Stats row ─────────────────────────────────────────────────────────────
+  const statY = divY + 14;
+  const mcStr  = formatMCUsd(token.marketCapEth, solPrice);
+  const volStr = (() => {
+    const v = stats?.vol24h ?? 0;
+    if (!v) return "—";
+    return solPrice ? formatUSD(v * solPrice) : `${v.toFixed(2)} SOL`;
+  })();
+  const txnStr = stats
+    ? `${stats.txns24hBuy+stats.txns24hSell}`
+    : "—";
+  const buyPct = stats && (stats.vol24hBuy+stats.vol24hSell) > 0
+    ? (stats.vol24hBuy/(stats.vol24hBuy+stats.vol24hSell))*100
+    : 50;
+
+  const statCols = [
+    { label: "MARKET CAP", value: mcStr },
+    { label: "VOL 24H",    value: volStr },
+    { label: "TXNS 24H",   value: txnStr },
+  ];
+  const colW = (W - 48) / 3;
+  statCols.forEach(({ label, value }, i) => {
+    const cx = 24 + i*colW + colW/2;
+    if (i > 0) {
+      ctx.strokeStyle = "rgba(255,255,255,0.07)";
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(24+i*colW, statY); ctx.lineTo(24+i*colW, statY+42); ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(255,255,255,0.30)";
+    ctx.font = `600 9px -apple-system,BlinkMacSystemFont,sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    ctx.fillText(label, cx, statY);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `bold 15px "SFMono-Regular",Consolas,monospace`;
+    ctx.textBaseline = "top";
+    ctx.fillText(value, cx, statY+14);
+  });
+
+  // ── Buy/Sell bar ──────────────────────────────────────────────────────────
+  const barY = statY + 46;
+  const barH = 5;
+  const barW = W - 48;
+  // background (sell side)
+  roundRect(ctx, 24, barY, barW, barH, 3);
+  ctx.fillStyle = "#f87171";
+  ctx.fill();
+  // buy side
+  roundRect(ctx, 24, barY, barW*(buyPct/100), barH, 3);
+  ctx.fillStyle = "#4ade80";
+  ctx.fill();
+
+  // Buy% / Sell% labels
+  ctx.font = `600 9px -apple-system,BlinkMacSystemFont,sans-serif`;
+  ctx.fillStyle = "#4ade80";
+  ctx.textAlign = "left"; ctx.textBaseline = "top";
+  ctx.fillText(`B ${buyPct.toFixed(0)}%`, 24, barY+8);
+  ctx.fillStyle = "#f87171";
+  ctx.textAlign = "right";
+  ctx.fillText(`S ${(100-buyPct).toFixed(0)}%`, W-24, barY+8);
+
+  // ── Footer ────────────────────────────────────────────────────────────────
+  const footerY = H - 20;
+  // mintix logo mark (simple rocket emoji-style "⬆" replaced with text)
+  ctx.fillStyle = `rgba(${r1},${g1},${b1},0.9)`;
+  ctx.font = `bold 11px -apple-system,BlinkMacSystemFont,sans-serif`;
+  ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+  ctx.fillText("🚀 mintix.fun", 24, footerY);
+
+  // address
+  ctx.fillStyle = "rgba(255,255,255,0.20)";
+  ctx.font = `500 9px "SFMono-Regular",Consolas,monospace`;
+  ctx.textAlign = "right";
+  const addr = token.address;
+  const shortAddr = addr.length > 20 ? `${addr.slice(0,8)}...${addr.slice(-6)}` : addr;
+  ctx.fillText(shortAddr, W-24, footerY);
+
+  return canvas;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+export function ShareModal({ token, open, onClose, solPrice, priceStats }: ShareModalProps) {
   const url = `${window.location.origin}/app?token=${token.address}`;
-  const tweetText = `🚀 Just found $${token.symbol} on Mintix fun!\n\nMC: ${formatMCUsd(token.marketCapEth, solPrice ?? null)} · ${token.graduated ? "Graduated ✓" : "Bonding curve"}\n\n${url}`;
+  const tweetText = `🚀 Just found $${token.symbol} on Mintix fun!\n\nMC: ${formatMCUsd(token.marketCapEth, solPrice ?? null)}${priceStats?.p1h ? ` · 1h ${priceStats.p1h.val}` : ""}\n\n${url}`;
   const telegramText = encodeURIComponent(`🔥 $${token.symbol} on Mintix fun — ${formatMCUsd(token.marketCapEth, solPrice ?? null)} MC\n${url}`);
 
   const [c1, c2] = getGradient(token.symbol);
-  const cardRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
 
-  // Lock body scroll
+  const priceUsd = priceStats?.currentPrice && solPrice ? priceStats.currentPrice * solPrice : null;
+  const priceStr = priceUsd
+    ? (priceUsd < 0.0001 ? `$${priceUsd.toExponential(2)}` : formatUSD(priceUsd))
+    : token.priceEth ? parseFloat(token.priceEth).toExponential(4)+" SOL" : "—";
+
+  const volStr = (() => {
+    const v = priceStats?.vol24h ?? 0;
+    if (!v) return "—";
+    return solPrice ? formatUSD(v * solPrice) : `${v.toFixed(2)} SOL`;
+  })();
+
+  const buyPct = priceStats && (priceStats.vol24hBuy + priceStats.vol24hSell) > 0
+    ? (priceStats.vol24hBuy / (priceStats.vol24hBuy + priceStats.vol24hSell)) * 100
+    : 50;
+
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
-  // Esc to close
   useEffect(() => {
     if (!open) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
   }, [open, onClose]);
 
   const handleDownload = async () => {
-    if (!cardRef.current || downloading) return;
+    if (downloading) return;
     setDownloading(true);
     try {
-      const html2canvas = (await import("html2canvas")).default;
-      const canvas = await html2canvas(cardRef.current, {
-        backgroundColor: null,
-        scale: 3, // 3× for crisp high-res output
-        useCORS: true,
-        logging: false,
-      });
-      const link = document.createElement("a");
-      link.download = `${token.symbol}-mintix.png`;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-    } catch (err) {
-      console.error("Download failed:", err);
-    } finally {
-      setDownloading(false);
-    }
+      const canvas = await generateCardCanvas(token, solPrice ?? null, priceStats);
+      canvas.toBlob(blob => {
+        if (!blob) return;
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl; a.download = `${token.symbol}-mintix.png`;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 200);
+      }, "image/png");
+    } catch (e) { console.error(e); }
+    finally { setDownloading(false); }
   };
 
   if (!open) return null;
 
-  const statsData = [
-    { label: "Market Cap", value: formatMCUsd(token.marketCapEth, solPrice ?? null) },
-    {
-      label: "Price",
-      value: (() => {
-        const p = token.priceEth ? parseFloat(token.priceEth) : 0;
-        if (!p) return "—";
-        const usd = solPrice ? p * solPrice : null;
-        if (usd) return usd < 0.0001 ? `$${usd.toExponential(2)}` : formatUSD(usd);
-        return p < 0.0001 ? p.toExponential(3) : p.toFixed(6);
-      })(),
-    },
-    {
-      label: "Vol 24h",
-      value: (() => {
-        if (!token.volumeEth) return "—";
-        const sol = parseFloat(formatEth(token.volumeEth));
-        return solPrice ? formatUSD(sol * solPrice) : `${sol.toFixed(2)} SOL`;
-      })(),
-    },
+  const pctItems = [
+    { label: "5m", data: priceStats?.p5m ?? null },
+    { label: "1h", data: priceStats?.p1h ?? null },
+    { label: "6h", data: priceStats?.p6h ?? null },
   ];
 
   const modal = (
     <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Sheet */}
-      <div
-        className={cn(
-          "relative z-10 w-full sm:max-w-md",
-          "bg-[#111827] border border-border/60 shadow-2xl",
-          "rounded-t-2xl sm:rounded-xl",
-          "animate-slideUp sm:animate-slideDown",
-        )}
-      >
+      <div className={cn(
+        "relative z-10 w-full sm:max-w-md bg-[#0d1117] border border-white/10 shadow-2xl",
+        "rounded-t-2xl sm:rounded-2xl animate-slideUp sm:animate-slideDown overflow-hidden",
+      )}>
         {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-4">
-          <span className="text-sm font-bold text-foreground tracking-tight">Share token</span>
-          <button
-            onClick={onClose}
-            className="h-7 w-7 flex items-center justify-center rounded-full bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-          >
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/6">
+          <span className="text-sm font-bold text-white/90">Share token</span>
+          <button onClick={onClose} className="h-7 w-7 flex items-center justify-center rounded-full bg-white/8 hover:bg-white/14 text-white/60 hover:text-white transition-colors">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
 
-        {/* Signal Card Preview — captured by html2canvas */}
-        <div className="mx-5 mb-3 rounded-xl overflow-hidden border border-white/10 shadow-lg" ref={cardRef}>
-          {/* Card header — gradient from token color */}
-          <div
-            className="relative px-5 pt-5 pb-14"
-            style={{ background: `linear-gradient(135deg, ${c1}dd, ${c2}99)` }}
-          >
-            {/* Dot pattern */}
-            <div
-              className="absolute inset-0 opacity-20"
-              style={{
-                backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)",
-                backgroundSize: "18px 18px",
-              }}
-            />
-            {/* Shine */}
-            <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-transparent" />
+        {/* ── Signal Card Preview ── */}
+        <div className="mx-4 mt-4 mb-3 rounded-xl overflow-hidden border border-white/8 shadow-xl" style={{ background: "#080d1a" }}>
+          {/* Left accent */}
+          <div className="relative" style={{ borderLeft: `4px solid ${c1}` }}>
+            {/* Colour wash */}
+            <div className="absolute inset-0 pointer-events-none" style={{
+              background: `linear-gradient(135deg, ${c1}28 0%, ${c2}10 50%, transparent 100%)`,
+            }} />
 
-            <div className="relative flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <TokenAvatar symbol={token.symbol} imageUrl={token.imageUrl} size={44} shape="rounded" className="shadow-lg" />
-                <div>
-                  <div className="font-bold text-white text-base leading-tight">{token.name}</div>
-                  <div className="text-white/70 text-sm font-mono font-semibold">${token.symbol}</div>
+            <div className="relative px-4 pt-4 pb-3 space-y-3">
+              {/* Token row */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <TokenAvatar symbol={token.symbol} imageUrl={token.imageUrl} size={44} shape="rounded" />
+                  <div>
+                    <div className="font-bold text-white text-[15px] leading-tight">{token.name}</div>
+                    <div className="text-sm font-mono font-bold" style={{ color: c1 }}>${token.symbol}</div>
+                  </div>
+                </div>
+                {token.graduated && (
+                  <span className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide rounded-full border"
+                    style={{ color: c1, borderColor: `${c1}55`, background: `${c1}18` }}>
+                    ✓ Graduated
+                  </span>
+                )}
+              </div>
+
+              {/* Price + 1h pill */}
+              <div className="flex items-end gap-3">
+                <div className="text-[28px] font-bold text-white leading-none">{priceStr}</div>
+                {priceStats?.p1h && (
+                  <div className="flex flex-col items-center mb-0.5">
+                    <span className={cn("px-2 py-0.5 rounded text-xs font-bold", priceStats.p1h.up ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400")}>
+                      {priceStats.p1h.val}
+                    </span>
+                    <span className="text-[9px] text-white/30 mt-0.5">1h</span>
+                  </div>
+                )}
+              </div>
+
+              {/* % pills row */}
+              <div className="flex gap-2">
+                {pctItems.map(({ label, data }) => (
+                  <div key={label} className={cn(
+                    "flex-1 flex flex-col items-center py-1.5 rounded-lg border",
+                    data
+                      ? data.up
+                        ? "bg-green-500/10 border-green-500/25"
+                        : "bg-red-500/10 border-red-500/25"
+                      : "bg-white/4 border-white/8",
+                  )}>
+                    <span className="text-[9px] text-white/35 font-medium mb-0.5">{label}</span>
+                    <span className={cn("text-xs font-bold font-mono", data ? (data.up ? "text-green-400" : "text-red-400") : "text-white/25")}>
+                      {data?.val ?? "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-white/6" />
+
+              {/* Stats grid */}
+              <div className="grid grid-cols-3 divide-x divide-white/6">
+                {[
+                  { label: "Market Cap", value: formatMCUsd(token.marketCapEth, solPrice ?? null) },
+                  { label: "Vol 24h", value: volStr },
+                  { label: "Txns 24h", value: priceStats ? `${priceStats.txns24hBuy + priceStats.txns24hSell}` : "—" },
+                ].map(({ label, value }) => (
+                  <div key={label} className="flex flex-col items-center py-1 px-2">
+                    <span className="text-[9px] text-white/30 uppercase tracking-widest font-semibold">{label}</span>
+                    <span className="text-sm font-bold font-mono text-white mt-0.5">{value}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Buy / Sell bar */}
+              <div>
+                <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "#f87171" }}>
+                  <div className="h-full rounded-full" style={{ width: `${buyPct}%`, background: "#4ade80" }} />
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="text-[9px] font-semibold text-green-400">B {buyPct.toFixed(0)}%</span>
+                  <span className="text-[9px] font-semibold text-red-400">S {(100-buyPct).toFixed(0)}%</span>
                 </div>
               </div>
-              {token.graduated && (
-                <span className="px-2 py-1 bg-white/20 backdrop-blur-sm border border-white/30 text-white text-[10px] font-bold uppercase tracking-wider rounded-full">
-                  Graduated
+
+              {/* Footer */}
+              <div className="flex justify-between items-center pt-0.5">
+                <span className="text-[10px] font-bold" style={{ color: c1 }}>🚀 mintix.fun</span>
+                <span className="text-[9px] font-mono text-white/20">
+                  {token.address.slice(0,6)}...{token.address.slice(-4)}
                 </span>
-              )}
-            </div>
-
-            {/* Mintix watermark */}
-            <div className="absolute bottom-3 right-4 text-[10px] font-bold text-white/40 tracking-widest uppercase">
-              mintix.fun
-            </div>
-          </div>
-
-          {/* Card stats — dark base */}
-          <div className="bg-[#0d1626] px-5 py-4 grid grid-cols-3 divide-x divide-white/10">
-            {statsData.map(({ label, value }) => (
-              <div key={label} className="flex flex-col items-center gap-0.5 px-3">
-                <span className="text-[9px] text-white/40 uppercase tracking-widest font-semibold">{label}</span>
-                <span className="text-sm font-bold font-mono text-white">{value}</span>
               </div>
-            ))}
+            </div>
           </div>
         </div>
 
         {/* Download button */}
-        <div className="px-5 mb-4">
-          <button
-            onClick={handleDownload}
-            disabled={downloading}
-            className="w-full flex items-center justify-center gap-2 h-10 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-white text-sm font-semibold transition-all disabled:opacity-60"
-          >
+        <div className="px-4 mb-3">
+          <button onClick={handleDownload} disabled={downloading}
+            className="w-full flex items-center justify-center gap-2 h-10 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white text-sm font-semibold transition-all disabled:opacity-50">
             {downloading
-              ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating...</>
-              : <><Download className="h-4 w-4" /> Download image</>
-            }
+              ? <><Loader2 className="h-4 w-4 animate-spin" />Generating...</>
+              : <><Download className="h-4 w-4" />Download card</>}
           </button>
         </div>
 
-        {/* Share platform buttons */}
-        <div className="px-5 mb-4">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold mb-3">Share to</p>
+        {/* Share platforms */}
+        <div className="px-4 mb-3">
+          <p className="text-[9px] text-white/30 uppercase tracking-widest font-semibold mb-2">Share to</p>
           <div className="grid grid-cols-3 gap-2">
-            {/* Twitter/X */}
-            <a
-              href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex flex-col items-center gap-2 py-3 rounded-lg bg-muted/60 hover:bg-[#1DA1F2]/10 hover:border-[#1DA1F2]/30 border border-border/40 transition-all duration-150 group"
-            >
-              <div className="h-8 w-8 rounded-full bg-black flex items-center justify-center group-hover:scale-110 transition-transform">
-                <svg viewBox="0 0 24 24" className="h-4 w-4 fill-white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.261 5.633 5.903-5.633zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            <a href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`}
+              target="_blank" rel="noopener noreferrer"
+              className="flex flex-col items-center gap-1.5 py-2.5 rounded-xl bg-white/4 hover:bg-white/8 border border-white/6 hover:border-white/12 transition-all group">
+              <div className="h-7 w-7 rounded-full bg-black flex items-center justify-center group-hover:scale-110 transition-transform">
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.261 5.633 5.903-5.633zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
               </div>
-              <span className="text-[11px] font-semibold text-muted-foreground group-hover:text-foreground">X / Twitter</span>
+              <span className="text-[10px] font-semibold text-white/40 group-hover:text-white/70">X / Twitter</span>
             </a>
 
-            {/* Telegram */}
-            <a
-              href={`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${telegramText}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex flex-col items-center gap-2 py-3 rounded-lg bg-muted/60 hover:bg-[#2AABEE]/10 hover:border-[#2AABEE]/30 border border-border/40 transition-all duration-150 group"
-            >
-              <div className="h-8 w-8 rounded-full bg-[#2AABEE] flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Send className="h-4 w-4 text-white fill-white" />
+            <a href={`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${telegramText}`}
+              target="_blank" rel="noopener noreferrer"
+              className="flex flex-col items-center gap-1.5 py-2.5 rounded-xl bg-white/4 hover:bg-[#2AABEE]/10 border border-white/6 hover:border-[#2AABEE]/25 transition-all group">
+              <div className="h-7 w-7 rounded-full bg-[#2AABEE] flex items-center justify-center group-hover:scale-110 transition-transform">
+                <Send className="h-3.5 w-3.5 text-white fill-white" />
               </div>
-              <span className="text-[11px] font-semibold text-muted-foreground group-hover:text-foreground">Telegram</span>
+              <span className="text-[10px] font-semibold text-white/40 group-hover:text-white/70">Telegram</span>
             </a>
 
-            {/* Warpcast / Farcaster */}
-            <a
-              href={`https://warpcast.com/~/compose?text=${encodeURIComponent(`🚀 $${token.symbol} on Mintix fun — ${formatMCUsd(token.marketCapEth, solPrice ?? null)} MC\n${url}`)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex flex-col items-center gap-2 py-3 rounded-lg bg-muted/60 hover:bg-[#7C65C1]/10 hover:border-[#7C65C1]/30 border border-border/40 transition-all duration-150 group"
-            >
-              <div className="h-8 w-8 rounded-full bg-[#7C65C1] flex items-center justify-center group-hover:scale-110 transition-transform">
-                <svg viewBox="0 0 1000 1000" className="h-4 w-4 fill-white"><path d="M257.778 155.556H742.222V844.445H671.111V528.889H670.414C662.554 441.677 589.258 373.333 500 373.333C410.742 373.333 337.446 441.677 329.586 528.889H328.889V844.445H257.778V155.556Z"/><path d="M128.889 253.333L157.778 351.111H182.222V746.667C169.949 746.667 160 756.616 160 768.889V795.556H155.556C143.283 795.556 133.333 805.505 133.333 817.778V844.445H382.222V817.778C382.222 805.505 372.273 795.556 360 795.556H355.556V768.889C355.556 756.616 345.606 746.667 333.333 746.667H306.667V253.333H128.889Z"/><path d="M846.667 253.333H668.889V746.667C656.616 746.667 646.667 756.616 646.667 768.889V795.556H642.222C629.949 795.556 620 805.505 620 817.778V844.445H868.889V817.778C868.889 805.505 858.94 795.556 846.667 795.556H842.222V768.889C842.222 756.616 832.273 746.667 820 746.667V351.111H844.444L873.333 253.333H846.667Z"/></svg>
+            <a href={`https://warpcast.com/~/compose?text=${encodeURIComponent(`🚀 $${token.symbol} on Mintix fun — ${formatMCUsd(token.marketCapEth, solPrice ?? null)} MC\n${url}`)}`}
+              target="_blank" rel="noopener noreferrer"
+              className="flex flex-col items-center gap-1.5 py-2.5 rounded-xl bg-white/4 hover:bg-[#7C65C1]/10 border border-white/6 hover:border-[#7C65C1]/25 transition-all group">
+              <div className="h-7 w-7 rounded-full bg-[#7C65C1] flex items-center justify-center group-hover:scale-110 transition-transform">
+                <svg viewBox="0 0 1000 1000" className="h-3.5 w-3.5 fill-white"><path d="M257.778 155.556H742.222V844.445H671.111V528.889H670.414C662.554 441.677 589.258 373.333 500 373.333C410.742 373.333 337.446 441.677 329.586 528.889H328.889V844.445H257.778V155.556Z"/><path d="M128.889 253.333L157.778 351.111H182.222V746.667C169.949 746.667 160 756.616 160 768.889V795.556H155.556C143.283 795.556 133.333 805.505 133.333 817.778V844.445H382.222V817.778C382.222 805.505 372.273 795.556 360 795.556H355.556V768.889C355.556 756.616 345.606 746.667 333.333 746.667H306.667V253.333H128.889Z"/><path d="M846.667 253.333H668.889V746.667C656.616 746.667 646.667 756.616 646.667 768.889V795.556H642.222C629.949 795.556 620 805.505 620 817.778V844.445H868.889V817.778C868.889 805.505 858.94 795.556 846.667 795.556H842.222V768.889C842.222 756.616 832.273 746.667 820 746.667V351.111H844.444L873.333 253.333H846.667Z"/></svg>
               </div>
-              <span className="text-[11px] font-semibold text-muted-foreground group-hover:text-foreground">Farcaster</span>
+              <span className="text-[10px] font-semibold text-white/40 group-hover:text-white/70">Farcaster</span>
             </a>
           </div>
         </div>
 
         {/* Copy section */}
-        <div className="px-5 pb-5 space-y-2">
-          {/* Copy link */}
-          <button
-            onClick={() => copyToClipboard(url, "Link copied")}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-muted/40 hover:bg-muted/80 border border-border/40 hover:border-border/70 transition-all duration-150 group"
-          >
-            <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-primary/10">
-              <Link2 className="h-4 w-4 text-primary" />
+        <div className="px-4 pb-5 space-y-2">
+          <button onClick={() => copyToClipboard(url, "Link copied")}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/4 hover:bg-white/8 border border-white/6 hover:border-white/12 transition-all group">
+            <div className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0 bg-primary/15">
+              <Link2 className="h-3.5 w-3.5 text-primary" />
             </div>
             <div className="flex-1 text-left min-w-0">
-              <div className="text-xs font-semibold text-foreground">Copy link</div>
-              <div className="text-[10px] font-mono text-muted-foreground truncate">{url}</div>
+              <div className="text-xs font-semibold text-white/80">Copy link</div>
+              <div className="text-[10px] font-mono text-white/30 truncate">{url}</div>
             </div>
-            <Copy className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+            <Copy className="h-3 w-3 text-white/20 shrink-0" />
           </button>
 
-          {/* Copy contract address */}
-          <button
-            onClick={() => copyToClipboard(token.address)}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-muted/40 hover:bg-muted/80 border border-border/40 hover:border-border/70 transition-all duration-150 group"
-          >
-            <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 bg-muted">
-              <ExternalLink className="h-4 w-4 text-muted-foreground" />
+          <button onClick={() => copyToClipboard(token.address)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/4 hover:bg-white/8 border border-white/6 hover:border-white/12 transition-all group">
+            <div className="h-7 w-7 rounded-lg flex items-center justify-center shrink-0 bg-white/6">
+              <ExternalLink className="h-3.5 w-3.5 text-white/40" />
             </div>
             <div className="flex-1 text-left min-w-0">
-              <div className="text-xs font-semibold text-foreground">Contract address</div>
-              <div className="text-[10px] font-mono text-muted-foreground truncate">{token.address}</div>
+              <div className="text-xs font-semibold text-white/80">Contract address</div>
+              <div className="text-[10px] font-mono text-white/30 truncate">{token.address}</div>
             </div>
-            <Copy className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+            <Copy className="h-3 w-3 text-white/20 shrink-0" />
           </button>
         </div>
 
         {/* Mobile drag handle */}
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-white/10 sm:hidden" />
+        <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-9 h-1 rounded-full bg-white/10 sm:hidden" />
       </div>
     </div>
   );

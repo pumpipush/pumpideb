@@ -1329,6 +1329,17 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         open={shareOpen}
         onClose={() => setShareOpen(false)}
         solPrice={solPrice}
+        priceStats={{
+          currentPrice: priceStats.currentPrice,
+          vol24h: priceStats.vol24h,
+          vol24hBuy: priceStats.vol24hBuy,
+          vol24hSell: priceStats.vol24hSell,
+          txns24hBuy: priceStats.txns24hBuy,
+          txns24hSell: priceStats.txns24hSell,
+          p5m: priceStats.p5m,
+          p1h: priceStats.p1h,
+          p6h: priceStats.p6h,
+        }}
       />
     </div>
   );
