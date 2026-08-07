@@ -115,5 +115,5 @@ export function symbolColor(symbol: string): string {
   const colors = ['#1a2744','#1a2433','#1f2a1a','#2a1a1a','#2a2a1a','#1a1a2a'];
   let h = 0;
   for (let i = 0; i < symbol.length; i++) h = (h * 31 + symbol.charCodeAt(i)) & 0xffffffff;
-  return colors[Math.abs(h) % colors.length];
+  return colors[(h >>> 0) % colors.length];
 }

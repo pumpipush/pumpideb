@@ -31,7 +31,7 @@ import { formatSol, formatTokenAmount } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { copyToClipboard as fireClipboard } from "@/components/shared/CopyToast";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 
 function TokenDetailSkeleton() {
@@ -72,25 +72,27 @@ function TokenDetailSkeleton() {
 
 export default function AppInterface() {
   const [, setLocation] = useLocation();
-  const searchParams = new URLSearchParams(window.location.search);
-  const tokenParam = searchParams.get("token");
+  // Use reactive wouter search so query-string changes (e.g. ?token=abc) always trigger re-render
+  const search = useSearch();
+  const tokenParam = new URLSearchParams(search).get("token");
 
   const { wallet } = useWallet();
   const [activeTab, setActiveTab] = useState<string>(tokenParam ? "trade" : "launch");
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(tokenParam);
 
-  // Bug fix: always sync selectedTokenId to URL param — handles both A→B and token→null transitions
+  // Sync selectedTokenId to URL param; reset per-token state on every address change
   useEffect(() => {
     if (tokenParam) {
       setActiveTab("trade");
       setSelectedTokenId(tokenParam);
-      // Scroll both the outer <main> and any inner scrollable panel to top
+      // Scroll both outer <main> and inner scrollable panel to top
       requestAnimationFrame(() => {
         document.querySelector("main")?.scrollTo({ top: 0, behavior: "instant" });
         document.querySelector("[data-token-panel]")?.scrollTo({ top: 0, behavior: "instant" });
       });
     } else {
       setSelectedTokenId(null);
+      setActiveTab("launch"); // Return to launch tab when no token is selected
     }
   }, [tokenParam]);
 
@@ -153,9 +155,21 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("");
   const [desc, setDesc] = useState("");
-  
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const createToken = useCreateToken();
   const { toast } = useToast();
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Invalid file", description: "Please upload an image file.", variant: "destructive" });
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setImagePreview(url);
+  };
 
   const handleLaunch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -234,8 +248,22 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
           <div className="space-y-1">
             <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">image</label>
-            <div className="h-20 border border-dashed border-border/50 rounded-sm flex items-center justify-center text-muted-foreground text-sm hover:border-primary/50 hover:text-primary transition-colors cursor-pointer bg-card">
-               drag and drop an image
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleImageChange}
+            />
+            <div
+              className="h-20 border border-dashed border-border/50 rounded-sm flex items-center justify-center text-muted-foreground text-sm hover:border-primary/50 hover:text-primary transition-colors cursor-pointer bg-card overflow-hidden relative"
+              onClick={() => imageInputRef.current?.click()}
+            >
+              {imagePreview ? (
+                <img src={imagePreview} alt="Token preview" className="h-full w-full object-contain p-1" />
+              ) : (
+                <span>click or drag &amp; drop an image</span>
+              )}
             </div>
           </div>
 
@@ -282,7 +310,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     } 
   });
   
-  const { data: history, refetch: refetchHistory, isLoading: loadingHistory } = useTradeHistory(selectedAddress || "", {
+  const { data: history, refetch: refetchHistory, isLoading: loadingHistory, isError: historyError } = useTradeHistory(selectedAddress || "", {
     query: {
       enabled: !!selectedAddress,
       queryKey: ["tradeHistory", selectedAddress]
@@ -305,6 +333,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [activeSubTab, setActiveSubTab] = useState<"tx" | "holders" | "positions">("tx");
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
+
+  // Reset per-token UI state whenever the viewed token changes
+  useEffect(() => {
+    setTradeMode("buy");
+    setAmount("");
+    setActiveSubTab("tx");
+    setDescExpanded(false);
+  }, [selectedTokenId]);
 
   // New chart state
   const [chartTf, setChartTf] = useState<ChartTimeframe>("15m");
@@ -645,7 +681,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
       toast({
         title: tradeMode === "buy" ? "Buy order filled" : "Sell order filled",
-        description: `${amount} SOL ${tradeMode === "buy" ? "→" : "←"} ${token.symbol} executed on-chain.`,
+        description: tradeMode === "buy"
+          ? `${amount} SOL → ${token.symbol} executed on-chain.`
+          : `${amount} ${token.symbol} → SOL executed on-chain.`,
       });
 
       setAmount("");
@@ -732,8 +770,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               <span className="text-primary font-mono text-sm font-bold whitespace-nowrap">${token.symbol}</span>
             </div>
             <div className="flex items-center gap-2 mt-2">
-              <button className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Twitter"><Twitter className="h-4 w-4" /></button>
-              <button className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Website"><Globe className="h-4 w-4" /></button>
+              {(token as any).twitterUrl && (
+                <a href={(token as any).twitterUrl} target="_blank" rel="noopener noreferrer" className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Twitter"><Twitter className="h-4 w-4" /></a>
+              )}
+              {(token as any).websiteUrl && (
+                <a href={(token as any).websiteUrl} target="_blank" rel="noopener noreferrer" className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Website"><Globe className="h-4 w-4" /></a>
+              )}
               <button className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Copy address" onClick={() => copyToClipboard(token.address)}><Copy className="h-4 w-4" /></button>
             </div>
           </div>
@@ -889,6 +931,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                           <td colSpan={5} className="px-3 py-3"><Skeleton className="h-3.5 w-full" /></td>
                         </tr>
                       ))
+                    ) : historyError ? (
+                      <tr>
+                        <td colSpan={5} className="px-3 py-10 text-center text-[13px]" style={{ color: "#f87171" }}>
+                          Failed to load trades.{" "}
+                          <button onClick={() => refetchHistory()} className="underline hover:opacity-80 transition-opacity">Retry</button>
+                        </td>
+                      </tr>
                     ) : (() => {
                       const historyTxHashes = new Set((history ?? []).map(t => t.txHash));
                       const dedupedLive = liveTrades.filter(lt => !historyTxHashes.has(lt.txHash));
@@ -1277,15 +1326,29 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           </div>
 
           <div className="p-3 space-y-3">
-            {/* Preset amounts */}
+            {/* Preset amounts — SOL presets for buy, % presets for sell */}
             <div className="flex gap-2">
-              {[{ label: "$25", val: "0.008" }, { label: "$100", val: "0.033" }, { label: "$250", val: "0.083" }].map(({ label, val }) => (
-                <button
-                  key={label}
-                  className="flex-1 py-1.5 bg-muted/60 rounded text-xs font-bold text-muted-foreground hover:bg-white/10 hover:text-foreground border border-border/40 transition-all duration-150 active:scale-95 press-feedback"
-                  onClick={() => setAmount(val)}
-                >{label}</button>
-              ))}
+              {tradeMode === "buy"
+                ? [{ label: "$25", val: "0.008" }, { label: "$100", val: "0.033" }, { label: "$250", val: "0.083" }].map(({ label, val }) => (
+                  <button
+                    key={label}
+                    className="flex-1 py-1.5 bg-muted/60 rounded text-xs font-bold text-muted-foreground hover:bg-white/10 hover:text-foreground border border-border/40 transition-all duration-150 active:scale-95 press-feedback"
+                    onClick={() => setAmount(val)}
+                  >{label}</button>
+                ))
+                : [{ label: "25%", pct: 0.25 }, { label: "50%", pct: 0.5 }, { label: "100%", pct: 1 }].map(({ label, pct }) => (
+                  <button
+                    key={label}
+                    className="flex-1 py-1.5 bg-muted/60 rounded text-xs font-bold text-muted-foreground hover:bg-white/10 hover:text-foreground border border-border/40 transition-all duration-150 active:scale-95 press-feedback"
+                    onClick={() => {
+                      // Use virtual token reserves as a proxy for available balance
+                      const reserves = token?.virtualTokenReserves ? parseFloat(token.virtualTokenReserves) : 0;
+                      const estimate = (reserves * pct * 0.0001).toFixed(2);
+                      setAmount(estimate);
+                    }}
+                  >{label}</button>
+                ))
+              }
             </div>
 
             {/* Amount input */}
@@ -1333,7 +1396,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 }
 
 function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSelectToken: (addr: string) => void }) {
-  const { data: myTokens, isLoading } = useListTokens({}, { query: { enabled: !!wallet, queryKey: getListTokensQueryKey({}) } });
+  const creatorFilter = wallet ? { creatorAddress: wallet } : {};
+  const { data: myTokens, isLoading, isError, refetch } = useListTokens(creatorFilter as any, { query: { enabled: !!wallet, queryKey: getListTokensQueryKey(creatorFilter as any) } });
   const solPrice = useSolPrice();
 
   if (!wallet) {
@@ -1342,6 +1406,15 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
 
   if (isLoading) {
     return <div className="text-center py-20 text-muted-foreground font-mono text-sm animate-slideDown">Loading portfolio...</div>;
+  }
+
+  if (isError) {
+    return (
+      <div className="text-center py-20 animate-slideDown">
+        <p className="text-destructive font-mono text-sm mb-3">Failed to load your tokens.</p>
+        <button onClick={() => refetch()} className="text-xs text-primary underline hover:opacity-80 transition-opacity">Retry</button>
+      </div>
+    );
   }
 
   return (
