@@ -115,7 +115,7 @@ async function generateCardCanvas(
 ): Promise<HTMLCanvasElement> {
   const S = 2;       // retina scale
   const W = 520;
-  const H = 310;
+  const H = 220;
   const R = 20;
 
   const canvas = document.createElement("canvas");
@@ -227,89 +227,11 @@ async function generateCardCanvas(
     ctx.fillText("1h", pilX+pw/2, pilY+pilH+5);
   }
 
-  // ── % change pills row (5m / 1h / 6h) ────────────────────────────────────
-  const pctY = priceY + 56;
-  const pctItems = [
-    { label: "5m",  data: stats?.p5m  ?? null },
-    { label: "1h",  data: stats?.p1h  ?? null },
-    { label: "6h",  data: stats?.p6h  ?? null },
-  ];
-  const pilW2 = 80, pilH2 = 34, pilGap = 10;
-  pctItems.forEach(({ label, data }, i) => {
-    const px = 24 + i*(pilW2+pilGap);
-    const py = pctY;
-    roundRect(ctx, px, py, pilW2, pilH2, 8);
-    if (data) {
-      const [dr,dg,db] = hexToRgb(data.up ? "#16a34a" : "#dc2626");
-      ctx.fillStyle = `rgba(${dr},${dg},${db},0.12)`;
-    } else {
-      ctx.fillStyle = "rgba(255,255,255,0.04)";
-    }
-    ctx.fill();
-    roundRect(ctx, px, py, pilW2, pilH2, 8);
-    ctx.strokeStyle = data
-      ? `rgba(${hexToRgb(data.up?"#16a34a":"#dc2626").join(",")},0.3)`
-      : "rgba(255,255,255,0.08)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    // label
-    ctx.fillStyle = "rgba(255,255,255,0.4)";
-    ctx.font = `500 10px -apple-system,BlinkMacSystemFont,sans-serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "top";
-    ctx.fillText(label, px+pilW2/2, py+5);
-    // value
-    ctx.fillStyle = data ? (data.up ? "#4ade80" : "#f87171") : "rgba(255,255,255,0.25)";
-    ctx.font = `bold 13px "SFMono-Regular",Consolas,monospace`;
-    ctx.textBaseline = "bottom";
-    ctx.fillText(data?.val ?? "—", px+pilW2/2, py+pilH2-5);
-  });
-
-  // ── Divider ───────────────────────────────────────────────────────────────
-  const divY = pctY + pilH2 + 16;
-  ctx.strokeStyle = "rgba(255,255,255,0.07)";
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(24, divY); ctx.lineTo(W-24, divY); ctx.stroke();
-
-  // ── Stats row ─────────────────────────────────────────────────────────────
-  const statY = divY + 14;
-  const mcStr  = formatMCUsd(token.marketCapEth, solPrice);
-  const volStr = (() => {
-    const v = stats?.vol24h ?? 0;
-    if (!v) return "—";
-    return solPrice ? formatUSD(v * solPrice) : `${v.toFixed(2)} SOL`;
-  })();
-  const txnStr = stats
-    ? `${stats.txns24hBuy+stats.txns24hSell}`
-    : "—";
+  // ── Buy/Sell bar ──────────────────────────────────────────────────────────
   const buyPct = stats && (stats.vol24hBuy+stats.vol24hSell) > 0
     ? (stats.vol24hBuy/(stats.vol24hBuy+stats.vol24hSell))*100
     : 50;
-
-  const statCols = [
-    { label: "MARKET CAP", value: mcStr },
-    { label: "VOL 24H",    value: volStr },
-    { label: "TXNS 24H",   value: txnStr },
-  ];
-  const colW = (W - 48) / 3;
-  statCols.forEach(({ label, value }, i) => {
-    const cx = 24 + i*colW + colW/2;
-    if (i > 0) {
-      ctx.strokeStyle = "rgba(255,255,255,0.07)";
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(24+i*colW, statY); ctx.lineTo(24+i*colW, statY+42); ctx.stroke();
-    }
-    ctx.fillStyle = "rgba(255,255,255,0.30)";
-    ctx.font = `600 9px -apple-system,BlinkMacSystemFont,sans-serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "top";
-    ctx.fillText(label, cx, statY);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = `bold 15px "SFMono-Regular",Consolas,monospace`;
-    ctx.textBaseline = "top";
-    ctx.fillText(value, cx, statY+14);
-  });
-
-  // ── Buy/Sell bar ──────────────────────────────────────────────────────────
-  const barY = statY + 46;
+  const barY = priceY + 56;
   const barH = 5;
   const barW = W - 48;
   // background (sell side)
@@ -364,12 +286,6 @@ export function ShareModal({ token, open, onClose, solPrice, priceStats }: Share
     ? (priceUsd < 0.0001 ? `$${priceUsd.toExponential(2)}` : formatUSD(priceUsd))
     : token.priceEth ? parseFloat(token.priceEth).toExponential(4)+" SOL" : "—";
 
-  const volStr = (() => {
-    const v = priceStats?.vol24h ?? 0;
-    if (!v) return "—";
-    return solPrice ? formatUSD(v * solPrice) : `${v.toFixed(2)} SOL`;
-  })();
-
   const buyPct = priceStats && (priceStats.vol24hBuy + priceStats.vol24hSell) > 0
     ? (priceStats.vol24hBuy / (priceStats.vol24hBuy + priceStats.vol24hSell)) * 100
     : 50;
@@ -404,12 +320,6 @@ export function ShareModal({ token, open, onClose, solPrice, priceStats }: Share
   };
 
   if (!open) return null;
-
-  const pctItems = [
-    { label: "5m", data: priceStats?.p5m ?? null },
-    { label: "1h", data: priceStats?.p1h ?? null },
-    { label: "6h", data: priceStats?.p6h ?? null },
-  ];
 
   const modal = (
     <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -465,42 +375,6 @@ export function ShareModal({ token, open, onClose, solPrice, priceStats }: Share
                     <span className="text-[9px] text-white/30 mt-0.5">1h</span>
                   </div>
                 )}
-              </div>
-
-              {/* % pills row */}
-              <div className="flex gap-2">
-                {pctItems.map(({ label, data }) => (
-                  <div key={label} className={cn(
-                    "flex-1 flex flex-col items-center py-1.5 rounded-lg border",
-                    data
-                      ? data.up
-                        ? "bg-green-500/10 border-green-500/25"
-                        : "bg-red-500/10 border-red-500/25"
-                      : "bg-white/4 border-white/8",
-                  )}>
-                    <span className="text-[9px] text-white/35 font-medium mb-0.5">{label}</span>
-                    <span className={cn("text-xs font-bold font-mono", data ? (data.up ? "text-green-400" : "text-red-400") : "text-white/25")}>
-                      {data?.val ?? "—"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Divider */}
-              <div className="border-t border-white/6" />
-
-              {/* Stats grid */}
-              <div className="grid grid-cols-3 divide-x divide-white/6">
-                {[
-                  { label: "Market Cap", value: formatMCUsd(token.marketCapEth, solPrice ?? null) },
-                  { label: "Vol 24h", value: volStr },
-                  { label: "Txns 24h", value: priceStats ? `${priceStats.txns24hBuy + priceStats.txns24hSell}` : "—" },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex flex-col items-center py-1 px-2">
-                    <span className="text-[9px] text-white/30 uppercase tracking-widest font-semibold">{label}</span>
-                    <span className="text-sm font-bold font-mono text-white mt-0.5">{value}</span>
-                  </div>
-                ))}
               </div>
 
               {/* Buy / Sell bar */}
