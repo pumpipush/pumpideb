@@ -1,11 +1,12 @@
 /**
  * ShareModal — professional share sheet for a token.
  * Shows a "signal card" preview + platform share buttons.
+ * Card can be downloaded as a PNG image.
  */
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  X, Copy, Twitter, Send, Link2, ExternalLink,
+  X, Copy, Twitter, Send, Link2, ExternalLink, Download, Loader2,
 } from "lucide-react";
 import { TokenAvatar, getGradient } from "@/components/shared/TokenAvatar";
 import { formatMCUsd, formatUSD, formatEth } from "@/lib/utils";
@@ -37,6 +38,8 @@ export function ShareModal({ token, open, onClose, solPrice }: ShareModalProps) 
   const telegramText = encodeURIComponent(`🔥 $${token.symbol} on Mintix fun — ${formatMCUsd(token.marketCapEth, solPrice ?? null)} MC\n${url}`);
 
   const [c1, c2] = getGradient(token.symbol);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
 
   // Lock body scroll
   useEffect(() => {
@@ -52,7 +55,51 @@ export function ShareModal({ token, open, onClose, solPrice }: ShareModalProps) 
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
+  const handleDownload = async () => {
+    if (!cardRef.current || downloading) return;
+    setDownloading(true);
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(cardRef.current, {
+        backgroundColor: null,
+        scale: 3, // 3× for crisp high-res output
+        useCORS: true,
+        logging: false,
+      });
+      const link = document.createElement("a");
+      link.download = `${token.symbol}-mintix.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch (err) {
+      console.error("Download failed:", err);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   if (!open) return null;
+
+  const statsData = [
+    { label: "Market Cap", value: formatMCUsd(token.marketCapEth, solPrice ?? null) },
+    {
+      label: "Price",
+      value: (() => {
+        const p = token.priceEth ? parseFloat(token.priceEth) : 0;
+        if (!p) return "—";
+        const usd = solPrice ? p * solPrice : null;
+        if (usd) return usd < 0.0001 ? `$${usd.toExponential(2)}` : formatUSD(usd);
+        return p < 0.0001 ? p.toExponential(3) : p.toFixed(6);
+      })(),
+    },
+    {
+      label: "Vol 24h",
+      value: (() => {
+        if (!token.volumeEth) return "—";
+        const sol = parseFloat(formatEth(token.volumeEth));
+        return solPrice ? formatUSD(sol * solPrice) : `${sol.toFixed(2)} SOL`;
+      })(),
+    },
+  ];
 
   const modal = (
     <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -82,8 +129,8 @@ export function ShareModal({ token, open, onClose, solPrice }: ShareModalProps) 
           </button>
         </div>
 
-        {/* Signal Card Preview */}
-        <div className="mx-5 mb-5 rounded-xl overflow-hidden border border-white/10 shadow-lg">
+        {/* Signal Card Preview — captured by html2canvas */}
+        <div className="mx-5 mb-3 rounded-xl overflow-hidden border border-white/10 shadow-lg" ref={cardRef}>
           {/* Card header — gradient from token color */}
           <div
             className="relative px-5 pt-5 pb-14"
@@ -123,33 +170,27 @@ export function ShareModal({ token, open, onClose, solPrice }: ShareModalProps) 
 
           {/* Card stats — dark base */}
           <div className="bg-[#0d1626] px-5 py-4 grid grid-cols-3 divide-x divide-white/10">
-            {[
-              { label: "Market Cap", value: formatMCUsd(token.marketCapEth, solPrice ?? null) },
-              {
-                label: "Price",
-                value: (() => {
-                  const p = token.priceEth ? parseFloat(token.priceEth) : 0;
-                  if (!p) return "—";
-                  const usd = solPrice ? p * solPrice : null;
-                  if (usd) return usd < 0.0001 ? `$${usd.toExponential(2)}` : formatUSD(usd);
-                  return p < 0.0001 ? p.toExponential(3) : p.toFixed(6);
-                })(),
-              },
-              {
-                label: "Vol 24h",
-                value: (() => {
-                  if (!token.volumeEth) return "—";
-                  const sol = parseFloat(formatEth(token.volumeEth));
-                  return solPrice ? formatUSD(sol * solPrice) : `${sol.toFixed(2)} SOL`;
-                })(),
-              },
-            ].map(({ label, value }) => (
+            {statsData.map(({ label, value }) => (
               <div key={label} className="flex flex-col items-center gap-0.5 px-3">
                 <span className="text-[9px] text-white/40 uppercase tracking-widest font-semibold">{label}</span>
                 <span className="text-sm font-bold font-mono text-white">{value}</span>
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Download button */}
+        <div className="px-5 mb-4">
+          <button
+            onClick={handleDownload}
+            disabled={downloading}
+            className="w-full flex items-center justify-center gap-2 h-10 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-white text-sm font-semibold transition-all disabled:opacity-60"
+          >
+            {downloading
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating...</>
+              : <><Download className="h-4 w-4" /> Download image</>
+            }
+          </button>
         </div>
 
         {/* Share platform buttons */}
