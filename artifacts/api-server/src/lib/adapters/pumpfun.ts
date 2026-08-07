@@ -22,35 +22,85 @@ import {
 } from "./solanaRpcBase";
 
 const PUMP_PROGRAM = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
-const PUMP_API     = "https://frontend-api.pump.fun/coins";
 const PLATFORM     = "pump_fun";
 const CHAIN        = "solana";
 
-// ── Pump.fun API metadata ──────────────────────────────────────────────────────
+// ── On-chain instruction decoder ───────────────────────────────────────────────
+// pump.fun CREATE instruction is an Anchor instruction whose data is:
+//   8 bytes  – Anchor discriminator (sha256("global:create")[0..8])
+//   borsh    – name   (u32 length + utf8 bytes)
+//   borsh    – symbol (u32 length + utf8 bytes)
+//   borsh    – uri    (u32 length + utf8 bytes)
+//   ...      – more fields (ignored)
+//
+// Decoding this directly from the transaction avoids any external API call,
+// which means metadata is available even when pump.fun's CDN blocks us.
 
-interface PumpCoin {
-  mint?:                   string;
-  name?:                   string;
-  symbol?:                 string;
-  description?:            string;
-  image_uri?:              string;
-  twitter?:                string;
-  website?:                string;
-  creator?:                string;
-  market_cap?:             number;
-  virtual_sol_reserves?:   number;
-  virtual_token_reserves?: number;
-  created_timestamp?:      number;
+const BS58_ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+function bs58Decode(s: string): Uint8Array {
+  let n = 0n;
+  for (const c of s) {
+    const i = BS58_ALPHA.indexOf(c);
+    if (i < 0) throw new Error(`bad base58 char: ${c}`);
+    n = n * 58n + BigInt(i);
+  }
+  const bytes: number[] = [];
+  while (n > 0n) { bytes.unshift(Number(n & 0xffn)); n >>= 8n; }
+  let leading = 0;
+  for (const c of s) { if (c !== "1") break; leading++; }
+  return new Uint8Array([...new Array(leading).fill(0), ...bytes]);
 }
 
-async function fetchPumpMeta(mint: string): Promise<PumpCoin | null> {
+/** Read one borsh string (u32le length + utf8 bytes) from `buf` at `off`. */
+function readBorshStr(buf: Uint8Array, off: number): [string, number] {
+  if (off + 4 > buf.length) throw new RangeError("borsh underflow reading length");
+  const len = new DataView(buf.buffer, buf.byteOffset + off, 4).getUint32(0, true);
+  const end = off + 4 + len;
+  if (end > buf.length) throw new RangeError("borsh underflow reading string");
+  return [new TextDecoder().decode(buf.subarray(off + 4, end)), end];
+}
+
+/** Decode pump.fun CREATE params directly from the transaction instruction data. */
+function decodePumpCreate(tx: RpcTx): { name: string; symbol: string; uri: string } | null {
+  const keys   = tx.transaction?.message?.accountKeys   ?? [];
+  const instrs = tx.transaction?.message?.instructions  ?? [];
+
+  // Find pump.fun program position in account keys
+  const progIdx = keys.findIndex(
+    (k) => (typeof k === "string" ? k : k.pubkey) === PUMP_PROGRAM,
+  );
+  if (progIdx < 0) return null;
+
+  // Find the top-level instruction from the pump.fun program
+  const instr = instrs.find((i) => i.programIdIndex === progIdx);
+  if (!instr?.data) return null;
+
   try {
-    const res = await fetch(`${PUMP_API}/${mint}`, {
-      signal: AbortSignal.timeout(8_000),
+    const raw = bs58Decode(instr.data);
+    if (raw.length < 9) return null; // discriminator (8) + at least 1 byte
+    let off = 8; // skip 8-byte Anchor discriminator
+    const [name,   off1] = readBorshStr(raw, off);
+    const [symbol, off2] = readBorshStr(raw, off1);
+    const [uri]          = readBorshStr(raw, off2);
+    if (!name.trim() || !symbol.trim()) return null;
+    return { name: name.trim(), symbol: symbol.trim(), uri: uri.trim() };
+  } catch {
+    return null; // malformed data — not a pump.fun create instruction
+  }
+}
+
+/** Fetch token image by downloading the metadata JSON at a URI (IPFS / CDN). */
+async function fetchImageFromUri(uri: string): Promise<string | null> {
+  if (!uri) return null;
+  try {
+    const res = await fetch(uri, {
+      signal:  AbortSignal.timeout(10_000),
       headers: { "User-Agent": "RocketFi/1.0" },
     });
     if (!res.ok) return null;
-    return (await res.json()) as PumpCoin;
+    const json = (await res.json()) as { image?: string };
+    return json.image?.trim() || null;
   } catch {
     return null;
   }
@@ -94,37 +144,26 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
       return;
     }
 
-    // Fetch pump.fun API for rich metadata
-    const meta = await fetchPumpMeta(mint);
-
-    const name        = meta?.name        ?? mint.slice(0, 8) + "…";
-    const symbol      = meta?.symbol      ?? "???";
-    const description = meta?.description ?? null;
-    const imageUrl    = meta?.image_uri   ?? null;
-    const twitterUrl  = meta?.twitter     ?? null;
-    const websiteUrl  = meta?.website     ?? null;
-    const creatorAddr = meta?.creator     ?? creator;
-
-    // Convert market cap SOL value to lamports string for storage
-    const mcapSol = meta?.market_cap ?? null;
-    const marketCapEth = mcapSol != null
-      ? Math.round(mcapSol * 1_000_000_000).toString()
-      : null;
+    // Decode name/symbol/uri directly from on-chain instruction data.
+    // This replaces the pump.fun REST API call, which is rate-limited / CDN-blocked
+    // from hosted environments (returns HTTP 530). All data is sourced on-chain.
+    const params = decodePumpCreate(tx);
+    const name   = params?.name   ?? mint.slice(0, 8) + "…";
+    const symbol = params?.symbol ?? "???";
+    const uri    = params?.uri    ?? null;
 
     await db.insert(tokensTable).values({
       address:              mint,
       name,
       symbol,
-      description,
-      imageUrl,
-      creatorAddress:       creatorAddr,
+      description:          null,
+      imageUrl:             null, // filled async once the metadata URI is fetched
+      creatorAddress:       creator,
       totalSupply:          "1000000000000000",
-      virtualTokenReserves: meta?.virtual_token_reserves?.toString() ?? "1000000000000000",
-      virtualEthReserves:   meta?.virtual_sol_reserves?.toString()   ?? "0",
-      marketCapEth,
+      virtualTokenReserves: "1000000000000000",
+      virtualEthReserves:   "0",
+      marketCapEth:         null,
       priceEth:             null,
-      twitterUrl,
-      websiteUrl,
       platform:             PLATFORM,
       chain:                CHAIN,
     }).onConflictDoNothing();
@@ -137,9 +176,9 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
         address:      mint,
         name,
         symbol,
-        imageUrl,
+        imageUrl:     null,
         priceEth:     null,
-        marketCapEth,
+        marketCapEth: null,
         platform:     PLATFORM,
         chain:        CHAIN,
         createdAt:    tx.blockTime
@@ -147,6 +186,19 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
           : new Date().toISOString(),
       },
     });
+
+    // Fire-and-forget: fetch image from metadata URI (IPFS / pump.fun CDN).
+    // Updates the DB row when the image arrives; the enrichment loop also retries
+    // missing images independently.
+    if (uri) {
+      fetchImageFromUri(uri)
+        .then(async (imageUrl) => {
+          if (!imageUrl) return;
+          await db.update(tokensTable).set({ imageUrl }).where(eq(tokensTable.address, mint));
+          this.log.debug({ mint }, "pump_fun: image fetched from URI");
+        })
+        .catch(() => {/* enrichment loop retries */});
+    }
   }
 
   // ── Trade (buy / sell) ────────────────────────────────────────────────────

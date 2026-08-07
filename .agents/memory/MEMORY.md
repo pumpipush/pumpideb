@@ -1,1 +1,3 @@
 - [AppInterface patterns](appinterface-patterns.md) — token sync, BigInt safety, React state over DOM imperative, dead hook patterns
+- [pump.fun metadata sources](pumpfun-metadata.md) — API blocked from Replit; use on-chain instruction data decode instead
+- [Solana RPC rate limits](solana-rpc-limits.md) — PublicNode -32005 at pump.fun volume; fallback RPCs configured

@@ -111,9 +111,17 @@ interface EnrichResult {
 
 async function fetchMeta(mint: string, platform: string): Promise<EnrichResult | null> {
   if (platform === "pump_fun") {
-    const meta = await fetchPumpMeta(mint);
-    if (!meta) return null;
-    return { name: meta.name, symbol: meta.symbol, imageUrl: meta.image_uri ?? null };
+    // Primary: pump.fun API (may be blocked/rate-limited from hosted environments)
+    const pump = await fetchPumpMeta(mint);
+    if (pump) return { name: pump.name, symbol: pump.symbol, imageUrl: pump.image_uri ?? null };
+
+    // Fallback: Raydium's /mint/ids works for any SPL token, including pump.fun tokens
+    // that have been indexed after launch. Brand-new tokens won't appear here yet
+    // but tokens a few minutes old often do.
+    const ray = await fetchRaydiumMeta(mint);
+    if (ray) return { name: ray.name, symbol: ray.symbol, imageUrl: ray.logoURI ?? null };
+
+    return null;
   }
 
   if (

@@ -18,6 +18,13 @@ import { logger as rootLogger } from "../logger";
 export const PUBLICNODE_WSS  = "wss://solana-rpc.publicnode.com";
 export const PUBLICNODE_HTTP = "https://solana-rpc.publicnode.com";
 
+/** Free public Solana RPC endpoints used as fallbacks when the primary is rate-limited.
+ *  Tried in order on HTTP -32005 responses. No auth needed on any of these. */
+export const FALLBACK_HTTP_RPCS = [
+  "https://api.mainnet-beta.solana.com", // Solana Foundation
+  "https://rpc.ankr.com/solana",         // Ankr free tier
+] as const;
+
 export interface LogEvent {
   signature: string;
   logs: string[];
@@ -28,6 +35,13 @@ export interface TokenBalance {
   mint: string;
   owner?: string;
   uiTokenAmount: { amount: string; decimals: number; uiAmount: number | null };
+}
+
+export interface RpcInstruction {
+  programIdIndex: number;
+  accounts:       number[];
+  /** Base58-encoded instruction data (present when encoding="json") */
+  data:           string;
 }
 
 export interface RpcTx {
@@ -41,7 +55,8 @@ export interface RpcTx {
   } | null;
   transaction?: {
     message?: {
-      accountKeys?: Array<{ pubkey?: string } | string>;
+      accountKeys?:  Array<{ pubkey?: string } | string>;
+      instructions?: RpcInstruction[];
     };
   };
 }
@@ -111,8 +126,8 @@ export abstract class SolanaRpcIndexer {
   // Only if the queue itself is full (sustained overload) are new arrivals
   // dropped — this is an explicit backpressure boundary, not a silent loss.
   private _rpcInFlight   = 0;
-  private readonly _rpcMaxConcurrent = 4;
-  private readonly _rpcQueueMax      = 64;
+  private readonly _rpcMaxConcurrent = 4;  // keep low — PublicNode free tier rate-limits at ~4 req/s
+  private readonly _rpcQueueMax      = 32; // small queue — stale events aren't worth processing
   private _rpcQueue: Array<() => void> = [];
 
   private _acquireRpcSlot(): Promise<void> {
@@ -145,21 +160,33 @@ export abstract class SolanaRpcIndexer {
     } catch {
       return null; // queue full — explicit drop after warning
     }
+    // Try primary RPC first, then fall through to free public fallbacks on rate-limit (-32005).
+    const urlsToTry = [this.httpUrl, ...FALLBACK_HTTP_RPCS];
     try {
-      const res = await fetch(this.httpUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: nextId(), method, params }),
-        signal: AbortSignal.timeout(12_000),
-      });
-      const json = (await res.json()) as { result?: T; error?: unknown };
-      if (json.error) {
-        this.log.warn({ rpcError: json.error, method }, "rpc: error response");
-        return null;
+      for (const url of urlsToTry) {
+        try {
+          const res = await fetch(url, {
+            method:  "POST",
+            headers: { "Content-Type": "application/json" },
+            body:    JSON.stringify({ jsonrpc: "2.0", id: nextId(), method, params }),
+            signal:  AbortSignal.timeout(8_000),
+          });
+          const json = (await res.json()) as { result?: T; error?: { code?: number } & unknown };
+          if ((json.error as { code?: number } | undefined)?.code === -32005) {
+            // Rate-limited on this endpoint — silently try next
+            continue;
+          }
+          if (json.error) {
+            this.log.warn({ rpcError: json.error, method, url }, "rpc: error response");
+            return null;
+          }
+          return json.result ?? null;
+        } catch {
+          // Network failure on this endpoint — try next
+          continue;
+        }
       }
-      return json.result ?? null;
-    } catch (err) {
-      this.log.warn({ err, method }, "rpc: call failed");
+      this.log.warn({ method }, "rpc: all endpoints rate-limited or failed");
       return null;
     } finally {
       this._releaseRpcSlot();
