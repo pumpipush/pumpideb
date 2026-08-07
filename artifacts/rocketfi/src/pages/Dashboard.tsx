@@ -290,8 +290,8 @@ function TokenCard({ token, rank }: { token: DisplayToken; rank: number }) {
           <span className="text-primary font-mono text-xs font-bold">{formatMC(token.marketCapEth)}</span>
         </div>
         <div className="flex items-center justify-between mt-0.5">
-          <span className="flex items-center gap-1 text-[10px] text-muted-foreground/70 font-mono">
-            <Clock className="w-2.5 h-2.5 text-muted-foreground/40" />
+          <span className="flex items-center gap-1 text-[14px] text-emerald-400 font-mono">
+            <Clock className="w-3 h-3 text-emerald-400" />
             {timeAgo(token.createdAt)}
           </span>
           <PlatformBadge platform={token.platform as PlatformId} size="sm" iconOnly />
