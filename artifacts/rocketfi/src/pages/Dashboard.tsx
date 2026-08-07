@@ -217,7 +217,6 @@ function TableView({ tokens }: { tokens: DisplayToken[] }) {
                     <div className="min-w-0">
                       <div className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors truncate max-w-[120px] flex items-center gap-1.5">
                         {token.name}
-                        <span className={cn("text-[9px] font-mono px-1 py-0 rounded-[3px] shrink-0", token.isLive ? "text-emerald-400 bg-emerald-400/10 border border-emerald-400/20" : "text-muted-foreground/50")}>{timeAgo(token.createdAt)}</span>
                       </div>
                       <div className="text-[11px] font-mono text-primary">${token.symbol}</div>
                     </div>
@@ -276,11 +275,6 @@ function TokenCard({ token, rank }: { token: DisplayToken; rank: number }) {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
-          {token.isLive && (
-            <span className="text-[9px] font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 px-1.5 py-0.5 rounded-sm backdrop-blur-sm animate-pulse">
-              NEW
-            </span>
-          )}
           {token.graduated && (
             <div className="bg-primary/20 border border-primary/50 text-primary text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-sm backdrop-blur-md animate-pulseGlow">
               Grad
