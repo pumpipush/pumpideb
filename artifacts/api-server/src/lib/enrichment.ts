@@ -26,6 +26,7 @@
 import { and, desc, gte, isNull, like, or, not, eq, inArray } from "drizzle-orm";
 import { db, tokensTable } from "@workspace/db";
 import { logger } from "./logger";
+import { emitSnapshot } from "./tradeEmitter";
 
 const POLL_INTERVAL_MS       = 30_000;
 const IDENTITY_BATCH_SIZE    = 20;  // max tokens per identity tick
@@ -188,15 +189,38 @@ async function enrichOne(token: TokenRow): Promise<void> {
   const update = computeEnrichmentUpdate(token, meta);
   if (!update) return;
 
-  await db
+  const [updated] = await db
     .update(tokensTable)
     .set(update)
-    .where(eq(tokensTable.address, token.address));
+    .where(eq(tokensTable.address, token.address))
+    .returning();
 
   log.info(
     { address: token.address, platform: token.platform, ...update },
     "enrichment: token enriched",
   );
+
+  // Push the enriched state to any open SSE detail-page viewers so the
+  // name / symbol / image update live without a page refresh.
+  if (updated) {
+    emitSnapshot({
+      type: "snapshot",
+      token: {
+        address:              updated.address,
+        name:                 updated.name,
+        symbol:               updated.symbol,
+        imageUrl:             updated.imageUrl,
+        priceEth:             updated.priceEth,
+        marketCapEth:         updated.marketCapEth,
+        volumeEth:            updated.volumeEth,
+        virtualEthReserves:   updated.virtualEthReserves,
+        virtualTokenReserves: updated.virtualTokenReserves,
+        tradeCount:           Number(updated.tradeCount),
+        platform:             updated.platform,
+        chain:                updated.chain,
+      },
+    });
+  }
 }
 
 // ── Main enrichment tick ───────────────────────────────────────────────────────

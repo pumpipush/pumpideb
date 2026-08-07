@@ -18,20 +18,23 @@ export interface LiveTrade {
 }
 
 export interface LiveTokenSnapshot {
-  address: string;
-  priceEth: string | null;
-  marketCapEth: string | null;
-  volumeEth: string;
-  virtualEthReserves: string;
+  address:              string;
+  name:                 string | null;
+  symbol:               string | null;
+  imageUrl:             string | null;
+  priceEth:             string | null;
+  marketCapEth:         string | null;
+  volumeEth:            string;
+  virtualEthReserves:   string;
   virtualTokenReserves: string;
-  tradeCount: number;
+  tradeCount:           number;
+  platform?:            string;
+  chain?:               string;
 }
 
-interface StreamEvent {
-  type: "trade";
-  trade: LiveTrade;
-  token: LiveTokenSnapshot;
-}
+type StreamEvent =
+  | { type: "trade";    trade: LiveTrade; token: LiveTokenSnapshot }
+  | { type: "snapshot"; token: LiveTokenSnapshot };
 
 interface UseTokenStreamResult {
   /** Newest trades received from the stream (newest first, max 200) */
@@ -76,6 +79,9 @@ export function useTokenStream(tokenAddress: string | null): UseTokenStreamResul
         const event: StreamEvent = JSON.parse(e.data);
         if (event.type === "trade") {
           setLiveTrades((prev) => [event.trade, ...prev].slice(0, MAX_LIVE_TRADES));
+          setLiveToken(event.token);
+        } else if (event.type === "snapshot") {
+          // Initial snapshot on connect, or enrichment update (name/symbol/image changed)
           setLiveToken(event.token);
         }
       } catch {

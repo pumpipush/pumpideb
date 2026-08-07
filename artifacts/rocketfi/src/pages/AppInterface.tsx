@@ -450,16 +450,49 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       timestamp: lt.timestamp,
     }));
     const allTrades = [...liveAsHistory, ...(history ?? [])];
-    const localBars = allTrades.length > 0 ? tradesFromLocalBars(allTrades, chartTf) : [];
-    return localBars.length > 0
-      ? localBars
-      : syntheticBars(token.priceEth ? parseFloat(token.priceEth) : 0.00001, 48);
+    // Return real trade candles only — no synthetic fallback so the chart is always truthful
+    return allTrades.length > 0 ? tradesFromLocalBars(allTrades, chartTf) : [];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveTrades, history, chartTf, token?.address]);
+
+  // Effective market cap: stored value first, then derive from virtual reserves as fallback
+  // (pump.fun stores MC as null until the first trade updates it via on-chain data;
+  //  the bonding curve formula: MC_lamports = totalSupply × vSol_lamports / vTok_atomic)
+  const effectiveMcEth = useMemo(() => {
+    const raw = liveToken?.marketCapEth ?? token?.marketCapEth;
+    if (raw && raw !== "0") return raw;
+    try {
+      const vSolSol  = parseFloat(liveToken?.virtualEthReserves   ?? token?.virtualEthReserves   ?? "0");
+      const vTokAtom = parseFloat(liveToken?.virtualTokenReserves ?? token?.virtualTokenReserves ?? "1");
+      if (vSolSol <= 0 || vTokAtom <= 0) return null;
+      // totalSupply_atomic(1e15) × vSolLamports(vSolSol×1e9) / vTokAtom
+      const mc = Math.round(1e15 * (vSolSol * 1e9) / vTokAtom);
+      return mc > 0 ? mc.toString() : null;
+    } catch { return null; }
+  }, [liveToken?.marketCapEth, token?.marketCapEth,
+      liveToken?.virtualEthReserves, token?.virtualEthReserves,
+      liveToken?.virtualTokenReserves, token?.virtualTokenReserves]);
 
   // Memoized chart JSX — only re-renders when chart config state changes, not on crosshair moves
   const ChartSection = useMemo(() => {
     if (!token) return null;
+
+    // Empty state — show when no real trades have been indexed yet
+    if (chartBars.length === 0) {
+      return (
+        <div className="border border-border/20 rounded-sm flex items-center justify-center mb-0"
+          style={{ height: 280, background: "#0B1220" }}>
+          <div className="flex flex-col items-center gap-2 text-center px-8">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#334155" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+            </svg>
+            <p className="text-sm font-medium" style={{ color: "#475569" }}>No trades yet</p>
+            <p className="text-xs" style={{ color: "#334155" }}>Chart populates in real time as trades arrive</p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="border border-border/20 rounded-sm overflow-hidden mb-0" style={{ background: "#0B1220" }}>
         {/* Toolbar */}
@@ -755,6 +788,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const progressPercent = Math.min(100, (realSolInCurve / 85) * 100);
   const isGraduated = token.graduated || progressPercent >= 100;
 
+  // Prefer live snapshot identity (pushed by SSE on connect and after enrichment) over the
+  // initial REST response, so name/symbol/image update in real time without a page refresh.
+  const displayName     = (liveToken?.name   && !liveToken.name.endsWith("…")   && liveToken.name   !== "???" ? liveToken.name   : null) ?? token.name;
+  const displaySymbol   = (liveToken?.symbol && liveToken.symbol !== "???"                                     ? liveToken.symbol : null) ?? token.symbol;
+  const displayImageUrl = liveToken?.imageUrl ?? token.imageUrl;
+
   return (
     /* Full-bleed two-column layout — mirrors pump.fun */
     <div className="flex flex-col md:flex-row w-full animate-slideDown md:h-[calc(100dvh-96px)]">
@@ -764,11 +803,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
         {/* Compact Token Header */}
         <div className="flex gap-3 items-start mb-2 px-3 pt-3 md:px-0 md:pt-0">
-          <TokenAvatar symbol={token.symbol} imageUrl={token.imageUrl} size={52} shape="square" className="border border-border/40 shadow-sm" />
+          <TokenAvatar symbol={displaySymbol} imageUrl={displayImageUrl} size={52} shape="square" className="border border-border/40 shadow-sm" />
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2 flex-wrap leading-tight">
-              <h1 className="text-lg font-bold text-foreground">{token.name}</h1>
-              <span className="text-primary font-mono text-sm font-bold whitespace-nowrap">${token.symbol}</span>
+              <h1 className="text-lg font-bold text-foreground">{displayName}</h1>
+              <span className="text-primary font-mono text-sm font-bold whitespace-nowrap">${displaySymbol}</span>
             </div>
             <div className="flex items-center gap-2 mt-2">
               {(token as any).twitterUrl && (
@@ -826,7 +865,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             )}
           </div>
           <span className="text-[25px] font-semibold text-foreground font-mono tabular-nums leading-tight">
-            {formatMCUsd(liveToken?.marketCapEth ?? token.marketCapEth, solPrice)}
+            {formatMCUsd(effectiveMcEth, solPrice)}
           </span>
         </div>
 

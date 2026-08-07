@@ -25,6 +25,19 @@ const PUMP_PROGRAM = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
 const PLATFORM     = "pump_fun";
 const CHAIN        = "solana";
 
+// ── Pump.fun bonding curve constants (fixed by the protocol) ──────────────────
+// virtualSolReserves is stored in SOL units (the UI uses it to compute progress:
+//   realSol = virtualSol - 30,  graduation at +85 real SOL → 100%).
+// virtualTokenReserves is stored in raw atomic units (token × 10^6 decimals).
+// marketCapEth (a slight misnomer — it's lamports) = totalSupply × vSol_lamports / vTok.
+const PUMP_INIT_VSOL_SOL      = "30";                      // 30 virtual SOL at launch
+const PUMP_INIT_VSOL_LAMPORTS = 30_000_000_000n;           // same in lamports (BigInt)
+const PUMP_INIT_VTOK          = 1_073_000_191_045_000n;    // virtual token reserves at launch
+const PUMP_TOTAL_SUPPLY       = 1_000_000_000_000_000n;    // 1B tokens × 10^6 decimals
+// Initial MC in lamports: totalSupply × virtualSolLamports / virtualTokenReserves ≈ 28 SOL
+const PUMP_INIT_MC_LAMPORTS   =
+  (PUMP_TOTAL_SUPPLY * PUMP_INIT_VSOL_LAMPORTS / PUMP_INIT_VTOK).toString();
+
 // ── On-chain instruction decoder ───────────────────────────────────────────────
 // pump.fun CREATE instruction is an Anchor instruction whose data is:
 //   8 bytes  – Anchor discriminator (sha256("global:create")[0..8])
@@ -159,10 +172,10 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
       description:          null,
       imageUrl:             null, // filled async once the metadata URI is fetched
       creatorAddress:       creator,
-      totalSupply:          "1000000000000000",
-      virtualTokenReserves: "1000000000000000",
-      virtualEthReserves:   "0",
-      marketCapEth:         null,
+      totalSupply:          PUMP_TOTAL_SUPPLY.toString(),
+      virtualTokenReserves: PUMP_INIT_VTOK.toString(),
+      virtualEthReserves:   PUMP_INIT_VSOL_SOL,   // stored in SOL (UI uses this for progress bar)
+      marketCapEth:         PUMP_INIT_MC_LAMPORTS, // ≈ 28 SOL at launch
       priceEth:             null,
       platform:             PLATFORM,
       chain:                CHAIN,

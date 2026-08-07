@@ -52,6 +52,25 @@ export interface NewTokenEvent {
   };
 }
 
+/** Full token snapshot — pushed to SSE clients on connect and after enrichment updates */
+export interface SnapshotEvent {
+  type: "snapshot";
+  token: {
+    address:              string;
+    name:                 string | null;
+    symbol:               string | null;
+    imageUrl:             string | null;
+    priceEth:             string | null;
+    marketCapEth:         string | null;
+    volumeEth:            string;
+    virtualEthReserves:   string;
+    virtualTokenReserves: string;
+    tradeCount:           number;
+    platform:             string;
+    chain:                string;
+  };
+}
+
 class EventBus extends EventEmitter {}
 
 export const tradeEmitter = new EventBus();
@@ -66,4 +85,9 @@ export function emitTrade(event: TradeEvent): void {
 /** Emit a new token launch to the global wildcard feed */
 export function emitNewToken(event: NewTokenEvent): void {
   tradeEmitter.emit("newToken:*", event);
+}
+
+/** Push a token state snapshot to per-token SSE subscribers (on connect + after enrichment) */
+export function emitSnapshot(event: SnapshotEvent): void {
+  tradeEmitter.emit(`snapshot:${event.token.address}`, event);
 }
