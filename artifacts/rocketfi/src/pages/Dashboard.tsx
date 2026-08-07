@@ -331,7 +331,7 @@ function PlatformFilterStrip({
             key={opt.id}
             onClick={() => onChange(opt.id)}
             className={cn(
-              "snap-start shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 whitespace-nowrap",
+              "snap-start shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold border transition-all duration-150 whitespace-nowrap",
               selected === opt.id
                 ? "bg-primary/15 border-primary/40 text-primary shadow-[0_0_8px_rgba(59,130,246,0.15)]"
                 : "bg-card border-border/40 text-muted-foreground hover:text-foreground hover:border-border"
@@ -578,7 +578,7 @@ export default function Dashboard() {
                       key={tab}
                       onClick={() => setActiveTab(tab)}
                       className={cn(
-                        "px-3 py-1 text-xs font-bold rounded-[3px] transition-all duration-150",
+                        "px-3 py-1 text-[14px] font-bold rounded-[3px] transition-all duration-150",
                         activeTab === tab
                           ? "bg-primary text-black shadow-sm"
                           : "text-muted-foreground hover:text-foreground"
