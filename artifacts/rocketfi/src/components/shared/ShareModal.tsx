@@ -184,7 +184,7 @@ export function ShareModal({ token, open, onClose, solPrice }: ShareModalProps) 
 
             {/* Warpcast / Farcaster */}
             <a
-              href={`https://warpcast.com/~/compose?text=${encodeURIComponent(`🚀 $${token.symbol} on Mintix fun — ${formatMC(token.marketCapEth)} MC\n${url}`)}`}
+              href={`https://warpcast.com/~/compose?text=${encodeURIComponent(`🚀 $${token.symbol} on Mintix fun — ${formatMCUsd(token.marketCapEth, solPrice ?? null)} MC\n${url}`)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex flex-col items-center gap-2 py-3 rounded-lg bg-muted/60 hover:bg-[#7C65C1]/10 hover:border-[#7C65C1]/30 border border-border/40 transition-all duration-150 group"
