@@ -352,7 +352,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // ── Server-side holder list (SQL net balance across ALL trades — no 100-row cap) ────
   // Client-side computation from the 100-row history wildly undercounts high-volume
   // tokens. This endpoint aggregates every trade in the DB for this token.
-  const { data: serverHolders, isLoading: loadingHolders } = useQuery({
+  const { data: serverHolders, isLoading: loadingHolders, refetch: refetchHolders } = useQuery({
     queryKey: ["holders", selectedAddress],
     queryFn: async (): Promise<{ address: string; balance: string }[]> => {
       if (!selectedAddress) return [];
@@ -391,6 +391,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
   // Live SSE stream — real-time trade events
   const { liveTrades, liveToken, connected } = useTokenStream(selectedAddress);
+
+  // Re-fetch holders whenever a new live trade arrives — new buys may add holders.
+  // This keeps the count fresh within seconds of a new wallet entering.
+  const liveTradeCount = liveTrades.length;
+  useEffect(() => {
+    if (liveTradeCount > 0) refetchHolders();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveTradeCount]);
 
   const { openWalletModal } = useWallet();
   const [tradeMode, setTradeMode] = useState<"buy" | "sell">("buy");
