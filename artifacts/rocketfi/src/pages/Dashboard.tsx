@@ -52,6 +52,8 @@ interface DisplayToken {
   imageUrl?: string | null;
   marketCapEth?: string | null;
   priceEth?: string | null;
+  volumeEth?: string | null;
+  graduatedAt?: string | null;
   createdAt: string | number;
   platform: string;
   graduated: boolean;
@@ -189,7 +191,7 @@ function SortTh({
 }
 
 // ─── Table view ───────────────────────────────────────────────────────────────
-function TableView({ tokens, solPrice }: { tokens: DisplayToken[]; solPrice: number | null }) {
+function TableView({ tokens, solPrice, activeTab }: { tokens: DisplayToken[]; solPrice: number | null; activeTab: SortTab }) {
   const [sortKey, setSortKey] = useState<TableSortKey>("rank");
   const [sortDir, setSortDir] = useState<TableSortDir>("asc");
 
@@ -217,6 +219,9 @@ function TableView({ tokens, solPrice }: { tokens: DisplayToken[]; solPrice: num
     <SortTh col={col} label={label} active={sortKey === col} dir={sortDir} onSort={handleSort} className={cls} />
   );
 
+  const showVolumeCol   = activeTab === "Volume";
+  const showGraduatedCol = activeTab === "Graduated";
+
   return (
     <div className="overflow-x-auto rounded-sm border border-border/40 bg-card">
       <table className="w-full border-collapse min-w-[640px]">
@@ -224,25 +229,39 @@ function TableView({ tokens, solPrice }: { tokens: DisplayToken[]; solPrice: num
           <tr className="border-b border-border/40 bg-muted/30">
             <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground w-10">#</th>
             {th("name",      "Token",      "min-w-[160px]")}
+            {showVolumeCol && (
+              <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-primary hidden sm:table-cell whitespace-nowrap">
+                Volume
+              </th>
+            )}
             {th("marketCap", "Mkt Cap",    "hidden sm:table-cell")}
             {th("price",     "Price",      "hidden md:table-cell")}
             <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground hidden lg:table-cell">Platform</th>
-            {th("age",       "Age",        "hidden xl:table-cell")}
+            {showGraduatedCol ? (
+              <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-primary hidden xl:table-cell whitespace-nowrap">
+                Graduated
+              </th>
+            ) : (
+              th("age", "Age", "hidden xl:table-cell")
+            )}
             <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Action</th>
           </tr>
         </thead>
         <tbody>
           {sorted.map((token, idx) => {
-            const mc = parseFloat(token.marketCapEth ?? "0") || 0;
-            const price = parseFloat(token.priceEth ?? "0") || 0;
+            const mc    = parseFloat(token.marketCapEth ?? "0") || 0;
+            const price = parseFloat(token.priceEth    ?? "0") || 0;
+            const vol   = parseFloat(token.volumeEth   ?? "0") || 0;
             return (
               <tr
                 key={token.id}
                 className={cn(
                   "border-b border-border/20 last:border-0 hover:bg-primary/[0.04] transition-all duration-150 group border-l-2",
-                  token.isLive
-                    ? "border-l-emerald-400/60 bg-emerald-500/[0.03]"
-                    : "border-l-transparent hover:border-l-primary/40"
+                  token.graduated
+                    ? "border-l-primary/40"
+                    : token.isLive
+                      ? "border-l-emerald-400/60 bg-emerald-500/[0.03]"
+                      : "border-l-transparent hover:border-l-primary/40"
                 )}
               >
                 <td className="px-3 py-3 text-xs text-muted-foreground/50 font-mono tabular-nums">{idx + 1}</td>
@@ -276,6 +295,13 @@ function TableView({ tokens, solPrice }: { tokens: DisplayToken[]; solPrice: num
                     </div>
                   </Link>
                 </td>
+                {showVolumeCol && (
+                  <td className="px-3 py-3 hidden sm:table-cell">
+                    <span className="text-sm font-bold text-primary font-mono tabular-nums">
+                      {vol > 0 ? formatMCUsd(token.volumeEth, solPrice) : <span className="text-muted-foreground/40 font-normal">—</span>}
+                    </span>
+                  </td>
+                )}
                 <td className="px-3 py-3 hidden sm:table-cell">
                   <span className="text-sm font-bold text-foreground font-mono tabular-nums inline-flex items-center gap-1.5">
                     {formatMCUsd(token.marketCapEth, solPrice)}
@@ -289,9 +315,17 @@ function TableView({ tokens, solPrice }: { tokens: DisplayToken[]; solPrice: num
                 <td className="px-3 py-3 hidden lg:table-cell">
                   <PlatformBadge platform={token.platform as PlatformId} size="sm" />
                 </td>
-                <td className="px-3 py-3 hidden xl:table-cell">
-                  <span className="text-xs text-muted-foreground font-mono">{timeAgo(token.createdAt)}</span>
-                </td>
+                {showGraduatedCol ? (
+                  <td className="px-3 py-3 hidden xl:table-cell">
+                    <span className="text-xs text-primary font-mono">
+                      {token.graduatedAt ? timeAgo(token.graduatedAt) : <span className="text-muted-foreground/40">—</span>}
+                    </span>
+                  </td>
+                ) : (
+                  <td className="px-3 py-3 hidden xl:table-cell">
+                    <span className="text-xs text-muted-foreground font-mono">{timeAgo(token.createdAt)}</span>
+                  </td>
+                )}
                 <td className="px-3 py-3 text-right">
                   <Link
                     href={`/app?token=${token.address}`}
@@ -317,10 +351,14 @@ const RANK_STYLES: Record<number, { bg: string; text: string; border: string }> 
 };
 
 // ─── Grid card ────────────────────────────────────────────────────────────────
-function TokenCard({ token, rank, solPrice, isTrending }: { token: DisplayToken; rank: number; solPrice: number | null; isTrending?: boolean }) {
+function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; rank: number; solPrice: number | null; activeTab: SortTab }) {
   const rankStyle = RANK_STYLES[rank];
+  const isTrending = activeTab === "Trending";
+  const isVolume   = activeTab === "Volume";
+  const isGraduated = activeTab === "Graduated";
   const isHot = isTrending && rank <= 3;
   const fmtTrades = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${n}`;
+  const vol = parseFloat(token.volumeEth ?? "0") || 0;
 
   return (
     <Link
@@ -329,9 +367,11 @@ function TokenCard({ token, rank, solPrice, isTrending }: { token: DisplayToken;
         "flex flex-col bg-card border rounded-sm cursor-pointer group relative card-lift",
         isHot
           ? "border-amber-500/30 hover:border-amber-400/60 shadow-[0_0_14px_rgba(245,158,11,0.10)]"
-          : token.isLive
-            ? "border-emerald-500/30 hover:border-emerald-400/60 shadow-[0_0_12px_rgba(52,211,153,0.08)]"
-            : "border-border/60 hover:border-primary/50"
+          : token.graduated
+            ? "border-primary/25 hover:border-primary/60"
+            : token.isLive
+              ? "border-emerald-500/30 hover:border-emerald-400/60 shadow-[0_0_12px_rgba(52,211,153,0.08)]"
+              : "border-border/60 hover:border-primary/50"
       )}
     >
       <div className="aspect-square w-full bg-muted border-b border-border/50 relative overflow-hidden rounded-t-sm">
@@ -372,8 +412,8 @@ function TokenCard({ token, rank, solPrice, isTrending }: { token: DisplayToken;
             </div>
           )}
           {token.graduated && (
-            <div className="bg-primary/20 border border-primary/50 text-primary text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-sm backdrop-blur-md animate-pulseGlow">
-              Grad
+            <div className="flex items-center gap-0.5 bg-primary/20 border border-primary/50 text-primary text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-sm backdrop-blur-md animate-pulseGlow">
+              <GraduationCap className="w-2.5 h-2.5" /> Grad
             </div>
           )}
         </div>
@@ -388,10 +428,24 @@ function TokenCard({ token, rank, solPrice, isTrending }: { token: DisplayToken;
           </span>
         </div>
         <div className="flex items-center justify-between mt-0.5">
-          <span className="flex items-center gap-1 text-[14px] text-emerald-400 font-mono">
-            <Clock className="w-3 h-3 text-emerald-400" />
-            {timeAgo(token.createdAt)}
-          </span>
+          {/* Bottom-left: volume for Volume tab, grad date for Graduated tab, age otherwise */}
+          {isVolume ? (
+            <span className="flex items-center gap-1 text-[13px] text-primary font-mono font-semibold">
+              <BarChart2 className="w-3 h-3" />
+              {vol > 0 ? formatMCUsd(token.volumeEth, solPrice) : "—"}
+              <span className="text-muted-foreground/50 font-normal text-[11px]">vol</span>
+            </span>
+          ) : isGraduated ? (
+            <span className="flex items-center gap-1 text-[13px] text-primary font-mono">
+              <GraduationCap className="w-3 h-3" />
+              {token.graduatedAt ? timeAgo(token.graduatedAt) : "—"}
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-[14px] text-emerald-400 font-mono">
+              <Clock className="w-3 h-3 text-emerald-400" />
+              {timeAgo(token.createdAt)}
+            </span>
+          )}
           {isTrending && (token.tradeCount ?? 0) > 0 && (
             <span className="flex items-center gap-1 text-[12px] font-mono" style={{ color: "#94a3b8" }}>
               <BarChart2 className="w-3 h-3" />
@@ -502,7 +556,7 @@ export default function Dashboard() {
     "New":       ListTokensSort.newest,
     "Trending":  ListTokensSort.trending,
     "Volume":    ListTokensSort.volume,
-    "Graduated": ListTokensSort.newest,
+    "Graduated": ListTokensSort.marketcap,
   };
 
   // Reset to page 1 whenever any filter/tab/platform changes
@@ -583,6 +637,8 @@ export default function Dashboard() {
         // Overlay live trade stats when available — keeps cards current without polling
         marketCapEth: tradeSnap?.marketCapEth ?? t.marketCapEth,
         priceEth:     tradeSnap?.priceEth     ?? t.priceEth,
+        volumeEth:    tradeSnap?.volumeEth    ?? t.volumeEth,
+        graduatedAt:  t.graduatedAt,
         createdAt:    t.createdAt,
         platform:     t.platform ?? "unknown",
         graduated:    t.graduated,
@@ -638,7 +694,8 @@ export default function Dashboard() {
     }
 
     // All other tabs: liveOnly tokens at the top (page 1 only); within apiDisplay, live rows first
-    const filteredLiveOnly = page === 1
+    // Graduated tab never shows live-feed tokens — they haven't graduated yet
+    const filteredLiveOnly = page === 1 && activeTab !== "Graduated"
       ? (onlyWithImage ? liveOnly.filter((t) => !!t.imageUrl) : liveOnly)
       : [];
     const apiLive    = apiDisplay.filter((t) => t.isLive);
@@ -873,12 +930,12 @@ export default function Dashboard() {
             ) : viewMode === "grid" ? (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-3 mt-1">
                 {tokens.map((token, idx) => (
-                  <TokenCard key={token.id} token={token} rank={idx + 1} solPrice={solPrice} isTrending={activeTab === "Trending"} />
+                  <TokenCard key={token.id} token={token} rank={idx + 1} solPrice={solPrice} activeTab={activeTab} />
                 ))}
               </div>
             ) : (
               <div className="mt-1">
-                <TableView tokens={tokens} solPrice={solPrice} />
+                <TableView tokens={tokens} solPrice={solPrice} activeTab={activeTab} />
               </div>
             )}
 
