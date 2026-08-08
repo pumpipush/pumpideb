@@ -518,6 +518,13 @@ export default function Dashboard() {
       const min = parseFloat(minMcap) || 0;
       apiDisplay = apiDisplay.filter((t) => (parseFloat(t.marketCapEth ?? "0") || 0) >= min);
     }
+    // Trending tab: only show tokens with market cap above $50k
+    if (activeTab === "Trending" && solPrice) {
+      const minLamports = (50_000 / solPrice) * 1e9;
+      const meetsThreshold = (t: DisplayToken) =>
+        (parseFloat(t.marketCapEth ?? "0") || 0) >= minLamports;
+      apiDisplay = apiDisplay.filter(meetsThreshold);
+    }
 
     if (!rawTokens) return undefined; // still loading
     // liveOnly tokens at the top; within apiDisplay, live (isNew) rows sort first
@@ -525,7 +532,7 @@ export default function Dashboard() {
     const apiNonLive = apiDisplay.filter((t) => !t.isLive);
     return [...liveOnly, ...apiLive, ...apiNonLive];
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawTokens, liveTokens, liveTradeStats, platformFilter, search, onlyGraduated, onlyWithImage, minMcap]);
+  }, [rawTokens, liveTokens, liveTradeStats, platformFilter, search, onlyGraduated, onlyWithImage, minMcap, activeTab, solPrice]);
 
   // How many live tokens visible for the current platform filter
   const visibleLiveCount = useMemo(() => {
