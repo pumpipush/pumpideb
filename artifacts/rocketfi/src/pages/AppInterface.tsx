@@ -26,7 +26,7 @@ import { ethers } from "ethers";
 import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, formatTokenPrice, cn, timeAgo } from "@/lib/utils";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { ShareModal } from "@/components/shared/ShareModal";
-import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare } from "lucide-react";
+import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare, Rocket, ShieldCheck, Zap, CheckCircle2, UploadCloud } from "lucide-react";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { formatSol, formatTokenAmount } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -228,80 +228,267 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-5 lg:gap-8 max-w-[900px] mx-auto">
-      {/* Form Column */}
-      <div className="flex-1 space-y-4">
+    <div className="flex flex-col lg:flex-row gap-6 lg:gap-10 max-w-[960px] mx-auto">
+
+      {/* ── LEFT: Form ── */}
+      <div className="flex-1 min-w-0 space-y-5">
+
+        {/* Hero header */}
         <div>
-          <h2 className="text-lg font-bold text-foreground mb-0.5">Launch a new coin</h2>
-          <p className="text-xs text-muted-foreground">Tokens are created instantly. No presale, no team allocation.</p>
-        </div>
-        
-        <form onSubmit={handleLaunch} className="space-y-3">
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">description</label>
-            <Textarea placeholder="What is this token about?" value={desc} onChange={e => setDesc(e.target.value)} className="rounded-sm bg-card border-border min-h-[72px] focus-visible:ring-primary transition-all resize-none" />
-          </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">name <span className="text-destructive">*</span></label>
-              <Input placeholder="Token Name" value={name} onChange={e => setName(e.target.value)} className="rounded-sm bg-card border-border h-9 focus-visible:ring-primary transition-all" required />
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+              style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.25)" }}>
+              <Rocket className="h-4 w-4" style={{ color: "#4ade80" }} />
             </div>
-            
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">ticker <span className="text-destructive">*</span></label>
-              <Input placeholder="TICKER" value={symbol} onChange={e => setSymbol(e.target.value)} className="rounded-sm bg-card border-border h-9 focus-visible:ring-primary uppercase transition-all" required />
+            <h2 className="text-[20px] font-bold text-foreground tracking-tight">Launch a Token</h2>
+          </div>
+          <p className="text-[13px] text-muted-foreground mb-3 pl-0.5">
+            Deploy on the bonding curve in seconds — no presale, no team allocation.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {([
+              { icon: ShieldCheck, label: "Fair Launch" },
+              { icon: Zap,         label: "Instant Deploy" },
+              { icon: CheckCircle2, label: "~0.02 SOL" },
+            ] as { icon: React.ElementType; label: string }[]).map(({ icon: Icon, label }) => (
+              <div key={label} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8" }}>
+                <Icon className="h-3 w-3" style={{ color: "#4ade80" }} />
+                {label}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Form card */}
+        <form onSubmit={handleLaunch} className="space-y-0 rounded-2xl overflow-hidden"
+          style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.015)" }}>
+
+          {/* ── Step 1: Identity ── */}
+          <div className="px-5 pt-5 pb-5">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
+                style={{ background: "rgba(34,197,94,0.15)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.30)" }}>1</span>
+              <span className="text-[13px] font-semibold text-foreground">Token Identity</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-medium text-muted-foreground">
+                  Name <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  placeholder="e.g. Doge on Solana"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  className="h-10 rounded-lg bg-background/40 border-white/10 focus-visible:ring-green-500/30 text-[14px]"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-medium text-muted-foreground">
+                  Ticker <span className="text-destructive">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[14px] font-bold pointer-events-none"
+                    style={{ color: "#4ade80" }}>$</span>
+                  <Input
+                    placeholder="DOGE"
+                    value={symbol}
+                    onChange={e => setSymbol(e.target.value.toUpperCase())}
+                    className="h-10 pl-7 rounded-lg bg-background/40 border-white/10 focus-visible:ring-green-500/30 font-mono uppercase tracking-widest text-[14px]"
+                    maxLength={10}
+                    required
+                  />
+                </div>
+                {symbol && (
+                  <p className="text-[11px] tabular-nums" style={{ color: symbol.length >= 9 ? "#f87171" : "#64748b" }}>
+                    {symbol.length}/10
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">image</label>
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleImageChange}
-            />
+          <div style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
+
+          {/* ── Step 2: Image ── */}
+          <div className="px-5 pt-5 pb-5">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
+                style={{ background: "rgba(34,197,94,0.15)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.30)" }}>2</span>
+              <span className="text-[13px] font-semibold text-foreground">Token Image</span>
+              <span className="ml-auto text-[11px]" style={{ color: "#475569" }}>PNG · JPG · GIF · Max 5MB</span>
+            </div>
+            <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
             <div
-              className="h-20 border border-dashed border-border/50 rounded-sm flex items-center justify-center text-muted-foreground text-sm hover:border-primary/50 hover:text-primary transition-colors cursor-pointer bg-card overflow-hidden relative"
               onClick={() => imageInputRef.current?.click()}
+              className="cursor-pointer rounded-xl transition-all duration-200 group"
+              style={{
+                border: imagePreview
+                  ? "1px solid rgba(34,197,94,0.35)"
+                  : "2px dashed rgba(255,255,255,0.09)",
+                background: imagePreview ? "rgba(34,197,94,0.04)" : "rgba(255,255,255,0.015)",
+              }}
             >
               {imagePreview ? (
-                <img src={imagePreview} alt="Token preview" className="h-full w-full object-contain p-1" />
+                <div className="flex items-center gap-4 p-3">
+                  <img src={imagePreview} alt="Token" className="h-16 w-16 rounded-xl object-cover shrink-0"
+                    style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14px] font-semibold text-foreground">Image ready</p>
+                    <p className="text-[12px]" style={{ color: "#64748b" }}>Click to change</p>
+                  </div>
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                    style={{ background: "rgba(74,222,128,0.15)", border: "1px solid rgba(74,222,128,0.30)" }}>
+                    <CheckCircle2 className="h-4 w-4" style={{ color: "#4ade80" }} />
+                  </div>
+                </div>
               ) : (
-                <span>click or drag &amp; drop an image</span>
+                <div className="flex flex-col items-center justify-center py-8 gap-2">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-1 transition-colors group-hover:border-white/15"
+                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <UploadCloud className="h-5 w-5" style={{ color: "#475569" }} />
+                  </div>
+                  <p className="text-[13px] font-medium" style={{ color: "#94a3b8" }}>
+                    Drop image here or <span style={{ color: "#4ade80" }}>browse</span>
+                  </p>
+                  <p className="text-[11px]" style={{ color: "#475569" }}>Recommended: 500 × 500 px</p>
+                </div>
               )}
             </div>
           </div>
 
-          <div className="pt-2 border-t border-border/50">
-             <Button type="submit" className="w-full h-10 text-sm font-bold rounded-sm bg-primary hover:bg-primary/90 text-white shadow-none transition-all duration-150" disabled={createToken.isPending}>
-               {createToken.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "create coin"}
-             </Button>
-             <div className="text-center mt-2 text-xs font-mono text-muted-foreground">
-               Cost to deploy: ~0.02 SOL
-             </div>
+          <div style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
+
+          {/* ── Step 3: Description ── */}
+          <div className="px-5 pt-5 pb-5">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
+                style={{ background: "rgba(34,197,94,0.15)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.30)" }}>3</span>
+              <span className="text-[13px] font-semibold text-foreground">Description</span>
+              <span className="ml-auto text-[11px] tabular-nums" style={{ color: desc.length >= 270 ? "#f87171" : "#475569" }}>
+                {desc.length}/300
+              </span>
+            </div>
+            <Textarea
+              placeholder="Tell the community what makes this token special — lore, utility, meme origin, anything..."
+              value={desc}
+              onChange={e => setDesc(e.target.value.slice(0, 300))}
+              className="rounded-lg bg-background/40 border-white/10 focus-visible:ring-green-500/30 min-h-[90px] resize-none text-[14px]"
+            />
+          </div>
+
+          <div style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
+
+          {/* ── Submit ── */}
+          <div className="px-5 pt-5 pb-5 space-y-3">
+            <button
+              type="submit"
+              disabled={createToken.isPending}
+              className="w-full h-12 rounded-xl text-[15px] font-bold flex items-center justify-center gap-2 transition-all duration-150 active:scale-[0.98]"
+              style={{
+                background: createToken.isPending
+                  ? "rgba(255,255,255,0.06)"
+                  : "linear-gradient(135deg, #16a34a 0%, #22c55e 60%, #4ade80 100%)",
+                color: createToken.isPending ? "#475569" : "#fff",
+                border: "none",
+                boxShadow: createToken.isPending ? "none" : "0 0 28px rgba(34,197,94,0.28)",
+                cursor: createToken.isPending ? "not-allowed" : "pointer",
+              }}
+            >
+              {createToken.isPending ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Deploying on-chain...</>
+              ) : (
+                <><Rocket className="w-4 h-4" /> Launch Token</>
+              )}
+            </button>
+
+            {/* Trust strip */}
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              {["~0.02 SOL deploy fee", "No team allocation", "Instant liquidity"].map(item => (
+                <span key={item} className="flex items-center gap-1 text-[11px]" style={{ color: "#475569" }}>
+                  <CheckCircle2 className="h-3 w-3 shrink-0" style={{ color: "#4ade80" }} />
+                  {item}
+                </span>
+              ))}
+            </div>
           </div>
         </form>
       </div>
 
-      {/* Preview Column */}
-      <div className="w-full lg:w-[320px] shrink-0">
-         <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Preview</div>
-         <div className="p-4 border border-border/50 rounded-sm bg-card hover:border-primary/40 hover:shadow-[0_0_0_1px_hsl(var(--primary)/0.3)] transition-all cursor-default group h-full">
-           <div className="flex gap-4 mb-3">
-              <TokenAvatar symbol={symbol || "?"} size={56} shape="square" className="border border-border/50" />
-              <div className="min-w-0 flex-1 pt-1">
-                <div className="font-bold text-foreground truncate leading-tight transition-colors">{name || "Token Name"}</div>
-                <div className="text-xs font-mono text-primary mt-0.5 truncate">ticker: ${symbol ? symbol.toUpperCase() : "TICKER"}</div>
+      {/* ── RIGHT: Live Preview ── */}
+      <div className="w-full lg:w-[290px] shrink-0">
+        <div className="sticky top-4 space-y-4">
+
+          {/* Header */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "#475569" }}>Live Preview</span>
+            <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
+          </div>
+
+          {/* Token card preview */}
+          <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.09)", background: "rgba(255,255,255,0.02)" }}>
+
+            {/* Card header */}
+            <div className="p-4 flex items-center gap-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+              {imagePreview ? (
+                <img src={imagePreview} alt="Token" className="w-12 h-12 rounded-xl object-cover shrink-0"
+                  style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
+              ) : (
+                <TokenAvatar symbol={symbol || "?"} size={48} shape="square" />
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="font-bold text-foreground truncate text-[15px] leading-tight">
+                  {name || <span style={{ color: "#334155" }}>Token Name</span>}
+                </div>
+                <div className="text-[12px] font-mono mt-0.5 truncate" style={{ color: "#4ade80" }}>
+                  ${symbol ? symbol.toUpperCase() : <span style={{ color: "#334155" }}>TICKER</span>}
+                </div>
               </div>
-           </div>
-           <p className="text-sm text-muted-foreground line-clamp-4 leading-relaxed mb-4">
-             {desc || "Token description will appear here. The community will see this when they view your token."}
-           </p>
-           <div className="text-[10px] font-mono text-muted-foreground border-t border-border/50 pt-3">Created by {wallet ? formatAddress(wallet) : "0x..."}</div>
-         </div>
+              <div className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                style={{ background: "rgba(74,222,128,0.10)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.22)" }}>
+                NEW
+              </div>
+            </div>
+
+            {/* Card body */}
+            <div className="p-4 space-y-4">
+              <p className="text-[13px] leading-relaxed line-clamp-4" style={{ color: "#64748b" }}>
+                {desc || "Your description will appear here. Tell the community what makes this token unique."}
+              </p>
+
+              {/* Mock stats */}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: "Price",   value: "$0.000028" },
+                  { label: "Mkt Cap", value: "$28K" },
+                  { label: "Holders", value: "1" },
+                ].map(({ label, value }) => (
+                  <div key={label} className="rounded-lg p-2 text-center"
+                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                    <div className="text-[10px] mb-0.5" style={{ color: "#475569" }}>{label}</div>
+                    <div className="text-[12px] font-mono font-semibold text-foreground">{value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="text-[11px] font-mono pt-1" style={{ color: "#334155", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 12 }}>
+                Created by {wallet ? formatAddress(wallet) : "— connect wallet"}
+              </div>
+            </div>
+          </div>
+
+          {/* Fair launch info box */}
+          <div className="rounded-xl p-3.5"
+            style={{ background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.14)" }}>
+            <div className="flex items-start gap-2">
+              <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0" style={{ color: "#4ade80" }} />
+              <p className="text-[12px] leading-relaxed" style={{ color: "#86efac" }}>
+                <span className="font-semibold">Fair Launch</span> — 100% of supply enters the bonding curve. No team wallet, no VC allocation, no rug.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
