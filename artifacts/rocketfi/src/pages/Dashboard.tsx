@@ -441,6 +441,10 @@ export default function Dashboard() {
     graduated: activeTab === "Graduated" ? true : undefined,
     limit: 100,
     platform: platformFilter === "all" ? undefined : platformFilter as ListTokensPlatform,
+  }, {
+    // Re-fetch every 30 s so logos and market caps that resolved after the
+    // initial load (via enrichment or IPFS fetch) appear without a manual refresh.
+    query: { refetchInterval: 30_000 },
   });
 
   const { data: trending, isLoading: loadingTrending } = useGetTrendingTokens({ limit: 4 });
