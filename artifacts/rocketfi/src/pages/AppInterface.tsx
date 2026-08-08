@@ -922,21 +922,92 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           onToggle={toggleIndicator}
         />
 
-        {/* Bonding Curve — thin bar immediately below chart */}
-        <div className="py-2 px-3 md:px-0 border-b border-border/20 mb-4">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] text-muted-foreground">Bonding curve progress</span>
-            <span className="text-[10px] font-mono font-bold text-primary">{progressPercent.toFixed(1)}%</span>
+        {/* Bonding Curve */}
+        <div className="py-3 px-3 md:px-0 border-b border-border/20 mb-4">
+          {/* Header row */}
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-[10px] font-semibold tracking-widest uppercase" style={{ color: "#475569" }}>
+              Bonding Curve
+            </span>
+            <span
+              className="text-[11px] font-bold font-mono px-2 py-0.5 rounded-full"
+              style={{
+                background: isGraduated ? "rgba(34,197,94,0.12)" : "rgba(16,185,129,0.10)",
+                color: isGraduated ? "#22c55e" : "#10b981",
+                border: `1px solid ${isGraduated ? "rgba(34,197,94,0.28)" : "rgba(16,185,129,0.22)"}`,
+              }}
+            >
+              {progressPercent >= 100 ? "100%" : `${progressPercent.toFixed(1)}%`}
+            </span>
           </div>
-          <div className="h-1.5 w-full bg-muted/60 rounded-full overflow-hidden">
-            <div className="h-full bg-primary transition-all duration-500 rounded-full" style={{ width: `${progressPercent}%` }} />
+
+          {/* Progress bar */}
+          <div className="relative h-3 w-full rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+            {/* Milestone divider ticks */}
+            {[25, 50, 75].map(m => (
+              <div
+                key={m}
+                className="absolute top-0 h-full w-px pointer-events-none"
+                style={{ left: `${m}%`, background: "rgba(0,0,0,0.45)", zIndex: 2 }}
+              />
+            ))}
+            {/* Filled portion */}
+            <div
+              className="h-full rounded-full transition-all duration-700"
+              style={{
+                width: `${Math.min(progressPercent, 100)}%`,
+                background: isGraduated
+                  ? "linear-gradient(90deg, #16a34a 0%, #22c55e 55%, #4ade80 100%)"
+                  : "linear-gradient(90deg, #059669 0%, #10b981 55%, #34d399 100%)",
+                boxShadow: isGraduated
+                  ? "0 0 12px rgba(34,197,94,0.5), 0 0 24px rgba(34,197,94,0.18)"
+                  : "0 0 10px rgba(16,185,129,0.45)",
+              }}
+            />
           </div>
-          <div className="mt-1 text-[10px] font-mono text-muted-foreground/70">
-            {isGraduated
-              ? <span className="text-primary font-bold">Graduated — liquidity added to Raydium ✓</span>
-              : <span>{realSolInCurve.toFixed(2)} / 85 SOL goal</span>
-            }
+
+          {/* Milestone labels */}
+          <div className="relative h-4 mt-0.5">
+            {[25, 50, 75].map(m => (
+              <span
+                key={m}
+                className="absolute text-[9px] font-mono"
+                style={{
+                  left: `${m}%`,
+                  transform: "translateX(-50%)",
+                  color: progressPercent >= m ? "#475569" : "#1e293b",
+                }}
+              >
+                {m}%
+              </span>
+            ))}
           </div>
+
+          {/* Status / amounts row */}
+          {isGraduated ? (
+            <div className="flex items-center gap-2 mt-1">
+              <div
+                className="flex items-center justify-center w-4 h-4 rounded-full shrink-0"
+                style={{ background: "rgba(34,197,94,0.18)" }}
+              >
+                <span style={{ fontSize: 9, color: "#22c55e", lineHeight: 1 }}>✓</span>
+              </div>
+              <span className="text-[12px] font-semibold" style={{ color: "#22c55e" }}>
+                Graduated to Raydium
+              </span>
+              <span className="text-[10px]" style={{ color: "#334155" }}>· Liquidity locked</span>
+            </div>
+          ) : (
+            <div className="flex items-end justify-between mt-1">
+              <span className="text-[12px] font-mono font-semibold text-foreground">
+                {realSolInCurve.toFixed(2)}
+                <span className="text-[10px] text-muted-foreground font-normal ml-1">/ 85 SOL</span>
+              </span>
+              <span className="text-[10px] font-mono" style={{ color: "#475569" }}>
+                {(85 - realSolInCurve).toFixed(2)} SOL to Raydium
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Transactions + Holders tabs */}
