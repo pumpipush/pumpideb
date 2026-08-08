@@ -574,7 +574,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // Server-side OHLCV: pre-aggregated over the full trade history (no 100-row limit).
   // Re-fetched every 30 s so new trades reconcile with the live SSE overlay.
   // Returns { bars, maxTradeId } — maxTradeId gates which SSE events to overlay.
-  const { data: serverOhlcv } = useGetTokenOhlcv(
+  const { data: serverOhlcv, isLoading: ohlcvLoading } = useGetTokenOhlcv(
     selectedAddress || "",
     { tf: chartTf },
     {
@@ -791,7 +791,24 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const ChartSection = useMemo(() => {
     if (!token) return null;
 
-    // Empty state — show when no real trades have been indexed yet
+    // Still loading from server — show skeleton, not "No trades yet"
+    if (chartBars.length === 0 && ohlcvLoading) {
+      return (
+        <div className="border border-border/20 rounded-sm overflow-hidden mb-0 animate-pulse"
+          style={{ height: 280, background: "#0B1220" }}>
+          <div className="flex flex-col justify-end h-full gap-1 p-4">
+            {/* fake candle bars at varying heights */}
+            <div className="flex items-end gap-[3px] h-40">
+              {[40,65,30,80,55,70,45,90,60,75,35,85,50,95,42,68,38,78,52,88].map((h, i) => (
+                <div key={i} className="flex-1 rounded-sm" style={{ height: `${h}%`, background: "rgba(255,255,255,0.06)" }} />
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Empty state — only show after server has responded with zero bars
     if (chartBars.length === 0) {
       return (
         <div className="border border-border/20 rounded-sm flex items-center justify-center mb-0"
