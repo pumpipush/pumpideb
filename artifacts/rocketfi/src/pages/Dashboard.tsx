@@ -492,9 +492,9 @@ export default function Dashboard() {
 
   const { data: trending, isLoading: loadingTrending } = useGetTrendingTokens({ limit: 8 });
 
-  // Bubble map: top 100 tokens by volume (separate fetch, updates every 30s)
+  // Bubble map: top 60 tokens by volume (separate fetch, updates every 30s)
   const { data: bubbleRawTokens } = useListTokens(
-    { sort: ListTokensSort.volume, limit: 100 },
+    { sort: ListTokensSort.volume, limit: 60 },
     { query: { refetchInterval: 30_000 } }
   );
   const bubbleTokens = useMemo<TokenBubbleInput[]>(() => {
