@@ -15,6 +15,7 @@ export interface TokenBubbleInput {
   name: string;
   imageUrl?: string | null;
   marketCapEth?: string | null; // lamports as string
+  volumeEth?: string | null;    // 24h volume in lamports
   priceEth?: string | null;
   platform: string;
 }
@@ -32,6 +33,7 @@ interface BubbleState {
   name: string;
   platform: string;
   marketCapSol: number;
+  volumeSol: number;
   pctChange: number;
   // layout
   x: number;
@@ -40,11 +42,17 @@ interface BubbleState {
   vy: number;
   r: number;
   // animation
-  dispX: number; // current display position (lerped)
+  dispX: number; // current display position (lerped toward x + float offset)
   dispY: number;
   dispR: number; // current display radius (lerped for hover)
   colorR: number; colorG: number; colorB: number; // lerped color
   targetR: number; targetG: number; targetB: number;
+  // floating bob (unique per bubble)
+  floatPhaseX: number; // random 0–2π
+  floatPhaseY: number;
+  floatFreqX:  number; // radians/ms ≈ 0.0004–0.0009
+  floatFreqY:  number;
+  floatAmp:    number; // pixels
   // assets
   img?: HTMLImageElement;
   imgLoaded: boolean;
@@ -110,13 +118,12 @@ function toHex(n: number) { return Math.round(Math.max(0, Math.min(255, n))).toS
 
 // ─── Radius from market cap ───────────────────────────────────────────────────
 
-function calcRadius(mcSol: number, maxMcSol: number): number {
-  if (maxMcSol <= 0 || mcSol <= 0) return MIN_R;
-  // Logarithmic scale: prevents one whale from making all others invisible,
-  // while still conveying relative size meaningfully.
-  const logMc  = Math.log1p(mcSol);
-  const logMax = Math.log1p(maxMcSol);
-  const norm   = logMc / logMax;
+function calcRadius(volSol: number, maxVolSol: number): number {
+  if (maxVolSol <= 0 || volSol <= 0) return MIN_R;
+  // Log scale: volume spans many orders of magnitude; log compresses without losing rank signal
+  const logV   = Math.log1p(volSol);
+  const logMax = Math.log1p(maxVolSol);
+  const norm   = logV / logMax;
   return Math.max(MIN_R, Math.min(MAX_R, MIN_R + norm * (MAX_R - MIN_R)));
 }
 
@@ -362,16 +369,17 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 
     const W = containerRef.current?.offsetWidth ?? 600;
     const H = height;
 
-    const maxMcSol = Math.max(
-      ...tokens.map(t => parseFloat(t.marketCapEth ?? "0") / 1e9)
+    const maxVolSol = Math.max(
+      ...tokens.map(t => parseFloat(t.volumeEth ?? t.marketCapEth ?? "0") / 1e9)
     );
 
     const prevMap = new Map(bubblesRef.current.map(b => [b.address, b]));
 
     const newBubbles: BubbleState[] = tokens.map((t, i) => {
-      const mcSol = parseFloat(t.marketCapEth ?? "0") / 1e9;
-      const r     = calcRadius(mcSol, maxMcSol);
-      const prev  = prevMap.get(t.address);
+      const volSol = parseFloat(t.volumeEth ?? t.marketCapEth ?? "0") / 1e9;
+      const mcSol  = parseFloat(t.marketCapEth ?? "0") / 1e9;
+      const r      = calcRadius(volSol, maxVolSol);
+      const prev   = prevMap.get(t.address);
 
       // Store initial price for % change tracking
       const initPrice = parseFloat(t.priceEth ?? "0");
@@ -387,12 +395,13 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 
       const cols = pctToColors(pct);
 
       const bubble: BubbleState = {
-        address:   t.address,
-        symbol:    t.symbol,
-        name:      t.name,
-        platform:  t.platform,
+        address:      t.address,
+        symbol:       t.symbol,
+        name:         t.name,
+        platform:     t.platform,
         marketCapSol: mcSol,
-        pctChange: pct,
+        volumeSol:    volSol,
+        pctChange:    pct,
         x:     prev?.x ?? W / 2 + Math.cos(angle) * spread,
         y:     prev?.y ?? H / 2 + Math.sin(angle) * spread,
         vx:    0,
@@ -407,6 +416,12 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 
         targetR: cols.center.r,
         targetG: cols.center.g,
         targetB: cols.center.b,
+        // Unique floating bob per bubble — keep existing if re-using prev
+        floatPhaseX: prev?.floatPhaseX ?? Math.random() * Math.PI * 2,
+        floatPhaseY: prev?.floatPhaseY ?? Math.random() * Math.PI * 2,
+        floatFreqX:  prev?.floatFreqX  ?? (0.00035 + Math.random() * 0.00055),
+        floatFreqY:  prev?.floatFreqY  ?? (0.00030 + Math.random() * 0.00050),
+        floatAmp:    prev?.floatAmp    ?? (3 + Math.random() * 6),
         imgLoaded: prev?.imgLoaded ?? false,
         img: prev?.img,
       };
@@ -493,10 +508,13 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 
       const hIdx  = hoverIdxRef.current;
       const bubbles = bubblesRef.current;
 
-      // Lerp positions & colors
+      // Lerp positions & colors — float offset applied to target so lerp smoothly follows the wave
+      const now = performance.now();
       for (const b of bubbles) {
-        b.dispX  += (b.x - b.dispX) * 0.08;
-        b.dispY  += (b.y - b.dispY) * 0.08;
+        const fx = b.floatAmp * Math.sin(now * b.floatFreqX + b.floatPhaseX);
+        const fy = b.floatAmp * Math.cos(now * b.floatFreqY + b.floatPhaseY);
+        b.dispX  += (b.x + fx - b.dispX) * 0.05;
+        b.dispY  += (b.y + fy - b.dispY) * 0.05;
         b.colorR += (b.targetR - b.colorR) * 0.06;
         b.colorG += (b.targetG - b.colorG) * 0.06;
         b.colorB += (b.targetB - b.colorB) * 0.06;

@@ -492,10 +492,10 @@ export default function Dashboard() {
 
   const { data: trending, isLoading: loadingTrending } = useGetTrendingTokens({ limit: 8 });
 
-  // Bubble map: top tokens by market cap (separate fetch, independent of tab state)
+  // Bubble map: top 100 tokens by volume (separate fetch, updates every 30s)
   const { data: bubbleRawTokens } = useListTokens(
-    { sort: ListTokensSort.marketcap, limit: 50 },
-    { query: { refetchInterval: 60_000 } }
+    { sort: ListTokensSort.volume, limit: 100 },
+    { query: { refetchInterval: 30_000 } }
   );
   const bubbleTokens = useMemo<TokenBubbleInput[]>(() => {
     if (!bubbleRawTokens) return [];
@@ -507,6 +507,7 @@ export default function Dashboard() {
         name:         t.name,
         imageUrl:     t.imageUrl,
         marketCapEth: snap?.marketCapEth ?? t.marketCapEth,
+        volumeEth:    snap?.volumeEth    ?? t.volumeEth,
         priceEth:     snap?.priceEth     ?? t.priceEth,
         platform:     t.platform ?? "unknown",
       };
@@ -629,8 +630,8 @@ export default function Dashboard() {
           <section className="mb-3 md:mb-5">
             <div className="flex flex-col lg:flex-row gap-3">
 
-              {/* ── LEFT: Trending leaderboard ─────────────────────────────── */}
-              <div className="lg:w-[280px] xl:w-[300px] shrink-0 flex flex-col gap-2">
+              {/* ── LEFT: Trending leaderboard (30%) ──────────────────────── */}
+              <div className="lg:w-[30%] shrink-0 flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <h2 className="text-[13px] font-bold uppercase tracking-widest flex items-center gap-1.5" style={{ color: "#e2e8f0" }}>
                     <Flame className="w-3.5 h-3.5 text-amber-400" /> Trending
@@ -707,7 +708,7 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between">
                   <h2 className="text-[13px] font-bold uppercase tracking-widest flex items-center gap-1.5" style={{ color: "#e2e8f0" }}>
                     <BarChart2 className="w-3.5 h-3.5" style={{ color: "#94a3b8" }} /> Market Bubbles
-                    <span className="text-[10px] font-normal ml-1" style={{ color: "#475569" }}>· size = market cap · color = momentum</span>
+                    <span className="text-[10px] font-normal ml-1" style={{ color: "#475569" }}>· size = volume · color = momentum</span>
                   </h2>
                 </div>
                 <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
@@ -724,7 +725,7 @@ export default function Dashboard() {
                       tokens={bubbleTokens}
                       liveUpdates={liveTradeStats}
                       solPrice={solPrice}
-                      height={360}
+                      height={400}
                     />
                   )}
                 </div>
