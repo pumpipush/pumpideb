@@ -18,11 +18,13 @@ export interface TokenBubbleInput {
   volumeEth?: string | null;    // 24h volume in lamports
   priceEth?: string | null;
   platform: string;
+  /** Pre-computed 24h price change from the API (null = no trades in window) */
+  pctChange24h?: number | null;
 }
 
 export interface LivePriceUpdate {
-  priceEth?: string;
-  marketCapEth?: string;
+  priceEth?: string | null;
+  marketCapEth?: string | null;
   lastTradeAt?: number;
 }
 
@@ -484,17 +486,29 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 
       const r      = calcRadius(i, tokens.length);
       const prev   = prevMap.get(t.address);
 
-      // Store initial price for % change tracking
-      const initPrice = parseFloat(t.priceEth ?? "0");
-      if (!initPricesRef.current.has(t.address) && initPrice > 0) {
-        initPricesRef.current.set(t.address, initPrice);
+      // Seed initPricesRef with the 24h open price so that live WebSocket
+      // updates continue measuring change relative to the 24h open, not the
+      // moment the page loaded.
+      const currentPrice = parseFloat(t.priceEth ?? "0");
+      if (!initPricesRef.current.has(t.address) && currentPrice > 0) {
+        if (t.pctChange24h != null && t.pctChange24h !== 0) {
+          // Back-calculate the 24h open price from the known pct change:
+          //   currentPrice = openPrice * (1 + pctChange24h/100)
+          const openPrice = currentPrice / (1 + t.pctChange24h / 100);
+          if (openPrice > 0) initPricesRef.current.set(t.address, openPrice);
+          else initPricesRef.current.set(t.address, currentPrice);
+        } else {
+          initPricesRef.current.set(t.address, currentPrice);
+        }
       }
 
       // Spread initial positions in a rough circle so layout converges faster
       const angle  = (i / tokens.length) * Math.PI * 2;
       const spread = Math.min(W, H) * 0.25;
 
-      const pct  = prev?.pctChange ?? 0;
+      // Use API-provided 24h pct change as initial value (not 0) so bubbles
+      // show meaningful colors immediately on page load.
+      const pct  = prev?.pctChange ?? (t.pctChange24h ?? 0);
       const cols = pctToColors(pct);
 
       const bubble: BubbleState = {

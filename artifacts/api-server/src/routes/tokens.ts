@@ -17,6 +17,45 @@ import {
 
 const router: IRouter = Router();
 
+// ── Helper: fetch 24-hour price % change for a set of token addresses ────────
+// Returns a Map<address, pctChange24h>. Tokens with no trades in the window
+// are absent from the map (caller should treat as null).
+async function fetch24hPctChanges(addresses: string[]): Promise<Map<string, number>> {
+  if (addresses.length === 0) return new Map();
+  const { rows } = await pool.query<{ token_address: string; pct_change_24h: string }>(
+    `SELECT
+       o.token_address,
+       CASE WHEN o.price_eth::numeric > 0
+         THEN ((c.price_eth::numeric - o.price_eth::numeric) / o.price_eth::numeric * 100)
+         ELSE 0
+       END AS pct_change_24h
+     FROM (
+       SELECT DISTINCT ON (token_address) token_address, price_eth
+       FROM   trades
+       WHERE  timestamp   > NOW() - INTERVAL '24 hours'
+         AND  price_eth  IS NOT NULL
+         AND  price_eth::numeric > 0
+         AND  token_address = ANY($1)
+       ORDER  BY token_address, timestamp ASC
+     ) o
+     JOIN (
+       SELECT DISTINCT ON (token_address) token_address, price_eth
+       FROM   trades
+       WHERE  timestamp   > NOW() - INTERVAL '24 hours'
+         AND  price_eth  IS NOT NULL
+         AND  price_eth::numeric > 0
+         AND  token_address = ANY($1)
+       ORDER  BY token_address, timestamp DESC
+     ) c ON o.token_address = c.token_address`,
+    [addresses],
+  );
+  const result = new Map<string, number>();
+  for (const row of rows) {
+    result.set(row.token_address, parseFloat(row.pct_change_24h));
+  }
+  return result;
+}
+
 // GET /tokens
 router.get("/tokens", async (req, res): Promise<void> => {
   const parsed = ListTokensQueryParams.safeParse(req.query);
@@ -96,7 +135,8 @@ router.get("/tokens", async (req, res): Promise<void> => {
       createdAt:            r["created_at"] as string,
       updatedAt:            r["updated_at"] as string,
     }));
-    res.json(ListTokensResponse.parse(mapped.map(formatToken)));
+    const pctChanges = await fetch24hPctChanges(mapped.map(r => r.address));
+    res.json(ListTokensResponse.parse(mapped.map(r => formatToken(r, pctChanges.get(r.address)))));
     return;
   }
 
@@ -142,7 +182,8 @@ router.get("/tokens", async (req, res): Promise<void> => {
     return true;
   }).slice(0, Number(limit));
 
-  res.json(ListTokensResponse.parse(tokens.map(formatToken)));
+  const pctChanges = await fetch24hPctChanges(tokens.map(t => t.address));
+  res.json(ListTokensResponse.parse(tokens.map(t => formatToken(t, pctChanges.get(t.address)))));
 });
 
 // POST /tokens
@@ -258,11 +299,12 @@ router.patch("/tokens/:address", async (req, res): Promise<void> => {
   res.json(UpdateTokenResponse.parse(formatToken(token)));
 });
 
-function formatToken(t: typeof tokensTable.$inferSelect) {
+function formatToken(t: typeof tokensTable.$inferSelect | Record<string, unknown>, pctChange24h?: number) {
   return {
     ...t,
-    tradeCount: Number(t.tradeCount),
-    holderCount: Number(t.holderCount),
+    tradeCount: Number((t as Record<string, unknown>).tradeCount ?? 0),
+    holderCount: Number((t as Record<string, unknown>).holderCount ?? 0),
+    pctChange24h: pctChange24h ?? null,
   };
 }
 

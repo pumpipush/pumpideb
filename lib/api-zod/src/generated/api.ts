@@ -59,7 +59,8 @@ export const ListTokensResponseItem = zod.object({
   "websiteUrl": zod.string().nullish(),
   "platform": zod.string().default(listTokensResponsePlatformDefault).describe('Source platform: pump_fun | moonshot | letsbonk | unknown'),
   "chain": zod.string().default(listTokensResponseChainDefault).describe('Chain: solana | base'),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "pctChange24h": zod.number().nullish(),
 })
 export const ListTokensResponse = zod.array(ListTokensResponseItem)
 

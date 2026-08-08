@@ -493,9 +493,10 @@ export default function Dashboard() {
   const { data: trending, isLoading: loadingTrending } = useGetTrendingTokens({ limit: 8 });
 
   // Bubble map: top 40 tokens by volume (separate fetch, updates every 30s)
+  const bubbleListParams = { sort: ListTokensSort.volume, limit: 40 };
   const { data: bubbleRawTokens } = useListTokens(
-    { sort: ListTokensSort.volume, limit: 40 },
-    { query: { refetchInterval: 30_000 } }
+    bubbleListParams,
+    { query: { refetchInterval: 30_000, queryKey: getListTokensQueryKey(bubbleListParams) } }
   );
   const bubbleTokens = useMemo<TokenBubbleInput[]>(() => {
     if (!bubbleRawTokens) return [];
@@ -510,6 +511,7 @@ export default function Dashboard() {
         volumeEth:    snap?.volumeEth    ?? t.volumeEth,
         priceEth:     snap?.priceEth     ?? t.priceEth,
         platform:     t.platform ?? "unknown",
+        pctChange24h: t.pctChange24h ?? null,
       };
     });
   }, [bubbleRawTokens, liveTradeStats]);
