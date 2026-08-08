@@ -962,7 +962,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
           {/* Price — right, takes equal space */}
           <div className="flex-1 flex flex-col justify-center items-end">
-            <span className="text-[12px] font-medium mb-0.5" style={{ color: "#94a3b8" }}>Price</span>
+            <span className="text-[12px] font-medium mb-0.5" style={{ color: "#94a3b8" }}>Price USD</span>
             <span
               key={`price-${priceFlash.key}`}
               className={`text-[16px] font-bold font-mono tabular-nums leading-tight${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
@@ -1323,7 +1323,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 {priceStats.currentPrice > 0
                   ? (priceStats.currentPrice < 1e-4
                     ? priceStats.currentPrice.toExponential(3)
-                    : priceStats.currentPrice.toPrecision(4)) + " SOL"
+                    : priceStats.currentPrice.toPrecision(4))
                   : "—"}
               </span>
             </div>
