@@ -90,11 +90,12 @@ export abstract class SolanaRpcIndexer {
   private maxDelay = 120_000;
 
   // ── Zero-event startup watchdog ────────────────────────────────────────────
-  // If the program ID is wrong, the WebSocket will connect successfully but
-  // zero log events will arrive. We warn after 60s so operators can detect this
-  // without waiting for a trade to be missed.
+  // If the program ID is wrong OR the connection silently drops, the WebSocket
+  // will stay "open" but deliver no log events. We force a reconnect after 30 s
+  // of silence so the indexer self-heals without operator intervention.
   private _eventsSeenThisConnection = 0;
-  private _watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+  private _watchdogTimer:  ReturnType<typeof setTimeout>  | null = null;
+  private _keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(opts: {
     programId:   string;
@@ -301,16 +302,26 @@ export abstract class SolanaRpcIndexer {
         params: [{ mentions: [this.programId] }, { commitment: "confirmed" }],
       }));
 
-      // Watchdog: warn if the program ID is wrong (no events after 60 s)
+      // Keepalive: send a getHealth ping every 20 s to prevent silent drops.
+      // PublicNode silently closes idle WebSocket connections; this keeps them alive.
+      this._keepaliveTimer = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ jsonrpc: "2.0", id: nextId(), method: "getHealth" }));
+        }
+      }, 20_000);
+
+      // Watchdog: if 30 s pass with zero events, the connection is silently dead —
+      // force a close so the reconnect loop kicks in immediately.
       this._watchdogTimer = setTimeout(() => {
         if (this._eventsSeenThisConnection === 0) {
           this.log.warn(
             { programId: this.programId },
-            `${this.constructor.name}: 60 s elapsed with zero create events — ` +
-            "program ID may be incorrect. Set the corresponding env var to override."
+            `${this.constructor.name}: 30 s elapsed with zero events — ` +
+            "forcing reconnect (likely silent WebSocket drop)"
           );
+          ws.close();
         }
-      }, 60_000);
+      }, 30_000);
     });
 
     ws.addEventListener("message", (event) => {
@@ -349,10 +360,14 @@ export abstract class SolanaRpcIndexer {
     });
 
     ws.addEventListener("close", () => {
-      // Clear watchdog on disconnect (reconnect will start a fresh one)
+      // Clear watchdog + keepalive on disconnect (reconnect will start fresh ones)
       if (this._watchdogTimer !== null) {
         clearTimeout(this._watchdogTimer);
         this._watchdogTimer = null;
+      }
+      if (this._keepaliveTimer !== null) {
+        clearInterval(this._keepaliveTimer);
+        this._keepaliveTimer = null;
       }
       this.log.warn({ retryMs: this.delay }, `${this.constructor.name}: disconnected — reconnecting`);
       setTimeout(() => this.connect(), this.delay);
