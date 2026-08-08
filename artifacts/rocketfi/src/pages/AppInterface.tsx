@@ -366,6 +366,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const solPriceRef = useRef<number | null>(solPrice);
   solPriceRef.current = solPrice;
 
+  // ── Price flash animation state (declared before priceStats, effect registered after) ──
+  const prevPriceRef  = useRef<number>(0);
+  const [priceFlash, setPriceFlash] = useState<{ key: number; up: boolean }>({ key: 0, up: true });
+
   // ── Price / Vol / % stats (used both above chart and removed from right panel) ──
   const priceStats = useMemo(() => {
     const now = Date.now();
@@ -416,6 +420,15 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveToken, token?.priceEth, liveTrades, history]);
+
+  // ── Price flash effect — runs after priceStats is declared ──
+  useEffect(() => {
+    const p = priceStats.currentPrice;
+    if (p > 0 && prevPriceRef.current > 0 && p !== prevPriceRef.current) {
+      setPriceFlash(f => ({ key: f.key + 1, up: p >= prevPriceRef.current }));
+    }
+    if (p > 0) prevPriceRef.current = p;
+  }, [priceStats.currentPrice]);
 
   // OHLC crosshair display — written directly to DOM so mouse moves never trigger re-renders
   const ohlcDisplayRef = useRef<HTMLDivElement>(null);
@@ -900,7 +913,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               </span>
             )}
           </div>
-          <span className="text-[25px] font-semibold text-foreground font-mono tabular-nums leading-tight">
+          <span
+            key={priceFlash.key}
+            className={`text-[25px] font-semibold text-foreground font-mono tabular-nums leading-tight${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
+          >
             {formatMCUsd(effectiveMcEth, solPrice)}
           </span>
         </div>
@@ -1033,7 +1049,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         return (
                           <tr
                             key={trade.txHash ?? trade.id}
-                            className="transition-colors"
+                            className={isLive ? (isBuy ? "animate-trade-buy" : "animate-trade-sell") : "transition-colors"}
                             style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
                             onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
                             onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
@@ -1046,8 +1062,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                                   {isBuy ? "Buy" : "Sell"}
                                 </span>
                                 {isLive && (
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold"
-                                    style={{ background: "rgba(59,130,246,0.15)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.25)" }}>
+                                  <span className="animate-badge-pop text-[9px] px-1.5 py-0.5 rounded-full font-bold"
+                                    style={{ background: "rgba(59,130,246,0.15)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.25)", display: "inline-block" }}>
                                     New
                                   </span>
                                 )}
@@ -1262,7 +1278,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           <div className="grid grid-cols-2 divide-x divide-white/[0.08]" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
             <div className="flex flex-col px-4 py-3">
               <span className="text-[13px] font-medium mb-1" style={{ color: "#94a3b8" }}>Price</span>
-              <span className="font-mono font-bold text-[15px]" style={{ color: "#e2e8f0" }}>
+              <span
+                key={`price-${priceFlash.key}`}
+                className={`font-mono font-bold text-[15px]${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
+                style={{ color: "#e2e8f0" }}
+              >
                 {solPrice && priceStats.currentPrice > 0 ? formatUSD(priceStats.currentPrice * solPrice) : priceStats.currentPrice > 0 ? priceStats.currentPrice.toExponential(4) : "—"}
               </span>
             </div>
@@ -1283,7 +1303,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               <div key={label} className="flex flex-col items-center px-2 py-2.5"
                 style={{ borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.08)" : "none" }}>
                 <span className="text-[12px] font-medium mb-1" style={{ color: "#64748b" }}>{label}</span>
-                <span className="font-mono font-bold text-[13px]" style={{ color: data ? (data.up ? "#4ade80" : "#f87171") : "#475569" }}>
+                <span
+                  key={`${label}-${data?.val ?? "null"}-${priceFlash.key}`}
+                  className={`font-mono font-bold text-[13px]${data && priceFlash.key > 0 ? (data.up ? " animate-stat-up" : " animate-stat-down") : ""}`}
+                  style={{ color: data ? (data.up ? "#4ade80" : "#f87171") : "#475569" }}
+                >
                   {data?.val ?? "—"}
                 </span>
               </div>
@@ -1374,8 +1398,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     </div>
                   </div>
                   {/* Buy/Sell progress bar */}
-                  <div className="flex h-1 mx-3 mb-2.5 rounded-full overflow-hidden" style={{ background: "#f6583c" }}>
-                    <div className="h-full transition-all duration-500" style={{ width: `${buyPct}%`, background: "#4ade80" }} />
+                  <div
+                    key={`bar-${label}-${Math.round(buyPct)}`}
+                    className="animate-bar-pulse flex h-1 mx-3 mb-2.5 rounded-full overflow-hidden"
+                    style={{ background: "#f6583c" }}
+                  >
+                    <div className="h-full transition-all duration-700" style={{ width: `${buyPct}%`, background: "#4ade80" }} />
                   </div>
                 </div>
               ))}

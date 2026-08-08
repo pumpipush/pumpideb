@@ -213,6 +213,67 @@
   100% { color: inherit; }
 }
 
+/* ── Live trading animations ── */
+@keyframes priceFlashUp {
+  0%   { color: #4ade80; text-shadow: 0 0 14px rgba(74,222,128,0.7); }
+  55%  { color: #86efac; text-shadow: 0 0 6px rgba(74,222,128,0.3); }
+  100% { color: inherit; text-shadow: none; }
+}
+@keyframes priceFlashDown {
+  0%   { color: #f87171; text-shadow: 0 0 14px rgba(248,113,113,0.7); }
+  55%  { color: #fca5a5; text-shadow: 0 0 6px rgba(248,113,113,0.3); }
+  100% { color: inherit; text-shadow: none; }
+}
+@keyframes tradeRowFlashBuy {
+  0%   { background: rgba(74,222,128,0.14); }
+  70%  { background: rgba(74,222,128,0.04); }
+  100% { background: transparent; }
+}
+@keyframes tradeRowFlashSell {
+  0%   { background: rgba(248,113,113,0.12); }
+  70%  { background: rgba(248,113,113,0.03); }
+  100% { background: transparent; }
+}
+@keyframes tradeRowSlideIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes mcBump {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.025); }
+  100% { transform: scale(1); }
+}
+@keyframes badgePop {
+  0%   { transform: scale(0.6); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes barPulse {
+  0%   { opacity: 1; }
+  35%  { opacity: 0.75; }
+  100% { opacity: 1; }
+}
+@keyframes statNumFlashUp {
+  0%   { color: #4ade80; }
+  100% { color: inherit; }
+}
+@keyframes statNumFlashDown {
+  0%   { color: #f87171; }
+  100% { color: inherit; }
+}
+
+.animate-price-up      { animation: priceFlashUp    0.7s ease-out forwards; }
+.animate-price-down    { animation: priceFlashDown  0.7s ease-out forwards; }
+.animate-trade-buy     { animation: tradeRowSlideIn 0.18s ease-out forwards,
+                                     tradeRowFlashBuy  1.6s ease-out forwards; }
+.animate-trade-sell    { animation: tradeRowSlideIn 0.18s ease-out forwards,
+                                     tradeRowFlashSell 1.6s ease-out forwards; }
+.animate-mc-bump       { animation: mcBump          0.35s ease-out forwards; }
+.animate-badge-pop     { animation: badgePop        0.28s ease-out forwards; }
+.animate-bar-pulse     { animation: barPulse        0.5s  ease-out forwards; }
+.animate-stat-up       { animation: statNumFlashUp  0.65s ease-out forwards; }
+.animate-stat-down     { animation: statNumFlashDown 0.65s ease-out forwards; }
+
 .animate-slideDown  { animation: slideDown  0.22s ease-out    forwards; }
 .animate-slideUp    { animation: slideUp    0.25s cubic-bezier(0.32,0.72,0,1) forwards; }
 .animate-fadeIn     { animation: fadeIn     0.3s  ease-out    forwards; }
