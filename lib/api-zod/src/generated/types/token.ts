@@ -47,6 +47,4 @@ export interface Token {
   /** Chain: solana | base */
   chain?: string;
   createdAt: Date;
-  /** Percentage price change over the last 24 hours (null if no trades in window) */
-  pctChange24h?: number | null;
 }

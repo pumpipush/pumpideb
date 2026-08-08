@@ -400,12 +400,21 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [chartTypeOpen, setChartTypeOpen] = useState(false);
 
   // Server-side OHLCV: pre-aggregated over the full trade history (no 100-row limit).
-  // Re-fetched whenever the token address or timeframe changes.
+  // Re-fetched every 30 s so new trades reconcile with the live SSE overlay.
+  // Returns { bars, maxTradeId } — maxTradeId gates which SSE events to overlay.
   const { data: serverOhlcv } = useGetTokenOhlcv(
     selectedAddress || "",
     { tf: chartTf },
-    { query: { enabled: !!selectedAddress, queryKey: ["ohlcv", selectedAddress, chartTf] } }
+    {
+      query: {
+        enabled: !!selectedAddress,
+        queryKey: ["ohlcv", selectedAddress, chartTf],
+        refetchInterval: 30_000,
+        staleTime: 25_000,
+      }
+    }
   );
+
   const CHART_TIMEFRAMES: ChartTimeframe[] = ["1m", "5m", "15m", "1H", "4H", "1D", "1W"];
   const toggleIndicator = useCallback((ind: Indicator) => {
     setIndicators(prev => prev.includes(ind) ? prev.filter(i => i !== ind) : [...prev, ind]);
@@ -531,9 +540,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const chartBars = useMemo(() => {
     if (!token) return [];
 
-    // Merge server OHLCV with live trades (SSE feed, up to ~200 most-recent trades).
-    // Live ticks update the current bucket's OHLC and volume in real-time.
-    const base = (serverOhlcv ?? []) as import("@/lib/ohlcv").OHLCVBar[];
+    // serverOhlcv now returns { bars, maxTradeId }.
+    // maxTradeId is the highest trade ID the server aggregate already includes.
+    const base  = (serverOhlcv?.bars ?? []) as import("@/lib/ohlcv").OHLCVBar[];
+    const maxId = serverOhlcv?.maxTradeId ?? 0;
 
     const liveAsHistory = liveTrades.map(lt => ({
       id: lt.id,
@@ -548,14 +558,28 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       timestamp: lt.timestamp,
     }));
 
-    const liveBars = liveAsHistory.length > 0
-      ? tradesFromLocalBars(liveAsHistory, chartTf)
+    // ── Anti-double-count: ID-based cursor ────────────────────────────────────
+    // The server aggregate includes every trade with id <= maxTradeId.
+    // Adding all SSE trades on top re-counts those same rows on every 30-s
+    // refetch, inflating the current candle's volume each poll cycle.
+    //
+    // Fix: only overlay SSE trades whose database id is strictly greater than
+    // maxTradeId — those are genuinely new rows the server hasn't seen yet.
+    // When maxId = 0 (no server data loaded yet), all SSE trades are new.
+    const freshLiveTrades = maxId > 0
+      ? liveAsHistory.filter(lt => (lt.id ?? 0) > maxId)
+      : liveAsHistory;
+
+    const liveBars = freshLiveTrades.length > 0
+      ? tradesFromLocalBars(freshLiveTrades, chartTf)
       : [];
 
     if (liveBars.length === 0) return base;
     if (base.length === 0) return liveBars;
 
-    // Merge: live bars update the matching server bar, or append new ones
+    // Merge: fresh live bars update the matching server bar (or append new ones).
+    // Volume addition is safe here — freshLiveTrades are id > maxTradeId so
+    // they are not yet present in any server bar.
     const merged = new Map<number, import("@/lib/ohlcv").OHLCVBar>();
     for (const b of base) merged.set(b.time, { ...b });
     for (const lb of liveBars) {

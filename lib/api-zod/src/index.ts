@@ -19,3 +19,4 @@ export type { TokenInput }              from "./generated/types/tokenInput";
 export type { TokenUpdate }             from "./generated/types/tokenUpdate";
 export type { Trade }                   from "./generated/types/trade";
 export type { TradeInput }              from "./generated/types/tradeInput";
+export * from './generated/types';

@@ -106,6 +106,9 @@ router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
   // Ordering within each bucket uses (timestamp ASC, id ASC) — insertion
   // order is the best proxy for on-chain sequence given that blockTime is
   // not yet stored.
+  // MAX(id) per bucket (and globally) is included so clients can identify
+  // which SSE/live trades are already baked into this aggregate — they
+  // should only overlay trades with id > maxTradeId to avoid double-counting.
   const { rows } = await pool.query<{
     bucket: string;
     open:   string;
@@ -113,12 +116,14 @@ router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
     low:    string;
     close:  string;
     volume: string;
+    max_id: string;
   }>(`
     WITH ranked AS (
       SELECT
         (FLOOR(EXTRACT(EPOCH FROM timestamp) / $1) * $1)::bigint AS bucket,
         CAST(price_eth  AS DOUBLE PRECISION)                      AS price,
         CAST(eth_amount AS DOUBLE PRECISION)                      AS vol,
+        id,
         ROW_NUMBER() OVER (
           PARTITION BY FLOOR(EXTRACT(EPOCH FROM timestamp) / $1)
           ORDER BY timestamp ASC, id ASC
@@ -143,7 +148,8 @@ router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
       MAX(price)::text                                AS high,
       MIN(price)::text                                AS low,
       MAX(CASE WHEN rn_desc = 1 THEN price END)::text AS close,
-      SUM(vol)::text                                  AS volume
+      SUM(vol)::text                                  AS volume,
+      MAX(id)::text                                   AS max_id
     FROM ranked
     GROUP BY bucket
     ORDER BY bucket ASC
@@ -158,7 +164,12 @@ router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
     volume: parseFloat(r.volume),
   }));
 
-  res.json(bars);
+  // maxTradeId: the highest trade ID present in this aggregate.
+  // SSE events with id <= maxTradeId are already included; only those
+  // strictly above this value are genuinely new and safe to overlay.
+  const maxTradeId = rows.reduce((m, r) => Math.max(m, parseInt(r.max_id ?? "0", 10)), 0);
+
+  res.json({ bars, maxTradeId });
 });
 
 // GET /tokens/:address/stats  — 24-hour aggregated stats (SQL, no row-limit)
