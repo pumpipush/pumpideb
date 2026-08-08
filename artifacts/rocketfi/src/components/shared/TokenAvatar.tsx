@@ -3,7 +3,7 @@
  * Uses an SVG radial gradient derived from the symbol string so each token
  * gets a unique, consistent visual identity.
  */
-import { cn } from "@/lib/utils";
+import { cn, resolveImageUrl } from "@/lib/utils";
 import { useState, useEffect } from "react";
 
 interface TokenAvatarProps {
@@ -62,16 +62,19 @@ export function TokenAvatar({ symbol, imageUrl, size = 40, className, shape = "s
   const gradId = `g-${hashSymbol(symbol ?? "?") % 10000}`;
 
   // If we have a valid image, show it
-  if (imageUrl && !imgError) {
+  const resolvedUrl = resolveImageUrl(imageUrl);
+  if (resolvedUrl && !imgError) {
     return (
       <div
         className={cn("shrink-0 overflow-hidden border border-white/10", shapeClass, className)}
         style={{ width: size, height: size }}
       >
         <img
-          src={imageUrl}
+          src={resolvedUrl}
           alt={symbol}
           className="w-full h-full object-cover"
+          loading="eager"
+          decoding="async"
           onError={() => setImgError(true)}
         />
       </div>

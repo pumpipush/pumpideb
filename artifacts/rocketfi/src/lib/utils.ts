@@ -65,6 +65,19 @@ export function formatUSD(usd: number): string {
   return `$${usd.toExponential(3)}`;
 }
 
+/**
+ * Swap slow public IPFS gateways for Cloudflare's CDN-backed gateway.
+ * ipfs.io cold-loads in 5-10 s; cf-ipfs.com is typically <500 ms.
+ */
+export function resolveImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("ipfs://"))
+    return "https://cf-ipfs.com/ipfs/" + url.slice(7);
+  if (url.includes("ipfs.io/ipfs/"))
+    return url.replace(/https?:\/\/ipfs\.io\/ipfs\//, "https://cf-ipfs.com/ipfs/");
+  return url;
+}
+
 const SUBSCRIPT_DIGITS = ['₀','₁','₂','₃','₄','₅','₆','₇','₈','₉'] as const;
 const toSub = (n: number) => String(n).split('').map(d => SUBSCRIPT_DIGITS[+d]).join('');
 
