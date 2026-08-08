@@ -220,9 +220,9 @@ function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 460) {
     }
   }
 
-  // Restore exact target radii and sync display
+  // Restore exact target radii — dispX/dispY/dispR intentionally NOT synced
+  // here so the render-loop lerp can animate the initial spread on first open.
   for (let i = 0; i < n; i++) bubbles[i].r = targetR[i];
-  for (const b of bubbles) { b.dispX = b.x; b.dispY = b.y; b.dispR = b.r; }
 }
 
 // ─── Canvas renderer ──────────────────────────────────────────────────────────
@@ -271,8 +271,17 @@ function drawBubble(
 ) {
   const x = b.dispX, y = b.dispY, r = b.dispR;
 
+  // Guard: skip until radius is large enough for all arc calls.
+  // Largest negative arc is r - bw - 2 (inner ring), bw=2.2 → needs r > 4.2; use 6.
+  if (r < 6) return;
+
+  // Fade-in opacity driven by dispR growth (0 → r over ~3s on first open)
+  const fadeAlpha = Math.min(1, r / Math.max(b.r, 1));
+  if (fadeAlpha < 0.02) return;
+
   // ── MODE B: Small label (rank ≥ TOP_CIRCLES) — logo + name + % ───────────
   if (rank >= TOP_CIRCLES) {
+    ctx.globalAlpha = fadeAlpha;
     const col     = circleColors(b.pctChange);
     const pct     = (b.pctChange >= 0 ? "+" : "") + b.pctChange.toFixed(2) + "%";
     const name    = b.name.substring(0, 11);
@@ -327,6 +336,7 @@ function drawBubble(
     ctx.fillText(pct, x, cy);
 
     ctx.restore();
+    ctx.globalAlpha = 1;
     return;
   }
 
@@ -334,6 +344,7 @@ function drawBubble(
   const col = circleColors(b.pctChange);
   const bw  = isHovered ? 3.0 : 2.2;
 
+  ctx.globalAlpha = fadeAlpha;
   ctx.save();
 
   // Outer glow
@@ -424,6 +435,7 @@ function drawBubble(
   ctx.shadowColor  = "rgba(0,0,0,0.95)";
   ctx.fillText(pctText, x, curY);
   ctx.restore();
+  ctx.globalAlpha = 1; // reset after fade-in applied
 }
 
 // ─── Image preloader ──────────────────────────────────────────────────────────
@@ -527,7 +539,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
         r,
         dispX: prev?.dispX ?? W / 2 + Math.cos(angle) * spread,
         dispY: prev?.dispY ?? H / 2 + Math.sin(angle) * spread,
-        dispR: prev?.dispR ?? r,
+        dispR: prev?.dispR ?? 0, // new bubbles grow from 0 → visible spread-in animation
         colorR: prev?.colorR ?? cols.center.r,
         colorG: prev?.colorG ?? cols.center.g,
         colorB: prev?.colorB ?? cols.center.b,
