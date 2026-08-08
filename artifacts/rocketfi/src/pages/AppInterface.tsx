@@ -912,8 +912,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             </span>
           </div>
 
-          {/* Bonding Curve — grows to fill centre */}
-          <div className="flex-1 flex flex-col justify-center min-w-0">
+          {/* Bonding Curve — fixed width centre column */}
+          <div className="w-48 flex flex-col justify-center min-w-0">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-semibold tracking-widest uppercase" style={{ color: "#475569" }}>Bonding Curve</span>
               <span
