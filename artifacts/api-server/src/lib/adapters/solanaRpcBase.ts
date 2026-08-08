@@ -18,6 +18,13 @@ import { logger as rootLogger } from "../logger";
 export const PUBLICNODE_WSS  = "wss://solana-rpc.publicnode.com";
 export const PUBLICNODE_HTTP = "https://solana-rpc.publicnode.com";
 
+/** Free public Solana WebSocket RPC endpoints — rotated on silent-drop reconnects. */
+export const FALLBACK_WSS_RPCS = [
+  "wss://api.mainnet-beta.solana.com",           // Solana Foundation
+  "wss://rpc.ankr.com/solana/ws",                // Ankr free tier
+  "wss://solana-rpc.publicnode.com",             // PublicNode (back as third option)
+] as const;
+
 /** Free public Solana RPC endpoints used as fallbacks when the primary is rate-limited.
  *  Tried in order on -32005 / 429 responses. No auth needed on any of these. */
 export const FALLBACK_HTTP_RPCS = [
@@ -81,10 +88,13 @@ function nextId() { return _id++; }
 
 export abstract class SolanaRpcIndexer {
   protected readonly programId: string;
-  protected readonly wssUrl: string;
   protected readonly httpUrl: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   protected readonly log: any;
+
+  // WSS rotation — tried in round-robin on each silent-drop reconnect
+  private readonly _wssUrls: string[];
+  private _wssIdx = 0;
 
   private delay    = 5_000;
   private maxDelay = 120_000;
@@ -104,7 +114,9 @@ export abstract class SolanaRpcIndexer {
     httpUrl?:    string;
   }) {
     this.programId = opts.programId;
-    this.wssUrl    = opts.wssUrl  ?? PUBLICNODE_WSS;
+    // Round-robin WSS pool: start with caller-supplied or PublicNode, then fallbacks
+    const primary = opts.wssUrl ?? PUBLICNODE_WSS;
+    this._wssUrls = [primary, ...FALLBACK_WSS_RPCS.filter(u => u !== primary)];
     this.httpUrl   = opts.httpUrl ?? PUBLICNODE_HTTP;
     this.log       = rootLogger.child({ adapter: opts.adapterName });
   }
@@ -289,12 +301,13 @@ export abstract class SolanaRpcIndexer {
   }
 
   private connect(): void {
-    const ws = new WebSocket(this.wssUrl);
+    const wssUrl = this._wssUrls[this._wssIdx % this._wssUrls.length];
+    const ws = new WebSocket(wssUrl);
 
     ws.addEventListener("open", () => {
       this.delay = 5_000;
       this._eventsSeenThisConnection = 0;
-      this.log.info({ programId: this.programId }, `${this.constructor.name}: connected`);
+      this.log.info({ programId: this.programId, wss: wssUrl }, `${this.constructor.name}: connected`);
       ws.send(JSON.stringify({
         jsonrpc: "2.0",
         id: nextId(),
@@ -303,22 +316,23 @@ export abstract class SolanaRpcIndexer {
       }));
 
       // Keepalive: send a getHealth ping every 20 s to prevent silent drops.
-      // PublicNode silently closes idle WebSocket connections; this keeps them alive.
+      // Some RPCs silently close idle WebSocket connections; this keeps them alive.
       this._keepaliveTimer = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ jsonrpc: "2.0", id: nextId(), method: "getHealth" }));
         }
       }, 20_000);
 
-      // Watchdog: if 30 s pass with zero events, the connection is silently dead —
-      // force a close so the reconnect loop kicks in immediately.
+      // Watchdog: if 30 s pass with zero events, rotate to the next WSS endpoint
+      // and force a close so the reconnect loop kicks in immediately.
       this._watchdogTimer = setTimeout(() => {
         if (this._eventsSeenThisConnection === 0) {
+          const nextUrl = this._wssUrls[(this._wssIdx + 1) % this._wssUrls.length];
           this.log.warn(
-            { programId: this.programId },
-            `${this.constructor.name}: 30 s elapsed with zero events — ` +
-            "forcing reconnect (likely silent WebSocket drop)"
+            { programId: this.programId, currentWss: wssUrl, nextWss: nextUrl },
+            `${this.constructor.name}: 30 s with zero events — rotating WSS endpoint and reconnecting`
           );
+          this._wssIdx++; // rotate before close so the reconnect uses next URL
           ws.close();
         }
       }, 30_000);
