@@ -1320,10 +1320,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 className={`font-mono font-bold text-[15px]${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
                 style={{ color: "#e2e8f0" }}
               >
-                {priceStats.currentPrice > 0
-                  ? (priceStats.currentPrice < 1e-4
-                    ? priceStats.currentPrice.toExponential(3)
-                    : priceStats.currentPrice.toPrecision(4))
+                {priceStats.currentPrice > 0 && solPrice
+                  ? (() => {
+                      const priceUsd = priceStats.currentPrice * solPrice;
+                      const priceInSol = priceUsd / solPrice;
+                      return priceInSol < 1e-4
+                        ? priceInSol.toExponential(3)
+                        : priceInSol.toPrecision(4);
+                    })()
                   : "—"}
               </span>
             </div>
