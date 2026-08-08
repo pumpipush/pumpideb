@@ -616,6 +616,7 @@ export default function Dashboard() {
     }
     if (onlyGraduated) apiDisplay = apiDisplay.filter((t) => t.graduated);
     if (onlyWithImage)  apiDisplay = apiDisplay.filter((t) => !!t.imageUrl);
+    if (activeTab === "New") apiDisplay = apiDisplay.filter((t) => (parseFloat(t.marketCapEth ?? "0") || 0) > 0);
     if (minMcap.trim()) {
       const min = parseFloat(minMcap) || 0;
       apiDisplay = apiDisplay.filter((t) => (parseFloat(t.marketCapEth ?? "0") || 0) >= min);
