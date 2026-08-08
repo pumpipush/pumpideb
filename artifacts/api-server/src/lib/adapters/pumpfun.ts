@@ -18,9 +18,10 @@
  * No env vars required — uses PublicNode free WebSocket RPC.
  */
 
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and, isNull, gt } from "drizzle-orm";
 import { db, tokensTable, tradesTable } from "@workspace/db";
 import { emitTrade, emitNewToken } from "../tradeEmitter";
+import { logger as rootLogger } from "../logger";
 import {
   SolanaRpcIndexer,
   detectInstructionType,
@@ -350,6 +351,37 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
       ({ mint, isBuy, solLamports, tokenAmount, traderAddress } = swap);
     }
 
+    // ── Inline repair: correct zero token_amount BEFORE insert ───────────────
+    // When the TradeEvent log is present we have exact post-trade virtual
+    // reserves on-chain. Back-calculate the pre-trade token reserve and derive
+    // the token delta. This is race-free: no DB reads, runs entirely from the
+    // parsed event before any other state is written.
+    //
+    // The fallback path (getTransaction + parseSwap) has no reserves; any
+    // zero-amount trade it produces is left for the periodic healer, which
+    // replays the full AMM history in correct insertion order.
+    if (tokenAmount === "0" && onChainVSolLam !== null && onChainVTok !== null) {
+      const solLam = BigInt(solLamports);
+      if (solLam > 0n) {
+        try {
+          const k          = onChainVSolLam * onChainVTok;
+          // TradeEvent reserves are POST-trade; reverse to get PRE-trade vSol
+          const preVSolLam = isBuy ? onChainVSolLam - solLam : onChainVSolLam + solLam;
+          if (preVSolLam > 0n) {
+            const preVTok = k / preVSolLam;
+            const delta   = isBuy ? preVTok - onChainVTok : onChainVTok - preVTok;
+            if (delta > 0n) {
+              tokenAmount = delta.toString();
+              this.log.debug(
+                { mint, tokenAmount, onChainVSolLam: onChainVSolLam.toString() },
+                "pump_fun: zero token_amount corrected from on-chain reserves",
+              );
+            }
+          }
+        } catch { /* leave as zero — periodic healer will fix */ }
+      }
+    }
+
     // Only compute price when both amounts are non-zero — avoids writing
     // 0.000...0 (from protocol fee/allocation events with sol_amount=0) over
     // the last valid price stored in the token row.
@@ -488,9 +520,155 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
   }
 }
 
+// ── Periodic zero-amount trade heal job ───────────────────────────────────────
+
+/**
+ * Every HEAL_INTERVAL_MS, scan for pump_fun trades inserted in the last
+ * HEAL_WINDOW_MS with token_amount='0' and price_eth IS NULL. For each
+ * affected token, replay all its trades in insertion order (constant-product
+ * AMM) to derive the missing amounts — identical to the manual backfill
+ * script but running continuously in the background.
+ *
+ * Only non-graduated tokens are replayed (same reason as backfill Pass 1:
+ * constant-product is invalid after Raydium migration).
+ */
+
+const HEAL_INTERVAL_MS = 5 * 60 * 1_000; // 5 minutes
+const HEAL_WINDOW_MS   = 30 * 60 * 1_000; // look back 30 minutes
+
+const healLog = rootLogger.child({ job: "zero-heal" });
+
+async function healZeroAmountTrades(): Promise<void> {
+  const windowStart = new Date(Date.now() - HEAL_WINDOW_MS);
+
+  // Find distinct token mints with recent zero-amount eligible trades.
+  // Join tokensTable to exclude graduated tokens: the bonding-curve constant-
+  // product formula is only valid while the token is still on pump.fun's curve.
+  // Graduated tokens that migrated to Raydium use a different AMM and would
+  // produce wildly wrong replay prices.
+  const affectedRows = await db
+    .selectDistinct({ tokenAddress: tradesTable.tokenAddress })
+    .from(tradesTable)
+    .innerJoin(tokensTable, eq(tradesTable.tokenAddress, tokensTable.address))
+    .where(
+      and(
+        eq(tradesTable.platform, "pump_fun"),
+        eq(tradesTable.tokenAmount, "0"),
+        isNull(tradesTable.priceEth),
+        gt(tradesTable.ethAmount, "0"),
+        gt(tradesTable.timestamp, windowStart),
+        eq(tokensTable.graduated, false),
+      )
+    );
+
+  if (affectedRows.length === 0) return;
+
+  healLog.info({ count: affectedRows.length }, "zero-heal: found tokens with zero-amount trades");
+
+  for (const { tokenAddress: mint } of affectedRows) {
+    try {
+      await healTokenTrades(mint);
+    } catch (err) {
+      healLog.warn({ err, mint }, "zero-heal: error healing token");
+    }
+  }
+}
+
+/**
+ * Walk all pump_fun trades for `mint` in insertion order.
+ * Starting from the protocol-defined initial reserves, advance the virtual
+ * reserves for every valid trade and back-fill any row whose token_amount
+ * is still '0' (and price_eth is null).
+ */
+async function healTokenTrades(mint: string): Promise<void> {
+  const trades = await db
+    .select({
+      id:          tradesTable.id,
+      isBuy:       tradesTable.isBuy,
+      ethAmount:   tradesTable.ethAmount,
+      tokenAmount: tradesTable.tokenAmount,
+      priceEth:    tradesTable.priceEth,
+    })
+    .from(tradesTable)
+    .where(
+      and(
+        eq(tradesTable.tokenAddress, mint),
+        eq(tradesTable.platform, "pump_fun"),
+      )
+    )
+    .orderBy(tradesTable.id);
+
+  if (trades.length === 0) return;
+
+  let vSolLam = PUMP_INIT_VSOL_LAMPORTS;
+  let vTok    = PUMP_INIT_VTOK;
+  const k     = vSolLam * vTok; // constant-product invariant
+
+  let healed = 0;
+
+  for (const trade of trades) {
+    const solLam   = BigInt(trade.ethAmount);
+    const needsFix = trade.tokenAmount === "0" && trade.priceEth === null;
+
+    if (solLam === 0n) continue; // zero-SOL: no price derivable, skip advancing reserves
+
+    let newVSolLam: bigint;
+    let newVTok:    bigint;
+    let tokenDelta: bigint;
+
+    try {
+      if (trade.isBuy) {
+        newVSolLam = vSolLam + solLam;
+        newVTok    = k / newVSolLam;
+        tokenDelta = vTok - newVTok;
+      } else {
+        newVSolLam = vSolLam > solLam ? vSolLam - solLam : vSolLam;
+        newVTok    = k / newVSolLam;
+        tokenDelta = newVTok - vTok;
+      }
+
+      if (tokenDelta <= 0n || newVTok <= 0n) continue;
+
+      if (needsFix) {
+        const priceEth = (Number(solLam) / Number(tokenDelta)).toFixed(12);
+        await db.update(tradesTable)
+          .set({ tokenAmount: tokenDelta.toString(), priceEth })
+          .where(eq(tradesTable.id, trade.id));
+        healed++;
+      }
+
+      // Always advance reserves — even for already-good rows — so the
+      // virtual state stays consistent for subsequent zero rows.
+      vSolLam = newVSolLam;
+      vTok    = newVTok;
+    } catch {
+      continue;
+    }
+  }
+
+  if (healed > 0) {
+    healLog.info({ mint, healed }, "zero-heal: repaired zero-amount trades for token");
+  }
+}
+
+function startZeroHealJob(): void {
+  // Run once shortly after startup, then on a fixed interval.
+  setTimeout(() => {
+    void healZeroAmountTrades().catch((err: unknown) =>
+      healLog.warn({ err }, "zero-heal: initial run failed"),
+    );
+    setInterval(() => {
+      void healZeroAmountTrades().catch((err: unknown) =>
+        healLog.warn({ err }, "zero-heal: periodic run failed"),
+      );
+    }, HEAL_INTERVAL_MS);
+  }, 30_000); // 30 s after start — let the indexer warm up first
+}
+
 // ── Exported entry point ───────────────────────────────────────────────────────
 
 export async function startPumpFunAdapter(): Promise<void> {
   const indexer = new PumpFunChainIndexer();
   indexer.start();
+  startZeroHealJob();
 }
