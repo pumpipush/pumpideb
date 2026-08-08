@@ -527,7 +527,8 @@ export default function Dashboard() {
   const [onlyWithImage, setOnlyWithImage] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage]               = useState(1);
-  const PAGE_SIZE = isMobile ? 24 : 50;
+  const PAGE_SIZE     = isMobile ? 24 : 50;   // paginated tabs
+  const NEW_TAB_LIMIT = isMobile ? 50 : 150;  // New tab: fixed pool, no pagination
 
   // ── Live feed ─────────────────────────────────────────────────────────────
   const { liveTokens, liveTradeStats, connected } = useFeedStream();
@@ -554,12 +555,14 @@ export default function Dashboard() {
   // Reset to page 1 whenever any filter/tab/platform changes
   useEffect(() => { setPage(1); }, [activeTab, platformFilter, search, minMcap, onlyGraduated, onlyWithImage]);
 
+  const isNewTab = activeTab === "New";
   const listParams = {
     sort: sortMap[activeTab],
     // Graduated tab uses client-side mcap threshold — no server-side flag needed
     graduated: undefined as boolean | undefined,
-    limit: PAGE_SIZE,
-    offset: (page - 1) * PAGE_SIZE,
+    // New tab: fetch a large pool in one shot — no pagination
+    limit: isNewTab ? NEW_TAB_LIMIT : PAGE_SIZE,
+    offset: isNewTab ? 0 : (page - 1) * PAGE_SIZE,
     platform: platformFilter === "all" ? undefined : platformFilter as ListTokensPlatform,
   };
   const { data: rawTokens, isLoading: loadingTokens } = useListTokens(listParams, {
@@ -693,12 +696,16 @@ export default function Dashboard() {
 
     // All other tabs: liveOnly tokens at the top (page 1 only); within apiDisplay, live rows first
     // Graduated tab never shows live-feed tokens — brand-new launches haven't completed the bonding curve
-    const filteredLiveOnly = page === 1 && activeTab !== "Graduated"
+    // New tab: live tokens always shown (no page restriction — it's a single pool, not paginated)
+    const filteredLiveOnly = activeTab !== "Graduated" && (activeTab === "New" || page === 1)
       ? (onlyWithImage ? liveOnly.filter((t) => !!t.imageUrl) : liveOnly)
       : [];
     const apiLive    = apiDisplay.filter((t) => t.isLive);
     const apiNonLive = apiDisplay.filter((t) => !t.isLive);
-    return [...filteredLiveOnly, ...apiLive, ...apiNonLive];
+    const combined = [...filteredLiveOnly, ...apiLive, ...apiNonLive];
+    // New tab: cap pool at NEW_TAB_LIMIT — coins past that position sink off the bottom
+    if (activeTab === "New") return combined.slice(0, NEW_TAB_LIMIT);
+    return combined;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawTokens, liveTokens, liveTradeStats, platformFilter, search, onlyGraduated, onlyWithImage, minMcap, activeTab, solPrice, page]);
 
@@ -723,7 +730,8 @@ export default function Dashboard() {
     setPage(1);
   };
 
-  const hasMore = (rawTokens?.length ?? 0) >= PAGE_SIZE;
+  // New tab uses a fixed pool — no next-page button
+  const hasMore = !isNewTab && (rawTokens?.length ?? 0) >= PAGE_SIZE;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -937,8 +945,8 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* ── Pagination ── */}
-            {!loadingTokens && tokens && tokens.length > 0 && (
+            {/* ── Pagination — hidden on New tab (fixed 150-coin pool) ── */}
+            {!loadingTokens && tokens && tokens.length > 0 && !isNewTab && (
               <div className="flex items-center justify-center gap-1.5 pt-4 pb-2">
                 {/* Previous */}
                 <button
