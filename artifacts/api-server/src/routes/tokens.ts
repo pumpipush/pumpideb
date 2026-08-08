@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, ilike, and, sql } from "drizzle-orm";
+import { eq, desc, ilike, and, not, sql } from "drizzle-orm";
 import { db, tokensTable } from "@workspace/db";
 import {
   ListTokensQueryParams,
@@ -30,6 +30,8 @@ router.get("/tokens", async (req, res): Promise<void> => {
   let query = db.select().from(tokensTable).$dynamic();
 
   const conditions = [];
+  // Filter out placeholder tokens that haven't been enriched yet
+  conditions.push(sql`${tokensTable.symbol} != '???'`);
   if (search) {
     conditions.push(
       sql`(${ilike(tokensTable.name, `%${search}%`)} OR ${ilike(tokensTable.symbol, `%${search}%`)})`
@@ -47,10 +49,12 @@ router.get("/tokens", async (req, res): Promise<void> => {
 
   switch (sort) {
     case "volume":
-      query = query.orderBy(desc(tokensTable.volumeEth));
+      // volumeEth is stored as TEXT (lamports) — must cast to NUMERIC for correct ordering
+      query = query.orderBy(desc(sql<number>`CAST(COALESCE(NULLIF(${tokensTable.volumeEth},''), '0') AS NUMERIC)`));
       break;
     case "marketcap":
-      query = query.orderBy(desc(tokensTable.marketCapEth));
+      // marketCapEth is stored as TEXT (lamports) — must cast to NUMERIC for correct ordering
+      query = query.orderBy(desc(sql<number>`CAST(COALESCE(NULLIF(${tokensTable.marketCapEth},''), '0') AS NUMERIC)`));
       break;
     case "trending":
       query = query.orderBy(desc(tokensTable.tradeCount));
@@ -61,7 +65,21 @@ router.get("/tokens", async (req, res): Promise<void> => {
       break;
   }
 
-  const tokens = await query.limit(Number(limit)).offset(Number(offset));
+  // Over-fetch so we have enough after deduplication, then deduplicate in-memory.
+  // Within each (name, symbol) group the sort order already surfaces the "best"
+  // token first (newest for New tab, highest volume/trade-count for others), so
+  // we just keep the first occurrence of each key.
+  const raw = await query.limit(Number(limit) * 4).offset(Number(offset));
+  // Deduplicate by symbol — pump.fun allows copy-cat launches with identical symbols;
+  // show only the one that sorted first (highest-activity or most-recent per sort mode).
+  const seen = new Set<string>();
+  const tokens = raw.filter(t => {
+    const key = t.symbol.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, Number(limit));
+
   res.json(ListTokensResponse.parse(tokens.map(formatToken)));
 });
 
@@ -104,7 +122,12 @@ router.get("/tokens/trending", async (req, res): Promise<void> => {
   const tokens = await db
     .select()
     .from(tokensTable)
-    .where(eq(tokensTable.graduated, false))
+    .where(
+      and(
+        eq(tokensTable.graduated, false),
+        not(eq(tokensTable.symbol, "???"))
+      )
+    )
     .orderBy(desc(tokensTable.tradeCount))
     .limit(limit);
 

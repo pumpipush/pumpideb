@@ -237,8 +237,17 @@ export abstract class SolanaRpcIndexer {
     const preBalances  = meta.preBalances       ?? [];
     const postBalances = meta.postBalances      ?? [];
 
-    // Find mint with largest absolute token delta
-    const mintDeltas = new Map<string, bigint>();
+    // Determine buy/sell from SOL balance of fee-payer (index 0): spends SOL = buy.
+    const solDelta  = (postBalances[0] ?? 0) - (preBalances[0] ?? 0);
+    const isBuy     = solDelta < 0;
+    const solLamports = Math.abs(solDelta).toString();
+
+    // Collect per-account token deltas WITHOUT summing across accounts.
+    // Summing cancels because the trader gains exactly what the bonding curve loses.
+    // Instead, keep the single largest-magnitude individual account delta whose
+    // direction matches isBuy (+ for buy, − for sell).
+    type AccountDelta = { mint: string; delta: bigint };
+    const perAccount: AccountDelta[] = [];
     for (const pb of post) {
       const preEntry = pre.find(
         (p) => p.mint === pb.mint && p.accountIndex === pb.accountIndex
@@ -246,21 +255,20 @@ export abstract class SolanaRpcIndexer {
       const preAmt  = BigInt(preEntry?.uiTokenAmount.amount ?? "0");
       const postAmt = BigInt(pb.uiTokenAmount.amount);
       const delta   = postAmt - preAmt;
-      if (delta !== 0n) {
-        mintDeltas.set(pb.mint, (mintDeltas.get(pb.mint) ?? 0n) + delta);
-      }
+      if (delta !== 0n) perAccount.push({ mint: pb.mint, delta });
     }
 
-    if (mintDeltas.size === 0) return null;
+    if (perAccount.length === 0) return null;
 
-    const [mint, delta] = [...mintDeltas.entries()].reduce((best, cur) =>
-      (cur[1] < 0n ? -cur[1] : cur[1]) > (best[1] < 0n ? -best[1] : best[1]) ? cur : best
-    );
+    const abs = (n: bigint) => (n < 0n ? -n : n);
 
-    const isBuy       = delta > 0n;
-    const tokenAmount = (delta < 0n ? -delta : delta).toString();
-    const solDelta    = (postBalances[0] ?? 0) - (preBalances[0] ?? 0);
-    const solLamports = Math.abs(solDelta).toString();
+    // Prefer accounts whose delta direction matches the SOL-based isBuy flag.
+    const matching = perAccount.filter(e => isBuy ? e.delta > 0n : e.delta < 0n);
+    const candidates = matching.length > 0 ? matching : perAccount;
+    const best = candidates.reduce((a, b) => abs(a.delta) >= abs(b.delta) ? a : b);
+
+    const mint        = best.mint;
+    const tokenAmount = abs(best.delta).toString();
     const traderAddress = this.extractSigner(tx);
 
     return { mint, isBuy, solLamports, tokenAmount, traderAddress };

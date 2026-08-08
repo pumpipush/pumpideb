@@ -366,7 +366,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     const vol24h = allTradesForVol.reduce((acc, t) => {
       const ts = new Date(t.timestamp).getTime();
       if (!Number.isFinite(ts)) return acc;
-      const amt = parseFloat(t.ethAmount ?? "0");
+      const amt = parseFloat(t.ethAmount ?? "0") / 1e9; // lamports → SOL
       return now - ts <= 86_400_000 ? acc + (Number.isFinite(amt) ? amt : 0) : acc;
     }, 0);
     const priceAt = (cutoffMs: number): number | null => {
@@ -388,8 +388,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       const ts = new Date(t.timestamp).getTime();
       return Number.isFinite(ts) && now - ts <= 86_400_000;
     });
-    const vol24hBuy  = trades24h.filter(t => t.isBuy) .reduce((a, t) => a + (parseFloat(t.ethAmount ?? "0") || 0), 0);
-    const vol24hSell = trades24h.filter(t => !t.isBuy).reduce((a, t) => a + (parseFloat(t.ethAmount ?? "0") || 0), 0);
+    const vol24hBuy  = trades24h.filter(t => t.isBuy) .reduce((a, t) => a + ((parseFloat(t.ethAmount ?? "0") || 0) / 1e9), 0);
+    const vol24hSell = trades24h.filter(t => !t.isBuy).reduce((a, t) => a + ((parseFloat(t.ethAmount ?? "0") || 0) / 1e9), 0);
     const txns24hBuy  = trades24h.filter(t => t.isBuy).length;
     const txns24hSell = trades24h.filter(t => !t.isBuy).length;
 
@@ -624,7 +624,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           <ChartCanvas
             bars={chartBars}
             address={token.address}
-            loading={!connected}
+            loading={false}
             chartType={chartType}
             indicators={indicators}
             solPrice={solPrice}

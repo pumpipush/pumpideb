@@ -247,11 +247,52 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
 
     if (!trade) return; // duplicate tx
 
-    // Update token aggregate stats
+    // Read current virtual reserves to advance the bonding curve
+    const [current] = await db
+      .select({
+        virtualEthReserves:   tokensTable.virtualEthReserves,
+        virtualTokenReserves: tokensTable.virtualTokenReserves,
+      })
+      .from(tokensTable)
+      .where(eq(tokensTable.address, mint))
+      .limit(1);
+
+    // Constant-product formula: vSol_lamports × vTok = k (invariant)
+    // vSol is stored in SOL units (float string), vTok in atomic units.
+    let updVSolStr: string | undefined;
+    let updVTokStr: string | undefined;
+    let updMCStr:   string | undefined;
+
+    try {
+      const vSolSol      = parseFloat(current?.virtualEthReserves ?? PUMP_INIT_VSOL_SOL);
+      const vTokAtom     = BigInt(current?.virtualTokenReserves ?? PUMP_INIT_VTOK.toString());
+      const oldVSolLam   = BigInt(Math.round(vSolSol * 1e9));
+      const tradeLam     = BigInt(solLamports);
+      const k            = oldVSolLam * vTokAtom;   // constant product
+
+      const newVSolLam   = isBuy
+        ? oldVSolLam + tradeLam
+        : oldVSolLam > tradeLam ? oldVSolLam - tradeLam : oldVSolLam;
+
+      if (newVSolLam > 0n) {
+        const newVTok  = k / newVSolLam;
+        updVSolStr     = (Number(newVSolLam) / 1e9).toFixed(6).replace(/\.?0+$/, "");
+        updVTokStr     = newVTok.toString();
+        // MC_lamports = totalSupply × newVSol_lamports / newVTok
+        if (newVTok > 0n)
+          updMCStr = (PUMP_TOTAL_SUPPLY * newVSolLam / newVTok).toString();
+      }
+    } catch { /* keep existing reserves on parse error */ }
+
+    // Update token aggregate stats + bonding curve state
+    // Only overwrite priceEth when we have a real value — never erase the last good price with null.
     await db.update(tokensTable).set({
       tradeCount: sql`${tokensTable.tradeCount} + 1`,
       volumeEth:  sql`CAST(CAST(${tokensTable.volumeEth} AS NUMERIC) + ${solLamports} AS TEXT)`,
-      priceEth,
+      ...(priceEth !== null ? { priceEth } : {}),
+      ...(updVSolStr !== undefined ? { virtualEthReserves:   updVSolStr } : {}),
+      ...(updVTokStr !== undefined ? { virtualTokenReserves: updVTokStr } : {}),
+      ...(updMCStr   !== undefined ? { marketCapEth:         updMCStr   } : {}),
     }).where(eq(tokensTable.address, mint));
 
     this.log.debug({ mint, isBuy, sol: solLamports }, "pump_fun: trade ingested");

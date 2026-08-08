@@ -23,8 +23,8 @@
  *   daos_fun           → https://api-v3.raydium.io/mint/ids?mints={mint}
  */
 
-import { and, desc, gte, isNull, like, or, not, eq, inArray } from "drizzle-orm";
-import { db, tokensTable } from "@workspace/db";
+import { and, desc, gte, isNull, like, or, not, eq, inArray, sql, gt } from "drizzle-orm";
+import { db, tokensTable, tradesTable } from "@workspace/db";
 import { logger } from "./logger";
 import { emitSnapshot } from "./tradeEmitter";
 
@@ -304,10 +304,77 @@ async function enrichTick(): Promise<void> {
   }
 }
 
+// ── Bonding curve backfill ─────────────────────────────────────────────────────
+// Runs once on startup. For pump.fun tokens whose virtualEthReserves was never
+// updated from trade data (stuck at the initial "30" SOL), replays all their
+// DB trades using the constant-product formula to compute current state.
+//
+// For a constant-product AMM: vSol × vTok = k (invariant).
+// Since each buy/sell moves SOL linearly: finalVSol = 30e9 + Σbuys − Σsells.
+// Then finalVTok = k₀ / finalVSol,  MC = totalSupply × finalVSol / finalVTok.
+
+const PUMP_INIT_VSOL_LAM = 30_000_000_000n;
+const PUMP_INIT_VTOK     = 1_073_000_191_045_000n;
+const PUMP_TOTAL_SUPPLY  = 1_000_000_000_000_000n;
+const PUMP_K0            = PUMP_INIT_VSOL_LAM * PUMP_INIT_VTOK;
+
+async function backfillBondingCurves(): Promise<void> {
+  // Tokens that still have the initial reserves despite having trades
+  const stale = await db
+    .select({ address: tokensTable.address, tradeCount: tokensTable.tradeCount })
+    .from(tokensTable)
+    .where(
+      and(
+        eq(tokensTable.platform, "pump_fun"),
+        eq(tokensTable.virtualEthReserves, "30"),
+        sql`${tokensTable.tradeCount}::int > 0`,
+      ),
+    )
+    .limit(500);
+
+  if (stale.length === 0) return;
+  log.info({ count: stale.length }, "enrichment: backfilling bonding curve reserves");
+
+  for (const token of stale) {
+    try {
+      // Aggregate net SOL for this token: positive = bought in, negative = sold out
+      const [agg] = await db
+        .select({
+          netLamports: sql<string>`
+            SUM(CASE WHEN ${tradesTable.isBuy} THEN CAST(${tradesTable.ethAmount} AS NUMERIC)
+                     ELSE -CAST(${tradesTable.ethAmount} AS NUMERIC) END)
+          `,
+        })
+        .from(tradesTable)
+        .where(eq(tradesTable.tokenAddress, token.address));
+
+      const netLam = BigInt(Math.round(Number(agg?.netLamports ?? "0")));
+      const newVSolLam = PUMP_INIT_VSOL_LAM + netLam;
+      if (newVSolLam <= 0n) continue;
+
+      const newVTok    = PUMP_K0 / newVSolLam;
+      const newMC      = PUMP_TOTAL_SUPPLY * newVSolLam / newVTok;
+      const newVSolStr = (Number(newVSolLam) / 1e9).toFixed(6).replace(/\.?0+$/, "");
+
+      await db.update(tokensTable).set({
+        virtualEthReserves:   newVSolStr,
+        virtualTokenReserves: newVTok.toString(),
+        marketCapEth:         newMC.toString(),
+      }).where(eq(tokensTable.address, token.address));
+    } catch (err) {
+      log.warn({ address: token.address, err }, "enrichment: backfill failed for token");
+    }
+  }
+
+  log.info({ count: stale.length }, "enrichment: bonding curve backfill complete");
+}
+
 // ── Entry point ────────────────────────────────────────────────────────────────
 
 export function startEnrichmentLoop(): void {
   log.info({ intervalMs: POLL_INTERVAL_MS }, "enrichment: background loop started");
+  // Run bonding-curve backfill immediately so existing tokens get real MC values
+  void backfillBondingCurves();
   // First tick slightly delayed so adapters can connect and insert initial records
   setTimeout(() => {
     void enrichTick();
