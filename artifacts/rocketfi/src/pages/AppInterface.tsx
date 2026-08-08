@@ -678,13 +678,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             indicators={indicators}
             solPrice={solPrice}
             symbol={token.symbol}
+            graduated={token.graduated}
             onCrosshairMove={onCrosshairMove}
           />
         </div>
       </div>
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartBars, chartType, chartTf, indicators, indOpen, connected, token?.address, onCrosshairMove, solPrice]);
+  }, [chartBars, chartType, chartTf, indicators, indOpen, connected, token?.address, token?.graduated, onCrosshairMove, solPrice]);
 
   const handleTrade = async () => {
     if (!wallet) {

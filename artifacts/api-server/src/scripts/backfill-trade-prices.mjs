@@ -175,7 +175,25 @@ async function interpolateToken(client, mint) {
 
 // ── Token-set helpers ─────────────────────────────────────────────────────────
 
-async function tokensNeedingFix(pool) {
+/**
+ * Returns mints that have chart-eligible zero-amount trades.
+ * When `excludeGraduated` is true (Pass 1 — AMM replay) the result is
+ * limited to non-graduated tokens: the bonding-curve constant-product
+ * formula is only valid while the token is still on pump.fun's curve.
+ * Graduated tokens that migrated to Raydium use a different AMM and would
+ * produce wildly wrong replay prices, so they are left as-is and handled
+ * only by Pass 2 (nearest-neighbour interpolation from real recorded prices).
+ */
+async function tokensNeedingFix(pool, { excludeGraduated = false } = {}) {
+  const graduatedClause = excludeGraduated
+    ? `AND NOT EXISTS (
+         SELECT 1 FROM tokens t
+         WHERE  t.address  = trades.token_address
+           AND  t.platform = 'pump_fun'
+           AND  t.graduated = TRUE
+       )`
+    : "";
+
   const { rows } = await pool.query(`
     SELECT DISTINCT token_address
     FROM   trades
@@ -183,6 +201,7 @@ async function tokensNeedingFix(pool) {
       AND  token_amount = '0'
       AND  price_eth    IS NULL
       AND  CAST(eth_amount AS NUMERIC) > 0
+      ${graduatedClause}
     ORDER BY token_address
   `);
   return rows.map(r => r.token_address);
@@ -255,8 +274,11 @@ async function main() {
   console.log(`=== Pump.fun trade price backfill${DRY_RUN ? " (DRY RUN)" : ""} ===\n`);
 
   // ── Pass 1: AMM replay ────────────────────────────────────────────────────
-  const pass1Tokens = await tokensNeedingFix(pool);
-  console.log(`Pass 1 (AMM replay): ${pass1Tokens.length} token(s) with eligible zero-amount trades`);
+  // Graduated tokens are excluded: the bonding-curve constant-product formula
+  // is invalid after a token migrates to Raydium, so replaying their trades
+  // would produce wrong prices. They are handled by interpolation in Pass 2.
+  const pass1Tokens = await tokensNeedingFix(pool, { excludeGraduated: true });
+  console.log(`Pass 1 (AMM replay): ${pass1Tokens.length} token(s) with eligible zero-amount trades (graduated tokens excluded)`);
   if (pass1Tokens.length > 0) {
     const { totalUpdated: u1, totalErrors: e1 } = await runParallel(pass1Tokens, ammReplayToken, "amm");
     console.log(`Pass 1 done — updated=${u1}  unrepairable=${e1}`);

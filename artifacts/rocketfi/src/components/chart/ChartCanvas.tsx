@@ -41,6 +41,7 @@ interface ChartCanvasProps {
   indicators?:      Indicator[];
   solPrice?:        number | null;
   symbol?:          string;
+  graduated?:       boolean;
   priceFormatter?:  (price: number) => string;
   onCrosshairMove?: (bar: OHLCSnapshot | null) => void;
 }
@@ -374,7 +375,7 @@ function ChartSkeleton({ visible }: { visible: boolean }) {
 
 /* ── Main component ────────────────────────────────────────────────── */
 export const ChartCanvas = memo(function ChartCanvas({
-  bars, address, loading, chartType = "candle", indicators = [], solPrice, symbol, priceFormatter, onCrosshairMove,
+  bars, address, loading, chartType = "candle", indicators = [], solPrice, symbol, graduated, priceFormatter, onCrosshairMove,
 }: ChartCanvasProps) {
   const mainRef    = useRef<HTMLDivElement>(null);
   const chartRef   = useRef<IChartApi | null>(null);
@@ -892,10 +893,28 @@ export const ChartCanvas = memo(function ChartCanvas({
       <ChartNoData visible={chartReady && !bars.length} />
       <div ref={mainRef} style={{ flex: 1, minHeight: 0 }} />
 
+      {/* ── Graduated badge — top-right, visible only for graduated tokens ── */}
+      {graduated && (
+        <div
+          className="absolute top-2 right-2 z-20 select-none flex items-center gap-1.5 pointer-events-none"
+          style={{
+            background: "rgba(34,197,94,0.12)",
+            border: "1px solid rgba(34,197,94,0.40)",
+            borderRadius: 6,
+            padding: "3px 8px",
+            backdropFilter: "blur(6px)",
+          }}
+        >
+          <span style={{ fontSize: 10, color: "#4ade80", fontWeight: 700, letterSpacing: "0.05em" }}>
+            🎓 GRADUATED TO RAYDIUM
+          </span>
+        </div>
+      )}
+
       {/* ── In-chart symbol + OHLC overlay — single row ── */}
       <div
         className="absolute top-2 left-2 z-10 select-none flex items-center gap-3 pointer-events-none"
-        style={{ maxWidth: "calc(100% - 80px)" }}
+        style={{ maxWidth: "calc(100% - 160px)" }}
       >
         {/* Pair label — always visible, never scrolls away */}
         {symbol && (
