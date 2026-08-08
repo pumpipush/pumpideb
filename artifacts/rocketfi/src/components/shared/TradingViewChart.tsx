@@ -74,7 +74,7 @@ export function TradingViewChart({
         layout: {
           background:  { type: ColorType.Solid, color: "#0B1220" },
           textColor:   "#64748b",
-          fontFamily:  "'Inter', 'Plus Jakarta Sans', sans-serif",
+          fontFamily:  "'Trebuchet MS', system-ui, sans-serif",
           fontSize:    10,
         },
         grid: {

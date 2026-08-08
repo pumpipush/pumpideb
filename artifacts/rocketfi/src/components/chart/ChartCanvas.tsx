@@ -290,7 +290,7 @@ function makeChart(
   opts: { timeVisible?: boolean; rightScale?: boolean; priceFormatter?: (p: number) => string } = {},
 ) {
   return createChart(el, {
-    layout: { background: { type: ColorType.Solid, color: BG }, textColor: "#94a3b8", fontSize: 11, fontFamily: "'Inter', 'Plus Jakarta Sans', sans-serif" },
+    layout: { background: { type: ColorType.Solid, color: BG }, textColor: "#94a3b8", fontSize: 11, fontFamily: "'Trebuchet MS', system-ui, sans-serif" },
     grid: { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
     crosshair: {
       vertLine: { color: "rgba(59,130,246,0.4)", width: 1, style: 3 },
@@ -337,7 +337,7 @@ function ChartNoData({ visible }: { visible: boolean }) {
         <rect x="29.5" y="24" width="1.5" height="7"  rx="0.75" fill="rgba(255,255,255,0.18)" />
         <rect x="4" y="34" width="32" height="1" rx="0.5" fill="rgba(255,255,255,0.10)" />
       </svg>
-      <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.32)", fontFamily: "'Inter', sans-serif", letterSpacing: "0.01em" }}>
+      <span style={{ fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.32)", fontFamily: "'Trebuchet MS', sans-serif", letterSpacing: "0.01em" }}>
         No chart data
       </span>
     </div>
@@ -362,10 +362,10 @@ function ChartSkeleton({ visible }: { visible: boolean }) {
           strokeLinecap="round" strokeDasharray="30 65" />
       </svg>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.8)", fontFamily: "'Inter', sans-serif" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.8)", fontFamily: "'Trebuchet MS', sans-serif" }}>
           Loading chart
         </span>
-        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontFamily: "'Inter', sans-serif" }}>
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontFamily: "'Trebuchet MS', sans-serif" }}>
           Please wait…
         </span>
       </div>
