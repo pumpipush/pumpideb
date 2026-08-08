@@ -1076,8 +1076,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           {/* ── MOBILE: Row 3 — Vol 24h (left) + 5m / 1h / 6h % (right) ── */}
           <div className="flex items-center justify-between mt-2 md:hidden">
             <div className="flex flex-col justify-center">
-              <span className="text-[11px] font-medium mb-0.5" style={{ color: "#94a3b8" }}>Vol 24h</span>
-              <span className="font-mono font-bold text-[14px]" style={{ color: "#e2e8f0" }}>
+              <span className="text-[12px] font-medium mb-0.5" style={{ color: "#94a3b8" }}>Vol 24h</span>
+              <span className="font-mono font-bold text-[18px] tabular-nums leading-tight" style={{ color: "#e2e8f0" }}>
                 {solPrice && priceStats.vol24h > 0 ? formatUSD(priceStats.vol24h * solPrice) : "—"}
               </span>
             </div>
@@ -1088,9 +1088,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 { label: "6h", data: priceStats.p6h },
               ] as { label: string; data: { val: string; up: boolean } | null }[]).map(({ label, data }) => (
                 <div key={label} className="flex flex-col items-center">
-                  <span className="text-[10px] font-medium mb-0.5" style={{ color: "#64748b" }}>{label}</span>
+                  <span className="text-[12px] font-medium mb-0.5" style={{ color: "#64748b" }}>{label}</span>
                   <span
-                    className="font-mono font-bold text-[12px]"
+                    className="font-mono font-bold text-[14px] tabular-nums leading-tight"
                     style={{ color: data ? (data.up ? "#4ade80" : "#f87171") : "#475569" }}
                   >
                     {data?.val ?? "—"}
