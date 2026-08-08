@@ -933,7 +933,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           </div>
           <div className="mt-1 text-[10px] font-mono text-muted-foreground/70">
             {isGraduated
-              ? <span className="text-primary font-bold">Graduated — liquidity added to Uniswap ✓</span>
+              ? <span className="text-primary font-bold">Graduated — liquidity added to Raydium ✓</span>
               : <span>{realSolInCurve.toFixed(2)} / 85 SOL goal</span>
             }
           </div>
