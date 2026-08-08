@@ -644,30 +644,37 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
       const T   = performance.now();
       const PHI = 1.6180339887;
 
-      // Global drift — period ~20s on X, ~28s on Y (Lissajous 5:3 ratio globally)
-      const gx = 5.0 * Math.sin(T * 0.000314) +
-                 2.0 * Math.sin(T * 0.000314 * PHI);   // ±7px total
-      const gy = 4.0 * Math.cos(T * 0.000188) +
-                 1.5 * Math.cos(T * 0.000188 * PHI);   // ±5.5px total
-
       for (let i = 0; i < bubbles.length; i++) {
         const b = bubbles[i];
 
-        // Individual variation — tiny (1-2px) so adjacent bubbles stay clear
-        const fx = gx + b.floatAmp * Math.sin(T * b.floatFreqX + b.floatPhaseX);
-        const fy = gy + b.floatAmp * Math.cos(T * b.floatFreqY + b.floatPhaseY);
-
-        // Slow viscous lerp — smooth lag ~1.5s behind target (no jerk/snap)
-        b.dispX  += (b.x + fx - b.dispX) * 0.016;
-        b.dispY  += (b.y + fy - b.dispY) * 0.016;
         b.colorR += (b.targetR - b.colorR) * 0.04;
         b.colorG += (b.targetG - b.colorG) * 0.04;
         b.colorB += (b.targetB - b.colorB) * 0.04;
 
-        // Radius breathing for top-5 only (±1.5% pulse ~6-8s period)
         if (i < TOP_CIRCLES) {
+          // ── Only the 5 big circles animate — text labels stay perfectly still ──
+          // Each circle gets its own independent Lissajous 3:2 path
+          // (X freq * 1.5 = Y freq → figure-8 orbital) with small amplitude
+          // so circles never crash into each other.
+          const fx = b.floatAmp * (
+            0.65 * Math.sin(T * b.floatFreqX + b.floatPhaseX) +
+            0.35 * Math.sin(T * b.floatFreqX * PHI + b.floatPhaseX * 1.9)
+          );
+          const fy = b.floatAmp * (
+            0.65 * Math.cos(T * b.floatFreqY + b.floatPhaseY) +
+            0.35 * Math.cos(T * b.floatFreqY * PHI + b.floatPhaseY * 1.6)
+          );
+          // Slow viscous lerp → smooth, no snapping
+          b.dispX += (b.x + fx - b.dispX) * 0.018;
+          b.dispY += (b.y + fy - b.dispY) * 0.018;
+
+          // Radius breathing ±1.5%
           const pulse = 1 + 0.015 * Math.sin(T * b.pulseFreq + b.pulsePhase);
           b.dispR += (b.r * pulse - b.dispR) * 0.04;
+        } else {
+          // Text labels — snap to layout position, zero animation
+          b.dispX = b.x;
+          b.dispY = b.y;
         }
       }
 
