@@ -6,7 +6,7 @@ import {
   type ListTokensPlatform,
 } from "@workspace/api-client-react";
 
-import { formatMC, formatMCUsd, cn, timeAgo, resolveImageUrl } from "@/lib/utils";
+import { formatMC, formatMCUsd, formatTokenPrice, cn, timeAgo, resolveImageUrl } from "@/lib/utils";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { PlatformBadge, PlatformDot, type PlatformId } from "@/components/shared/PlatformBadge";
@@ -260,7 +260,7 @@ function TableView({ tokens, solPrice }: { tokens: DisplayToken[]; solPrice: num
                 </td>
                 <td className="px-3 py-3 hidden md:table-cell">
                   <span className="text-xs font-mono text-muted-foreground tabular-nums">
-                    {price < 1e-6 ? price.toExponential(2) : price < 0.001 ? price.toFixed(6) : price.toFixed(4)} SOL
+                    {solPrice ? formatTokenPrice(price * solPrice) : "—"}
                   </span>
                 </td>
                 <td className="px-3 py-3 hidden lg:table-cell">
