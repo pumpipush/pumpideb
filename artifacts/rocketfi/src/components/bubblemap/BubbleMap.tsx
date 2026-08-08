@@ -105,13 +105,13 @@ function pctToColors(pct: number): {
       pctHex: "#ffffff",
     };
   } else {
-    // Neutral — very dark, makes colored bubbles pop
+    // Neutral — dark blue-gray, clearly visible on black background
     return {
-      center: { r: 24, g: 26, b: 42 },
-      mid:    { r: 14, g: 15, b: 26 },
-      edge:   { r: 6,  g: 7,  b: 13 },
-      glow:   "rgba(40,45,80,0.08)",
-      border: "rgba(60,65,100,0.28)",
+      center: { r: 52, g: 58, b: 88 },
+      mid:    { r: 32, g: 36, b: 58 },
+      edge:   { r: 16, g: 18, b: 30 },
+      glow:   "rgba(55,62,100,0.25)",
+      border: "rgba(90,100,150,0.50)",
       pctHex: "#94a3b8",
     };
   }
