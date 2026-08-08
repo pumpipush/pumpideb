@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, or, isNull, sql } from "drizzle-orm";
 import { db, pool, tradesTable, tokensTable } from "@workspace/db";
 import {
   TradeHistoryParams,
@@ -206,7 +206,18 @@ router.get("/tokens/:address/trades", async (req, res): Promise<void> => {
   const trades = await db
     .select()
     .from(tradesTable)
-    .where(eq(tradesTable.tokenAddress, params.data.address))
+    .where(
+      and(
+        eq(tradesTable.tokenAddress, params.data.address),
+        // Sanity guard: pump.fun prices are never legitimately above ~0.0001 SOL/token.
+        // 1.0 SOL/token is a generous ceiling that blocks corrupted price spikes from
+        // appearing in the trade history, even if a future heal-job regression writes bad data.
+        or(
+          isNull(tradesTable.priceEth),
+          sql`CAST(${tradesTable.priceEth} AS DOUBLE PRECISION) < 1.0`,
+        ),
+      ),
+    )
     .orderBy(desc(tradesTable.timestamp))
     .limit(100);
 
