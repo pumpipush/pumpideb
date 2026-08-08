@@ -33,6 +33,8 @@ import {
   Clock,
   Flame,
   BarChart2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -478,6 +480,8 @@ export default function Dashboard() {
   const [onlyGraduated, setOnlyGraduated] = useState(false);
   const [onlyWithImage, setOnlyWithImage] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
+  const [page, setPage]               = useState(1);
+  const PAGE_SIZE = isMobile ? 24 : 50;
 
   // ── Live feed ─────────────────────────────────────────────────────────────
   const { liveTokens, liveTradeStats, connected } = useFeedStream();
@@ -501,10 +505,14 @@ export default function Dashboard() {
     "Graduated": ListTokensSort.newest,
   };
 
+  // Reset to page 1 whenever any filter/tab/platform changes
+  useEffect(() => { setPage(1); }, [activeTab, platformFilter, search, minMcap, onlyGraduated, onlyWithImage]);
+
   const listParams = {
     sort: sortMap[activeTab],
     graduated: activeTab === "Graduated" ? true : undefined,
-    limit: isMobile ? 100 : 150,
+    limit: PAGE_SIZE,
+    offset: (page - 1) * PAGE_SIZE,
     platform: platformFilter === "all" ? undefined : platformFilter as ListTokensPlatform,
   };
   const { data: rawTokens, isLoading: loadingTokens } = useListTokens(listParams, {
@@ -629,13 +637,15 @@ export default function Dashboard() {
       return apiDisplay;
     }
 
-    // All other tabs: liveOnly tokens at the top; within apiDisplay, live rows first
-    const filteredLiveOnly = onlyWithImage ? liveOnly.filter((t) => !!t.imageUrl) : liveOnly;
+    // All other tabs: liveOnly tokens at the top (page 1 only); within apiDisplay, live rows first
+    const filteredLiveOnly = page === 1
+      ? (onlyWithImage ? liveOnly.filter((t) => !!t.imageUrl) : liveOnly)
+      : [];
     const apiLive    = apiDisplay.filter((t) => t.isLive);
     const apiNonLive = apiDisplay.filter((t) => !t.isLive);
     return [...filteredLiveOnly, ...apiLive, ...apiNonLive];
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawTokens, liveTokens, liveTradeStats, platformFilter, search, onlyGraduated, onlyWithImage, minMcap, activeTab, solPrice]);
+  }, [rawTokens, liveTokens, liveTradeStats, platformFilter, search, onlyGraduated, onlyWithImage, minMcap, activeTab, solPrice, page]);
 
   // How many live tokens visible for the current platform filter
   const visibleLiveCount = useMemo(() => {
@@ -655,7 +665,10 @@ export default function Dashboard() {
     setMinMcap("");
     setOnlyGraduated(false);
     setOnlyWithImage(false);
+    setPage(1);
   };
+
+  const hasMore = (rawTokens?.length ?? 0) >= PAGE_SIZE;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -713,7 +726,7 @@ export default function Dashboard() {
                   {(["New", "Trending", "Volume", "Graduated"] as SortTab[]).map((tab) => (
                     <button
                       key={tab}
-                      onClick={() => setActiveTab(tab)}
+                      onClick={() => { setActiveTab(tab); setPage(1); }}
                       className={cn(
                         "px-3 py-1 text-[14px] font-bold rounded-[3px] transition-all duration-150",
                         activeTab === tab
@@ -866,6 +879,55 @@ export default function Dashboard() {
             ) : (
               <div className="mt-1">
                 <TableView tokens={tokens} solPrice={solPrice} />
+              </div>
+            )}
+
+            {/* ── Pagination ── */}
+            {!loadingTokens && tokens && tokens.length > 0 && (
+              <div className="flex items-center justify-center gap-1.5 pt-4 pb-2">
+                {/* Previous */}
+                <button
+                  disabled={page === 1}
+                  onClick={() => { setPage(p => p - 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                  className="flex items-center gap-1 h-8 px-3 rounded-sm text-[13px] font-medium border transition-all disabled:opacity-30 disabled:cursor-not-allowed border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                </button>
+
+                {/* Page numbers */}
+                {page > 2 && (
+                  <>
+                    <button onClick={() => { setPage(1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                      className="h-8 w-8 rounded-sm text-[13px] font-medium border border-border/50 text-muted-foreground hover:text-foreground hover:border-border transition-all">
+                      1
+                    </button>
+                    {page > 3 && <span className="text-muted-foreground text-[13px] px-1">…</span>}
+                  </>
+                )}
+                {page > 1 && (
+                  <button onClick={() => { setPage(p => p - 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    className="h-8 w-8 rounded-sm text-[13px] font-medium border border-border/50 text-muted-foreground hover:text-foreground hover:border-border transition-all">
+                    {page - 1}
+                  </button>
+                )}
+                <button className="h-8 w-8 rounded-sm text-[13px] font-bold border border-primary bg-primary/15 text-primary cursor-default">
+                  {page}
+                </button>
+                {hasMore && (
+                  <button onClick={() => { setPage(p => p + 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    className="h-8 w-8 rounded-sm text-[13px] font-medium border border-border/50 text-muted-foreground hover:text-foreground hover:border-border transition-all">
+                    {page + 1}
+                  </button>
+                )}
+
+                {/* Next */}
+                <button
+                  disabled={!hasMore}
+                  onClick={() => { setPage(p => p + 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                  className="flex items-center gap-1 h-8 px-3 rounded-sm text-[13px] font-medium border transition-all disabled:opacity-30 disabled:cursor-not-allowed border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
+                >
+                  Next <ChevronRight className="w-3.5 h-3.5" />
+                </button>
               </div>
             )}
           </section>
