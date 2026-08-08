@@ -219,8 +219,7 @@ function TableView({ tokens, solPrice, activeTab }: { tokens: DisplayToken[]; so
     <SortTh col={col} label={label} active={sortKey === col} dir={sortDir} onSort={handleSort} className={cls} />
   );
 
-  const showVolumeCol   = activeTab === "Volume";
-  const showGraduatedCol = activeTab === "Graduated";
+  const showVolumeCol = activeTab === "Volume";
 
   return (
     <div className="overflow-x-auto rounded-sm border border-border/40 bg-card">
@@ -237,13 +236,7 @@ function TableView({ tokens, solPrice, activeTab }: { tokens: DisplayToken[]; so
             {th("marketCap", "Mkt Cap",    "hidden sm:table-cell")}
             {th("price",     "Price",      "hidden md:table-cell")}
             <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground hidden lg:table-cell">Platform</th>
-            {showGraduatedCol ? (
-              <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-primary hidden xl:table-cell whitespace-nowrap">
-                Graduated
-              </th>
-            ) : (
-              th("age", "Age", "hidden xl:table-cell")
-            )}
+            {th("age", "Age", "hidden xl:table-cell")}
             <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Action</th>
           </tr>
         </thead>
@@ -315,17 +308,9 @@ function TableView({ tokens, solPrice, activeTab }: { tokens: DisplayToken[]; so
                 <td className="px-3 py-3 hidden lg:table-cell">
                   <PlatformBadge platform={token.platform as PlatformId} size="sm" />
                 </td>
-                {showGraduatedCol ? (
-                  <td className="px-3 py-3 hidden xl:table-cell">
-                    <span className="text-xs text-primary font-mono">
-                      {token.graduatedAt ? timeAgo(token.graduatedAt) : <span className="text-muted-foreground/40">—</span>}
-                    </span>
-                  </td>
-                ) : (
-                  <td className="px-3 py-3 hidden xl:table-cell">
-                    <span className="text-xs text-muted-foreground font-mono">{timeAgo(token.createdAt)}</span>
-                  </td>
-                )}
+                <td className="px-3 py-3 hidden xl:table-cell">
+                  <span className="text-xs text-muted-foreground font-mono">{timeAgo(token.createdAt)}</span>
+                </td>
                 <td className="px-3 py-3 text-right">
                   <Link
                     href={`/app?token=${token.address}`}
@@ -436,9 +421,9 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
               <span className="text-muted-foreground/50 font-normal text-[11px]">vol</span>
             </span>
           ) : isGraduated ? (
-            <span className="flex items-center gap-1 text-[13px] text-primary font-mono">
-              <GraduationCap className="w-3 h-3" />
-              {token.graduatedAt ? timeAgo(token.graduatedAt) : "—"}
+            <span className="flex items-center gap-1 text-[14px] text-emerald-400 font-mono">
+              <Clock className="w-3 h-3 text-emerald-400" />
+              {timeAgo(token.createdAt)}
             </span>
           ) : (
             <span className="flex items-center gap-1 text-[14px] text-emerald-400 font-mono">
@@ -504,6 +489,11 @@ function PlatformFilterStrip({
   );
 }
 
+// pump.fun bonding curve fills when ~85 SOL is raised.
+// Market cap at that point (in lamports stored as marketCapEth) is ~85 SOL.
+// We use this as a client-side proxy for "completed bonding curve."
+const PUMP_GRADUATION_LAMPORTS = 85_000_000_000;
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const solPrice = useSolPrice();
@@ -564,7 +554,8 @@ export default function Dashboard() {
 
   const listParams = {
     sort: sortMap[activeTab],
-    graduated: activeTab === "Graduated" ? true : undefined,
+    // Graduated tab uses client-side mcap threshold — no server-side flag needed
+    graduated: undefined as boolean | undefined,
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
     platform: platformFilter === "all" ? undefined : platformFilter as ListTokensPlatform,
@@ -678,9 +669,14 @@ export default function Dashboard() {
         (t) => t.name.toLowerCase().includes(q) || t.symbol.toLowerCase().includes(q)
       );
     }
-    if (onlyGraduated) apiDisplay = apiDisplay.filter((t) => t.graduated);
+    // Skip onlyGraduated toggle on the Graduated tab — it already filters by mcap threshold below
+    if (onlyGraduated && activeTab !== "Graduated") apiDisplay = apiDisplay.filter((t) => t.graduated);
     if (onlyWithImage)  apiDisplay = apiDisplay.filter((t) => !!t.imageUrl);
     if (activeTab === "New") apiDisplay = apiDisplay.filter((t) => (parseFloat(t.marketCapEth ?? "0") || 0) > 0);
+    // Graduated tab: proxy for "bonding curve completed" — filter by pump.fun graduation mcap threshold
+    if (activeTab === "Graduated") {
+      apiDisplay = apiDisplay.filter((t) => (parseFloat(t.marketCapEth ?? "0") || 0) >= PUMP_GRADUATION_LAMPORTS);
+    }
     if (minMcap.trim()) {
       const min = parseFloat(minMcap) || 0;
       apiDisplay = apiDisplay.filter((t) => (parseFloat(t.marketCapEth ?? "0") || 0) >= min);
@@ -694,7 +690,7 @@ export default function Dashboard() {
     }
 
     // All other tabs: liveOnly tokens at the top (page 1 only); within apiDisplay, live rows first
-    // Graduated tab never shows live-feed tokens — they haven't graduated yet
+    // Graduated tab never shows live-feed tokens — brand-new launches haven't completed the bonding curve
     const filteredLiveOnly = page === 1 && activeTab !== "Graduated"
       ? (onlyWithImage ? liveOnly.filter((t) => !!t.imageUrl) : liveOnly)
       : [];
