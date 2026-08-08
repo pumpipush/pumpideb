@@ -898,26 +898,26 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           );
         })()}
 
-        {/* ── Info strip above chart: MC / Bonding Curve / Price ── */}
-        <div className="mb-2 px-3 md:px-0 space-y-2">
+        {/* ── Info strip above chart: MC | Bonding Curve | Price (horizontal) ── */}
+        <div className="mb-2 px-3 md:px-0 flex items-stretch gap-3">
 
           {/* Market Cap */}
-          <div className="flex flex-col">
-            <span className="text-[11px] font-semibold uppercase tracking-widest mb-0.5" style={{ color: "#475569" }}>Market Cap</span>
+          <div className="flex flex-col justify-center shrink-0">
+            <span className="text-[10px] font-semibold uppercase tracking-widest mb-0.5" style={{ color: "#475569" }}>Market Cap</span>
             <span
               key={priceFlash.key}
-              className={`text-[24px] font-bold text-foreground font-mono tabular-nums leading-tight${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
+              className={`text-[20px] font-bold text-foreground font-mono tabular-nums leading-tight${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
             >
               {formatMCUsd(effectiveMcEth, solPrice)}
             </span>
           </div>
 
-          {/* Bonding Curve */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
+          {/* Bonding Curve — grows to fill centre */}
+          <div className="flex-1 flex flex-col justify-center min-w-0">
+            <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-semibold tracking-widest uppercase" style={{ color: "#475569" }}>Bonding Curve</span>
               <span
-                className="text-[11px] font-bold font-mono px-2 py-0.5 rounded-full"
+                className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-full"
                 style={{
                   background: isGraduated ? "rgba(34,197,94,0.12)" : "rgba(16,185,129,0.10)",
                   color: isGraduated ? "#22c55e" : "#10b981",
@@ -927,7 +927,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 {progressPercent >= 100 ? "100%" : `${progressPercent.toFixed(1)}%`}
               </span>
             </div>
-            <div className="relative h-2.5 w-full rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+            <div className="relative h-2 w-full rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
               {[25, 50, 75].map(m => (
                 <div key={m} className="absolute top-0 h-full w-px pointer-events-none" style={{ left: `${m}%`, background: "rgba(0,0,0,0.45)", zIndex: 2 }} />
               ))}
@@ -938,38 +938,34 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   background: isGraduated
                     ? "linear-gradient(90deg, #16a34a 0%, #22c55e 55%, #4ade80 100%)"
                     : "linear-gradient(90deg, #059669 0%, #10b981 55%, #34d399 100%)",
-                  boxShadow: isGraduated
-                    ? "0 0 10px rgba(34,197,94,0.45)"
-                    : "0 0 8px rgba(16,185,129,0.40)",
+                  boxShadow: isGraduated ? "0 0 8px rgba(34,197,94,0.40)" : "0 0 7px rgba(16,185,129,0.38)",
                 }}
               />
             </div>
             {isGraduated ? (
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-1.5 mt-1">
                 <span style={{ fontSize: 9, color: "#22c55e" }}>✓</span>
-                <span className="text-[12px] font-semibold" style={{ color: "#22c55e" }}>Graduated to Raydium</span>
-                {token.graduatedAt && (
-                  <span className="text-[10px]" style={{ color: "#64748b" }}>· {timeAgo(token.graduatedAt)} ago</span>
-                )}
+                <span className="text-[11px] font-semibold" style={{ color: "#22c55e" }}>Graduated to Raydium</span>
+                {token.graduatedAt && <span className="text-[10px]" style={{ color: "#64748b" }}>· {timeAgo(token.graduatedAt)} ago</span>}
               </div>
             ) : (
-              <div className="flex items-end justify-between mt-1">
-                <span className="text-[11px] font-mono font-semibold text-foreground">
-                  {realSolInCurve.toFixed(2)}<span className="text-[10px] text-muted-foreground font-normal ml-1">/ 85 SOL</span>
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-[10px] font-mono text-foreground">
+                  {realSolInCurve.toFixed(2)}<span className="text-muted-foreground ml-1">/ 85 SOL</span>
                 </span>
                 <span className="text-[10px] font-mono" style={{ color: "#475569" }}>
-                  {(85 - realSolInCurve).toFixed(2)} SOL to Raydium
+                  {(85 - realSolInCurve).toFixed(2)} SOL left
                 </span>
               </div>
             )}
           </div>
 
           {/* Price */}
-          <div className="flex flex-col">
-            <span className="text-[11px] font-semibold uppercase tracking-widest mb-0.5" style={{ color: "#475569" }}>Price</span>
+          <div className="flex flex-col justify-center items-end shrink-0">
+            <span className="text-[10px] font-semibold uppercase tracking-widest mb-0.5" style={{ color: "#475569" }}>Price</span>
             <span
               key={`price-${priceFlash.key}`}
-              className={`text-[18px] font-bold font-mono tabular-nums leading-tight${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
+              className={`text-[16px] font-bold font-mono tabular-nums leading-tight${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
               style={{ color: "#e2e8f0" }}
             >
               {priceStats.currentPrice > 0
