@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import {
   useListTokens,
   useGetTrendingTokens,
+  getListTokensQueryKey,
   ListTokensSort,
   type ListTokensPlatform,
 } from "@workspace/api-client-react";
@@ -436,15 +437,16 @@ export default function Dashboard() {
     "Graduated": ListTokensSort.newest,
   };
 
-  const { data: rawTokens, isLoading: loadingTokens } = useListTokens({
+  const listParams = {
     sort: sortMap[activeTab],
     graduated: activeTab === "Graduated" ? true : undefined,
     limit: 100,
     platform: platformFilter === "all" ? undefined : platformFilter as ListTokensPlatform,
-  }, {
+  };
+  const { data: rawTokens, isLoading: loadingTokens } = useListTokens(listParams, {
     // Re-fetch every 30 s so logos and market caps that resolved after the
     // initial load (via enrichment or IPFS fetch) appear without a manual refresh.
-    query: { refetchInterval: 30_000 },
+    query: { refetchInterval: 30_000, queryKey: getListTokensQueryKey(listParams) },
   });
 
   const { data: trending, isLoading: loadingTrending } = useGetTrendingTokens({ limit: 4 });

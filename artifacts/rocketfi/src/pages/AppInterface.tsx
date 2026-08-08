@@ -996,6 +996,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               <span className="text-[12px] font-semibold" style={{ color: "#22c55e" }}>
                 Graduated to Raydium
               </span>
+              {token.graduatedAt && (
+                <span className="text-[10px]" style={{ color: "#64748b" }}>
+                  · {timeAgo(token.graduatedAt)} ago
+                </span>
+              )}
               <span className="text-[10px]" style={{ color: "#334155" }}>· Liquidity locked</span>
             </div>
           ) : (
