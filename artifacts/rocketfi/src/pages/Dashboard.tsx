@@ -488,7 +488,7 @@ export default function Dashboard() {
   const listParams = {
     sort: sortMap[activeTab],
     graduated: activeTab === "Graduated" ? true : undefined,
-    limit: 100,
+    limit: isMobile ? 100 : 150,
     platform: platformFilter === "all" ? undefined : platformFilter as ListTokensPlatform,
   };
   const { data: rawTokens, isLoading: loadingTokens } = useListTokens(listParams, {
