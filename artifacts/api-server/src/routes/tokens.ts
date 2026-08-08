@@ -126,6 +126,9 @@ router.get("/tokens", async (req, res): Promise<void> => {
     }
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
     params.push(fetchLimit);
+    const limitParamIdx = params.length;
+    params.push(Number(offset));
+    const offsetParamIdx = params.length;
     const { rows } = await pool.query<Record<string, unknown>>(`
       SELECT t.*,
              COALESCE(r.cnt, 0) AS recent_trade_count
@@ -138,7 +141,8 @@ router.get("/tokens", async (req, res): Promise<void> => {
       ) r ON r.token_address = t.address
       ${whereSql}
       ORDER  BY recent_trade_count DESC, t.trade_count DESC
-      LIMIT  $${params.length}
+      LIMIT  $${limitParamIdx}
+      OFFSET $${offsetParamIdx}
     `, params);
     const seen = new Set<string>();
     const tokens = rows.filter(t => {
