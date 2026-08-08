@@ -665,11 +665,11 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <BubbleMap
-                  tokens={isMobile ? bubbleTokens.slice(0, 30) : bubbleTokens}
+                  tokens={isMobile ? bubbleTokens.slice(0, 20) : bubbleTokens}
                   liveUpdates={liveTradeStats}
                   solPrice={solPrice}
-                  height={isMobile ? 280 : 460}
-                  radiusScale={isMobile ? 0.6 : 1}
+                  height={isMobile ? 340 : 460}
+                  radiusScale={isMobile ? 0.5 : 1}
                 />
               )}
             </div>
