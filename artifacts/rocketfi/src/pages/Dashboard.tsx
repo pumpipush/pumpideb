@@ -519,7 +519,7 @@ export default function Dashboard() {
   }, []);
 
   // ── Sort / filter state ───────────────────────────────────────────────────
-  const [activeTab, setActiveTab]   = useState<SortTab>("New");
+  const [activeTab, setActiveTab]   = useState<SortTab>("Trending");
   const [viewMode, setViewMode]     = useState<ViewMode>("grid");
   const [search, setSearch]         = useState("");
   const [minMcap, setMinMcap]       = useState("");
