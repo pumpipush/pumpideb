@@ -250,9 +250,9 @@ function circleColors(pct: number): { border: string; glow: string; fill: string
     };
   }
   return {
-    border: "rgba(90,105,155,0.45)",
-    glow:   "rgba(60,70,120,0.18)",
-    fill:   "rgba(50,55,85,0.06)",
+    border: "rgba(110,130,200,0.80)",
+    glow:   "rgba(80,100,170,0.40)",
+    fill:   "rgba(60,70,110,0.12)",
     text:   "#94a3b8",
   };
 }
