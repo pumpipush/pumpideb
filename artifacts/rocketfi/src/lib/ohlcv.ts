@@ -97,15 +97,31 @@ export function toBarsLC(bars: OHLCVBar[]): CandlestickData[] {
   }));
 }
 
+/**
+ * Compute SOL-per-token price from a local trade record.
+ * Prefer the pre-computed priceEth column (SOL/token, already ÷1000).
+ * Fall back to ethAmount (lamports) / tokenAmount (atomic units) / 1000.
+ */
+function tradePrice(t: Trade): number {
+  const pe = parseFloat(t.priceEth ?? "");
+  if (Number.isFinite(pe) && pe > 0) return pe;
+  const ethAmt = parseFloat(t.ethAmount);
+  const tokAmt = parseFloat(t.tokenAmount);
+  // ethAmount is in lamports, tokenAmount in atomic units (1e6/token)
+  // lamports/atomic ÷ 1000 = SOL/token  (1e9 lam/SOL ÷ 1e6 atomic/token = 1e3)
+  return (Number.isFinite(ethAmt) && Number.isFinite(tokAmt) && tokAmt > 0)
+    ? ethAmt / tokAmt / 1000
+    : 0;
+}
+
 /** Convert our local EVM trades → OHLCVBar[] (new ChartTimeframe) */
 export function tradesFromLocalBars(trades: Trade[], tf: ChartTimeframe): OHLCVBar[] {
   const ticks: RawTick[] = trades
     .map(t => {
       const ethAmt = parseFloat(t.ethAmount);
-      const tokAmt = parseFloat(t.tokenAmount);
       return {
-        time: tsToSeconds(t.timestamp),
-        price: (Number.isFinite(ethAmt) && Number.isFinite(tokAmt) && tokAmt > 0) ? ethAmt / tokAmt : 0,
+        time:   tsToSeconds(t.timestamp),
+        price:  tradePrice(t),
         volume: Number.isFinite(ethAmt) ? ethAmt : 0,
       };
     })
@@ -119,10 +135,9 @@ export function tradesFromLocal(trades: Trade[], tf: Timeframe): CandlestickData
   const ticks: RawTick[] = trades
     .map(t => {
       const ethAmt = parseFloat(t.ethAmount);
-      const tokAmt = parseFloat(t.tokenAmount);
       return {
-        time: tsToSeconds(t.timestamp),
-        price: (Number.isFinite(ethAmt) && Number.isFinite(tokAmt) && tokAmt > 0) ? ethAmt / tokAmt : 0,
+        time:   tsToSeconds(t.timestamp),
+        price:  tradePrice(t),
         volume: Number.isFinite(ethAmt) ? ethAmt : 0,
       };
     })

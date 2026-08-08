@@ -728,7 +728,9 @@ async function healTokenTrades(mint: string): Promise<void> {
       if (tokenDelta <= 0n || newVTok <= 0n) continue;
 
       if (needsFix) {
-        const priceEth = (Number(solLam) / Number(tokenDelta)).toFixed(12);
+        // price_eth = SOL per token = (lamports / base_unit) / 1000
+        // (same formula as the main trade handler — must divide by 1000)
+        const priceEth = (Number(solLam) / Number(tokenDelta) / 1000).toFixed(15);
         await db.update(tradesTable)
           .set({ tokenAmount: tokenDelta.toString(), priceEth })
           .where(eq(tradesTable.id, trade.id));
