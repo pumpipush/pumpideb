@@ -324,14 +324,14 @@ function drawBubble(
     ctx.shadowColor = "rgba(0,0,0,0.92)";
 
     // Name
-    ctx.font         = `500 ${nameSz}px 'Trebuchet MS',system-ui,sans-serif`;
+    ctx.font         = `500 ${nameSz}px Inter,'SF Pro Display',system-ui,sans-serif`;
     ctx.fillStyle    = isHovered ? "#ffffff" : "rgba(200,212,235,0.85)";
     ctx.textBaseline = "top";
     ctx.fillText(name, x, cy);
     cy += nameSz + gap;
 
     // % change — 10px
-    ctx.font      = `700 ${pctSz}px 'Trebuchet MS',system-ui,sans-serif`;
+    ctx.font      = `700 ${pctSz}px Inter,'SF Pro Display',system-ui,sans-serif`;
     ctx.fillStyle = col.text;
     ctx.fillText(pct, x, cy);
 
@@ -415,7 +415,7 @@ function drawBubble(
 
   if (showSymbol) {
     ctx.save();
-    ctx.font         = `700 ${symFontSz}px 'Trebuchet MS',system-ui,sans-serif`;
+    ctx.font         = `700 ${symFontSz}px Inter,'SF Pro Display',system-ui,sans-serif`;
     ctx.fillStyle    = "rgba(255,255,255,0.95)";
     ctx.textAlign    = "center";
     ctx.textBaseline = "top";
@@ -427,7 +427,7 @@ function drawBubble(
   }
 
   ctx.save();
-  ctx.font         = `800 ${pctFontSz}px 'Trebuchet MS',system-ui,sans-serif`;
+  ctx.font         = `800 ${pctFontSz}px Inter,'SF Pro Display',system-ui,sans-serif`;
   ctx.fillStyle    = col.text;
   ctx.textAlign    = "center";
   ctx.textBaseline = "top";

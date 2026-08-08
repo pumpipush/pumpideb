@@ -3,27 +3,11 @@
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
 
-/* ── Trebuchet MS (TradingView font) ────────────────────────────────────────── */
-@font-face {
-  font-family: 'Trebuchet MS';
-  src: url('/fonts/trebuc.ttf') format('truetype');
-  font-weight: 100 700;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Trebuchet MS';
-  src: url('/fonts/Trebuchet-MS-Italic.ttf') format('truetype');
-  font-weight: 100 700;
-  font-style: italic;
-  font-display: swap;
-}
-
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: 'Trebuchet MS', system-ui, sans-serif;
-  --font-mono: 'Trebuchet MS', monospace;
+  --font-sans: 'Poppins', sans-serif;
+  --font-mono: 'Inter', sans-serif;
 
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));

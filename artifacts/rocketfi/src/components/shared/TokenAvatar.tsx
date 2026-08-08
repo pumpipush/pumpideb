@@ -150,7 +150,7 @@ export function TokenAvatar({ symbol, imageUrl, size = 40, className, shape = "s
           textAnchor="middle"
           fontSize={fontSize}
           fontWeight="700"
-          fontFamily="'Trebuchet MS', sans-serif"
+          fontFamily="'Plus Jakarta Sans', sans-serif"
           fill="white"
           opacity="0.95"
           style={{ letterSpacing: "-0.5px" }}
