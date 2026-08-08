@@ -5,10 +5,17 @@
  * Program:     6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P
  *
  * Indexes:
- *   - Token creation (CreateV2): extracts mint, fetches pump.fun API for metadata
- *   - Swaps (Buy / Sell): persists trade to DB, updates token stats, emits SSE
+ *   - Token creation (CreateV2): extracts mint from Anchor CreateEvent log
+ *   - Swaps (Buy / Sell): extracts amounts from Anchor TradeEvent log
  *
- * No env vars required — uses PublicNode free RPC.
+ * PRIMARY PATH: Parse "Program data: <base64>" Anchor events emitted by the
+ * pump.fun program into every transaction log. This avoids getTransaction
+ * entirely — no RPC rate-limiting, zero additional HTTP calls per trade.
+ *
+ * FALLBACK PATH: If log parsing fails (e.g. different instruction structure),
+ * falls back to getTransaction + parseSwap / decodePumpCreate.
+ *
+ * No env vars required — uses PublicNode free WebSocket RPC.
  */
 
 import { eq, sql } from "drizzle-orm";
@@ -26,33 +33,24 @@ const PLATFORM     = "pump_fun";
 const CHAIN        = "solana";
 
 // ── Pump.fun bonding curve constants (fixed by the protocol) ──────────────────
-// virtualSolReserves is stored in SOL units (the UI uses it to compute progress:
-//   realSol = virtualSol - 30,  graduation at +85 real SOL → 100%).
-// virtualTokenReserves is stored in raw atomic units (token × 10^6 decimals).
-// marketCapEth (a slight misnomer — it's lamports) = totalSupply × vSol_lamports / vTok.
-const PUMP_INIT_VSOL_SOL      = "30";                      // 30 virtual SOL at launch
-const PUMP_INIT_VSOL_LAMPORTS = 30_000_000_000n;           // same in lamports (BigInt)
-const PUMP_INIT_VTOK          = 1_073_000_191_045_000n;    // virtual token reserves at launch
-const PUMP_TOTAL_SUPPLY       = 1_000_000_000_000_000n;    // 1B tokens × 10^6 decimals
+const PUMP_INIT_VSOL_SOL      = "30";
+const PUMP_INIT_VSOL_LAMPORTS = 30_000_000_000n;
+const PUMP_INIT_VTOK          = 1_073_000_191_045_000n;
+const PUMP_TOTAL_SUPPLY       = 1_000_000_000_000_000n;
 
-// Initial MC in lamports: totalSupply × virtualSolLamports / virtualTokenReserves ≈ 28 SOL
-const PUMP_INIT_MC_LAMPORTS   =
+const PUMP_INIT_MC_LAMPORTS =
   (PUMP_TOTAL_SUPPLY * PUMP_INIT_VSOL_LAMPORTS / PUMP_INIT_VTOK).toString();
-// Initial price in lamports per token atomic unit
-const PUMP_INIT_PRICE_ETH     =
+const PUMP_INIT_PRICE_ETH =
   (Number(PUMP_INIT_VSOL_LAMPORTS) / Number(PUMP_INIT_VTOK)).toFixed(12);
 
-// ── On-chain instruction decoder ───────────────────────────────────────────────
-// pump.fun CREATE instruction is an Anchor instruction whose data is:
-//   8 bytes  – Anchor discriminator (sha256("global:create")[0..8])
-//   borsh    – name   (u32 length + utf8 bytes)
-//   borsh    – symbol (u32 length + utf8 bytes)
-//   borsh    – uri    (u32 length + utf8 bytes)
-//   ...      – more fields (ignored)
-//
-// Decoding this directly from the transaction avoids any external API call,
-// which means metadata is available even when pump.fun's CDN blocks us.
+// ── Anchor event discriminators ────────────────────────────────────────────────
+// Precomputed: sha256("event:<EventName>")[0..8] as Buffer
+// TradeEvent:  bddb7fd34ee661ee
+// CreateEvent: 1b72a94ddeeb6376
+const TRADE_EVENT_DISC  = Buffer.from("bddb7fd34ee661ee", "hex");
+const CREATE_EVENT_DISC = Buffer.from("1b72a94ddeeb6376", "hex");
 
+// ── Base58 helpers ─────────────────────────────────────────────────────────────
 const BS58_ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 function bs58Decode(s: string): Uint8Array {
@@ -69,6 +67,17 @@ function bs58Decode(s: string): Uint8Array {
   return new Uint8Array([...new Array(leading).fill(0), ...bytes]);
 }
 
+function bs58Encode(bytes: Buffer | Uint8Array): string {
+  let n = 0n;
+  for (const b of bytes) n = n * 256n + BigInt(b);
+  const chars: string[] = [];
+  while (n > 0n) { chars.unshift(BS58_ALPHA[Number(n % 58n)]); n /= 58n; }
+  let leading = 0;
+  for (const b of bytes) { if (b !== 0) break; leading++; }
+  return "1".repeat(leading) + chars.join("");
+}
+
+// ── Borsh string reader ────────────────────────────────────────────────────────
 /** Read one borsh string (u32le length + utf8 bytes) from `buf` at `off`. */
 function readBorshStr(buf: Uint8Array, off: number): [string, number] {
   if (off + 4 > buf.length) throw new RangeError("borsh underflow reading length");
@@ -78,32 +87,116 @@ function readBorshStr(buf: Uint8Array, off: number): [string, number] {
   return [new TextDecoder().decode(buf.subarray(off + 4, end)), end];
 }
 
+// ── Anchor event log parsers ───────────────────────────────────────────────────
+
+/**
+ * Parse pump.fun TradeEvent from Anchor "Program data:" log lines.
+ *
+ * TradeEvent layout (borsh):
+ *   discriminator (8)  mint (32)  sol_amount (8)  token_amount (8)
+ *   is_buy (1)  user (32)  timestamp (8)  virtual_sol_reserves (8)
+ *   virtual_token_reserves (8)
+ *
+ * Total: 8+32+8+8+1+32+8+8+8 = 113 bytes
+ */
+function parseTradeEventFromLogs(logs: string[]): {
+  mint:                 string;
+  solLamports:          string;
+  tokenAmount:          string;
+  isBuy:                boolean;
+  traderAddress:        string;
+  virtualSolReserves:   bigint;
+  virtualTokenReserves: bigint;
+} | null {
+  const PREFIX = "Program data: ";
+  for (const log of logs) {
+    if (!log.startsWith(PREFIX)) continue;
+    try {
+      const raw = Buffer.from(log.slice(PREFIX.length), "base64");
+      if (raw.length < 113) continue;
+      if (!raw.subarray(0, 8).equals(TRADE_EVENT_DISC)) continue;
+
+      let off = 8;
+      const mint         = bs58Encode(raw.subarray(off, off + 32)); off += 32;
+      const solLamports  = raw.readBigUInt64LE(off).toString();     off += 8;
+      const tokenAmount  = raw.readBigUInt64LE(off).toString();     off += 8;
+      const isBuy        = raw[off] === 1;                          off += 1;
+      const traderAddress = bs58Encode(raw.subarray(off, off + 32)); off += 32;
+      off += 8; // skip timestamp (i64)
+      const virtualSolReserves   = raw.readBigUInt64LE(off); off += 8;
+      const virtualTokenReserves = raw.readBigUInt64LE(off);
+
+      return { mint, solLamports, tokenAmount, isBuy, traderAddress,
+               virtualSolReserves, virtualTokenReserves };
+    } catch { continue; }
+  }
+  return null;
+}
+
+/**
+ * Parse pump.fun CreateEvent from Anchor "Program data:" log lines.
+ *
+ * CreateEvent layout (borsh):
+ *   discriminator (8)  name (borsh string)  symbol (borsh string)
+ *   uri (borsh string)  mint (32)  bonding_curve (32)  user (32)
+ */
+function parseCreateEventFromLogs(logs: string[]): {
+  name:           string;
+  symbol:         string;
+  uri:            string;
+  mint:           string;
+  creatorAddress: string;
+} | null {
+  const PREFIX = "Program data: ";
+  for (const log of logs) {
+    if (!log.startsWith(PREFIX)) continue;
+    try {
+      const raw = Buffer.from(log.slice(PREFIX.length), "base64");
+      if (raw.length < 8 + 12 + 96) continue; // minimum plausible length
+      if (!raw.subarray(0, 8).equals(CREATE_EVENT_DISC)) continue;
+
+      const u8 = new Uint8Array(raw.buffer, raw.byteOffset, raw.length);
+      let off = 8;
+      const [name,   off1] = readBorshStr(u8, off);  off = off1;
+      const [symbol, off2] = readBorshStr(u8, off);  off = off2;
+      const [uri,    off3] = readBorshStr(u8, off);  off = off3;
+      if (off + 96 > raw.length) continue; // need mint + bondingCurve + user
+      const mint           = bs58Encode(raw.subarray(off, off + 32)); off += 32;
+      off += 32; // skip bonding_curve
+      const creatorAddress = bs58Encode(raw.subarray(off, off + 32));
+
+      if (!name.trim() || !symbol.trim()) return null;
+      return { name: name.trim(), symbol: symbol.trim(), uri: uri.trim(), mint, creatorAddress };
+    } catch { continue; }
+  }
+  return null;
+}
+
+// ── On-chain instruction decoder (fallback for CREATE) ─────────────────────────
 /** Decode pump.fun CREATE params directly from the transaction instruction data. */
 function decodePumpCreate(tx: RpcTx): { name: string; symbol: string; uri: string } | null {
   const keys   = tx.transaction?.message?.accountKeys   ?? [];
   const instrs = tx.transaction?.message?.instructions  ?? [];
 
-  // Find pump.fun program position in account keys
   const progIdx = keys.findIndex(
     (k) => (typeof k === "string" ? k : k.pubkey) === PUMP_PROGRAM,
   );
   if (progIdx < 0) return null;
 
-  // Find the top-level instruction from the pump.fun program
   const instr = instrs.find((i) => i.programIdIndex === progIdx);
   if (!instr?.data) return null;
 
   try {
     const raw = bs58Decode(instr.data);
-    if (raw.length < 9) return null; // discriminator (8) + at least 1 byte
-    let off = 8; // skip 8-byte Anchor discriminator
+    if (raw.length < 9) return null;
+    let off = 8;
     const [name,   off1] = readBorshStr(raw, off);
     const [symbol, off2] = readBorshStr(raw, off1);
     const [uri]          = readBorshStr(raw, off2);
     if (!name.trim() || !symbol.trim()) return null;
     return { name: name.trim(), symbol: symbol.trim(), uri: uri.trim() };
   } catch {
-    return null; // malformed data — not a pump.fun create instruction
+    return null;
   }
 }
 
@@ -130,7 +223,6 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
     super({ programId: PUMP_PROGRAM, adapterName: "pump_fun" });
   }
 
-  /** Process create, buy, and sell instructions */
   protected override shouldProcess(logs: string[]): boolean {
     const t = detectInstructionType(logs);
     return t === "create" || t === "buy" || t === "sell";
@@ -138,7 +230,6 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
 
   protected override async onEvent(event: LogEvent): Promise<void> {
     const instrType = detectInstructionType(event.logs);
-
     if (instrType === "create") {
       await this.handleCreate(event);
     } else if (instrType === "buy" || instrType === "sell") {
@@ -149,43 +240,57 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
   // ── Creation ───────────────────────────────────────────────────────────────
 
   private async handleCreate(event: LogEvent): Promise<void> {
-    const { signature } = event;
+    const { signature, logs } = event;
 
-    const tx = await this.getTransaction(signature);
-    if (!tx || tx.meta?.err) return;
+    // ── Fast path: decode CreateEvent from Anchor program log ──────────────
+    const logEvent = parseCreateEventFromLogs(logs);
+    let mint:           string;
+    let name:           string;
+    let symbol:         string;
+    let uri:            string | null;
+    let creatorAddress: string | null;
 
-    const mint    = this.extractPumpMint(tx);
-    const creator = this.extractSigner(tx);
+    if (logEvent) {
+      ({ mint, name, symbol, creatorAddress } = logEvent);
+      uri = logEvent.uri || null;
+      this.log.debug({ mint, name, symbol }, "pump_fun: create decoded from log event");
+    } else {
+      // ── Fallback: getTransaction + on-chain instruction decode ───────────
+      const tx = await this.getTransaction(signature);
+      if (!tx || tx.meta?.err) return;
+
+      mint = this.extractPumpMint(tx) ?? "";
+      creatorAddress = this.extractSigner(tx);
+
+      const params = decodePumpCreate(tx);
+      name   = params?.name   ?? mint.slice(0, 8) + "…";
+      symbol = params?.symbol ?? "???";
+      uri    = params?.uri    ?? null;
+    }
+
     if (!mint) {
       this.log.debug({ signature }, "pump_fun: could not extract mint — skipping create");
       return;
     }
-
-    // Decode name/symbol/uri directly from on-chain instruction data.
-    // This replaces the pump.fun REST API call, which is rate-limited / CDN-blocked
-    // from hosted environments (returns HTTP 530). All data is sourced on-chain.
-    const params = decodePumpCreate(tx);
-    const name   = params?.name   ?? mint.slice(0, 8) + "…";
-    const symbol = params?.symbol ?? "???";
-    const uri    = params?.uri    ?? null;
 
     await db.insert(tokensTable).values({
       address:              mint,
       name,
       symbol,
       description:          null,
-      imageUrl:             null, // filled async once the metadata URI is fetched
-      creatorAddress:       creator,
+      imageUrl:             null,
+      creatorAddress,
       totalSupply:          PUMP_TOTAL_SUPPLY.toString(),
       virtualTokenReserves: PUMP_INIT_VTOK.toString(),
-      virtualEthReserves:   PUMP_INIT_VSOL_SOL,   // stored in SOL (UI uses this for progress bar)
-      marketCapEth:         PUMP_INIT_MC_LAMPORTS, // ≈ 28 SOL at launch
+      virtualEthReserves:   PUMP_INIT_VSOL_SOL,
+      marketCapEth:         PUMP_INIT_MC_LAMPORTS,
       priceEth:             PUMP_INIT_PRICE_ETH,
       platform:             PLATFORM,
       chain:                CHAIN,
     }).onConflictDoNothing();
 
-    this.log.info({ mint, name, symbol, marketCapEth: PUMP_INIT_MC_LAMPORTS }, "pump_fun: new token ingested (chain-native)");
+    this.log.info({ mint, name, symbol, marketCapEth: PUMP_INIT_MC_LAMPORTS },
+      "pump_fun: new token ingested");
 
     emitNewToken({
       type: "newToken",
@@ -198,15 +303,11 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
         marketCapEth: PUMP_INIT_MC_LAMPORTS,
         platform:     PLATFORM,
         chain:        CHAIN,
-        createdAt:    tx.blockTime
-          ? new Date(tx.blockTime * 1000).toISOString()
-          : new Date().toISOString(),
+        createdAt:    new Date().toISOString(),
       },
     });
 
     // Fire-and-forget: fetch image from metadata URI (IPFS / pump.fun CDN).
-    // Updates the DB row when the image arrives; the enrichment loop also retries
-    // missing images independently.
     if (uri) {
       fetchImageFromUri(uri)
         .then(async (imageUrl) => {
@@ -221,17 +322,36 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
   // ── Trade (buy / sell) ────────────────────────────────────────────────────
 
   private async handleTrade(event: LogEvent): Promise<void> {
-    const { signature } = event;
+    const { signature, logs } = event;
 
-    const tx = await this.getTransaction(signature);
-    if (!tx || tx.meta?.err) return;
+    let mint:           string;
+    let isBuy:          boolean;
+    let solLamports:    string;
+    let tokenAmount:    string;
+    let traderAddress:  string;
+    // On-chain reserves from TradeEvent (exact); set when log parsing succeeds.
+    let onChainVSolLam: bigint | null = null;
+    let onChainVTok:    bigint | null = null;
 
-    const swap = this.parseSwap(tx);
-    if (!swap) return;
+    // ── Fast path: decode TradeEvent from Anchor program log ───────────────
+    const logEvent = parseTradeEventFromLogs(logs);
+    if (logEvent) {
+      ({ mint, solLamports, tokenAmount, isBuy, traderAddress } = logEvent);
+      onChainVSolLam = logEvent.virtualSolReserves;
+      onChainVTok    = logEvent.virtualTokenReserves;
+    } else {
+      // ── Fallback: getTransaction + parseSwap ─────────────────────────────
+      const tx = await this.getTransaction(signature);
+      if (!tx || tx.meta?.err) return;
+      const swap = this.parseSwap(tx);
+      if (!swap) return;
+      ({ mint, isBuy, solLamports, tokenAmount, traderAddress } = swap);
+    }
 
-    const { mint, isBuy, solLamports, tokenAmount, traderAddress } = swap;
-
-    const priceEth = tokenAmount !== "0"
+    // Only compute price when both amounts are non-zero — avoids writing
+    // 0.000...0 (from protocol fee/allocation events with sol_amount=0) over
+    // the last valid price stored in the token row.
+    const priceEth = tokenAmount !== "0" && solLamports !== "0"
       ? (Number(solLamports) / Number(tokenAmount)).toFixed(12)
       : null;
 
@@ -251,55 +371,60 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
 
     if (!trade) return; // duplicate tx
 
-    // Read current virtual reserves to advance the bonding curve
-    const [current] = await db
-      .select({
-        virtualEthReserves:   tokensTable.virtualEthReserves,
-        virtualTokenReserves: tokensTable.virtualTokenReserves,
-      })
-      .from(tokensTable)
-      .where(eq(tokensTable.address, mint))
-      .limit(1);
-
-    // Constant-product formula: vSol_lamports × vTok = k (invariant)
-    // vSol is stored in SOL units (float string), vTok in atomic units.
+    // ── Compute updated bonding curve state ───────────────────────────────
+    // Prefer on-chain values from TradeEvent (exact reserves post-trade).
+    // Fall back to constant-product estimation when using getTransaction path.
     let updVSolStr: string | undefined;
     let updVTokStr: string | undefined;
     let updMCStr:   string | undefined;
 
-    try {
-      const vSolSol      = parseFloat(current?.virtualEthReserves ?? PUMP_INIT_VSOL_SOL);
-      const vTokAtom     = BigInt(current?.virtualTokenReserves ?? PUMP_INIT_VTOK.toString());
-      const oldVSolLam   = BigInt(Math.round(vSolSol * 1e9));
-      const tradeLam     = BigInt(solLamports);
-      const k            = oldVSolLam * vTokAtom;   // constant product
+    if (onChainVSolLam !== null && onChainVTok !== null) {
+      // Exact on-chain values — always correct, no estimation needed.
+      updVSolStr = (Number(onChainVSolLam) / 1e9).toFixed(6).replace(/\.?0+$/, "");
+      updVTokStr = onChainVTok.toString();
+      if (onChainVTok > 0n)
+        updMCStr = (PUMP_TOTAL_SUPPLY * onChainVSolLam / onChainVTok).toString();
+    } else {
+      // Fallback: constant-product estimation from current DB reserves.
+      try {
+        const [current] = await db
+          .select({ virtualEthReserves: tokensTable.virtualEthReserves,
+                    virtualTokenReserves: tokensTable.virtualTokenReserves })
+          .from(tokensTable)
+          .where(eq(tokensTable.address, mint))
+          .limit(1);
 
-      const newVSolLam   = isBuy
-        ? oldVSolLam + tradeLam
-        : oldVSolLam > tradeLam ? oldVSolLam - tradeLam : oldVSolLam;
+        const vSolSol    = parseFloat(current?.virtualEthReserves ?? PUMP_INIT_VSOL_SOL);
+        const vTokAtom   = BigInt(current?.virtualTokenReserves ?? PUMP_INIT_VTOK.toString());
+        const oldVSolLam = BigInt(Math.round(vSolSol * 1e9));
+        const tradeLam   = BigInt(solLamports);
+        const k          = oldVSolLam * vTokAtom;
 
-      if (newVSolLam > 0n) {
-        const newVTok  = k / newVSolLam;
-        updVSolStr     = (Number(newVSolLam) / 1e9).toFixed(6).replace(/\.?0+$/, "");
-        updVTokStr     = newVTok.toString();
-        // MC_lamports = totalSupply × newVSol_lamports / newVTok
-        if (newVTok > 0n)
-          updMCStr = (PUMP_TOTAL_SUPPLY * newVSolLam / newVTok).toString();
-      }
-    } catch { /* keep existing reserves on parse error */ }
+        const newVSolLam = isBuy
+          ? oldVSolLam + tradeLam
+          : oldVSolLam > tradeLam ? oldVSolLam - tradeLam : oldVSolLam;
 
-    // Update token aggregate stats + bonding curve state
-    // Only overwrite priceEth when we have a real value — never erase the last good price with null.
+        if (newVSolLam > 0n) {
+          const newVTok = k / newVSolLam;
+          updVSolStr = (Number(newVSolLam) / 1e9).toFixed(6).replace(/\.?0+$/, "");
+          updVTokStr = newVTok.toString();
+          if (newVTok > 0n)
+            updMCStr = (PUMP_TOTAL_SUPPLY * newVSolLam / newVTok).toString();
+        }
+      } catch { /* keep existing reserves on parse error */ }
+    }
+
+    // Update token aggregate stats + bonding curve — never erase last good price.
     await db.update(tokensTable).set({
       tradeCount: sql`${tokensTable.tradeCount} + 1`,
       volumeEth:  sql`CAST(CAST(${tokensTable.volumeEth} AS NUMERIC) + ${solLamports} AS TEXT)`,
-      ...(priceEth !== null ? { priceEth } : {}),
-      ...(updVSolStr !== undefined ? { virtualEthReserves:   updVSolStr } : {}),
+      ...(priceEth   !== null    ? { priceEth }                          : {}),
+      ...(updVSolStr !== undefined ? { virtualEthReserves: updVSolStr }   : {}),
       ...(updVTokStr !== undefined ? { virtualTokenReserves: updVTokStr } : {}),
-      ...(updMCStr   !== undefined ? { marketCapEth:         updMCStr   } : {}),
+      ...(updMCStr   !== undefined ? { marketCapEth: updMCStr }           : {}),
     }).where(eq(tokensTable.address, mint));
 
-    this.log.debug({ mint, isBuy, sol: solLamports }, "pump_fun: trade ingested");
+    this.log.debug({ mint, isBuy, sol: solLamports, fromLog: logEvent !== null }, "pump_fun: trade ingested");
 
     // Fetch latest token state for SSE payload
     const [tokenRow] = await db
@@ -348,10 +473,6 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
-  /**
-   * pump.fun mint is reliably at accountKeys[1] (ends in "pump").
-   * Falls back to postTokenBalances diff for safety.
-   */
   private extractPumpMint(tx: RpcTx): string | null {
     const keys = tx.transaction?.message?.accountKeys ?? [];
     const k1   = keys[1];

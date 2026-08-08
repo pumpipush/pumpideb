@@ -19,10 +19,12 @@ export const PUBLICNODE_WSS  = "wss://solana-rpc.publicnode.com";
 export const PUBLICNODE_HTTP = "https://solana-rpc.publicnode.com";
 
 /** Free public Solana RPC endpoints used as fallbacks when the primary is rate-limited.
- *  Tried in order on HTTP -32005 responses. No auth needed on any of these. */
+ *  Tried in order on -32005 / 429 responses. No auth needed on any of these. */
 export const FALLBACK_HTTP_RPCS = [
-  "https://api.mainnet-beta.solana.com", // Solana Foundation
-  "https://rpc.ankr.com/solana",         // Ankr free tier
+  "https://rpc.ankr.com/solana",                           // Ankr free tier
+  "https://api.mainnet-beta.solana.com",                   // Solana Foundation
+  "https://solana-api.tt-prod.net",                        // Triton
+  "https://endpoints.omniatech.io/v1/sol/mainnet/public",  // Omnia public
 ] as const;
 
 export interface LogEvent {
@@ -172,13 +174,14 @@ export abstract class SolanaRpcIndexer {
             signal:  AbortSignal.timeout(8_000),
           });
           const json = (await res.json()) as { result?: T; error?: { code?: number } & unknown };
-          if ((json.error as { code?: number } | undefined)?.code === -32005) {
-            // Rate-limited on this endpoint — silently try next
+          const errCode = (json.error as { code?: number } | undefined)?.code;
+          if (errCode === -32005 || errCode === 429) {
+            // Rate-limited on this endpoint — silently try next fallback
             continue;
           }
           if (json.error) {
             this.log.warn({ rpcError: json.error, method, url }, "rpc: error response");
-            return null;
+            continue; // try next endpoint instead of giving up entirely
           }
           return json.result ?? null;
         } catch {

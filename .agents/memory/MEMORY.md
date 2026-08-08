@@ -2,3 +2,4 @@
 - [pump.fun metadata sources](pumpfun-metadata.md) — API blocked from Replit; use on-chain instruction data decode instead
 - [Solana RPC rate limits](solana-rpc-limits.md) — PublicNode -32005 at pump.fun volume; fallback RPCs configured
 - [parseSwap token delta fix](pumpfun-parseswap.md) — summing per-mint deltas cancels; use per-account largest-match instead; ethAmount is lamports (÷1e9 for SOL)
+- [Pump.fun Anchor event log parsing](pumpfun-anchor-events.md) — parse "Program data:" base64 from WS logs; eliminates all getTransaction calls; TradeEvent gives exact virtual reserves
