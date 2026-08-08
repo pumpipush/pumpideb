@@ -466,7 +466,7 @@ export default function Dashboard() {
         address:      t.address,
         name:         t.name,
         symbol:       t.symbol,
-        imageUrl:     t.imageUrl,
+        imageUrl:     live?.imageUrl ?? t.imageUrl,
         // Overlay live trade stats when available — keeps cards current without polling
         marketCapEth: tradeSnap?.marketCapEth ?? t.marketCapEth,
         priceEth:     tradeSnap?.priceEth     ?? t.priceEth,
