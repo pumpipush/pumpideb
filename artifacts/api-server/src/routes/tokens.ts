@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, ilike, and, not, sql } from "drizzle-orm";
-import { db, tokensTable } from "@workspace/db";
+import { db, pool, tokensTable } from "@workspace/db";
 import {
   ListTokensQueryParams,
   ListTokensResponse,
@@ -27,6 +27,79 @@ router.get("/tokens", async (req, res): Promise<void> => {
 
   const { sort = "newest", limit = 20, offset = 0, search, graduated, platform } = parsed.data;
 
+  // ── Trending: pre-aggregated JOIN to avoid correlated subquery per-row ──────
+  if (sort === "trending") {
+    const fetchLimit = Number(limit) * 4;
+    const params: unknown[] = [];
+    const where: string[] = [`t.symbol != '???'`];
+    if (search) {
+      params.push(`%${search}%`);
+      where.push(`(t.name ILIKE $${params.length} OR t.symbol ILIKE $${params.length})`);
+    }
+    if (graduated !== undefined) {
+      params.push(graduated);
+      where.push(`t.graduated = $${params.length}`);
+    }
+    if (platform) {
+      params.push(platform);
+      where.push(`t.platform = $${params.length}`);
+    }
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    params.push(fetchLimit);
+    const { rows } = await pool.query<Record<string, unknown>>(`
+      SELECT t.*,
+             COALESCE(r.cnt, 0) AS recent_trade_count
+      FROM   tokens t
+      LEFT JOIN (
+        SELECT token_address, COUNT(*) AS cnt
+        FROM   trades
+        WHERE  timestamp > NOW() - INTERVAL '1 hour'
+        GROUP  BY token_address
+      ) r ON r.token_address = t.address
+      ${whereSql}
+      ORDER  BY recent_trade_count DESC, t.trade_count DESC
+      LIMIT  $${params.length}
+    `, params);
+    const seen = new Set<string>();
+    const tokens = rows.filter(t => {
+      const key = String(t["symbol"] ?? "").toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, Number(limit));
+    // Map raw rows → token shape expected by formatToken
+    const mapped = tokens.map(r => ({
+      id:                   r["id"] as string,
+      address:              r["address"] as string,
+      name:                 r["name"] as string,
+      symbol:               r["symbol"] as string,
+      description:          r["description"] as string | null,
+      imageUrl:             r["image_url"] as string | null,
+      creatorAddress:       r["creator_address"] as string,
+      totalSupply:          r["total_supply"] as string,
+      virtualTokenReserves: r["virtual_token_reserves"] as string,
+      virtualEthReserves:   r["virtual_eth_reserves"] as string,
+      realTokenReserves:    r["real_token_reserves"] as string,
+      realEthReserves:      r["real_eth_reserves"] as string,
+      marketCapEth:         r["market_cap_eth"] as string | null,
+      priceEth:             r["price_eth"] as string | null,
+      volumeEth:            r["volume_eth"] as string | null,
+      twitterUrl:           r["twitter_url"] as string | null,
+      telegramUrl:          r["telegram_url"] as string | null,
+      websiteUrl:           r["website_url"] as string | null,
+      platform:             r["platform"] as string,
+      chain:                r["chain"] as string,
+      graduated:            r["graduated"] as boolean,
+      graduatedAt:          r["graduated_at"] as string | null,
+      tradeCount:           Number(r["trade_count"] ?? 0),
+      holderCount:          Number(r["holder_count"] ?? 0),
+      createdAt:            r["created_at"] as string,
+      updatedAt:            r["updated_at"] as string,
+    }));
+    res.json(ListTokensResponse.parse(mapped.map(formatToken)));
+    return;
+  }
+
   let query = db.select().from(tokensTable).$dynamic();
 
   const conditions = [];
@@ -49,15 +122,10 @@ router.get("/tokens", async (req, res): Promise<void> => {
 
   switch (sort) {
     case "volume":
-      // volumeEth is stored as TEXT (lamports) — must cast to NUMERIC for correct ordering
       query = query.orderBy(desc(sql<number>`CAST(COALESCE(NULLIF(${tokensTable.volumeEth},''), '0') AS NUMERIC)`));
       break;
     case "marketcap":
-      // marketCapEth is stored as TEXT (lamports) — must cast to NUMERIC for correct ordering
       query = query.orderBy(desc(sql<number>`CAST(COALESCE(NULLIF(${tokensTable.marketCapEth},''), '0') AS NUMERIC)`));
-      break;
-    case "trending":
-      query = query.orderBy(desc(tokensTable.tradeCount));
       break;
     case "newest":
     default:
@@ -65,13 +133,7 @@ router.get("/tokens", async (req, res): Promise<void> => {
       break;
   }
 
-  // Over-fetch so we have enough after deduplication, then deduplicate in-memory.
-  // Within each (name, symbol) group the sort order already surfaces the "best"
-  // token first (newest for New tab, highest volume/trade-count for others), so
-  // we just keep the first occurrence of each key.
   const raw = await query.limit(Number(limit) * 4).offset(Number(offset));
-  // Deduplicate by symbol — pump.fun allows copy-cat launches with identical symbols;
-  // show only the one that sorted first (highest-activity or most-recent per sort mode).
   const seen = new Set<string>();
   const tokens = raw.filter(t => {
     const key = t.symbol.toLowerCase();

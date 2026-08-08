@@ -8,6 +8,7 @@ import {
 } from "@workspace/api-client-react";
 
 import { formatMC, formatMCUsd, formatTokenPrice, cn, timeAgo, resolveImageUrl } from "@/lib/utils";
+import BubbleMap, { type TokenBubbleInput } from "@/components/bubblemap/BubbleMap";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { PlatformBadge, PlatformDot, type PlatformId } from "@/components/shared/PlatformBadge";
@@ -31,6 +32,8 @@ import {
   Wifi,
   WifiOff,
   Clock,
+  Flame,
+  BarChart2,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -55,6 +58,8 @@ interface DisplayToken {
   isLive?: boolean;
   /** Unix ms of last SSE trade event — drives activity pulse on cards */
   lastTradeAt?: number;
+  /** All-time trade count from API */
+  tradeCount?: number;
 }
 
 // ─── Platform filter config ───────────────────────────────────────────────────
@@ -284,16 +289,29 @@ function TableView({ tokens, solPrice }: { tokens: DisplayToken[]; solPrice: num
   );
 }
 
+// ─── Rank badge config ────────────────────────────────────────────────────────
+const RANK_STYLES: Record<number, { bg: string; text: string; border: string }> = {
+  1: { bg: "linear-gradient(135deg,#f59e0b,#d97706)", text: "#000", border: "rgba(251,191,36,0.5)" },
+  2: { bg: "linear-gradient(135deg,#94a3b8,#64748b)", text: "#fff", border: "rgba(148,163,184,0.4)" },
+  3: { bg: "linear-gradient(135deg,#b45309,#92400e)", text: "#fde68a", border: "rgba(180,83,9,0.4)" },
+};
+
 // ─── Grid card ────────────────────────────────────────────────────────────────
-function TokenCard({ token, rank, solPrice }: { token: DisplayToken; rank: number; solPrice: number | null }) {
+function TokenCard({ token, rank, solPrice, isTrending }: { token: DisplayToken; rank: number; solPrice: number | null; isTrending?: boolean }) {
+  const rankStyle = RANK_STYLES[rank];
+  const isHot = isTrending && rank <= 3;
+  const fmtTrades = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${n}`;
+
   return (
     <Link
       href={`/app?token=${token.address}`}
       className={cn(
         "flex flex-col bg-card border rounded-sm cursor-pointer group relative card-lift",
-        token.isLive
-          ? "border-emerald-500/30 hover:border-emerald-400/60 shadow-[0_0_12px_rgba(52,211,153,0.08)]"
-          : "border-border/60 hover:border-primary/50"
+        isHot
+          ? "border-amber-500/30 hover:border-amber-400/60 shadow-[0_0_14px_rgba(245,158,11,0.10)]"
+          : token.isLive
+            ? "border-emerald-500/30 hover:border-emerald-400/60 shadow-[0_0_12px_rgba(52,211,153,0.08)]"
+            : "border-border/60 hover:border-primary/50"
       )}
     >
       <div className="aspect-square w-full bg-muted border-b border-border/50 relative overflow-hidden rounded-t-sm">
@@ -313,7 +331,29 @@ function TokenCard({ token, rank, solPrice }: { token: DisplayToken; rank: numbe
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+        {/* Rank badge — top-left, Trending only */}
+        {isTrending && (
+          <div
+            className="absolute top-2 left-2 min-w-[26px] h-[22px] flex items-center justify-center rounded-md text-[11px] font-black px-1.5 backdrop-blur-sm"
+            style={{
+              background: rankStyle?.bg ?? "rgba(0,0,0,0.55)",
+              color: rankStyle?.text ?? "#94a3b8",
+              border: `1px solid ${rankStyle?.border ?? "rgba(255,255,255,0.12)"}`,
+              textShadow: rank <= 3 ? "0 1px 2px rgba(0,0,0,0.4)" : "none",
+            }}
+          >
+            #{rank}
+          </div>
+        )}
+
+        {/* Top-right badges */}
         <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+          {isHot && (
+            <div className="flex items-center gap-0.5 bg-black/60 border border-amber-500/40 text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded-sm backdrop-blur-md">
+              <Flame className="w-2.5 h-2.5" />HOT
+            </div>
+          )}
           {token.graduated && (
             <div className="bg-primary/20 border border-primary/50 text-primary text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-sm backdrop-blur-md animate-pulseGlow">
               Grad
@@ -321,6 +361,7 @@ function TokenCard({ token, rank, solPrice }: { token: DisplayToken; rank: numbe
           )}
         </div>
       </div>
+
       <div className="p-3 flex flex-col gap-1.5">
         <span className="font-semibold text-foreground text-[16px] truncate leading-tight group-hover:text-primary transition-colors duration-200">{token.name}</span>
         <div className="flex justify-between items-center">
@@ -334,6 +375,12 @@ function TokenCard({ token, rank, solPrice }: { token: DisplayToken; rank: numbe
             <Clock className="w-3 h-3 text-emerald-400" />
             {timeAgo(token.createdAt)}
           </span>
+          {isTrending && (token.tradeCount ?? 0) > 0 && (
+            <span className="flex items-center gap-1 text-[12px] font-mono" style={{ color: "#94a3b8" }}>
+              <BarChart2 className="w-3 h-3" />
+              {fmtTrades(token.tradeCount!)}
+            </span>
+          )}
         </div>
       </div>
     </Link>
@@ -443,7 +490,28 @@ export default function Dashboard() {
     query: { refetchInterval: 30_000, queryKey: getListTokensQueryKey(listParams) },
   });
 
-  const { data: trending, isLoading: loadingTrending } = useGetTrendingTokens({ limit: 4 });
+  const { data: trending, isLoading: loadingTrending } = useGetTrendingTokens({ limit: 8 });
+
+  // Bubble map: top tokens by market cap (separate fetch, independent of tab state)
+  const { data: bubbleRawTokens } = useListTokens(
+    { sort: ListTokensSort.marketcap, limit: 50 },
+    { query: { refetchInterval: 60_000 } }
+  );
+  const bubbleTokens = useMemo<TokenBubbleInput[]>(() => {
+    if (!bubbleRawTokens) return [];
+    return bubbleRawTokens.map(t => {
+      const snap = liveTradeStats.get(t.address);
+      return {
+        address:      t.address,
+        symbol:       t.symbol,
+        name:         t.name,
+        imageUrl:     t.imageUrl,
+        marketCapEth: snap?.marketCapEth ?? t.marketCapEth,
+        priceEth:     snap?.priceEth     ?? t.priceEth,
+        platform:     t.platform ?? "unknown",
+      };
+    });
+  }, [bubbleRawTokens, liveTradeStats]);
 
   // ── Merge live + API tokens ───────────────────────────────────────────────
   const tokens = useMemo<DisplayToken[] | undefined>(() => {
@@ -476,6 +544,7 @@ export default function Dashboard() {
         // Preserve isLive=true if feed still considers this token new
         isLive:       live?.isNew ?? false,
         lastTradeAt:  tradeSnap?.lastTradeAt,
+        tradeCount:   t.tradeCount,
       };
     });
 
@@ -556,53 +625,111 @@ export default function Dashboard() {
       <div className="w-full max-w-[1400px] mx-auto pt-2 md:pt-4 px-3 md:px-5 flex-1">
         <div className="flex flex-col min-w-0">
 
-          {/* Trending strip */}
+          {/* ── Top section: Trending leaderboard (left) + Bubble Map (right) ── */}
           <section className="mb-3 md:mb-5">
-            <div className="flex items-center justify-between mb-2 md:mb-3">
-              <h2 className="text-sm font-bold text-foreground uppercase tracking-widest">Trending now</h2>
-              <Link href="/app" className="text-xs text-primary hover:underline transition-all">See all</Link>
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-1 md:pb-2 scrollbar-hide snap-x -mx-3 px-3 md:mx-0 md:px-0">
-              {loadingTrending ? (
-                <>{[1,2,3,4].map(i => <Skeleton key={i} className="snap-start shrink-0 w-[220px] h-[160px] rounded-sm" />)}</>
-              ) : trending?.slice(0, 4).map((token, i) => (
-                <Link
-                  key={token.id}
-                  href={`/app?token=${token.address}`}
-                  style={{ animationDelay: `${i * 60}ms` }}
-                  className="snap-start shrink-0 group relative w-[160px] h-[120px] md:w-[220px] md:h-[160px] rounded-sm overflow-hidden bg-muted border border-border/60 transition-all duration-300 animate-scaleIn hover:-translate-y-1 hover:border-primary/60 hover:shadow-[0_8px_24px_hsl(142_100%_45%/0.2)]"
-                >
-                  {token.imageUrl ? (
-                    <img src={resolveImageUrl(token.imageUrl) ?? ""} alt={token.symbol} className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.06] transition-transform duration-500 ease-out" loading="eager" />
+            <div className="flex flex-col lg:flex-row gap-3">
+
+              {/* ── LEFT: Trending leaderboard ─────────────────────────────── */}
+              <div className="lg:w-[280px] xl:w-[300px] shrink-0 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-[13px] font-bold uppercase tracking-widest flex items-center gap-1.5" style={{ color: "#e2e8f0" }}>
+                    <Flame className="w-3.5 h-3.5 text-amber-400" /> Trending
+                  </h2>
+                  <Link href="/app" className="text-[11px] hover:underline transition-all" style={{ color: "#4ade80" }}>See all →</Link>
+                </div>
+
+                <div className="flex flex-col gap-1.5 lg:gap-1 overflow-hidden">
+                  {loadingTrending
+                    ? [1,2,3,4,5,6].map(i => (
+                        <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
+                          <Skeleton className="w-7 h-7 rounded-full shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <Skeleton className="h-3 w-20 mb-1" />
+                            <Skeleton className="h-2.5 w-14" />
+                          </div>
+                          <Skeleton className="h-3 w-12" />
+                        </div>
+                      ))
+                    : (trending ?? []).slice(0, 8).map((token, i) => {
+                        const rankStyle = i === 0
+                          ? { bg: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000" }
+                          : i === 1
+                            ? { bg: "linear-gradient(135deg,#94a3b8,#64748b)", color: "#fff" }
+                            : i === 2
+                              ? { bg: "linear-gradient(135deg,#b45309,#92400e)", color: "#fde68a" }
+                              : { bg: "rgba(255,255,255,0.07)", color: "#94a3b8" };
+                        return (
+                          <Link
+                            key={token.id}
+                            href={`/app?token=${token.address}`}
+                            className="group flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all duration-150"
+                            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}
+                            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.07)")}
+                            onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+                          >
+                            {/* Rank */}
+                            <div className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black shrink-0"
+                              style={{ background: rankStyle.bg, color: rankStyle.color }}>
+                              {i + 1}
+                            </div>
+                            {/* Avatar */}
+                            <div className="w-7 h-7 rounded-full overflow-hidden shrink-0 bg-muted">
+                              {token.imageUrl
+                                ? <img src={resolveImageUrl(token.imageUrl) ?? ""} alt={token.symbol} className="w-full h-full object-cover" />
+                                : <div className="w-full h-full flex items-center justify-center text-[11px] font-bold" style={{ background: tokenCardBackground(token.symbol) }}>
+                                    {token.symbol.replace(/^\$/, "").charAt(0).toUpperCase()}
+                                  </div>
+                              }
+                            </div>
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[13px] font-bold truncate" style={{ color: "#e2e8f0" }}>
+                                {token.symbol.replace(/^\$/, "")}
+                              </div>
+                              <div className="text-[11px] truncate" style={{ color: "#64748b" }}>{token.name}</div>
+                            </div>
+                            {/* MC */}
+                            <div className="text-right shrink-0">
+                              <div className="text-[12px] font-mono font-bold" style={{ color: "#e2e8f0" }}>
+                                {formatMCUsd(token.marketCapEth, solPrice)}
+                              </div>
+                              <div className="text-[10px]" style={{ color: "#64748b" }}>MC</div>
+                            </div>
+                          </Link>
+                        );
+                      })
+                  }
+                </div>
+              </div>
+
+              {/* ── RIGHT: Bubble Map ────────────────────────────────────────── */}
+              <div className="flex-1 min-w-0 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-[13px] font-bold uppercase tracking-widest flex items-center gap-1.5" style={{ color: "#e2e8f0" }}>
+                    <BarChart2 className="w-3.5 h-3.5" style={{ color: "#94a3b8" }} /> Market Bubbles
+                    <span className="text-[10px] font-normal ml-1" style={{ color: "#475569" }}>· size = market cap · color = momentum</span>
+                  </h2>
+                </div>
+                <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
+                  {bubbleTokens.length === 0 ? (
+                    <div className="flex items-center justify-center" style={{ height: 360, background: "#050508" }}>
+                      <div className="flex gap-2.5 items-center">
+                        <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:0ms]" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:150ms]" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:300ms]" />
+                      </div>
+                    </div>
                   ) : (
-                    <div className="absolute inset-0 flex items-center justify-center font-bold text-5xl text-white/80" style={{ background: tokenCardBackground(token.symbol) }}>
-                      {isPlaceholder(token.symbol) ? (
-                        <span className="flex gap-2 items-center">
-                          <span className="w-3 h-3 rounded-full bg-white/30 animate-bounce [animation-delay:0ms]" />
-                          <span className="w-3 h-3 rounded-full bg-white/30 animate-bounce [animation-delay:150ms]" />
-                          <span className="w-3 h-3 rounded-full bg-white/30 animate-bounce [animation-delay:300ms]" />
-                        </span>
-                      ) : (
-                        token.symbol.replace(/^\$/, "").charAt(0).toUpperCase()
-                      )}
-                    </div>
+                    <BubbleMap
+                      tokens={bubbleTokens}
+                      liveUpdates={liveTradeStats}
+                      solPrice={solPrice}
+                      height={360}
+                    />
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                  <div className="absolute bottom-3 left-3 right-3">
-                    <span className="text-white font-mono text-sm font-bold drop-shadow-md block">{formatMCUsd(token.marketCapEth, solPrice)}</span>
-                    <span className="text-foreground/90 text-xs font-medium truncate block drop-shadow-md">{token.name}</span>
-                  </div>
-                  {/* Platform badge on trending cards */}
-                  <div className="absolute top-2 left-2">
-                    <PlatformBadge platform={token.platform as PlatformId} size="sm" iconOnly />
-                  </div>
-                  {token.graduated && (
-                    <div className="absolute top-2 right-2 bg-primary/20 border border-primary/50 text-primary text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-sm backdrop-blur-md animate-pulseGlow">
-                      Grad
-                    </div>
-                  )}
-                </Link>
-              ))}
+                </div>
+              </div>
+
             </div>
           </section>
 
@@ -777,7 +904,7 @@ export default function Dashboard() {
             ) : viewMode === "grid" ? (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-3 mt-1">
                 {tokens.map((token, idx) => (
-                  <TokenCard key={token.id} token={token} rank={idx + 1} solPrice={solPrice} />
+                  <TokenCard key={token.id} token={token} rank={idx + 1} solPrice={solPrice} isTrending={activeTab === "Trending"} />
                 ))}
               </div>
             ) : (

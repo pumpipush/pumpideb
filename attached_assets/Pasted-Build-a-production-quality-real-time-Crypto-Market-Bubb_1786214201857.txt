@@ -1,0 +1,563 @@
+Build a production-quality real-time Crypto Market Bubble Map component for my existing website.
+
+IMPORTANT:
+Use the uploaded reference image as the primary visual reference for the Bubble Map design, layout, proportions, spacing, typography, colors, glow effects, and overall visual appearance.
+
+The result should look like a professional crypto trading terminal, NOT like a basic HTML/CSS bubble chart.
+
+==================================================
+CORE CONCEPT
+==================================================
+
+Create a full-width interactive crypto market bubble map.
+
+Each cryptocurrency is represented by a circular bubble.
+
+Bubble size:
+- Bubble AREA must represent market capitalization.
+- Larger market cap = significantly larger bubble.
+- Use a sensible logarithmic/square-root scaling so very large coins do not completely dominate the screen.
+- Set minimum and maximum bubble sizes.
+
+Bubble color:
+- Green = positive 24h price change.
+- Red = negative 24h price change.
+- Near 0% = neutral/dark.
+- Strong positive percentage = brighter/more saturated green.
+- Strong negative percentage = brighter/more saturated red.
+
+The visual appearance should resemble the supplied reference image:
+- black / near-black background
+- glowing green bubbles for gainers
+- glowing red bubbles for losers
+- subtle radial gradients
+- soft outer glow
+- white typography
+- token logo inside the bubble
+- token symbol prominently displayed
+- 24h percentage displayed below the symbol
+- large bubbles have large typography
+- small bubbles automatically simplify their contents
+
+==================================================
+TECH STACK
+==================================================
+
+Use the existing project's framework and architecture.
+
+If the project is Nuxt 3:
+- Use Vue 3 / Composition API.
+- Use TypeScript.
+- Do not migrate the project to another framework.
+
+For rendering:
+- Prefer PixiJS/WebGL or HTML5 Canvas for the bubble renderer.
+- Do NOT create hundreds of DOM elements for the bubbles.
+- The implementation must remain performant with 500+ tokens.
+
+If PixiJS is appropriate, install and use the latest compatible PixiJS version.
+
+==================================================
+LAYOUT ENGINE
+==================================================
+
+Implement a proper circle packing / collision layout.
+
+Requirements:
+- Bubbles must never visually overlap.
+- Bubbles should efficiently fill the available viewport.
+- Larger bubbles should generally be placed toward the center.
+- Smaller bubbles should fill surrounding spaces.
+- Maintain a minimum gap between bubbles.
+- Layout should be deterministic enough to avoid excessive movement.
+
+Do NOT simply use random x/y coordinates.
+
+Use an appropriate algorithm such as:
+- circle packing
+- force simulation with collision
+- custom packing algorithm
+
+The layout must automatically recalculate when:
+- viewport size changes
+- market cap changes significantly
+- filters change
+- selected chain changes
+
+==================================================
+REALTIME DATA ARCHITECTURE
+==================================================
+
+Design the component so it can work with real market data.
+
+Create a clean data interface:
+
+interface TokenBubble {
+  address: string;
+  symbol: string;
+  name: string;
+  logo?: string;
+  price: number;
+  marketCap: number;
+  volume24h: number;
+  priceChange24h: number;
+  chain?: string;
+}
+
+Create a market data service abstraction.
+
+Do NOT tightly couple the UI to one API.
+
+Create something like:
+
+services/marketData.ts
+
+with methods such as:
+
+- getTopTokens()
+- subscribeToPriceUpdates()
+- unsubscribe()
+
+Initially implement realistic mock data so the Bubble Map works immediately without requiring an API key.
+
+The mock data should contain at least 100 tokens with:
+- realistic symbols
+- realistic market caps
+- realistic positive/negative price changes
+- token logos where possible
+
+Do not use identical fake values for all tokens.
+
+Structure the code so I can later connect Birdeye WebSocket/API without rewriting the UI.
+
+==================================================
+BIRDEYE READY
+==================================================
+
+Prepare the architecture for Birdeye.
+
+The final implementation should allow:
+
+REST:
+- initial token list
+- market cap
+- price
+- volume
+- token logo
+
+WebSocket:
+- realtime price changes
+- 24h percentage changes
+- market cap changes if available
+
+Do not expose API keys in client-side code.
+
+Use environment variables for API credentials.
+
+Example:
+
+BIRDEYE_API_KEY=
+
+Never hardcode API keys.
+
+If the current project already has an API/data provider, preserve the existing provider architecture and create an adapter instead of replacing it.
+
+==================================================
+REALTIME BEHAVIOR
+==================================================
+
+The bubble map must feel alive.
+
+When price changes:
+- update the displayed percentage
+- update bubble color smoothly
+- update glow intensity
+- update price/market cap where appropriate
+
+Do NOT completely rebuild the entire layout on every price tick.
+
+Separate:
+1. market data updates
+2. visual updates
+3. layout recalculation
+
+Small price updates should update the bubble visually without causing all bubbles to jump around.
+
+Use smooth transitions.
+
+Example:
+
+SOL
++3.72%
+
+If SOL changes to:
+
++4.10%
+
+the bubble should smoothly transition rather than instantly redraw.
+
+==================================================
+BUBBLE DESIGN
+==================================================
+
+Large bubble:
+
+- token logo at top/center
+- large token symbol
+- large percentage
+- subtle glow
+- strong radial gradient
+- dark edge
+- high contrast
+
+Example:
+
+        [TOKEN LOGO]
+
+             SOL
+
+           +3.72%
+
+Small bubbles:
+
+- smaller logo
+- symbol
+- percentage if enough space
+
+Very small bubbles:
+- show only logo or symbol
+
+Automatically determine what content can fit based on bubble radius.
+
+Do not allow text to overflow outside the bubble.
+
+==================================================
+VISUAL STYLE
+==================================================
+
+Reference image style:
+
+Background:
+#050505 / almost black
+
+Positive bubbles:
+- dark green outer edge
+- green glow
+- brighter green center
+
+Negative bubbles:
+- dark red outer edge
+- red glow
+- brighter red center
+
+Use radial gradients.
+
+Example conceptual colors:
+
+Positive:
+- center: bright green
+- middle: medium green
+- edge: dark green
+
+Negative:
+- center: bright red
+- middle: medium red
+- edge: dark red
+
+Do not make the entire UI neon green.
+
+The glow should be subtle and premium.
+
+Typography:
+- clean modern sans-serif
+- white
+- bold symbol
+- percentage slightly smaller
+- strong contrast
+
+==================================================
+REFERENCE IMAGE DETAILS
+==================================================
+
+Match the uploaded image closely.
+
+The reference contains:
+- a large GT bubble around the upper-left/center
+- a large BEAT bubble on the right
+- a large BDX bubble near the center
+- many smaller token bubbles around them
+- black background
+- green/red bubbles
+- logos inside bubbles
+- percentage labels
+- dense but organized composition
+
+Do NOT copy the exact token names or exact data from the screenshot.
+
+Reproduce the DESIGN SYSTEM and behavior, not the specific data.
+
+==================================================
+INTERACTION
+==================================================
+
+Add:
+
+1. Hover
+
+When hovering a bubble:
+- slightly enlarge it
+- increase glow
+- bring it to visual foreground
+- show tooltip
+
+Tooltip should contain:
+
+Token Name
+Symbol
+Price
+Market Cap
+24h Change
+24h Volume
+Chain
+
+Example:
+
+Solana
+SOL
+
+Price: $182.42
+Market Cap: $89.5B
+24h: +3.72%
+Volume: $3.2B
+Chain: Solana
+
+2. Click
+
+Clicking a bubble should emit a token selection event.
+
+Create:
+
+onTokenClick(token)
+
+Do not hardcode navigation unless the existing application already has a token detail route.
+
+3. Mouse wheel
+
+Allow zoom in/out.
+
+4. Drag
+
+Allow panning the bubble map.
+
+5. Reset
+
+Add a small reset-view control.
+
+==================================================
+FILTERS
+==================================================
+
+Create a compact toolbar above the map.
+
+Include:
+
+Chain:
+- All
+- Solana
+- Ethereum
+- BSC
+
+Time:
+- 1H
+- 24H
+- 7D
+
+Metric:
+- Market Cap
+- Volume
+
+Default:
+
+Chain = All
+Time = 24H
+Metric = Market Cap
+
+The UI should remain minimal and not cover the bubble map.
+
+==================================================
+TOP TOKENS
+==================================================
+
+Initially show approximately 100–200 tokens.
+
+Add an optional limit selector:
+
+50
+100
+200
+500
+
+The renderer should remain performant.
+
+==================================================
+RESPONSIVE DESIGN
+==================================================
+
+Desktop:
+- full-width bubble map
+- large bubbles
+- dense layout
+
+Tablet:
+- fewer visible labels
+- responsive bubble sizes
+
+Mobile:
+- optimized layout
+- reduce text inside small bubbles
+- maintain touch interaction
+- allow pinch zoom if practical
+
+Do not create horizontal page overflow.
+
+The Bubble Map itself should adapt to its container dimensions.
+
+==================================================
+PERFORMANCE
+==================================================
+
+This is extremely important.
+
+Target:
+- 60 FPS where practical
+- 500+ bubbles should remain usable
+- avoid hundreds of Vue reactive DOM components
+- avoid unnecessary Vue re-renders
+- use Canvas/WebGL for rendering
+- throttle/debounce expensive layout calculations
+- use requestAnimationFrame for animation
+- update only changed visual properties when possible
+
+Do not recalculate the entire circle packing layout for every price tick.
+
+==================================================
+COMPONENT STRUCTURE
+==================================================
+
+Create clean components such as:
+
+components/
+  crypto/
+    CryptoBubbleMap.vue
+    BubbleRenderer.ts
+    BubbleLayout.ts
+    BubbleTooltip.vue
+    BubbleToolbar.vue
+
+services/
+  marketData.ts
+  marketDataMock.ts
+
+types/
+  market.ts
+
+If the project has a different existing structure, follow the existing project's conventions instead.
+
+Keep the Bubble Map modular and reusable.
+
+==================================================
+IMPORTANT UI REQUIREMENTS
+==================================================
+
+The map should occupy most of the available screen.
+
+Example:
+
+--------------------------------------------------
+ Crypto Market Bubble Map
+
+ [All Chains] [24H] [Market Cap]     [100 tokens]
+
+              BUBBLE MAP
+
+        OOOOOOOOO
+      OO         OO
+     O     SOL     O
+      OO  +3.72% OO
+
+                     OOOOOOOOOOO
+                   OO           OO
+                  O    TOKEN     O
+                   OO +12.4%  OO
+
+--------------------------------------------------
+
+Do not make it look like a generic dashboard card.
+
+The Bubble Map is the primary visual element.
+
+==================================================
+LOADING / ERROR STATES
+==================================================
+
+Add:
+
+Loading:
+- subtle animated skeleton / loading indicator
+
+No data:
+- clean empty state
+
+API error:
+- friendly error message
+- retry button
+
+Realtime disconnected:
+- show a small unobtrusive "Reconnecting..." status
+- automatically reconnect
+
+==================================================
+CODE QUALITY
+==================================================
+
+Use:
+- TypeScript
+- clean interfaces
+- reusable functions
+- comments for complex layout calculations
+- no unnecessary dependencies
+- no hardcoded API keys
+- no massive monolithic component
+
+Do not break existing application functionality.
+
+Do not modify unrelated pages.
+
+==================================================
+DELIVERABLE
+==================================================
+
+Implement the Bubble Map completely in the existing application.
+
+After implementation:
+
+1. Run the project.
+2. Confirm there are no TypeScript errors.
+3. Confirm there are no console errors.
+4. Confirm the map renders correctly.
+5. Confirm 100+ bubbles render.
+6. Confirm bubble size is based on market cap.
+7. Confirm color is based on 24h price change.
+8. Confirm logos render.
+9. Confirm hover tooltip works.
+10. Confirm click event works.
+11. Confirm zoom/pan works.
+12. Confirm responsive behavior.
+13. Confirm mock realtime updates work.
+14. Confirm the architecture is ready for Birdeye WebSocket integration.
+
+MOST IMPORTANT:
+
+Do not create a simple static bubble chart.
+
+Create a polished, interactive, trading-terminal-quality Bubble Map visually inspired by the uploaded reference image.

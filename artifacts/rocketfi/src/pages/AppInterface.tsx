@@ -387,7 +387,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   }, [selectedAddress]);
 
   // New chart state
-  const [chartTf, setChartTf] = useState<ChartTimeframe>("15m");
+  const [chartTf, setChartTf] = useState<ChartTimeframe>("1m");
   const [chartType, setChartType] = useState<ChartType>("candle");
   const [indicators, setIndicators] = useState<Indicator[]>([]);
   const [indOpen, setIndOpen] = useState(false);
@@ -1043,6 +1043,33 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             )}
           </div>
 
+          {/* ── MOBILE: Row 3 — Vol 24h (left) + 5m / 1h / 6h % (right) ── */}
+          <div className="flex items-center justify-between mt-2 md:hidden">
+            <div className="flex flex-col justify-center">
+              <span className="text-[11px] font-medium mb-0.5" style={{ color: "#94a3b8" }}>Vol 24h</span>
+              <span className="font-mono font-bold text-[14px]" style={{ color: "#e2e8f0" }}>
+                {solPrice && priceStats.vol24h > 0 ? formatUSD(priceStats.vol24h * solPrice) : "—"}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              {([
+                { label: "5m", data: priceStats.p5m },
+                { label: "1h", data: priceStats.p1h },
+                { label: "6h", data: priceStats.p6h },
+              ] as { label: string; data: { val: string; up: boolean } | null }[]).map(({ label, data }) => (
+                <div key={label} className="flex flex-col items-center">
+                  <span className="text-[10px] font-medium mb-0.5" style={{ color: "#64748b" }}>{label}</span>
+                  <span
+                    className="font-mono font-bold text-[12px]"
+                    style={{ color: data ? (data.up ? "#4ade80" : "#f87171") : "#475569" }}
+                  >
+                    {data?.val ?? "—"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* ── DESKTOP (md+): original 3-column horizontal ── */}
           <div className="hidden md:flex items-center gap-3">
             {/* Market Cap */}
@@ -1185,7 +1212,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     border: "1px solid " + (activeSubTab === "holders" ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
                   }}
                 >
-                  <Users className="h-3.5 w-3.5" /> Holders
+                  <Users className="h-3.5 w-3.5" /> Holders{holders.length > 0 && <span className="ml-1 text-[11px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.08)", color: activeSubTab === "holders" ? "#e2e8f0" : "#94a3b8" }}>{holders.length}</span>}
                 </button>
                 <button
                   onClick={() => setActiveSubTab("positions")}
