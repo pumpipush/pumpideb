@@ -5,6 +5,7 @@ import {
   useRecordTrade, 
   useUpdateToken,
   useTradeHistory,
+  useGetTokenOhlcv,
   useListTokens,
   useGetTrendingTokens,
   getListTokensQueryKey,
@@ -348,6 +349,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [indicators, setIndicators] = useState<Indicator[]>([]);
   const [indOpen, setIndOpen] = useState(false);
   const [chartTypeOpen, setChartTypeOpen] = useState(false);
+
+  // Server-side OHLCV: pre-aggregated over the full trade history (no 100-row limit).
+  // Re-fetched whenever the token address or timeframe changes.
+  const { data: serverOhlcv } = useGetTokenOhlcv(
+    selectedAddress || "",
+    { tf: chartTf },
+    { query: { enabled: !!selectedAddress, queryKey: ["ohlcv", selectedAddress, chartTf] } }
+  );
   const CHART_TIMEFRAMES: ChartTimeframe[] = ["1m", "5m", "15m", "1H", "4H", "1D", "1W"];
   const toggleIndicator = useCallback((ind: Indicator) => {
     setIndicators(prev => prev.includes(ind) ? prev.filter(i => i !== ind) : [...prev, ind]);
@@ -434,9 +443,16 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     `;
   }, []);
 
-  // Memoized bars — reference is stable until trades or timeframe actually change
+  // Memoized bars — reference is stable until trades or timeframe actually change.
+  // Uses server-side OHLCV (full history, no 100-row cap) merged with real-time
+  // SSE trade ticks so the last candle stays live between server refetches.
   const chartBars = useMemo(() => {
     if (!token) return [];
+
+    // Merge server OHLCV with live trades (SSE feed, up to ~200 most-recent trades).
+    // Live ticks update the current bucket's OHLC and volume in real-time.
+    const base = (serverOhlcv ?? []) as import("@/lib/ohlcv").OHLCVBar[];
+
     const liveAsHistory = liveTrades.map(lt => ({
       id: lt.id,
       tokenAddress: lt.tokenAddress,
@@ -449,11 +465,31 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       platform: lt.platform ?? "unknown",
       timestamp: lt.timestamp,
     }));
-    const allTrades = [...liveAsHistory, ...(history ?? [])];
-    // Return real trade candles only — no synthetic fallback so the chart is always truthful
-    return allTrades.length > 0 ? tradesFromLocalBars(allTrades, chartTf) : [];
+
+    const liveBars = liveAsHistory.length > 0
+      ? tradesFromLocalBars(liveAsHistory, chartTf)
+      : [];
+
+    if (liveBars.length === 0) return base;
+    if (base.length === 0) return liveBars;
+
+    // Merge: live bars update the matching server bar, or append new ones
+    const merged = new Map<number, import("@/lib/ohlcv").OHLCVBar>();
+    for (const b of base) merged.set(b.time, { ...b });
+    for (const lb of liveBars) {
+      const existing = merged.get(lb.time);
+      if (existing) {
+        existing.high   = Math.max(existing.high, lb.high);
+        existing.low    = Math.min(existing.low,  lb.low);
+        existing.close  = lb.close;
+        existing.volume += lb.volume;
+      } else {
+        merged.set(lb.time, lb);
+      }
+    }
+    return Array.from(merged.values()).sort((a, b) => a.time - b.time);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveTrades, history, chartTf, token?.address]);
+  }, [serverOhlcv, liveTrades, chartTf, token?.address]);
 
   // Effective market cap: stored value first, then derive from virtual reserves as fallback
   // (pump.fun stores MC as null until the first trade updates it via on-chain data;

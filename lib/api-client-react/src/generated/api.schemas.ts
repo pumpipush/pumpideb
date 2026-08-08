@@ -44,9 +44,9 @@ export interface Token {
   /** @nullable */
   websiteUrl?: string | null;
   /** Source platform: pump_fun | moonshot | letsbonk | unknown */
-  platform: string;
+  platform?: string;
   /** Chain: solana | base */
-  chain: string;
+  chain?: string;
   createdAt: string;
 }
 
@@ -97,7 +97,7 @@ export interface Trade {
   priceEth?: string | null;
   txHash: string;
   /** Source platform: pump_fun | moonshot | letsbonk | unknown */
-  platform: string;
+  platform?: string;
   timestamp: string;
 }
 
@@ -157,6 +157,17 @@ export interface ProfileUpdate {
   websiteUrl?: string;
 }
 
+export interface OHLCVBar {
+  /** Unix timestamp seconds (candle open time) */
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  /** Sum of eth_amount (lamports) in this bucket */
+  volume: number;
+}
+
 export interface ActivityItem {
   id: number;
   tokenAddress: string;
@@ -178,8 +189,7 @@ limit?: number;
 offset?: number;
 search?: string;
 graduated?: boolean;
-/** Filter by source platform: pump_fun | moonshot | letsbonk */
-platform?: string;
+platform?: ListTokensPlatform;
 };
 
 export type ListTokensSort = typeof ListTokensSort[keyof typeof ListTokensSort];
@@ -192,8 +202,24 @@ export const ListTokensSort = {
   marketcap: 'marketcap',
 } as const;
 
+export type ListTokensPlatform = typeof ListTokensPlatform[keyof typeof ListTokensPlatform];
+
+
+export const ListTokensPlatform = {
+  pump_fun: 'pump_fun',
+  moonshot: 'moonshot',
+  letsbonk: 'letsbonk',
+} as const;
+
 export type GetTrendingTokensParams = {
 limit?: number;
+};
+
+export type GetTokenOhlcvParams = {
+/**
+ * Candle timeframe: 1m 5m 15m 1H 4H 1D 1W (default: 15m)
+ */
+tf?: string;
 };
 
 export type GetRecentActivityParams = {

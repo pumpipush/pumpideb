@@ -5,6 +5,7 @@
  * RocketFi API — Token Launchpad Backend
  * OpenAPI spec version: 0.1.0
  */
+import type { ListTokensPlatform } from './listTokensPlatform';
 import type { ListTokensSort } from './listTokensSort';
 
 export type ListTokensParams = {
@@ -13,4 +14,5 @@ limit?: number;
 offset?: number;
 search?: string;
 graduated?: boolean;
+platform?: ListTokensPlatform;
 };

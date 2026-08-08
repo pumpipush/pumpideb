@@ -22,9 +22,11 @@ import type {
 import type {
   ActivityItem,
   GetRecentActivityParams,
+  GetTokenOhlcvParams,
   GetTrendingTokensParams,
   HealthStatus,
   ListTokensParams,
+  OHLCVBar,
   PlatformStats,
   Profile,
   ProfileInput,
@@ -527,6 +529,95 @@ export const useUpdateToken = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getUpdateTokenMutationOptions(options));
     }
+
+export const getGetTokenOhlcvUrl = (address: string,
+    params?: GetTokenOhlcvParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/tokens/${address}/ohlcv?${stringifiedParams}` : `/api/tokens/${address}/ohlcv`
+}
+
+/**
+ * @summary Get OHLCV candles for a token aggregated server-side over full history
+ */
+export const getTokenOhlcv = async (address: string,
+    params?: GetTokenOhlcvParams, options?: Parameters<typeof customFetch>[1]): Promise<OHLCVBar[]> => {
+
+  return customFetch<OHLCVBar[]>(getGetTokenOhlcvUrl(address,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTokenOhlcvQueryKey = (address: string,
+    params?: GetTokenOhlcvParams,) => {
+    return [
+    `/api/tokens/${address}/ohlcv`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetTokenOhlcvQueryOptions = <TData = Awaited<ReturnType<typeof getTokenOhlcv>>, TError = ErrorType<unknown>>(address: string,
+    params?: GetTokenOhlcvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTokenOhlcv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTokenOhlcvQueryKey(address,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTokenOhlcv>>> = ({ signal }) => getTokenOhlcv(address,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: address !== null && address !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTokenOhlcv>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTokenOhlcvQueryResult = NonNullable<Awaited<ReturnType<typeof getTokenOhlcv>>>
+export type GetTokenOhlcvQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get OHLCV candles for a token aggregated server-side over full history
+ */
+
+export function useGetTokenOhlcv<TData = Awaited<ReturnType<typeof getTokenOhlcv>>, TError = ErrorType<unknown>>(
+ address: string,
+    params?: GetTokenOhlcvParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTokenOhlcv>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTokenOhlcvQueryOptions(address,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getTradeHistoryUrl = (address: string,) => {
 

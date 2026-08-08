@@ -65,6 +65,12 @@ paths:
           schema:
             type: boolean
           required: false
+        - in: query
+          name: platform
+          schema:
+            type: string
+            enum: [pump_fun, moonshot, letsbonk]
+          required: false
       responses:
         "200":
           description: List of tokens
@@ -157,6 +163,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Token"
+
+  /tokens/{address}/ohlcv:
+    get:
+      operationId: getTokenOhlcv
+      tags: [trades]
+      summary: Get OHLCV candles for a token aggregated server-side over full history
+      parameters:
+        - in: path
+          name: address
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: tf
+          required: false
+          description: "Candle timeframe: 1m 5m 15m 1H 4H 1D 1W (default: 15m)"
+          schema:
+            type: string
+            default: "15m"
+      responses:
+        "200":
+          description: OHLCV candle array ordered by time ascending
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OHLCVBar"
 
   /tokens/{address}/trades:
     get:
@@ -619,6 +653,31 @@ components:
           type: string
         websiteUrl:
           type: string
+
+    OHLCVBar:
+      type: object
+      required:
+        - time
+        - open
+        - high
+        - low
+        - close
+        - volume
+      properties:
+        time:
+          type: number
+          description: Unix timestamp seconds (candle open time)
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        close:
+          type: number
+        volume:
+          type: number
+          description: Sum of eth_amount (lamports) in this bucket
 
     ActivityItem:
       type: object

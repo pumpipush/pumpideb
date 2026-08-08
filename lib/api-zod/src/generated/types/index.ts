@@ -8,10 +8,13 @@
 
 export * from './activityItem';
 export * from './getRecentActivityParams';
+export * from './getTokenOhlcvParams';
 export * from './getTrendingTokensParams';
 export * from './healthStatus';
 export * from './listTokensParams';
+export * from './listTokensPlatform';
 export * from './listTokensSort';
+export * from './oHLCVBar';
 export * from './platformStats';
 export * from './profile';
 export * from './profileInput';

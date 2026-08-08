@@ -3,6 +3,7 @@ import {
   useListTokens,
   useGetTrendingTokens,
   ListTokensSort,
+  type ListTokensPlatform,
 } from "@workspace/api-client-react";
 
 import { formatMC, formatMCUsd, cn, timeAgo } from "@/lib/utils";
@@ -439,7 +440,7 @@ export default function Dashboard() {
     sort: sortMap[activeTab],
     graduated: activeTab === "Graduated" ? true : undefined,
     limit: 100,
-    platform: platformFilter === "all" ? undefined : platformFilter,
+    platform: platformFilter === "all" ? undefined : platformFilter as ListTokensPlatform,
   });
 
   const { data: trending, isLoading: loadingTrending } = useGetTrendingTokens({ limit: 4 });
@@ -470,7 +471,7 @@ export default function Dashboard() {
         marketCapEth: tradeSnap?.marketCapEth ?? t.marketCapEth,
         priceEth:     tradeSnap?.priceEth     ?? t.priceEth,
         createdAt:    t.createdAt,
-        platform:     t.platform,
+        platform:     t.platform ?? "unknown",
         graduated:    t.graduated,
         // Preserve isLive=true if feed still considers this token new
         isLive:       live?.isNew ?? false,
@@ -493,7 +494,7 @@ export default function Dashboard() {
           marketCapEth: tradeSnap?.marketCapEth ?? t.marketCapEth,
           priceEth:     tradeSnap?.priceEth     ?? t.priceEth,
           createdAt:    t.createdAt,
-          platform:     t.platform,
+          platform:     t.platform ?? "unknown",
           graduated:    false,
           isLive:       t.isNew,
           lastTradeAt:  tradeSnap?.lastTradeAt,

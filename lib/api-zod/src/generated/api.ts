@@ -28,8 +28,11 @@ export const ListTokensQueryParams = zod.object({
   "offset": zod.coerce.number().default(listTokensQueryOffsetDefault),
   "search": zod.coerce.string().optional(),
   "graduated": zod.coerce.boolean().optional(),
-  "platform": zod.enum(['pump_fun', 'moonshot', 'letsbonk']).optional(),
+  "platform": zod.enum(['pump_fun', 'moonshot', 'letsbonk']).optional()
 })
+
+export const listTokensResponsePlatformDefault = `unknown`;
+export const listTokensResponseChainDefault = `base`;
 
 export const ListTokensResponseItem = zod.object({
   "id": zod.number(),
@@ -53,8 +56,8 @@ export const ListTokensResponseItem = zod.object({
   "twitterUrl": zod.string().nullish(),
   "telegramUrl": zod.string().nullish(),
   "websiteUrl": zod.string().nullish(),
-  "platform": zod.string().default('unknown'),
-  "chain": zod.string().default('base'),
+  "platform": zod.string().default(listTokensResponsePlatformDefault).describe('Source platform: pump_fun | moonshot | letsbonk | unknown'),
+  "chain": zod.string().default(listTokensResponseChainDefault).describe('Chain: solana | base'),
   "createdAt": zod.coerce.date()
 })
 export const ListTokensResponse = zod.array(ListTokensResponseItem)
@@ -76,9 +79,12 @@ export const CreateTokenBody = zod.object({
   "twitterUrl": zod.string().optional(),
   "telegramUrl": zod.string().optional(),
   "websiteUrl": zod.string().optional(),
-  "platform": zod.string().optional(),
-  "chain": zod.string().optional()
+  "platform": zod.string().optional().describe('Source platform: pump_fun | moonshot | letsbonk | unknown'),
+  "chain": zod.string().optional().describe('Chain: solana | base')
 })
+
+export const createTokenResponsePlatformDefault = `unknown`;
+export const createTokenResponseChainDefault = `base`;
 
 export const CreateTokenResponse = zod.object({
   "id": zod.number(),
@@ -102,8 +108,8 @@ export const CreateTokenResponse = zod.object({
   "twitterUrl": zod.string().nullish(),
   "telegramUrl": zod.string().nullish(),
   "websiteUrl": zod.string().nullish(),
-  "platform": zod.string().default('unknown'),
-  "chain": zod.string().default('base'),
+  "platform": zod.string().default(createTokenResponsePlatformDefault).describe('Source platform: pump_fun | moonshot | letsbonk | unknown'),
+  "chain": zod.string().default(createTokenResponseChainDefault).describe('Chain: solana | base'),
   "createdAt": zod.coerce.date()
 })
 
@@ -116,6 +122,9 @@ export const getTrendingTokensQueryLimitDefault = 10;
 export const GetTrendingTokensQueryParams = zod.object({
   "limit": zod.coerce.number().default(getTrendingTokensQueryLimitDefault)
 })
+
+export const getTrendingTokensResponsePlatformDefault = `unknown`;
+export const getTrendingTokensResponseChainDefault = `base`;
 
 export const GetTrendingTokensResponseItem = zod.object({
   "id": zod.number(),
@@ -139,8 +148,8 @@ export const GetTrendingTokensResponseItem = zod.object({
   "twitterUrl": zod.string().nullish(),
   "telegramUrl": zod.string().nullish(),
   "websiteUrl": zod.string().nullish(),
-  "platform": zod.string().default('unknown'),
-  "chain": zod.string().default('base'),
+  "platform": zod.string().default(getTrendingTokensResponsePlatformDefault).describe('Source platform: pump_fun | moonshot | letsbonk | unknown'),
+  "chain": zod.string().default(getTrendingTokensResponseChainDefault).describe('Chain: solana | base'),
   "createdAt": zod.coerce.date()
 })
 export const GetTrendingTokensResponse = zod.array(GetTrendingTokensResponseItem)
@@ -152,6 +161,9 @@ export const GetTrendingTokensResponse = zod.array(GetTrendingTokensResponseItem
 export const GetTokenParams = zod.object({
   "address": zod.coerce.string()
 })
+
+export const getTokenResponsePlatformDefault = `unknown`;
+export const getTokenResponseChainDefault = `base`;
 
 export const GetTokenResponse = zod.object({
   "id": zod.number(),
@@ -175,8 +187,8 @@ export const GetTokenResponse = zod.object({
   "twitterUrl": zod.string().nullish(),
   "telegramUrl": zod.string().nullish(),
   "websiteUrl": zod.string().nullish(),
-  "platform": zod.string().default('unknown'),
-  "chain": zod.string().default('base'),
+  "platform": zod.string().default(getTokenResponsePlatformDefault).describe('Source platform: pump_fun | moonshot | letsbonk | unknown'),
+  "chain": zod.string().default(getTokenResponseChainDefault).describe('Chain: solana | base'),
   "createdAt": zod.coerce.date()
 })
 
@@ -201,6 +213,9 @@ export const UpdateTokenBody = zod.object({
   "holderCount": zod.number().optional()
 })
 
+export const updateTokenResponsePlatformDefault = `unknown`;
+export const updateTokenResponseChainDefault = `base`;
+
 export const UpdateTokenResponse = zod.object({
   "id": zod.number(),
   "address": zod.string(),
@@ -223,10 +238,34 @@ export const UpdateTokenResponse = zod.object({
   "twitterUrl": zod.string().nullish(),
   "telegramUrl": zod.string().nullish(),
   "websiteUrl": zod.string().nullish(),
-  "platform": zod.string().default('unknown'),
-  "chain": zod.string().default('base'),
+  "platform": zod.string().default(updateTokenResponsePlatformDefault).describe('Source platform: pump_fun | moonshot | letsbonk | unknown'),
+  "chain": zod.string().default(updateTokenResponseChainDefault).describe('Chain: solana | base'),
   "createdAt": zod.coerce.date()
 })
+
+
+/**
+ * @summary Get OHLCV candles for a token aggregated server-side over full history
+ */
+export const GetTokenOhlcvParams = zod.object({
+  "address": zod.coerce.string()
+})
+
+export const getTokenOhlcvQueryTfDefault = `15m`;
+
+export const GetTokenOhlcvQueryParams = zod.object({
+  "tf": zod.coerce.string().default(getTokenOhlcvQueryTfDefault).describe('Candle timeframe: 1m 5m 15m 1H 4H 1D 1W (default: 15m)')
+})
+
+export const GetTokenOhlcvResponseItem = zod.object({
+  "time": zod.number().describe('Unix timestamp seconds (candle open time)'),
+  "open": zod.number(),
+  "high": zod.number(),
+  "low": zod.number(),
+  "close": zod.number(),
+  "volume": zod.number().describe('Sum of eth_amount (lamports) in this bucket')
+})
+export const GetTokenOhlcvResponse = zod.array(GetTokenOhlcvResponseItem)
 
 
 /**
@@ -235,6 +274,8 @@ export const UpdateTokenResponse = zod.object({
 export const TradeHistoryParams = zod.object({
   "address": zod.coerce.string()
 })
+
+export const tradeHistoryResponsePlatformDefault = `unknown`;
 
 export const TradeHistoryResponseItem = zod.object({
   "id": zod.number(),
@@ -247,7 +288,7 @@ export const TradeHistoryResponseItem = zod.object({
   "tokenAmount": zod.string(),
   "priceEth": zod.string().nullish(),
   "txHash": zod.string(),
-  "platform": zod.string().default('unknown'),
+  "platform": zod.string().default(tradeHistoryResponsePlatformDefault).describe('Source platform: pump_fun | moonshot | letsbonk | unknown'),
   "timestamp": zod.coerce.date()
 })
 export const TradeHistoryResponse = zod.array(TradeHistoryResponseItem)
@@ -267,9 +308,11 @@ export const RecordTradeBody = zod.object({
   "tokenAmount": zod.string(),
   "priceEth": zod.string().optional(),
   "txHash": zod.string(),
-  "platform": zod.string().optional(),
+  "platform": zod.string().optional().describe('Source platform: pump_fun | moonshot | letsbonk | unknown'),
   "timestamp": zod.coerce.date()
 })
+
+export const recordTradeResponsePlatformDefault = `unknown`;
 
 export const RecordTradeResponse = zod.object({
   "id": zod.number(),
@@ -282,7 +325,7 @@ export const RecordTradeResponse = zod.object({
   "tokenAmount": zod.string(),
   "priceEth": zod.string().nullish(),
   "txHash": zod.string(),
-  "platform": zod.string().default('unknown'),
+  "platform": zod.string().default(recordTradeResponsePlatformDefault).describe('Source platform: pump_fun | moonshot | letsbonk | unknown'),
   "timestamp": zod.coerce.date()
 })
 

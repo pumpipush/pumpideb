@@ -41,8 +41,8 @@ export interface Token {
   /** @nullable */
   websiteUrl?: string | null;
   /** Source platform: pump_fun | moonshot | letsbonk | unknown */
-  platform: string;
+  platform?: string;
   /** Chain: solana | base */
-  chain: string;
+  chain?: string;
   createdAt: Date;
 }
