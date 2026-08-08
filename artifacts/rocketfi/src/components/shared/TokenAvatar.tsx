@@ -4,7 +4,7 @@
  * gets a unique, consistent visual identity.
  */
 import { cn, resolveImageUrl } from "@/lib/utils";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface TokenAvatarProps {
   symbol: string;
