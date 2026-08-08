@@ -28,6 +28,7 @@ import {
   type LogEvent,
   type RpcTx,
 } from "./solanaRpcBase";
+import { registerGraduatedMint } from "./raydium-amm";
 
 const PUMP_PROGRAM = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
 const PLATFORM     = "pump_fun";
@@ -228,7 +229,10 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
 
   protected override shouldProcess(logs: string[]): boolean {
     const t = detectInstructionType(logs);
-    return t === "create" || t === "buy" || t === "sell";
+    if (t === "create" || t === "buy" || t === "sell") return true;
+    // Also process graduation (Migrate) events so we can mark tokens as graduated
+    // and hand off to the Raydium AMM adapter.
+    return logs.some((l) => /Instruction:\s*Migrate\b/i.test(l));
   }
 
   protected override async onEvent(event: LogEvent): Promise<void> {
@@ -237,6 +241,8 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
       await this.handleCreate(event);
     } else if (instrType === "buy" || instrType === "sell") {
       await this.handleTrade(event);
+    } else if (event.logs.some((l) => /Instruction:\s*Migrate\b/i.test(l))) {
+      await this.handleGraduation(event);
     }
   }
 
@@ -505,6 +511,44 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
         chain:                CHAIN,
       },
     });
+  }
+
+  // ── Graduation (Migrate) ───────────────────────────────────────────────────
+
+  /**
+   * Handle a pump.fun Migrate instruction — the event that fires when the bonding
+   * curve fills and the token's liquidity is moved to a Raydium AMM v4 pool.
+   *
+   * This method:
+   *   1. Extracts the token mint from the transaction.
+   *   2. Sets `graduated = true` in the DB so the chart can show the boundary.
+   *   3. Calls registerGraduatedMint() so the Raydium adapter immediately starts
+   *      indexing swaps for this mint without waiting for the next DB refresh.
+   */
+  private async handleGraduation(event: LogEvent): Promise<void> {
+    const { signature } = event;
+    const tx = await this.getTransaction(signature);
+    if (!tx || tx.meta?.err) return;
+
+    // The migrated token mint is account key 1 (the mint account) in pump.fun's
+    // migrate instruction, or falls back to the new-mint extraction heuristic.
+    const mint = this.extractPumpMint(tx);
+    if (!mint) {
+      this.log.debug({ signature }, "pump_fun: graduation: could not extract mint — skipping");
+      return;
+    }
+
+    // Mark as graduated in DB so the zero-heal job and other logic skip this token.
+    await db
+      .update(tokensTable)
+      .set({ graduated: true })
+      .where(eq(tokensTable.address, mint));
+
+    // Immediately register with the Raydium adapter — no need to wait for its
+    // next periodic DB refresh.
+    registerGraduatedMint(mint);
+
+    this.log.info({ mint, signature }, "pump_fun: token graduated — handed off to raydium_amm adapter");
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────

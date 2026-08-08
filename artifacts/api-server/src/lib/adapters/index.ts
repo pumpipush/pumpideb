@@ -12,6 +12,7 @@ import { startMoonshotAdapter } from "./moonshot";
 import { startLetsBonkAdapter } from "./letsbonk";
 import { startDaosFunAdapter } from "./daos";
 import { startRaydiumLaunchLabAdapter } from "./raydium-launchlab";
+import { startRaydiumAmmAdapter } from "./raydium-amm";
 
 interface AdapterEntry {
   name: string;
@@ -19,6 +20,9 @@ interface AdapterEntry {
 }
 
 const ADAPTERS: AdapterEntry[] = [
+  // raydium_amm must start before pump_fun so the graduated-mint cache is
+  // populated before the pump_fun adapter calls registerGraduatedMint().
+  { name: "raydium_amm",       start: startRaydiumAmmAdapter },
   { name: "pump_fun",          start: startPumpFunAdapter },
   { name: "moonshot",          start: startMoonshotAdapter },
   { name: "letsbonk",          start: startLetsBonkAdapter },
