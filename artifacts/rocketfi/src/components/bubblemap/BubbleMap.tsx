@@ -629,56 +629,17 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
       const hIdx  = hoverIdxRef.current;
       const bubbles = bubblesRef.current;
 
-      // ── Float animation — collision-free professional drift ──────────────────
-      // KEY INSIGHT: independent per-bubble offsets cause visual "collisions"
-      // because adjacent packed bubbles move in opposite directions and overlap.
-      //
-      // SOLUTION: one shared global drift (all bubbles move together → zero
-      // relative displacement → zero collision) + tiny individual variation
-      // (1-2px) that adds organic feel without pushing into neighbors.
-      //
-      // T in MILLISECONDS; freqs in rad/ms.
-      const T   = performance.now();
-      const PHI = 1.6180339887;
-
+      // ── No continuous animation — bubbles lock to layout positions ───────────
+      // The spread effect comes from runLayout (inflate-and-pack on mount).
+      // After layout settles, everything is static. Only color transitions
+      // and hover radius stay live.
       for (let i = 0; i < bubbles.length; i++) {
         const b = bubbles[i];
-
         b.colorR += (b.targetR - b.colorR) * 0.04;
         b.colorG += (b.targetG - b.colorG) * 0.04;
         b.colorB += (b.targetB - b.colorB) * 0.04;
-
-        if (i < TOP_CIRCLES) {
-          // ── Circular orbit + spring physics (top-5 only) ─────────────────────
-          // Target traces a perfect circle around the layout anchor point.
-          // X = amp·cos(ωt + φ),  Y = amp·sin(ωt + φ)  — same ω → no Lissajous
-          // reversal artifacts; direction is always tangential → feels like orbit.
-          //
-          // Spring pulls dispX/Y toward the moving target with inertia (vx/vy).
-          // Inertia means the bubble overshoots slightly and curves back →
-          // motion looks physical/alive, not mechanical.
-          const ω   = b.floatFreqX;              // rad/ms (same for X and Y)
-          const φ   = b.floatPhaseX;
-          const amp = b.floatAmp;
-
-          const targetX = b.x + amp * Math.cos(ω * T + φ);
-          const targetY = b.y + amp * Math.sin(ω * T + φ);
-
-          // Spring: F = k · (target − pos); k = 0.004 (gentle, not snappy)
-          // Damping: 0.88 — enough friction to prevent oscillation, smooth glide
-          b.vx = (b.vx + (targetX - b.dispX) * 0.004) * 0.88;
-          b.vy = (b.vy + (targetY - b.dispY) * 0.004) * 0.88;
-          b.dispX += b.vx;
-          b.dispY += b.vy;
-
-          // Radius breathing ±1.5% — subtle inhale/exhale
-          const pulse = 1 + 0.015 * Math.sin(T * b.pulseFreq + b.pulsePhase);
-          b.dispR += (b.r * pulse - b.dispR) * 0.035;
-        } else {
-          // Text labels — locked to layout, zero animation
-          b.dispX = b.x;
-          b.dispY = b.y;
-        }
+        b.dispX = b.x;
+        b.dispY = b.y;
       }
 
       // Z-ordering: draw text labels first (back), then large circles on top.
