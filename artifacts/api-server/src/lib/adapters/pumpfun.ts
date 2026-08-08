@@ -40,8 +40,10 @@ const PUMP_TOTAL_SUPPLY       = 1_000_000_000_000_000n;
 
 const PUMP_INIT_MC_LAMPORTS =
   (PUMP_TOTAL_SUPPLY * PUMP_INIT_VSOL_LAMPORTS / PUMP_INIT_VTOK).toString();
+// price_eth is stored as SOL per token (not lamports per base_unit).
+// Conversion: (lamports / base_unit) / 1000 = (SOL×1e9 / token×1e6) / 1000 = SOL/token
 const PUMP_INIT_PRICE_ETH =
-  (Number(PUMP_INIT_VSOL_LAMPORTS) / Number(PUMP_INIT_VTOK)).toFixed(12);
+  (Number(PUMP_INIT_VSOL_LAMPORTS) / Number(PUMP_INIT_VTOK) / 1000).toFixed(15);
 
 // ── Anchor event discriminators ────────────────────────────────────────────────
 // Precomputed: sha256("event:<EventName>")[0..8] as Buffer
@@ -351,8 +353,10 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
     // Only compute price when both amounts are non-zero — avoids writing
     // 0.000...0 (from protocol fee/allocation events with sol_amount=0) over
     // the last valid price stored in the token row.
+    // price_eth = SOL per token = (lamports / base_unit) / 1000
+    // (1e9 lamports/SOL ÷ 1e6 base_unit/token = 1e3 factor)
     const priceEth = tokenAmount !== "0" && solLamports !== "0"
-      ? (Number(solLamports) / Number(tokenAmount)).toFixed(12)
+      ? (Number(solLamports) / Number(tokenAmount) / 1000).toFixed(15)
       : null;
 
     const [trade] = await db.insert(tradesTable).values({

@@ -5,6 +5,7 @@
  * Sub-pane indicators: RSI, MACD, STOCH (separate synced chart instances)
  */
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, memo } from "react";
+import { formatTokenPrice } from "@/lib/utils";
 import {
   createChart,
   CandlestickSeries,
@@ -52,13 +53,7 @@ function makeUsdFormatter(solPrice: number | null): (p: number) => string {
     if (!solPrice || !p || !Number.isFinite(p)) {
       return p < 0.0001 ? p.toExponential(3) : p.toPrecision(5);
     }
-    const usd = p * solPrice;
-    if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(2)}M`;
-    if (usd >= 1_000)     return `$${(usd / 1_000).toFixed(1)}K`;
-    if (usd >= 1)         return `$${usd.toFixed(2)}`;
-    if (usd >= 0.01)      return `$${usd.toFixed(4)}`;
-    if (usd >= 0.000_1)   return `$${usd.toFixed(6)}`;
-    return `$${usd.toExponential(3)}`;
+    return formatTokenPrice(p * solPrice);
   };
 }
 
@@ -407,13 +402,7 @@ export const ChartCanvas = memo(function ChartCanvas({
     if (!bar) { el.style.opacity = "0"; return; }
     const sp = solPriceRef.current;
     const fmt = (n: number): string => {
-      if (sp && n > 0) {
-        const u = n * sp;
-        if (u >= 1)      return `$${u.toFixed(2)}`;
-        if (u >= 0.01)   return `$${u.toFixed(4)}`;
-        if (u >= 0.0001) return `$${u.toFixed(6)}`;
-        return `$${u.toExponential(3)}`;
-      }
+      if (sp && n > 0) return formatTokenPrice(n * sp);
       return n < 0.00001 ? n.toExponential(3) : n.toPrecision(4);
     };
     const isUp = bar.close >= bar.open;

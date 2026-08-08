@@ -22,7 +22,7 @@ import { tradesFromLocal, syntheticCandles, Timeframe } from "@/lib/ohlcv";
 import { useTokenStream } from "@/hooks/useTokenStream";
 
 import { ethers } from "ethers";
-import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, cn, timeAgo } from "@/lib/utils";
+import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, formatTokenPrice, cn, timeAgo } from "@/lib/utils";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { ShareModal } from "@/components/shared/ShareModal";
 import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare } from "lucide-react";
@@ -439,13 +439,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     el.style.opacity = "1";
     const sp = solPriceRef.current;
     const fmt = (n: number): string => {
-      if (sp && n > 0) {
-        const usd = n * sp;
-        if (usd >= 1)       return `$${usd.toFixed(2)}`;
-        if (usd >= 0.01)    return `$${usd.toFixed(4)}`;
-        if (usd >= 0.0001)  return `$${usd.toFixed(6)}`;
-        return `$${usd.toExponential(3)}`;
-      }
+      if (sp && n > 0) return formatTokenPrice(n * sp);
       return n < 0.00001 ? n.toExponential(3) : n.toPrecision(4);
     };
     el.innerHTML = `
@@ -1162,8 +1156,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
                 const rows: { label: string; value: string; sub?: string | null }[] = [
                   { label: "Tokens Held",   value: netTokens > 0 ? netTokens.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "0", sub: token.symbol },
-                  { label: "Avg Buy Price", value: avgBuyPriceSol > 0 ? avgBuyPriceSol.toExponential(4) + " SOL" : "—", sub: fmtUsd(avgBuyPriceSol) },
-                  { label: "Current Price", value: currentPriceSol > 0 ? currentPriceSol.toExponential(4) + " SOL" : "—", sub: fmtUsd(currentPriceSol) },
+                  { label: "Avg Buy Price", value: avgBuyPriceSol > 0 ? (solPrice ? formatTokenPrice(avgBuyPriceSol * solPrice) : avgBuyPriceSol.toPrecision(4) + " SOL") : "—", sub: null },
+                  { label: "Current Price", value: currentPriceSol > 0 ? (solPrice ? formatTokenPrice(currentPriceSol * solPrice) : currentPriceSol.toPrecision(4) + " SOL") : "—", sub: null },
                   { label: "Current Value", value: fmtSol(currentValueSol), sub: fmtUsd(currentValueSol) },
                   { label: "SOL Spent",     value: fmtSol(solSpent),     sub: fmtUsd(solSpent) },
                   { label: "SOL Received",  value: fmtSol(solReceived),  sub: fmtUsd(solReceived) },
@@ -1284,7 +1278,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 className={`font-mono font-bold text-[15px]${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
                 style={{ color: "#e2e8f0" }}
               >
-                {solPrice && priceStats.currentPrice > 0 ? formatUSD(priceStats.currentPrice * solPrice) : priceStats.currentPrice > 0 ? priceStats.currentPrice.toExponential(4) : "—"}
+                {priceStats.currentPrice > 0 ? formatTokenPrice(solPrice ? priceStats.currentPrice * solPrice : priceStats.currentPrice) : "—"}
               </span>
             </div>
             <div className="flex flex-col px-4 py-3">

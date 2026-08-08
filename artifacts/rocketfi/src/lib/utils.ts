@@ -65,6 +65,37 @@ export function formatUSD(usd: number): string {
   return `$${usd.toExponential(3)}`;
 }
 
+const SUBSCRIPT_DIGITS = ['₀','₁','₂','₃','₄','₅','₆','₇','₈','₉'] as const;
+const toSub = (n: number) => String(n).split('').map(d => SUBSCRIPT_DIGITS[+d]).join('');
+
+/**
+ * Format a per-token USD price — like pump.fun / Dexscreener.
+ * Tiny values use subscript-zero compression:  0.000002194 → "$0.0₄2194"
+ * (subscript digit = count of zeros between "0.0" and the first sig digit)
+ */
+export function formatTokenPrice(priceUsd: number): string {
+  if (!priceUsd || !Number.isFinite(priceUsd) || priceUsd <= 0) return "—";
+  if (priceUsd >= 1_000_000) return `$${(priceUsd / 1_000_000).toFixed(2)}M`;
+  if (priceUsd >= 1_000)     return `$${(priceUsd / 1_000).toFixed(1)}K`;
+  if (priceUsd >= 1)         return `$${priceUsd.toFixed(2)}`;
+  if (priceUsd >= 0.1)       return `$${priceUsd.toFixed(3)}`;
+  if (priceUsd >= 0.01)      return `$${priceUsd.toFixed(4)}`;
+  if (priceUsd >= 0.001)     return `$${priceUsd.toFixed(5)}`;
+
+  // Subscript zero notation for very small prices
+  const str = priceUsd.toFixed(20);
+  const afterDot = str.slice(2); // digits after "0."
+  let zeros = 0;
+  while (zeros < afterDot.length && afterDot[zeros] === '0') zeros++;
+
+  // Fewer than 4 leading zeros — plain decimal is still readable
+  if (zeros < 4) return `$${priceUsd.toFixed(zeros + 4)}`;
+
+  // e.g. 0.000002194 → zeros=5 → "$0.0₄2194"
+  const sigStr = afterDot.slice(zeros, zeros + 4).padEnd(4, '0');
+  return `$0.0${toSub(zeros - 1)}${sigStr}`;
+}
+
 /** Format market cap stored as lamports → USD given a SOL/USD price.
  *  Returns "—" when lamportStr is absent or zero (data not yet available). */
 export function formatMCUsd(lamportStr: string | null | undefined, solPrice: number | null): string {

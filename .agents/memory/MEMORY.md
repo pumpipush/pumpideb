@@ -3,3 +3,4 @@
 - [Solana RPC rate limits](solana-rpc-limits.md) — PublicNode -32005 at pump.fun volume; fallback RPCs configured
 - [parseSwap token delta fix](pumpfun-parseswap.md) — summing per-mint deltas cancels; use per-account largest-match instead; ethAmount is lamports (÷1e9 for SOL)
 - [Pump.fun Anchor event log parsing](pumpfun-anchor-events.md) — parse "Program data:" base64 from WS logs; eliminates all getTransaction calls; TradeEvent gives exact virtual reserves
+- [pump.fun price_eth unit convention](pumpfun-price-units.md) — price_eth must be SOL/token (divide raw AMM ratio by 1000); market_cap_eth stays in lamports; verification SQL included
