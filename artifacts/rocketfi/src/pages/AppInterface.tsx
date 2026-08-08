@@ -899,10 +899,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         })()}
 
         {/* ── Info strip above chart: MC | Bonding Curve | Price (horizontal) ── */}
-        <div className="mb-2 px-3 md:px-0 flex items-stretch gap-3">
+        <div className="mb-2 px-3 md:px-0 flex items-center gap-3">
 
-          {/* Market Cap */}
-          <div className="flex flex-col justify-center shrink-0">
+          {/* Market Cap — left, takes equal space */}
+          <div className="flex-1 flex flex-col justify-center">
             <span className="text-[10px] font-semibold uppercase tracking-widest mb-0.5" style={{ color: "#475569" }}>Market Cap</span>
             <span
               key={priceFlash.key}
@@ -912,8 +912,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             </span>
           </div>
 
-          {/* Bonding Curve — fixed width centre column */}
-          <div className="w-48 flex flex-col justify-center min-w-0">
+          {/* Bonding Curve — compact fixed width, truly centred */}
+          <div className="w-36 shrink-0 flex flex-col justify-center">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-semibold tracking-widest uppercase" style={{ color: "#475569" }}>Bonding Curve</span>
               <span
@@ -960,8 +960,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             )}
           </div>
 
-          {/* Price */}
-          <div className="flex flex-col justify-center items-end shrink-0">
+          {/* Price — right, takes equal space */}
+          <div className="flex-1 flex flex-col justify-center items-end">
             <span className="text-[10px] font-semibold uppercase tracking-widest mb-0.5" style={{ color: "#475569" }}>Price</span>
             <span
               key={`price-${priceFlash.key}`}
