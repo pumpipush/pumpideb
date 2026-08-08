@@ -349,6 +349,23 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     staleTime: 12_000,
   });
 
+  // ── Server-side holder list (SQL net balance across ALL trades — no 100-row cap) ────
+  // Client-side computation from the 100-row history wildly undercounts high-volume
+  // tokens. This endpoint aggregates every trade in the DB for this token.
+  const { data: serverHolders, isLoading: loadingHolders } = useQuery({
+    queryKey: ["holders", selectedAddress],
+    queryFn: async (): Promise<{ address: string; balance: string }[]> => {
+      if (!selectedAddress) return [];
+      const res = await fetch(`/api/tokens/${selectedAddress}/holders`);
+      if (!res.ok) return [];
+      const json = await res.json();
+      return json.holders ?? [];
+    },
+    enabled: !!selectedAddress,
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+  });
+
   // ── Server-side 24h stats (SQL aggregate — no 100-row cap) ────────────────
   // Refreshed every 30 s so Vol 24h stays accurate and real-time.
   const { data: serverStats } = useQuery({
@@ -1206,17 +1223,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
         {/* Transactions + Holders tabs */}
         {(() => {
-          // Compute holders from trade history (net token per address)
-          const holderMap = new Map<string, number>();
-          (history ?? []).forEach(t => {
-            const amt = parseFloat(t.tokenAmount ?? "0");
-            const prev = holderMap.get(t.traderAddress) ?? 0;
-            holderMap.set(t.traderAddress, t.isBuy ? prev + amt : prev - amt);
-          });
-          const holders = Array.from(holderMap.entries())
-            .filter(([, bal]) => bal > 0)
-            .sort((a, b) => b[1] - a[1]);
-          const totalSupply = holders.reduce((s, [, b]) => s + b, 0) || 1;
+          // Server-side holder list — aggregated over the FULL trade history in DB.
+          // The old client-side approach used the 100-row history cap, which wildly
+          // underestimates holders for high-volume tokens (e.g. 34 instead of 265).
+          const holders = serverHolders ?? [];
+          const totalSupply = holders.reduce(
+            (s, h) => s + Math.max(0, parseFloat(h.balance) || 0), 0
+          ) || 1;
 
           return (
             <div className="mt-0 px-3 md:px-0">
@@ -1242,7 +1255,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     border: "1px solid " + (activeSubTab === "holders" ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
                   }}
                 >
-                  <Users className="h-3.5 w-3.5" /> Holders{holders.length > 0 && <span className="ml-1 text-[11px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.08)", color: activeSubTab === "holders" ? "#e2e8f0" : "#94a3b8" }}>{holders.length}</span>}
+                  <Users className="h-3.5 w-3.5" /> Holders{holders.length > 0 && <span className="ml-1 text-[11px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.08)", color: activeSubTab === "holders" ? "#e2e8f0" : "#94a3b8" }}>{holders.length.toLocaleString()}</span>}
                 </button>
                 <button
                   onClick={() => setActiveSubTab("positions")}
@@ -1472,7 +1485,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/20">
-                    {loadingHistory ? (
+                    {loadingHolders ? (
                       [...Array(4)].map((_, i) => (
                         <tr key={i}><td colSpan={5} className="px-3 py-2.5"><Skeleton className="h-3.5 w-full" /></td></tr>
                       ))
@@ -1480,14 +1493,15 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       <tr>
                         <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground/60 text-[11px]">No holders yet.</td>
                       </tr>
-                    ) : holders.map(([addr, bal], idx) => {
+                    ) : holders.map(({ address: addr, balance }, idx) => {
+                      const bal = Math.max(0, parseFloat(balance) || 0);
                       const pct = (bal / totalSupply) * 100;
                       return (
                         <tr key={addr} className="hover:bg-white/[0.025] transition-colors">
                           <td className="px-3 py-2.5 text-[14px]" style={{ color: "#64748b" }}>{idx + 1}</td>
                           <td className="px-3 py-2.5 text-[14px]">
                             <div className="flex items-center gap-2">
-                              <TokenAvatar symbol={addr.slice(2, 6)} size={20} shape="circle" />
+                              <TokenAvatar symbol={addr.slice(0, 4)} size={20} shape="circle" />
                               <span
                                 className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                                 onClick={() => copyToClipboard(addr)}
@@ -1499,11 +1513,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               )}
                             </div>
                           </td>
-                          <td className="px-3 py-2.5 text-right text-[14px] text-foreground">{formatTokenAmount(bal.toString())}</td>
+                          <td className="px-3 py-2.5 text-right text-[14px] text-foreground">{formatTokenAmount(balance)}</td>
                           <td className="px-3 py-2.5 text-right text-[14px] text-primary font-bold">{pct.toFixed(1)}%</td>
                           <td className="px-3 py-2.5">
                             <div className="h-1.5 w-20 bg-muted/50 rounded-full overflow-hidden">
-                              <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
+                              <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(pct, 100)}%` }} />
                             </div>
                           </td>
                         </tr>

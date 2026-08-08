@@ -172,6 +172,48 @@ router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
   res.json({ bars, maxTradeId });
 });
 
+// GET /tokens/:address/holders — net token balance per wallet across ALL trades in DB.
+// Client-side computation from the 100-row trade history only sees a fraction of
+// wallets for high-volume tokens; this endpoint has no row limit.
+router.get("/tokens/:address/holders", async (req, res): Promise<void> => {
+  const address = req.params.address as string;
+  if (!address) { res.status(400).json({ error: "address required" }); return; }
+
+  const { rows } = await pool.query<{
+    trader_address: string;
+    balance: string;
+  }>(`
+    SELECT
+      trader_address,
+      SUM(
+        CASE WHEN is_buy
+          THEN  CAST(NULLIF(token_amount, '') AS NUMERIC)
+          ELSE -CAST(NULLIF(token_amount, '') AS NUMERIC)
+        END
+      ) AS balance
+    FROM trades
+    WHERE token_address = $1
+      AND token_amount IS NOT NULL
+      AND token_amount <> ''
+      AND token_amount <> '0'
+    GROUP BY trader_address
+    HAVING SUM(
+      CASE WHEN is_buy
+        THEN  CAST(NULLIF(token_amount, '') AS NUMERIC)
+        ELSE -CAST(NULLIF(token_amount, '') AS NUMERIC)
+      END
+    ) > 0
+    ORDER BY balance DESC
+  `, [address]);
+
+  const holders = rows.map(r => ({
+    address: r.trader_address,
+    balance: r.balance,
+  }));
+
+  res.json({ holders, count: holders.length });
+});
+
 // GET /tokens/:address/stats  — 24-hour aggregated stats (SQL, no row-limit)
 router.get("/tokens/:address/stats", async (req, res): Promise<void> => {
   const address = req.params.address as string;
