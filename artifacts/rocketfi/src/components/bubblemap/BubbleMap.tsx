@@ -140,51 +140,58 @@ function calcRadius(rank: number, total: number): number {
 // then inflate to their target radius while collision + boundary forces resolve
 // overlaps. No center gravity — bubbles fill ALL available space uniformly.
 
-const GOLDEN_ANGLE = 2.39996;
+// ─── Halton quasi-random sequence ─────────────────────────────────────────────
+// Produces uniformly-distributed points that always cover the full rectangle
+// (unlike phyllotaxis which creates a circle, leaving corners empty).
+function halton(idx: number, base: number): number {
+  let f = 1, r = 0;
+  while (idx > 0) { f /= base; r += f * (idx % base); idx = Math.floor(idx / base); }
+  return r;
+}
 
-function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 420) {
+// ─── Force layout — inflate-and-pack ─────────────────────────────────────────
+// 1. Init: place bubbles via Halton(2,3) — uniform rectangle coverage incl. corners
+// 2. Inflate radii 0→target over simulation
+// 3. Collision repulsion + hard boundary walls only (no gravity) → fills uniformly
+
+function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 460) {
   if (W <= 0 || H <= 0 || bubbles.length === 0) return;
   const n = bubbles.length;
-
-  // Save target radii; we'll inflate from tiny → target over the run
   const targetR = bubbles.map(b => b.r);
 
-  // ── Initialize: spread randomly across FULL canvas using phyllotaxis ──────
-  // Start very small so inflation drives the packing geometry
+  // ── Halton initialization — covers full W×H rectangle uniformly ───────────
   bubbles.forEach((b, i) => {
-    const t     = (i + 0.5) / n;
-    const ang   = i * GOLDEN_ANGLE;
-    const dist  = Math.sqrt(t) * Math.min(W, H) * 0.48;
-    b.x  = Math.max(MIN_R, Math.min(W - MIN_R, W / 2 + dist * Math.cos(ang)));
-    b.y  = Math.max(MIN_R, Math.min(H - MIN_R, H / 2 + dist * Math.sin(ang)));
-    b.vx = (Math.random() - 0.5) * 1.5;
-    b.vy = (Math.random() - 0.5) * 1.5;
-    b.r  = Math.max(2, targetR[i] * 0.08); // start tiny
+    const margin = MIN_R;
+    b.x  = margin + halton(i + 1, 2) * (W - 2 * margin);
+    b.y  = margin + halton(i + 1, 3) * (H - 2 * margin);
+    b.vx = 0;
+    b.vy = 0;
+    b.r  = Math.max(2, targetR[i] * 0.07);
   });
 
   for (let step = 0; step < steps; step++) {
-    const progress = step / steps;                       // 0 → 1
-    const inflate  = Math.pow(progress, 0.55);           // eased inflation curve
-    const damping  = 0.80 + 0.06 * progress;            // tighter as it settles
+    const progress = step / steps;
+    // Inflate: slow start, fast middle, settle at end
+    const inflate = Math.pow(progress, 0.45);
+    const damping = 0.78 + 0.10 * progress;  // 0.78 early (energetic), 0.88 late (settled)
 
-    // Inflate all radii toward target
     for (let i = 0; i < n; i++) {
-      bubbles[i].r = Math.max(1, lerp(targetR[i] * 0.08, targetR[i], inflate));
+      bubbles[i].r = Math.max(1, targetR[i] * inflate);
     }
 
     for (let i = 0; i < n; i++) {
       const a   = bubbles[i];
       const pad = a.r + GAP;
 
-      // Collision repulsion (contact only — keeps packing tight)
+      // Collision repulsion — push apart when overlapping
       for (let j = i + 1; j < n; j++) {
-        const b   = bubbles[j];
-        const dx  = b.x - a.x;
-        const dy  = b.y - a.y;
-        const d   = Math.sqrt(dx * dx + dy * dy) || 0.001;
+        const b    = bubbles[j];
+        const dx   = b.x - a.x;
+        const dy   = b.y - a.y;
+        const d    = Math.sqrt(dx * dx + dy * dy) || 0.001;
         const minD = a.r + b.r + GAP;
         if (d < minD) {
-          const push  = (minD - d) / minD * 0.72;
+          const push  = (minD - d) / minD * 0.70;
           const nx    = dx / d, ny = dy / d;
           const total = a.r + b.r;
           a.vx -= nx * push * (b.r / total);
@@ -194,28 +201,24 @@ function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 420) {
         }
       }
 
-      // Hard wall boundary — strong elastic bounce
-      const wallK = 0.55;
-      if (a.x < pad)      a.vx += (pad - a.x)     * wallK;
-      if (a.x > W - pad)  a.vx += (W - pad - a.x) * wallK;
-      if (a.y < pad)      a.vy += (pad - a.y)      * wallK;
-      if (a.y > H - pad)  a.vy += (H - pad - a.y)  * wallK;
+      // Hard wall — strong elastic boundary, fills corners
+      const wK = 0.60;
+      if (a.x < pad)      a.vx += (pad - a.x)      * wK;
+      if (a.x > W - pad)  a.vx += (W - pad - a.x)  * wK;
+      if (a.y < pad)      a.vy += (pad - a.y)       * wK;
+      if (a.y > H - pad)  a.vy += (H - pad - a.y)   * wK;
 
       a.vx *= damping;
       a.vy *= damping;
       a.x  += a.vx;
       a.y  += a.vy;
-
-      // Hard clamp
-      a.x = Math.max(pad, Math.min(W - pad, a.x));
-      a.y = Math.max(pad, Math.min(H - pad, a.y));
+      a.x   = Math.max(pad, Math.min(W - pad, a.x));
+      a.y   = Math.max(pad, Math.min(H - pad, a.y));
     }
   }
 
-  // Restore final target radii
+  // Restore exact target radii and sync display
   for (let i = 0; i < n; i++) bubbles[i].r = targetR[i];
-
-  // Sync display positions
   for (const b of bubbles) { b.dispX = b.x; b.dispY = b.y; b.dispR = b.r; }
 }
 
