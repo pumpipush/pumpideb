@@ -15,7 +15,7 @@ const router: IRouter = Router();
 
 // GET /tokens/:address/stream  — Server-Sent Events for live trade feed
 router.get("/tokens/:address/stream", async (req: Request, res: Response) => {
-  const { address } = req.params;
+  const address = req.params.address as string;
   if (!address) {
     res.status(400).json({ error: "address required" });
     return;

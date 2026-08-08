@@ -34,9 +34,13 @@ const PUMP_INIT_VSOL_SOL      = "30";                      // 30 virtual SOL at 
 const PUMP_INIT_VSOL_LAMPORTS = 30_000_000_000n;           // same in lamports (BigInt)
 const PUMP_INIT_VTOK          = 1_073_000_191_045_000n;    // virtual token reserves at launch
 const PUMP_TOTAL_SUPPLY       = 1_000_000_000_000_000n;    // 1B tokens × 10^6 decimals
+
 // Initial MC in lamports: totalSupply × virtualSolLamports / virtualTokenReserves ≈ 28 SOL
 const PUMP_INIT_MC_LAMPORTS   =
   (PUMP_TOTAL_SUPPLY * PUMP_INIT_VSOL_LAMPORTS / PUMP_INIT_VTOK).toString();
+// Initial price in lamports per token atomic unit
+const PUMP_INIT_PRICE_ETH     =
+  (Number(PUMP_INIT_VSOL_LAMPORTS) / Number(PUMP_INIT_VTOK)).toFixed(12);
 
 // ── On-chain instruction decoder ───────────────────────────────────────────────
 // pump.fun CREATE instruction is an Anchor instruction whose data is:
@@ -176,12 +180,12 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
       virtualTokenReserves: PUMP_INIT_VTOK.toString(),
       virtualEthReserves:   PUMP_INIT_VSOL_SOL,   // stored in SOL (UI uses this for progress bar)
       marketCapEth:         PUMP_INIT_MC_LAMPORTS, // ≈ 28 SOL at launch
-      priceEth:             null,
+      priceEth:             PUMP_INIT_PRICE_ETH,
       platform:             PLATFORM,
       chain:                CHAIN,
     }).onConflictDoNothing();
 
-    this.log.info({ mint, name, symbol }, "pump_fun: new token ingested (chain-native)");
+    this.log.info({ mint, name, symbol, marketCapEth: PUMP_INIT_MC_LAMPORTS }, "pump_fun: new token ingested (chain-native)");
 
     emitNewToken({
       type: "newToken",
@@ -190,8 +194,8 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
         name,
         symbol,
         imageUrl:     null,
-        priceEth:     null,
-        marketCapEth: null,
+        priceEth:     PUMP_INIT_PRICE_ETH,
+        marketCapEth: PUMP_INIT_MC_LAMPORTS,
         platform:     PLATFORM,
         chain:        CHAIN,
         createdAt:    tx.blockTime
