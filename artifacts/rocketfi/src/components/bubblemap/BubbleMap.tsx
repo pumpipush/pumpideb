@@ -632,38 +632,42 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
       const hIdx  = hoverIdxRef.current;
       const bubbles = bubblesRef.current;
 
-      // ── Float animation — professional 3-harmonic Lissajous paths ────────────
-      // T in MILLISECONDS so freq values (rad/ms) give visible periods
-      // Top-5 circles also get radius breathing (±3% pulse)
-      const T     = performance.now();   // ms
-      const PHI   = 1.6180339887;        // golden ratio
-      const SQRT2 = 1.4142135624;
+      // ── Float animation — collision-free professional drift ──────────────────
+      // KEY INSIGHT: independent per-bubble offsets cause visual "collisions"
+      // because adjacent packed bubbles move in opposite directions and overlap.
+      //
+      // SOLUTION: one shared global drift (all bubbles move together → zero
+      // relative displacement → zero collision) + tiny individual variation
+      // (1-2px) that adds organic feel without pushing into neighbors.
+      //
+      // T in MILLISECONDS; freqs in rad/ms.
+      const T   = performance.now();
+      const PHI = 1.6180339887;
+
+      // Global drift — period ~20s on X, ~28s on Y (Lissajous 5:3 ratio globally)
+      const gx = 5.0 * Math.sin(T * 0.000314) +
+                 2.0 * Math.sin(T * 0.000314 * PHI);   // ±7px total
+      const gy = 4.0 * Math.cos(T * 0.000188) +
+                 1.5 * Math.cos(T * 0.000188 * PHI);   // ±5.5px total
 
       for (let i = 0; i < bubbles.length; i++) {
-        const b  = bubbles[i];
-        const fx = b.floatAmp * (
-          0.60 * Math.sin(T * b.floatFreqX             + b.floatPhaseX) +
-          0.28 * Math.sin(T * b.floatFreqX * PHI       + b.floatPhaseX * 2.39) +
-          0.12 * Math.sin(T * b.floatFreqX * 0.381     + b.floatPhaseX * 0.72)
-        );
-        // Y freq = floatFreqY (already set to freqX * 1.5 → Lissajous 3:2)
-        const fy = b.floatAmp * (
-          0.60 * Math.cos(T * b.floatFreqY             + b.floatPhaseY) +
-          0.28 * Math.cos(T * b.floatFreqY * SQRT2     + b.floatPhaseY * 1.77) +
-          0.12 * Math.cos(T * b.floatFreqY * 0.618     + b.floatPhaseY * 0.54)
-        );
+        const b = bubbles[i];
 
-        // Very slow lerp → viscous "floating on water" feel; fast lerp = jerky/crash
-        b.dispX  += (b.x + fx - b.dispX) * 0.018;
-        b.dispY  += (b.y + fy - b.dispY) * 0.018;
+        // Individual variation — tiny (1-2px) so adjacent bubbles stay clear
+        const fx = gx + b.floatAmp * Math.sin(T * b.floatFreqX + b.floatPhaseX);
+        const fy = gy + b.floatAmp * Math.cos(T * b.floatFreqY + b.floatPhaseY);
+
+        // Slow viscous lerp — smooth lag ~1.5s behind target (no jerk/snap)
+        b.dispX  += (b.x + fx - b.dispX) * 0.016;
+        b.dispY  += (b.y + fy - b.dispY) * 0.016;
         b.colorR += (b.targetR - b.colorR) * 0.04;
         b.colorG += (b.targetG - b.colorG) * 0.04;
         b.colorB += (b.targetB - b.colorB) * 0.04;
 
-        // Radius breathing — top-5 circles only (±3% gentle pulse)
+        // Radius breathing for top-5 only (±1.5% pulse ~6-8s period)
         if (i < TOP_CIRCLES) {
-          const pulse = 1 + 0.030 * Math.sin(T * b.pulseFreq + b.pulsePhase);
-          b.dispR += (b.r * pulse - b.dispR) * 0.06;
+          const pulse = 1 + 0.015 * Math.sin(T * b.pulseFreq + b.pulsePhase);
+          b.dispR += (b.r * pulse - b.dispR) * 0.04;
         }
       }
 
