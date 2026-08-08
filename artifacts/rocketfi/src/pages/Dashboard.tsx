@@ -518,15 +518,20 @@ export default function Dashboard() {
       const min = parseFloat(minMcap) || 0;
       apiDisplay = apiDisplay.filter((t) => (parseFloat(t.marketCapEth ?? "0") || 0) >= min);
     }
+    if (!rawTokens) return undefined; // still loading
+
     // Trending tab: only show tokens with market cap above $50k
+    // Applied to both apiDisplay and liveOnly (SSE-fed) tokens.
     if (activeTab === "Trending" && solPrice) {
       const minLamports = (50_000 / solPrice) * 1e9;
       const meetsThreshold = (t: DisplayToken) =>
         (parseFloat(t.marketCapEth ?? "0") || 0) >= minLamports;
       apiDisplay = apiDisplay.filter(meetsThreshold);
+      // liveOnly tokens are brand-new (MC ~$2-4k) and will never pass this threshold
+      // but filter them explicitly for correctness
+      return [...liveOnly.filter(meetsThreshold), ...apiDisplay.filter((t) => t.isLive), ...apiDisplay.filter((t) => !t.isLive)];
     }
 
-    if (!rawTokens) return undefined; // still loading
     // liveOnly tokens at the top; within apiDisplay, live (isNew) rows sort first
     const apiLive    = apiDisplay.filter((t) => t.isLive);
     const apiNonLive = apiDisplay.filter((t) => !t.isLive);
