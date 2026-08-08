@@ -310,47 +310,62 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
     this.log.info({ mint, name, symbol, marketCapEth: PUMP_INIT_MC_LAMPORTS },
       "pump_fun: new token ingested");
 
-    emitNewToken({
-      type: "newToken",
-      token: {
-        address:      mint,
-        name,
-        symbol,
-        imageUrl:     null,
-        priceEth:     PUMP_INIT_PRICE_ETH,
-        marketCapEth: PUMP_INIT_MC_LAMPORTS,
-        platform:     PLATFORM,
-        chain:        CHAIN,
-        createdAt:    new Date().toISOString(),
-      },
-    });
+    // Helper: broadcast token to the live feed (used below in two paths).
+    const broadcastToken = (imageUrl: string | null) => {
+      emitNewToken({
+        type: "newToken",
+        token: {
+          address:      mint,
+          name,
+          symbol,
+          imageUrl,
+          priceEth:     PUMP_INIT_PRICE_ETH,
+          marketCapEth: PUMP_INIT_MC_LAMPORTS,
+          platform:     PLATFORM,
+          chain:        CHAIN,
+          createdAt:    new Date().toISOString(),
+        },
+      });
+    };
 
-    // Fire-and-forget: fetch image from metadata URI (IPFS / pump.fun CDN).
-    // Uses cf-ipfs.com so this typically resolves in <2 s instead of 5-10 s.
-    // After storing, emits a second newToken SSE so the frontend card updates
-    // without requiring a manual page refresh.
     if (uri) {
+      // Delay the SSE broadcast until the image is resolved so the card never
+      // shows a gradient placeholder that immediately flips to a real image.
+      //
+      // Race plan:
+      //  • cf-ipfs.com typically resolves in <2 s → broadcast WITH image, done.
+      //  • If it takes >3 s → broadcast now with null so the card at least appears,
+      //    then broadcast again with the image when it eventually resolves.
+      let broadcasted = false;
+
+      const fallback = setTimeout(() => {
+        if (!broadcasted) { broadcasted = true; broadcastToken(null); }
+      }, 3_000);
+
       fetchImageFromUri(uri)
         .then(async (imageUrl) => {
-          if (!imageUrl) return;
-          await db.update(tokensTable).set({ imageUrl }).where(eq(tokensTable.address, mint));
-          emitNewToken({
-            type: "newToken",
-            token: {
-              address:      mint,
-              name,
-              symbol,
-              imageUrl,
-              priceEth:     PUMP_INIT_PRICE_ETH,
-              marketCapEth: PUMP_INIT_MC_LAMPORTS,
-              platform:     PLATFORM,
-              chain:        CHAIN,
-              createdAt:    new Date().toISOString(),
-            },
-          });
-          this.log.debug({ mint }, "pump_fun: image fetched and emitted via SSE");
+          clearTimeout(fallback);
+          if (imageUrl) {
+            await db.update(tokensTable).set({ imageUrl }).where(eq(tokensTable.address, mint));
+            this.log.debug({ mint }, "pump_fun: image fetched from URI");
+          }
+          if (!broadcasted) {
+            // Fast path — image ready before the 3 s fallback fired
+            broadcasted = true;
+            broadcastToken(imageUrl);
+          } else if (imageUrl) {
+            // Slow path — fallback already showed the card; update it with image
+            broadcastToken(imageUrl);
+          }
         })
-        .catch(() => {/* enrichment loop retries */});
+        .catch(() => {
+          clearTimeout(fallback);
+          if (!broadcasted) { broadcasted = true; broadcastToken(null); }
+          // enrichment loop will retry the image later
+        });
+    } else {
+      // No metadata URI — broadcast immediately without image
+      broadcastToken(null);
     }
   }
 
