@@ -300,7 +300,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
             <div className="flex items-center gap-2 mb-4">
               <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
                 style={{ background: "rgba(34,197,94,0.15)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.30)" }}>2</span>
-              <span className="text-[13px] font-semibold text-foreground">Token Image</span>
+              <span className="text-[13px] font-semibold text-foreground">Token Logo</span>
               <span className="ml-auto text-[11px]" style={{ color: "#94a3b8" }}>PNG · JPG · GIF · Max 5MB</span>
             </div>
             <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
