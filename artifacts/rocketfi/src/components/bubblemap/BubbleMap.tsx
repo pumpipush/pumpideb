@@ -68,62 +68,51 @@ interface TooltipState {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MIN_R = 12;
-const MAX_R = 72;
-const GAP   = 2;
+const MIN_R = 14;
+const MAX_R = 80;
+const GAP   = 1.5;
 const SOL_PRICE_USD = 160;  // fallback if no solPrice prop
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
 
 type RGB = { r: number; g: number; b: number };
 
-// Returns colors for glass-bubble style:
-//   center/mid/edge = very dark tint used at low alpha (transparent fill)
-//   border = vivid stroke ring (the main visual identity)
-//   glow   = outer shadow matching border
-//   pctHex = text color
+// Solid-fill colors — matches BirdEye/reference style:
+//   vivid green / vivid red / very dark neutral
 function pctToColors(pct: number): {
-  center: RGB; mid: RGB; edge: RGB;
-  glow: string; border: string; borderRgb: RGB;
-  fillAlpha: number; pctHex: string;
+  center: RGB; mid: RGB; edge: RGB; glow: string; border: string; pctHex: string;
 } {
   if (pct > 0.15) {
     const t = Math.min(pct / 20, 1);
-    const g = Math.round(lerp(160, 220, t));
+    const g = Math.round(lerp(140, 210, t));
     return {
-      center:    { r: 20, g, b: 60 },
-      mid:       { r: 8,  g: Math.round(g * 0.55), b: 25 },
-      edge:      { r: 2,  g: Math.round(g * 0.25), b: 8  },
-      border:    `rgba(30,${g},70,${lerp(0.75, 1.0, t)})`,
-      borderRgb: { r: 30, g, b: 70 },
-      glow:      `rgba(20,${g},55,${lerp(0.35, 0.65, t)})`,
-      fillAlpha: lerp(0.06, 0.13, t),
-      pctHex:    `rgb(${Math.round(lerp(100,180,t))},${g},${Math.round(lerp(110,140,t))})`,
+      center: { r: Math.round(lerp(25,15,t)),  g: Math.round(lerp(g, g+20, 0.3)), b: Math.round(lerp(45,35,t)) },
+      mid:    { r: Math.round(lerp(10,6,t)),   g: Math.round(g * 0.60),            b: Math.round(lerp(22,18,t)) },
+      edge:   { r: 3,                           g: Math.round(g * 0.28),            b: 8 },
+      glow:   `rgba(15,${g},40,${lerp(0.30,0.60,t)})`,
+      border: `rgba(20,${g},50,0.60)`,
+      pctHex: "#ffffff",
     };
   } else if (pct < -0.15) {
-    const t = Math.min(-pct / 20, 1);
-    const r = Math.round(lerp(190, 245, t));
+    const t  = Math.min(-pct / 20, 1);
+    const rv = Math.round(lerp(185, 240, t));
     return {
-      center:    { r, g: 18, b: 18 },
-      mid:       { r: Math.round(r * 0.55), g: 8, b: 8 },
-      edge:      { r: Math.round(r * 0.25), g: 2, b: 2 },
-      border:    `rgba(${r},22,22,${lerp(0.75, 1.0, t)})`,
-      borderRgb: { r, g: 22, b: 22 },
-      glow:      `rgba(${r},15,15,${lerp(0.35, 0.65, t)})`,
-      fillAlpha: lerp(0.06, 0.13, t),
-      pctHex:    `rgb(${r},${Math.round(lerp(80,50,t))},${Math.round(lerp(80,50,t))})`,
+      center: { r: rv,                             g: Math.round(lerp(18,10,t)), b: Math.round(lerp(18,10,t)) },
+      mid:    { r: Math.round(rv * 0.55),          g: 7,                         b: 7 },
+      edge:   { r: Math.round(rv * 0.26),          g: 3,                         b: 3 },
+      glow:   `rgba(${rv},10,10,${lerp(0.30,0.60,t)})`,
+      border: `rgba(${rv},15,15,0.60)`,
+      pctHex: "#ffffff",
     };
   } else {
-    // Neutral — subtle dark ring, barely visible so colorful ones pop
+    // Neutral — very dark, makes colored bubbles pop
     return {
-      center:    { r: 20, g: 22, b: 36 },
-      mid:       { r: 10, g: 11, b: 20 },
-      edge:      { r: 5,  g: 6,  b: 11 },
-      border:    "rgba(90,100,140,0.22)",
-      borderRgb: { r: 90, g: 100, b: 140 },
-      glow:      "rgba(50,55,90,0.06)",
-      fillAlpha: 0.50, // neutral: more opaque dark fill so bubble is visible
-      pctHex:    "#64748b",
+      center: { r: 24, g: 26, b: 42 },
+      mid:    { r: 14, g: 15, b: 26 },
+      edge:   { r: 6,  g: 7,  b: 13 },
+      glow:   "rgba(40,45,80,0.08)",
+      border: "rgba(60,65,100,0.28)",
+      pctHex: "#94a3b8",
     };
   }
 }
@@ -146,93 +135,96 @@ function calcRadius(rank: number, total: number): number {
   return Math.max(MIN_R, Math.min(MAX_R, MIN_R + curved * (MAX_R - MIN_R)));
 }
 
-// ─── Force layout ─────────────────────────────────────────────────────────────
-// Uses phyllotaxis (golden angle) initialization for even canvas coverage,
-// then relaxes with center gravity + collision repulsion + soft boundary forces.
+// ─── Force layout — inflate-and-pack ─────────────────────────────────────────
+// Bubbles start tiny at staggered grid positions across the whole canvas,
+// then inflate to their target radius while collision + boundary forces resolve
+// overlaps. No center gravity — bubbles fill ALL available space uniformly.
 
-const GOLDEN_ANGLE = 2.39996; // radians — fills plane without clustering
+const GOLDEN_ANGLE = 2.39996;
 
-function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 320) {
-  if (W <= 0 || H <= 0) return;
-  const cx = W / 2;
-  const cy = H / 2;
-  const n  = bubbles.length;
-  if (n === 0) return;
+function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 420) {
+  if (W <= 0 || H <= 0 || bubbles.length === 0) return;
+  const n = bubbles.length;
 
-  // ── Phyllotaxis initialization ─────────────────────────────────────────────
-  // Scale to ~80% of the shorter canvas dimension so bubbles start spread out
-  const initR = Math.min(W, H) * 0.46;
+  // Save target radii; we'll inflate from tiny → target over the run
+  const targetR = bubbles.map(b => b.r);
+
+  // ── Initialize: spread randomly across FULL canvas using phyllotaxis ──────
+  // Start very small so inflation drives the packing geometry
   bubbles.forEach((b, i) => {
-    const t     = (i + 1) / (n + 1);
-    const r     = Math.sqrt(t) * initR;
-    const theta = i * GOLDEN_ANGLE;
-    b.x  = cx + r * Math.cos(theta);
-    b.y  = cy + r * Math.sin(theta);
-    b.vx = 0;
-    b.vy = 0;
+    const t     = (i + 0.5) / n;
+    const ang   = i * GOLDEN_ANGLE;
+    const dist  = Math.sqrt(t) * Math.min(W, H) * 0.48;
+    b.x  = Math.max(MIN_R, Math.min(W - MIN_R, W / 2 + dist * Math.cos(ang)));
+    b.y  = Math.max(MIN_R, Math.min(H - MIN_R, H / 2 + dist * Math.sin(ang)));
+    b.vx = (Math.random() - 0.5) * 1.5;
+    b.vy = (Math.random() - 0.5) * 1.5;
+    b.r  = Math.max(2, targetR[i] * 0.08); // start tiny
   });
 
-  // ── Iterative relaxation ───────────────────────────────────────────────────
   for (let step = 0; step < steps; step++) {
-    const alpha = Math.pow(1 - step / steps, 1.2); // cooling
+    const progress = step / steps;                       // 0 → 1
+    const inflate  = Math.pow(progress, 0.55);           // eased inflation curve
+    const damping  = 0.80 + 0.06 * progress;            // tighter as it settles
+
+    // Inflate all radii toward target
+    for (let i = 0; i < n; i++) {
+      bubbles[i].r = Math.max(1, lerp(targetR[i] * 0.08, targetR[i], inflate));
+    }
 
     for (let i = 0; i < n; i++) {
-      const a = bubbles[i];
+      const a   = bubbles[i];
+      const pad = a.r + GAP;
 
-      // Weak center gravity — keeps bubbles roughly centered
-      a.vx += (cx - a.x) * 0.005 * alpha;
-      a.vy += (cy - a.y) * 0.005 * alpha;
-
-      // Bubble-bubble repulsion (broader zone: 1.4× contact distance)
+      // Collision repulsion (contact only — keeps packing tight)
       for (let j = i + 1; j < n; j++) {
         const b   = bubbles[j];
         const dx  = b.x - a.x;
         const dy  = b.y - a.y;
         const d   = Math.sqrt(dx * dx + dy * dy) || 0.001;
         const minD = a.r + b.r + GAP;
-        if (d < minD * 1.4) {
-          const overlap = (minD - d) / minD;
-          const force   = (d < minD ? overlap * 0.75 : overlap * 0.15);
-          const nx = dx / d;
-          const ny = dy / d;
+        if (d < minD) {
+          const push  = (minD - d) / minD * 0.72;
+          const nx    = dx / d, ny = dy / d;
           const total = a.r + b.r;
-          a.vx -= nx * force * (b.r / total);
-          a.vy -= ny * force * (b.r / total);
-          b.vx += nx * force * (a.r / total);
-          b.vy += ny * force * (a.r / total);
+          a.vx -= nx * push * (b.r / total);
+          a.vy -= ny * push * (b.r / total);
+          b.vx += nx * push * (a.r / total);
+          b.vy += ny * push * (a.r / total);
         }
       }
 
-      // Soft boundary forces (velocity-based — bubbles bounce back smoothly)
-      const pad = a.r + GAP;
-      if (a.x < pad)      a.vx += (pad - a.x)      * 0.4;
-      if (a.x > W - pad)  a.vx += (W - pad - a.x)  * 0.4;
-      if (a.y < pad)      a.vy += (pad - a.y)       * 0.4;
-      if (a.y > H - pad)  a.vy += (H - pad - a.y)   * 0.4;
+      // Hard wall boundary — strong elastic bounce
+      const wallK = 0.55;
+      if (a.x < pad)      a.vx += (pad - a.x)     * wallK;
+      if (a.x > W - pad)  a.vx += (W - pad - a.x) * wallK;
+      if (a.y < pad)      a.vy += (pad - a.y)      * wallK;
+      if (a.y > H - pad)  a.vy += (H - pad - a.y)  * wallK;
 
-      // Damping + integrate
-      a.vx *= 0.84;
-      a.vy *= 0.84;
+      a.vx *= damping;
+      a.vy *= damping;
       a.x  += a.vx;
       a.y  += a.vy;
 
-      // Hard boundary clamp (safety net)
+      // Hard clamp
       a.x = Math.max(pad, Math.min(W - pad, a.x));
       a.y = Math.max(pad, Math.min(H - pad, a.y));
     }
   }
 
+  // Restore final target radii
+  for (let i = 0; i < n; i++) bubbles[i].r = targetR[i];
+
   // Sync display positions
-  for (const b of bubbles) {
-    b.dispX = b.x;
-    b.dispY = b.y;
-    b.dispR = b.r;
-  }
+  for (const b of bubbles) { b.dispX = b.x; b.dispY = b.y; b.dispR = b.r; }
 }
 
 // ─── Canvas renderer ──────────────────────────────────────────────────────────
-// Glass bubble style: transparent fill, vivid colored border ring, glow.
-// Text tiers:  r<18 → nothing | 18–28 → % only | 28–44 → sym+% | 44+ → logo+sym+%
+// Solid sphere style — matches BirdEye reference:
+//   vivid color fill with radial gradient (lighter center, darker edge),
+//   subtle top-left specular, thin dark border for definition.
+//
+// Text tiers:  r<16 → nothing | 16–26 → % only | 26–40 → sym+% | 40+ → logo+sym+%
 
 function drawBubble(
   ctx: CanvasRenderingContext2D,
@@ -242,72 +234,61 @@ function drawBubble(
   dpr: number,
 ) {
   const x = b.dispX, y = b.dispY, r = b.dispR;
-  const { center: c, mid: m, borderRgb: br } = colors;
-  const fa = isHovered ? Math.min(colors.fillAlpha * 1.6, 0.28) : colors.fillAlpha;
-  const bw = isHovered ? 2.8 : 1.8;  // border width px
+  const { center: c, mid: m, edge: e } = colors;
 
   ctx.save();
 
-  // ── 1. Outer glow (shadow on border stroke) ───────────────────────────────
-  ctx.shadowBlur  = (isHovered ? 28 : 16) * dpr;
+  // ── 1. Outer glow (softens edge, gives depth) ─────────────────────────────
+  ctx.shadowBlur  = (isHovered ? 24 : 10) * dpr;
   ctx.shadowColor = colors.glow;
 
-  // ── 2. Transparent fill — very subtle color tint ──────────────────────────
-  // For colored bubbles: near-transparent with color tint
-  // For neutral: semi-dark so the circle shape is visible
-  const fillGrad = ctx.createRadialGradient(x, y, 0, x, y, r);
-  fillGrad.addColorStop(0,   `rgba(${c.r},${c.g},${c.b},${fa * 0.4})`);
-  fillGrad.addColorStop(0.5, `rgba(${m.r},${m.g},${m.b},${fa * 0.7})`);
-  fillGrad.addColorStop(1,   `rgba(${m.r},${m.g},${m.b},${fa})`);
+  // ── 2. Solid sphere body — off-center radial gradient (light from top-left)
+  const grad = ctx.createRadialGradient(
+    x - r * 0.30, y - r * 0.32, r * 0.02,  // light source
+    x + r * 0.10, y + r * 0.10, r * 1.04,   // shadow side
+  );
+  grad.addColorStop(0.00, `rgb(${c.r},${c.g},${c.b})`);
+  grad.addColorStop(0.45, `rgb(${Math.round(lerp(c.r,m.r,0.55))},${Math.round(lerp(c.g,m.g,0.55))},${Math.round(lerp(c.b,m.b,0.55))})`);
+  grad.addColorStop(0.80, `rgb(${m.r},${m.g},${m.b})`);
+  grad.addColorStop(1.00, `rgb(${e.r},${e.g},${e.b})`);
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fillStyle = fillGrad;
+  ctx.fillStyle = grad;
   ctx.fill();
-
-  // ── 3. Outer border ring (colored — the main identity) ────────────────────
-  ctx.beginPath();
-  ctx.arc(x, y, r - bw / 2, 0, Math.PI * 2);
-  ctx.strokeStyle = isHovered
-    ? `rgba(${br.r},${br.g},${br.b},1)`
-    : colors.border;
-  ctx.lineWidth = bw;
-  ctx.stroke();
 
   ctx.shadowBlur = 0;
 
-  // ── 4. Inner rim highlight (glass ring effect) ────────────────────────────
+  // ── 3. Specular highlight — glass-like sheen top-left ─────────────────────
+  const shine = ctx.createRadialGradient(
+    x - r * 0.32, y - r * 0.36, 0,
+    x - r * 0.14, y - r * 0.18, r * 0.72,
+  );
+  shine.addColorStop(0,    isHovered ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.22)");
+  shine.addColorStop(0.40, "rgba(255,255,255,0.07)");
+  shine.addColorStop(1,    "rgba(255,255,255,0)");
   ctx.beginPath();
-  ctx.arc(x, y, r - bw - 1.5, 0, Math.PI * 2);
-  ctx.strokeStyle = `rgba(${br.r},${br.g},${br.b},0.10)`;
-  ctx.lineWidth = 0.8;
-  ctx.stroke();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = shine;
+  ctx.fill();
 
-  // ── 5. Specular highlight (soap-bubble sheen, top-left arc) ───────────────
-  if (r >= 20) {
-    const shineGrad = ctx.createRadialGradient(
-      x - r * 0.30, y - r * 0.38, 0,
-      x - r * 0.10, y - r * 0.18, r * 0.65,
-    );
-    shineGrad.addColorStop(0,   "rgba(255,255,255,0.28)");
-    shineGrad.addColorStop(0.4, "rgba(255,255,255,0.08)");
-    shineGrad.addColorStop(1,   "rgba(255,255,255,0)");
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = shineGrad;
-    ctx.fill();
-  }
+  // ── 4. Thin dark border — separates touching bubbles cleanly ──────────────
+  ctx.beginPath();
+  ctx.arc(x, y, r - 0.5, 0, Math.PI * 2);
+  ctx.strokeStyle = isHovered ? "rgba(255,255,255,0.40)" : "rgba(0,0,0,0.50)";
+  ctx.lineWidth   = isHovered ? 1.5 : 0.8;
+  ctx.stroke();
 
   ctx.restore();
 
-  if (r < 18) return;
+  if (r < 16) return;
 
   // ── Text layout ───────────────────────────────────────────────────────────
-  const showLogo   = r >= 44 && b.img && b.imgLoaded;
-  const showSymbol = r >= 28;
+  const showLogo   = r >= 40 && b.img && b.imgLoaded;
+  const showSymbol = r >= 26;
   const pctText    = (b.pctChange >= 0 ? "+" : "") + b.pctChange.toFixed(2) + "%";
-  const pctFontSz  = Math.max(6,  Math.min(r * 0.27, 18));
-  const symFontSz  = Math.max(5,  Math.min(r * 0.19, 12));
-  const logoR      = r * 0.27;
+  const pctFontSz  = Math.max(7,  Math.min(r * 0.30, 20));
+  const symFontSz  = Math.max(6,  Math.min(r * 0.20, 13));
+  const logoR      = r * 0.26;
   const gap        = r * 0.07;
 
   let blockH = pctFontSz;
@@ -315,7 +296,7 @@ function drawBubble(
   if (showLogo)   blockH += logoR * 2  + gap;
   let curY = y - blockH / 2;
 
-  // Logo
+  // Logo — circular clip
   if (showLogo) {
     const lcy = curY + logoR;
     ctx.save();
@@ -329,27 +310,26 @@ function drawBubble(
 
   // Symbol
   if (showSymbol) {
-    const sym = b.symbol.replace(/^\$/, "").substring(0, 8);
     ctx.save();
     ctx.font = `700 ${symFontSz}px Inter,'SF Pro Display',system-ui,sans-serif`;
-    ctx.fillStyle    = "rgba(255,255,255,0.92)";
+    ctx.fillStyle    = "rgba(255,255,255,0.95)";
     ctx.textAlign    = "center";
     ctx.textBaseline = "top";
-    ctx.shadowBlur   = 3;
-    ctx.shadowColor  = "rgba(0,0,0,0.95)";
-    ctx.fillText(sym, x, curY);
+    ctx.shadowBlur   = 4;
+    ctx.shadowColor  = "rgba(0,0,0,0.90)";
+    ctx.fillText(b.symbol.replace(/^\$/, "").substring(0, 8), x, curY);
     ctx.restore();
     curY += symFontSz + gap;
   }
 
-  // % change — primary, most vivid
+  // % change — bold white (primary)
   ctx.save();
   ctx.font = `800 ${pctFontSz}px Inter,'SF Pro Display',system-ui,sans-serif`;
   ctx.fillStyle    = colors.pctHex;
   ctx.textAlign    = "center";
   ctx.textBaseline = "top";
-  ctx.shadowBlur   = 5;
-  ctx.shadowColor  = "rgba(0,0,0,0.98)";
+  ctx.shadowBlur   = 6;
+  ctx.shadowColor  = "rgba(0,0,0,0.95)";
   ctx.fillText(pctText, x, curY);
   ctx.restore();
 }
@@ -519,19 +499,8 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Background
-      ctx.fillStyle = "#050508";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // Subtle radial background glow (in physical pixels)
-      const bg = ctx.createRadialGradient(
-        canvas.width / 2, canvas.height / 2, 0,
-        canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) * 0.6
-      );
-      bg.addColorStop(0,   "rgba(15,20,40,0.6)");
-      bg.addColorStop(0.6, "rgba(8,10,20,0.3)");
-      bg.addColorStop(1,   "rgba(0,0,0,0)");
-      ctx.fillStyle = bg;
+      // Pure black background (like reference — gaps between bubbles show as black)
+      ctx.fillStyle = "#000000";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Apply dpr scale + pan/zoom in CSS space
