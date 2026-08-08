@@ -317,7 +317,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
                 style={{ background: "rgba(34,197,94,0.15)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.30)" }}>2</span>
               <span className="text-[13px] font-semibold text-foreground">Token Image</span>
-              <span className="ml-auto text-[11px]" style={{ color: "#475569" }}>PNG · JPG · GIF · Max 5MB</span>
+              <span className="ml-auto text-[11px]" style={{ color: "#94a3b8" }}>PNG · JPG · GIF · Max 5MB</span>
             </div>
             <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
             <div
@@ -347,12 +347,12 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 <div className="flex flex-col items-center justify-center py-8 gap-2">
                   <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-1 transition-colors group-hover:border-white/15"
                     style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <UploadCloud className="h-5 w-5" style={{ color: "#475569" }} />
+                    <UploadCloud className="h-5 w-5" style={{ color: "#64748b" }} />
                   </div>
                   <p className="text-[13px] font-medium" style={{ color: "#94a3b8" }}>
                     Drop image here or <span style={{ color: "#4ade80" }}>browse</span>
                   </p>
-                  <p className="text-[11px]" style={{ color: "#475569" }}>Recommended: 500 × 500 px</p>
+                  <p className="text-[11px]" style={{ color: "#94a3b8" }}>Recommended: 500 × 500 px</p>
                 </div>
               )}
             </div>
@@ -366,7 +366,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
                 style={{ background: "rgba(34,197,94,0.15)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.30)" }}>3</span>
               <span className="text-[13px] font-semibold text-foreground">Description</span>
-              <span className="ml-auto text-[11px] tabular-nums" style={{ color: desc.length >= 270 ? "#f87171" : "#475569" }}>
+              <span className="ml-auto text-[11px] tabular-nums" style={{ color: desc.length >= 270 ? "#f87171" : "#94a3b8" }}>
                 {desc.length}/300
               </span>
             </div>
@@ -406,7 +406,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
             {/* Trust strip */}
             <div className="flex flex-wrap items-center justify-center gap-3">
               {["~0.02 SOL deploy fee", "No team allocation", "Instant liquidity"].map(item => (
-                <span key={item} className="flex items-center gap-1 text-[11px]" style={{ color: "#475569" }}>
+                <span key={item} className="flex items-center gap-1 text-[11px]" style={{ color: "#94a3b8" }}>
                   <CheckCircle2 className="h-3 w-3 shrink-0" style={{ color: "#4ade80" }} />
                   {item}
                 </span>
@@ -422,7 +422,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
           {/* Header */}
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "#475569" }}>Live Preview</span>
+            <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "#64748b" }}>Live Preview</span>
             <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
           </div>
 
@@ -439,10 +439,10 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               )}
               <div className="min-w-0 flex-1">
                 <div className="font-bold text-foreground truncate text-[15px] leading-tight">
-                  {name || <span style={{ color: "#334155" }}>Token Name</span>}
+                  {name || <span style={{ color: "#475569" }}>Token Name</span>}
                 </div>
                 <div className="text-[12px] font-mono mt-0.5 truncate" style={{ color: "#4ade80" }}>
-                  ${symbol ? symbol.toUpperCase() : <span style={{ color: "#334155" }}>TICKER</span>}
+                  ${symbol ? symbol.toUpperCase() : <span style={{ color: "#475569" }}>TICKER</span>}
                 </div>
               </div>
               <div className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold"
@@ -466,13 +466,13 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 ].map(({ label, value }) => (
                   <div key={label} className="rounded-lg p-2 text-center"
                     style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                    <div className="text-[10px] mb-0.5" style={{ color: "#475569" }}>{label}</div>
+                    <div className="text-[10px] mb-0.5" style={{ color: "#94a3b8" }}>{label}</div>
                     <div className="text-[12px] font-mono font-semibold text-foreground">{value}</div>
                   </div>
                 ))}
               </div>
 
-              <div className="text-[11px] font-mono pt-1" style={{ color: "#334155", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 12 }}>
+              <div className="text-[11px] font-mono pt-1" style={{ color: "#64748b", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 12 }}>
                 Created by {wallet ? formatAddress(wallet) : "— connect wallet"}
               </div>
             </div>
