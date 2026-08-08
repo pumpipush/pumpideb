@@ -1099,7 +1099,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     ) : (() => {
                       const historyTxHashes = new Set((history ?? []).map(t => t.txHash));
                       const dedupedLive = liveTrades.filter(lt => !historyTxHashes.has(lt.txHash));
-                      const allRows = [...dedupedLive, ...(history ?? [])];
+                      const allRows = [...dedupedLive, ...(history ?? [])].slice(0, 50);
                       if (!allRows.length) {
                         return (
                           <tr>
