@@ -49,8 +49,9 @@ export function tokenCardBackground(symbol: string): string {
 
 export function TokenAvatar({ symbol, imageUrl, size = 40, className, shape = "square" }: TokenAvatarProps) {
   const [imgError, setImgError] = useState(false);
-  // Bug fix: reset error state when imageUrl changes so new URLs are retried
-  useEffect(() => { setImgError(false); }, [imageUrl]);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  // Reset both states when imageUrl changes so new URLs are retried
+  useEffect(() => { setImgError(false); setImgLoaded(false); }, [imageUrl]);
 
   const shapeClass =
     shape === "circle"  ? "rounded-full" :
@@ -61,13 +62,19 @@ export function TokenAvatar({ symbol, imageUrl, size = 40, className, shape = "s
   const [c1, c2, bg] = getGradient(symbol ?? "?");
   const gradId = `g-${hashSymbol(symbol ?? "?") % 10000}`;
 
-  // If we have a valid image, show it
+  // If we have a valid image URL, render the img immediately (no placeholder while loading).
+  // The container stays invisible until onLoad fires, then fades in.
   const resolvedUrl = resolveImageUrl(imageUrl);
   if (resolvedUrl && !imgError) {
     return (
       <div
-        className={cn("shrink-0 overflow-hidden border border-white/10", shapeClass, className)}
-        style={{ width: size, height: size }}
+        className={cn("shrink-0 overflow-hidden", shapeClass, className)}
+        style={{
+          width: size,
+          height: size,
+          // No border / background until image is ready — avoids a blank bordered box
+          border: imgLoaded ? "1px solid rgba(255,255,255,0.10)" : "none",
+        }}
       >
         <img
           src={resolvedUrl}
@@ -75,6 +82,8 @@ export function TokenAvatar({ symbol, imageUrl, size = 40, className, shape = "s
           className="w-full h-full object-cover"
           loading="eager"
           decoding="async"
+          style={{ opacity: imgLoaded ? 1 : 0, transition: "opacity 0.12s ease" }}
+          onLoad={() => setImgLoaded(true)}
           onError={() => setImgError(true)}
         />
       </div>
