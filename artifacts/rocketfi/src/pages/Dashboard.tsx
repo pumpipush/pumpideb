@@ -102,6 +102,29 @@ function setPlatformInUrl(platform: string) {
   window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
 }
 
+// ─── Token image with broken-URL fallback ────────────────────────────────────
+function TokenImage({ imageUrl, symbol, className, textSize = "text-5xl" }: {
+  imageUrl?: string | null;
+  symbol: string;
+  className?: string;
+  textSize?: string;
+}) {
+  const [broken, setBroken] = useState(false);
+  const src = resolveImageUrl(imageUrl ?? "") ?? "";
+  if (!imageUrl || broken) {
+    return (
+      <div className={cn("w-full h-full flex items-center justify-center font-bold text-white/80", textSize, className)}
+        style={{ background: tokenCardBackground(symbol) }}>
+        {symbol.replace(/^\$/, "").charAt(0).toUpperCase()}
+      </div>
+    );
+  }
+  return (
+    <img src={src} alt={symbol} className={cn("w-full h-full object-cover", className)}
+      loading="eager" onError={() => setBroken(true)} />
+  );
+}
+
 // ─── Skeletons ────────────────────────────────────────────────────────────────
 function TokenCardSkeleton() {
   return (
@@ -225,20 +248,16 @@ function TableView({ tokens, solPrice }: { tokens: DisplayToken[]; solPrice: num
                   <Link href={`/app?token=${token.address}`} className="flex items-center gap-2.5 min-w-0">
                     <div className="relative shrink-0">
                       <div className="w-9 h-9 rounded-sm overflow-hidden">
-                        {token.imageUrl ? (
-                          <img src={resolveImageUrl(token.imageUrl) ?? ""} alt={token.symbol} className="w-full h-full object-cover" loading="eager" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center font-bold text-base text-white/80" style={{ background: tokenCardBackground(token.symbol) }}>
-                            {isPlaceholder(token.symbol) ? (
-                              <span className="flex gap-0.5 items-center">
-                                <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce [animation-delay:0ms]" />
-                                <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce [animation-delay:150ms]" />
-                                <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce [animation-delay:300ms]" />
-                              </span>
-                            ) : (
-                              token.symbol.replace(/^\$/, "").charAt(0).toUpperCase()
-                            )}
+                        {isPlaceholder(token.symbol) ? (
+                          <div className="w-full h-full flex items-center justify-center" style={{ background: tokenCardBackground(token.symbol) }}>
+                            <span className="flex gap-0.5 items-center">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce [animation-delay:0ms]" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce [animation-delay:150ms]" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce [animation-delay:300ms]" />
+                            </span>
                           </div>
+                        ) : (
+                          <TokenImage imageUrl={token.imageUrl} symbol={token.symbol} textSize="text-base" />
                         )}
                       </div>
                       {token.graduated && (
@@ -314,20 +333,17 @@ function TokenCard({ token, rank, solPrice, isTrending }: { token: DisplayToken;
       )}
     >
       <div className="aspect-square w-full bg-muted border-b border-border/50 relative overflow-hidden rounded-t-sm">
-        {token.imageUrl ? (
-          <img src={resolveImageUrl(token.imageUrl) ?? ""} alt={token.symbol} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500 ease-out" loading="eager" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center font-bold text-5xl text-white/80 group-hover:scale-105 transition-transform duration-300" style={{ background: tokenCardBackground(token.symbol) }}>
-            {isPlaceholder(token.symbol) ? (
-              <span className="flex gap-1.5 items-center">
-                <span className="w-2.5 h-2.5 rounded-full bg-white/30 animate-bounce [animation-delay:0ms]" />
-                <span className="w-2.5 h-2.5 rounded-full bg-white/30 animate-bounce [animation-delay:150ms]" />
-                <span className="w-2.5 h-2.5 rounded-full bg-white/30 animate-bounce [animation-delay:300ms]" />
-              </span>
-            ) : (
-              token.symbol.replace(/^\$/, "").charAt(0).toUpperCase()
-            )}
+        {isPlaceholder(token.symbol) ? (
+          <div className="w-full h-full flex items-center justify-center" style={{ background: tokenCardBackground(token.symbol) }}>
+            <span className="flex gap-1.5 items-center">
+              <span className="w-2.5 h-2.5 rounded-full bg-white/30 animate-bounce [animation-delay:0ms]" />
+              <span className="w-2.5 h-2.5 rounded-full bg-white/30 animate-bounce [animation-delay:150ms]" />
+              <span className="w-2.5 h-2.5 rounded-full bg-white/30 animate-bounce [animation-delay:300ms]" />
+            </span>
           </div>
+        ) : (
+          <TokenImage imageUrl={token.imageUrl} symbol={token.symbol} textSize="text-5xl"
+            className="group-hover:scale-[1.07] transition-transform duration-500 ease-out" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
