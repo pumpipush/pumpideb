@@ -18,6 +18,7 @@ export const tokensTable = pgTable("tokens", {
   marketCapEth: text("market_cap_eth"),
   priceEth: text("price_eth"),
   graduated: boolean("graduated").notNull().default(false),
+  graduatedAt: timestamp("graduated_at", { withTimezone: true }),
   volumeEth: text("volume_eth").notNull().default("0"),
   tradeCount: numeric("trade_count").notNull().default("0"),
   holderCount: numeric("holder_count").notNull().default("0"),

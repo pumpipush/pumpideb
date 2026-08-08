@@ -579,10 +579,23 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
       return;
     }
 
-    // Mark as graduated in DB so the zero-heal job and other logic skip this token.
+    // Derive graduation time from the transaction's on-chain block time so the
+    // chart boundary is precise regardless of RPC delays, reconnects, or replays.
+    // Fall back to wall-clock only when blockTime is absent (very rare; pre-2020
+    // transactions or archival RPCs that omit the field).
+    const graduatedAt = tx.blockTime
+      ? new Date(tx.blockTime * 1000)
+      : new Date();
+
+    // graduated=true is always written (idempotent).
+    // graduated_at uses COALESCE so the first recorded timestamp wins —
+    // replayed or duplicate migration events do not overwrite it.
     await db
       .update(tokensTable)
-      .set({ graduated: true })
+      .set({
+        graduated:   true,
+        graduatedAt: sql`COALESCE(${tokensTable.graduatedAt}, ${graduatedAt})`,
+      })
       .where(eq(tokensTable.address, mint));
 
     // Immediately register with the Raydium adapter — no need to wait for its

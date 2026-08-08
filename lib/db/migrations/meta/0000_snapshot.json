@@ -1,0 +1,374 @@
+{
+  "id": "65ce461d-bfc3-46b3-9f7c-fd5df4b45b6d",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.tokens": {
+      "name": "tokens",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "symbol": {
+          "name": "symbol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "image_url": {
+          "name": "image_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "creator_address": {
+          "name": "creator_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "virtual_token_reserves": {
+          "name": "virtual_token_reserves",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'1000000000000000000000000000'"
+        },
+        "virtual_eth_reserves": {
+          "name": "virtual_eth_reserves",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'3000000000000000000000'"
+        },
+        "real_token_reserves": {
+          "name": "real_token_reserves",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'1000000000000000000000000000'"
+        },
+        "real_eth_reserves": {
+          "name": "real_eth_reserves",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "total_supply": {
+          "name": "total_supply",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'1000000000000000000000000000'"
+        },
+        "market_cap_eth": {
+          "name": "market_cap_eth",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price_eth": {
+          "name": "price_eth",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "graduated": {
+          "name": "graduated",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "graduated_at": {
+          "name": "graduated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "volume_eth": {
+          "name": "volume_eth",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "trade_count": {
+          "name": "trade_count",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "holder_count": {
+          "name": "holder_count",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "twitter_url": {
+          "name": "twitter_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "telegram_url": {
+          "name": "telegram_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "website_url": {
+          "name": "website_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "platform": {
+          "name": "platform",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'unknown'"
+        },
+        "chain": {
+          "name": "chain",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'base'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "tokens_address_unique": {
+          "name": "tokens_address_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "address"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.trades": {
+      "name": "trades",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "token_address": {
+          "name": "token_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_name": {
+          "name": "token_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "token_symbol": {
+          "name": "token_symbol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trader_address": {
+          "name": "trader_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_buy": {
+          "name": "is_buy",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "eth_amount": {
+          "name": "eth_amount",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_amount": {
+          "name": "token_amount",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "price_eth": {
+          "name": "price_eth",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tx_hash": {
+          "name": "tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "platform": {
+          "name": "platform",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'unknown'"
+        },
+        "timestamp": {
+          "name": "timestamp",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "trades_tx_hash_unique": {
+          "name": "trades_tx_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "tx_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.profiles": {
+      "name": "profiles",
+      "schema": "",
+      "columns": {
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "username": {
+          "name": "username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bio": {
+          "name": "bio",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avatar_url": {
+          "name": "avatar_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "twitter_handle": {
+          "name": "twitter_handle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "website_url": {
+          "name": "website_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "followers_count": {
+          "name": "followers_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "following_count": {
+          "name": "following_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

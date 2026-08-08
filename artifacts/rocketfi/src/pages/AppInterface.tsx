@@ -673,6 +673,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             solPrice={solPrice}
             symbol={token.symbol}
             graduated={token.graduated}
+            graduatedAt={token.graduatedAt ?? null}
             onCrosshairMove={onCrosshairMove}
           />
         </div>

@@ -8,6 +8,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useCallback, memo } from 
 import { formatTokenPrice } from "@/lib/utils";
 import {
   createChart,
+  createSeriesMarkers,
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
@@ -16,6 +17,9 @@ import {
   LineStyle,
   type IChartApi,
   type ISeriesApi,
+  type ISeriesMarkersPluginApi,
+  type SeriesType,
+  type Time,
   type CandlestickSeriesOptions,
   type HistogramSeriesOptions,
   type LineSeriesOptions,
@@ -43,6 +47,7 @@ interface ChartCanvasProps {
   solPrice?:        number | null;
   symbol?:          string;
   graduated?:       boolean;
+  graduatedAt?:     string | Date | null;
   priceFormatter?:  (price: number) => string;
   onCrosshairMove?: (bar: OHLCSnapshot | null) => void;
 }
@@ -370,7 +375,7 @@ function ChartSkeleton({ visible }: { visible: boolean }) {
 
 /* ── Main component ────────────────────────────────────────────────── */
 export const ChartCanvas = memo(function ChartCanvas({
-  bars, address, loading, chartType = "candle", indicators = [], solPrice, symbol, graduated, priceFormatter, onCrosshairMove,
+  bars, address, loading, chartType = "candle", indicators = [], solPrice, symbol, graduated, graduatedAt, priceFormatter, onCrosshairMove,
 }: ChartCanvasProps) {
   const mainRef    = useRef<HTMLDivElement>(null);
   const chartRef   = useRef<IChartApi | null>(null);
@@ -385,6 +390,10 @@ export const ChartCanvas = memo(function ChartCanvas({
   const lastBarIdxRef = useRef<number>(-1);
   const onCrosshairMoveRef = useRef(onCrosshairMove);
   useEffect(() => { onCrosshairMoveRef.current = onCrosshairMove; }, [onCrosshairMove]);
+
+  // Holds the lightweight-charts v5 series-markers plugin API for the main series.
+  // Populated in useLayoutEffect after the series is created; nulled on cleanup.
+  const seriesMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
   // Mutable refs so crosshair handler always reads latest values without closure staleness
   const solPriceRef = useRef<number | null>(solPrice ?? null);
@@ -519,12 +528,20 @@ export const ChartCanvas = memo(function ChartCanvas({
         lastValueVisible: false, priceLineVisible: false,
       } as Partial<HistogramSeriesOptions>);
       chart.priceScale("left").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 }, visible: false });
+      // Attach the series-markers plugin to the candle series (v5 API)
+      seriesMarkersRef.current = createSeriesMarkers(
+        candleRef.current as unknown as ISeriesApi<SeriesType, Time>,
+      );
     } else {
       lineRef.current = chart.addSeries(AreaSeries as unknown as typeof AreaSeries, {
         lineColor: UP, topColor: "rgba(8,153,129,0.18)", bottomColor: "rgba(8,153,129,0.0)", lineWidth: 2,
         priceFormat: { type: "price", precision: 8, minMove: 0.00000001 },
       } as Partial<AreaSeriesOptions>);
       chart.priceScale("right").applyOptions({ scaleMargins: { top: 0.10, bottom: 0.08 } });
+      // Attach the series-markers plugin to the area series (v5 API)
+      seriesMarkersRef.current = createSeriesMarkers(
+        lineRef.current as unknown as ISeriesApi<SeriesType, Time>,
+      );
     }
 
     chartRef.current = chart;
@@ -577,6 +594,7 @@ export const ChartCanvas = memo(function ChartCanvas({
       ro.disconnect();
       chart.remove();
       candleRef.current = lineRef.current = volRef.current = psarUpRef.current = psarDnRef.current = null;
+      seriesMarkersRef.current = null;
       indSeriesRef.current.clear();
     };
   }, [chartType]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -644,9 +662,36 @@ export const ChartCanvas = memo(function ChartCanvas({
       if (clean.length >= 2) {
         barBucketSecRef.current = (clean[1]!.time - clean[0]!.time) || 60;
       }
+
+      // ── Graduation marker (lightweight-charts v5 plugin API) ──────────────
+      // createSeriesMarkers() was called in useLayoutEffect; the plugin ref is
+      // always attached to the current main series. Update its marker list here
+      // so any change to bars OR graduatedAt causes the annotation to re-render.
+      const markerPlugin = seriesMarkersRef.current;
+      if (markerPlugin) {
+        if (graduatedAt && clean.length > 0) {
+          const gradTs = new Date(graduatedAt).getTime() / 1000; // unix seconds
+          // Walk forward to find the last bar whose time ≤ graduatedAt
+          let bestBar = clean[0]!;
+          for (const b of clean) {
+            if (b.time <= gradTs) bestBar = b;
+            else break;
+          }
+          markerPlugin.setMarkers([{
+            time: bestBar.time as Time,
+            position: "aboveBar",
+            color: "#a78bfa",
+            shape: "arrowUp",
+            text: "Raydium ↑",
+          }]);
+        } else {
+          // No graduation timestamp — clear any stale marker
+          markerPlugin.setMarkers([]);
+        }
+      }
     } catch (err) { console.warn("[ChartCanvas] setData:", err); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bars, chartType]);
+  }, [bars, chartType, graduatedAt]);
 
   /* ── Update indicators ──────────────────────────────────────────── */
   useEffect(() => {

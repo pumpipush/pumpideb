@@ -31,6 +31,8 @@ export interface Token {
   /** @nullable */
   priceEth?: string | null;
   graduated: boolean;
+  /** @nullable */
+  graduatedAt?: Date | null;
   volumeEth: string;
   tradeCount: number;
   holderCount: number;

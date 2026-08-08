@@ -1,7 +1,10 @@
+import { fileURLToPath } from "url";
+import path from "path";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startAdapters } from "./lib/adapters/index";
 import { startEnrichmentLoop } from "./lib/enrichment";
+import { runMigrations } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
 
@@ -17,19 +20,45 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
+async function start(): Promise<void> {
+  // Resolve the migrations folder relative to this file's bundled location.
+  // At runtime the bundle is at  artifacts/api-server/dist/index.mjs;
+  // going up three directories from `dist/` reaches the workspace root.
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname  = path.dirname(__filename);
+  const migrationsFolder = path.resolve(__dirname, "../../../lib/db/migrations");
 
-  logger.info({ port }, "Server listening");
+  // Apply any pending DB migrations before accepting traffic.
+  // The runner is idempotent — it tracks applied files in __drizzle_migrations
+  // and skips ones already applied.
+  logger.info({ migrationsFolder }, "db: running migrations");
+  await runMigrations(migrationsFolder);
+  logger.info("db: migrations complete");
 
-  // Start all platform data adapters (Pump.fun, Moonshot, LetsBONK)
-  // Each adapter is isolated — a crash in one will not affect the server
-  void startAdapters();
+  await new Promise<void>((resolve, reject) => {
+    app.listen(port, (err?: Error) => {
+      if (err) {
+        logger.error({ err }, "Error listening on port");
+        reject(err);
+        return;
+      }
 
-  // Start background enrichment loop — retries metadata for tokens that
-  // got placeholder names/symbols because the upstream API wasn't ready yet
-  startEnrichmentLoop();
+      logger.info({ port }, "Server listening");
+
+      // Start all platform data adapters (Pump.fun, Moonshot, LetsBONK)
+      // Each adapter is isolated — a crash in one will not affect the server
+      void startAdapters();
+
+      // Start background enrichment loop — retries metadata for tokens that
+      // got placeholder names/symbols because the upstream API wasn't ready yet
+      startEnrichmentLoop();
+
+      resolve();
+    });
+  });
+}
+
+start().catch((err) => {
+  logger.error({ err }, "Fatal startup error");
+  process.exit(1);
 });

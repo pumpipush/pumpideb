@@ -404,6 +404,9 @@ components:
           type: ["string", "null"]
         graduated:
           type: boolean
+        graduatedAt:
+          type: ["string", "null"]
+          format: date-time
         volumeEth:
           type: string
         tradeCount:
