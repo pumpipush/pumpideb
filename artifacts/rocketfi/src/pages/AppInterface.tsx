@@ -917,7 +917,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             <div className="flex items-center justify-between mb-1">
               <span className="text-[14px] font-medium" style={{ color: "#94a3b8" }}>Bonding Curve</span>
               <span
-                className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-full"
+                className="text-[12px] font-bold font-mono px-1.5 py-0.5 rounded-full"
                 style={{
                   background: isGraduated ? "rgba(34,197,94,0.12)" : "rgba(16,185,129,0.10)",
                   color: isGraduated ? "#22c55e" : "#10b981",
