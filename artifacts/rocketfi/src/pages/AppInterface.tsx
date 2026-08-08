@@ -242,22 +242,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
             </div>
             <h2 className="text-[20px] font-bold text-foreground tracking-tight">Launch a Token</h2>
           </div>
-          <p className="text-[13px] text-muted-foreground mb-3 pl-0.5">
-            Deploy on the bonding curve in seconds — no presale, no team allocation.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {([
-              { icon: ShieldCheck, label: "Fair Launch" },
-              { icon: Zap,         label: "Instant Deploy" },
-              { icon: CheckCircle2, label: "~0.02 SOL" },
-            ] as { icon: React.ElementType; label: string }[]).map(({ icon: Icon, label }) => (
-              <div key={label} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", color: "#94a3b8" }}>
-                <Icon className="h-3 w-3" style={{ color: "#4ade80" }} />
-                {label}
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* Form card */}
@@ -403,15 +387,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               )}
             </button>
 
-            {/* Trust strip */}
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              {["~0.02 SOL deploy fee", "No team allocation", "Instant liquidity"].map(item => (
-                <span key={item} className="flex items-center gap-1 text-[11px]" style={{ color: "#94a3b8" }}>
-                  <CheckCircle2 className="h-3 w-3 shrink-0" style={{ color: "#4ade80" }} />
-                  {item}
-                </span>
-              ))}
-            </div>
           </div>
         </form>
       </div>
@@ -478,16 +453,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
             </div>
           </div>
 
-          {/* Fair launch info box */}
-          <div className="rounded-xl p-3.5"
-            style={{ background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.14)" }}>
-            <div className="flex items-start gap-2">
-              <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0" style={{ color: "#4ade80" }} />
-              <p className="text-[12px] leading-relaxed" style={{ color: "#86efac" }}>
-                <span className="font-semibold">Fair Launch</span> — 100% of supply enters the bonding curve. No team wallet, no VC allocation, no rug.
-              </p>
-            </div>
-          </div>
         </div>
       </div>
     </div>
