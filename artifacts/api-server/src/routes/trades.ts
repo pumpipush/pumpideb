@@ -132,6 +132,10 @@ router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
         AND price_eth  IS NOT NULL
         AND CAST(price_eth  AS DOUBLE PRECISION) > 0
         AND CAST(eth_amount AS DOUBLE PRECISION) > 0
+        -- Sanity guard: pump.fun prices are never legitimately above ~0.0001 SOL/token.
+        -- 1.0 SOL/token is a generous ceiling that blocks corrupted price spikes from
+        -- appearing in the chart, even if a future heal-job regression writes bad data.
+        AND CAST(price_eth  AS DOUBLE PRECISION) < 1.0
     )
     SELECT
       bucket::text                                    AS bucket,
