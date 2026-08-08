@@ -548,10 +548,12 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
         floatFreqY:  i < TOP_CIRCLES
           ? (0.00042 + Math.random() * 0.00037) * 1.5
           : (0.00079 + Math.random() * 0.00079) * 1.5,
-        // Large circles drift more; small labels subtler
-        floatAmp:    prev?.floatAmp ?? (i < TOP_CIRCLES
-          ? 12 + Math.random() * 8              // 12–20px
-          : 3  + Math.random() * 4),            // 3–7px
+        // Amplitude must be small enough to NOT push bubbles into neighbors.
+        // Layout packs bubbles touching → even 5px drift looks smooth; 12+px = crash.
+        // Always regenerate (drop prev) so stale large values don't persist.
+        floatAmp:    i < TOP_CIRCLES
+          ? 3.5 + Math.random() * 2.5           // 3.5–6px — visible but won't overlap
+          : 1.5 + Math.random() * 1.5,          // 1.5–3px — very subtle drift
         pulsePhase:  prev?.pulsePhase ?? Math.random() * Math.PI * 2,
         // Breath: 5-8s period → freq = 2π/5000–2π/8000 ≈ 0.00079–0.00126
         pulseFreq:   0.00079 + Math.random() * 0.00047,
@@ -651,9 +653,9 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
           0.12 * Math.cos(T * b.floatFreqY * 0.618     + b.floatPhaseY * 0.54)
         );
 
-        // Smooth exponential lerp — 0.05 feels responsive without jitter
-        b.dispX  += (b.x + fx - b.dispX) * 0.05;
-        b.dispY  += (b.y + fy - b.dispY) * 0.05;
+        // Very slow lerp → viscous "floating on water" feel; fast lerp = jerky/crash
+        b.dispX  += (b.x + fx - b.dispX) * 0.018;
+        b.dispY  += (b.y + fy - b.dispY) * 0.018;
         b.colorR += (b.targetR - b.colorR) * 0.04;
         b.colorG += (b.targetG - b.colorG) * 0.04;
         b.colorB += (b.targetB - b.colorB) * 0.04;
