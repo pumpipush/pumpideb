@@ -68,10 +68,10 @@ interface TooltipState {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MIN_R = 24;
-const MAX_R = 88;
-const GAP   = 5;           // min gap between bubbles
-const SOL_PRICE_USD = 160; // fallback if no solPrice prop
+const MIN_R = 16;
+const MAX_R = 86;
+const GAP   = 2;            // tight pack — bubbles nearly touching like the reference
+const SOL_PRICE_USD = 160;  // fallback if no solPrice prop
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
 
@@ -80,35 +80,38 @@ type RGB = { r: number; g: number; b: number };
 function pctToColors(pct: number): {
   center: RGB; mid: RGB; edge: RGB; glow: string; border: string; pctHex: string;
 } {
-  if (pct > 0.3) {
-    const t = Math.min(pct / 20, 1);
+  if (pct > 0.15) {
+    // Green — vivid, saturated like BirdEye reference
+    const t = Math.min(pct / 25, 1);
     return {
-      center: { r: lerp(40, 0, t),   g: lerp(160, 230, t), b: lerp(60, 50, t) },
-      mid:    { r: lerp(15, 0, t),   g: lerp(80, 130, t),  b: lerp(25, 20, t) },
-      edge:   { r: 0, g: lerp(40, 70, t), b: 5 },
-      glow:   `rgba(0,${Math.round(lerp(180, 255, t))},40,${lerp(0.18, 0.40, t)})`,
-      border: `rgba(0,${Math.round(lerp(140, 210, t))},50,0.6)`,
-      pctHex: `#${toHex(lerp(100, 180, t))}${toHex(lerp(230, 255, t))}${toHex(lerp(100, 120, t))}`,
+      center: { r: lerp(30,  10, t), g: lerp(180, 220, t), b: lerp(80, 60, t) },
+      mid:    { r: lerp(10,   4, t), g: lerp(110, 160, t), b: lerp(40, 30, t) },
+      edge:   { r: 2,               g: lerp(50,  90, t),   b: lerp(20, 15, t) },
+      glow:   `rgba(20,${Math.round(lerp(220,255,t))},60,${lerp(0.25,0.55,t)})`,
+      border: `rgba(30,${Math.round(lerp(200,240,t))},70,0.7)`,
+      pctHex: "#4ade80",
     };
-  } else if (pct < -0.3) {
-    const t = Math.min(-pct / 20, 1);
+  } else if (pct < -0.15) {
+    // Red — vivid, saturated
+    const t = Math.min(-pct / 25, 1);
     return {
-      center: { r: lerp(180, 240, t), g: lerp(30, 20, t),  b: lerp(30, 20, t) },
-      mid:    { r: lerp(90, 140, t),  g: lerp(15, 10, t),  b: lerp(15, 10, t) },
-      edge:   { r: lerp(50, 80, t), g: 0, b: 0 },
-      glow:   `rgba(${Math.round(lerp(200, 255, t))},0,0,${lerp(0.18, 0.40, t)})`,
-      border: `rgba(${Math.round(lerp(150, 220, t))},0,0,0.6)`,
-      pctHex: `#${toHex(lerp(220, 255, t))}${toHex(lerp(80, 50, t))}${toHex(lerp(80, 50, t))}`,
+      center: { r: lerp(210, 255, t), g: lerp(25, 10, t), b: lerp(25, 10, t) },
+      mid:    { r: lerp(120, 180, t), g: lerp(10,  5, t), b: lerp(10,  5, t) },
+      edge:   { r: lerp(60, 100, t),  g: 2,               b: 2 },
+      glow:   `rgba(${Math.round(lerp(230,255,t))},10,10,${lerp(0.25,0.55,t)})`,
+      border: `rgba(${Math.round(lerp(200,240,t))},20,20,0.7)`,
+      pctHex: "#f87171",
     };
   } else {
-    // near-zero: dark neutral
+    // Near-zero: very dark / neutral — makes colored ones pop
+    const abs = Math.abs(pct) / 0.15; // 0..1
     return {
-      center: { r: 35, g: 38, b: 55 },
-      mid:    { r: 18, g: 20, b: 32 },
-      edge:   { r: 10, g: 11, b: 20 },
-      glow:   `rgba(80,80,120,0.10)`,
-      border: `rgba(80,80,130,0.35)`,
-      pctHex: "#6b7280",
+      center: { r: lerp(22, 28, abs), g: lerp(24, 32, abs), b: lerp(38, 50, abs) },
+      mid:    { r: lerp(12, 16, abs), g: lerp(13, 18, abs), b: lerp(22, 28, abs) },
+      edge:   { r: 6,                 g: 7,                  b: 12 },
+      glow:   "rgba(60,60,100,0.08)",
+      border: "rgba(70,70,120,0.30)",
+      pctHex: "#64748b",
     };
   }
 }
@@ -116,15 +119,17 @@ function pctToColors(pct: number): {
 function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
 function toHex(n: number) { return Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, "0"); }
 
-// ─── Radius from market cap ───────────────────────────────────────────────────
+// ─── Radius by rank ───────────────────────────────────────────────────────────
+// Rank-based sizing: position in volume-sorted list determines size.
+// This guarantees dramatic visual spread even when all volumes are similar
+// (e.g. all pump.fun tokens at bonding-curve start have nearly equal volumes).
+// rank 0 = highest volume → MAX_R; rank n-1 = lowest → MIN_R.
 
-function calcRadius(volSol: number, maxVolSol: number): number {
-  if (maxVolSol <= 0 || volSol <= 0) return MIN_R;
-  // Log scale: volume spans many orders of magnitude; log compresses without losing rank signal
-  const logV   = Math.log1p(volSol);
-  const logMax = Math.log1p(maxVolSol);
-  const norm   = logV / logMax;
-  return Math.max(MIN_R, Math.min(MAX_R, MIN_R + norm * (MAX_R - MIN_R)));
+function calcRadius(rank: number, total: number): number {
+  if (total <= 1) return MAX_R;
+  const norm    = 1 - rank / (total - 1);        // 1.0 → 0.0
+  const curved  = Math.pow(norm, 0.55);           // sqrt-ish: top tokens get disproportionately bigger
+  return Math.max(MIN_R, Math.min(MAX_R, MIN_R + curved * (MAX_R - MIN_R)));
 }
 
 // ─── Force layout ─────────────────────────────────────────────────────────────
@@ -212,6 +217,13 @@ function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 450) {
 }
 
 // ─── Canvas renderer ──────────────────────────────────────────────────────────
+// Visual style: BirdEye-style sphere with vivid color, % as dominant text.
+//
+// Layout tiers based on radius:
+//   r < 30  → nothing (too small)
+//   30–44   → % only
+//   44–60   → symbol + %
+//   60+     → logo + symbol + %
 
 function drawBubble(
   ctx: CanvasRenderingContext2D,
@@ -225,9 +237,9 @@ function drawBubble(
   const r  = b.dispR;
   const cr = b.colorR, cg = b.colorG, cb = b.colorB;
 
-  // --- Outer glow ---
+  // ── Outer glow ────────────────────────────────────────────────────────────
   ctx.save();
-  ctx.shadowBlur  = (isHovered ? 36 : 22) * dpr;
+  ctx.shadowBlur  = (isHovered ? 50 : 30) * dpr;
   ctx.shadowColor = colors.glow;
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -235,88 +247,105 @@ function drawBubble(
   ctx.fill();
   ctx.restore();
 
-  // --- Radial gradient body ---
+  // ── Sphere body gradient ──────────────────────────────────────────────────
+  // Off-center light source at top-left → realistic sphere look
   const grad = ctx.createRadialGradient(
-    x - r * 0.28, y - r * 0.3, r * 0.05,
-    x, y, r
+    x - r * 0.32, y - r * 0.36, r * 0.04,
+    x + r * 0.08, y + r * 0.08, r * 1.05
   );
-  grad.addColorStop(0,   `rgb(${colors.center.r},${colors.center.g},${colors.center.b})`);
-  grad.addColorStop(0.45, `rgb(${colors.mid.r},${colors.mid.g},${colors.mid.b})`);
-  grad.addColorStop(1,   `rgb(${colors.edge.r},${colors.edge.g},${colors.edge.b})`);
+  grad.addColorStop(0,    `rgb(${colors.center.r},${colors.center.g},${colors.center.b})`);
+  grad.addColorStop(0.40, `rgb(${Math.round(lerp(colors.center.r, colors.mid.r, 0.5))},${Math.round(lerp(colors.center.g, colors.mid.g, 0.5))},${Math.round(lerp(colors.center.b, colors.mid.b, 0.5))})`);
+  grad.addColorStop(0.75, `rgb(${colors.mid.r},${colors.mid.g},${colors.mid.b})`);
+  grad.addColorStop(1,    `rgb(${colors.edge.r},${colors.edge.g},${colors.edge.b})`);
 
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fillStyle = grad;
   ctx.fill();
 
-  // --- Specular highlight (top-left sheen) ---
+  // ── Specular highlight (glass-like sheen at top-left) ─────────────────────
   const shine = ctx.createRadialGradient(
-    x - r * 0.3, y - r * 0.35, 0,
-    x - r * 0.3, y - r * 0.35, r * 0.7
+    x - r * 0.32, y - r * 0.38, 0,
+    x - r * 0.18, y - r * 0.22, r * 0.78
   );
-  shine.addColorStop(0,   "rgba(255,255,255,0.14)");
-  shine.addColorStop(0.5, "rgba(255,255,255,0.04)");
-  shine.addColorStop(1,   "rgba(255,255,255,0)");
+  shine.addColorStop(0,    "rgba(255,255,255,0.22)");
+  shine.addColorStop(0.35, "rgba(255,255,255,0.07)");
+  shine.addColorStop(1,    "rgba(255,255,255,0)");
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fillStyle = shine;
   ctx.fill();
 
-  // --- Border ---
+  // ── Thin border ring ──────────────────────────────────────────────────────
   ctx.beginPath();
   ctx.arc(x, y, r - 0.5, 0, Math.PI * 2);
-  ctx.strokeStyle = colors.border;
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = isHovered ? "rgba(255,255,255,0.35)" : colors.border;
+  ctx.lineWidth = isHovered ? 1.5 : 0.8;
   ctx.stroke();
 
-  // --- Logo ---
-  if (b.img && b.imgLoaded && r >= 26) {
-    const hasText = r >= 28;
-    const logoR   = hasText ? r * 0.30 : r * 0.42;
-    const logoY   = hasText ? y - r * 0.22 : y;
+  if (r < 30) return; // too small — skip all text/logo
+
+  // ── Determine content tier ────────────────────────────────────────────────
+  const showLogo   = r >= 58 && b.img && b.imgLoaded;
+  const showSymbol = r >= 42;
+  const showPct    = true; // always for r >= 30
+
+  const pctText = b.pctChange >= 0
+    ? `+${b.pctChange.toFixed(2)}%`
+    : `${b.pctChange.toFixed(2)}%`;
+
+  // Vertical layout: distribute logo / symbol / pct within bubble
+  // Total text block height = sum of font sizes + gaps
+  const pctFontSize    = Math.max(9,  Math.min(r * 0.30, 22));
+  const symFontSize    = Math.max(8,  Math.min(r * 0.22, 16));
+  const logoR          = r * 0.28;
+  const logoDiameter   = logoR * 2;
+  const gap            = r * 0.06;
+
+  // Stack: [logo?] [symbol?] [pct]
+  let blockH = pctFontSize;
+  if (showSymbol) blockH += symFontSize + gap;
+  if (showLogo)   blockH += logoDiameter + gap;
+
+  let curY = y - blockH / 2;
+
+  // ── Logo ──────────────────────────────────────────────────────────────────
+  if (showLogo) {
+    const lcy = curY + logoR;
     ctx.save();
     ctx.beginPath();
-    ctx.arc(x, logoY, logoR, 0, Math.PI * 2);
+    ctx.arc(x, lcy, logoR, 0, Math.PI * 2);
     ctx.clip();
-    ctx.drawImage(b.img, x - logoR, logoY - logoR, logoR * 2, logoR * 2);
+    ctx.drawImage(b.img!, x - logoR, lcy - logoR, logoDiameter, logoDiameter);
     ctx.restore();
+    curY += logoDiameter + gap;
   }
 
-  // --- Symbol text ---
-  if (r >= 22) {
-    const hasLogo = b.img && b.imgLoaded && r >= 26;
-    const symSize = Math.max(8, Math.min(r * 0.34, 17));
+  // ── Symbol ────────────────────────────────────────────────────────────────
+  if (showSymbol) {
+    const sym = b.symbol.replace(/^\$/, "").substring(0, 8);
     ctx.save();
-    ctx.font = `700 ${symSize}px Inter,'SF Pro Display',system-ui,sans-serif`;
-    ctx.fillStyle = "rgba(255,255,255,0.96)";
-    ctx.textAlign  = "center";
-    ctx.textBaseline = "middle";
-    ctx.shadowBlur  = 3;
-    ctx.shadowColor = "rgba(0,0,0,0.8)";
-    const symY = hasLogo ? y + r * 0.12 : (r >= 32 ? y - r * 0.12 : y);
-    const sym = b.symbol.replace(/^\$/, "").substring(0, 7);
-    ctx.fillText(sym, x, symY);
+    ctx.font = `700 ${symFontSize}px Inter,'SF Pro Display',system-ui,sans-serif`;
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    ctx.textAlign    = "center";
+    ctx.textBaseline = "top";
+    ctx.shadowBlur   = 4;
+    ctx.shadowColor  = "rgba(0,0,0,0.9)";
+    ctx.fillText(sym, x, curY);
     ctx.restore();
+    curY += symFontSize + gap;
   }
 
-  // --- % change text ---
-  if (r >= 30) {
-    const hasLogo = b.img && b.imgLoaded && r >= 26;
-    const pctSize = Math.max(7, Math.min(r * 0.25, 13));
-    const pctText = b.pctChange >= 0
-      ? `+${b.pctChange.toFixed(1)}%`
-      : `${b.pctChange.toFixed(1)}%`;
-    ctx.save();
-    ctx.font = `600 ${pctSize}px Inter,'SF Pro Display',system-ui,sans-serif`;
-    ctx.fillStyle = colors.pctHex;
-    ctx.textAlign  = "center";
-    ctx.textBaseline = "middle";
-    ctx.shadowBlur  = 2;
-    ctx.shadowColor = "rgba(0,0,0,0.9)";
-    const pctY = hasLogo ? y + r * 0.40 : y + r * 0.28;
-    ctx.fillText(pctText, x, pctY);
-    ctx.restore();
-  }
+  // ── % change (primary — biggest, most vivid) ──────────────────────────────
+  ctx.save();
+  ctx.font = `800 ${pctFontSize}px Inter,'SF Pro Display',system-ui,sans-serif`;
+  ctx.fillStyle    = colors.pctHex;
+  ctx.textAlign    = "center";
+  ctx.textBaseline = "top";
+  ctx.shadowBlur   = 6;
+  ctx.shadowColor  = "rgba(0,0,0,0.95)";
+  ctx.fillText(pctText, x, curY);
+  ctx.restore();
 }
 
 // ─── Image preloader ──────────────────────────────────────────────────────────
@@ -369,16 +398,14 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 
     const W = containerRef.current?.offsetWidth ?? 600;
     const H = height;
 
-    const maxVolSol = Math.max(
-      ...tokens.map(t => parseFloat(t.volumeEth ?? t.marketCapEth ?? "0") / 1e9)
-    );
-
+    // tokens arrive pre-sorted by volume desc from the API
     const prevMap = new Map(bubblesRef.current.map(b => [b.address, b]));
 
     const newBubbles: BubbleState[] = tokens.map((t, i) => {
       const volSol = parseFloat(t.volumeEth ?? t.marketCapEth ?? "0") / 1e9;
       const mcSol  = parseFloat(t.marketCapEth ?? "0") / 1e9;
-      const r      = calcRadius(volSol, maxVolSol);
+      // Rank-based sizing: index 0 = highest volume → MAX_R
+      const r      = calcRadius(i, tokens.length);
       const prev   = prevMap.get(t.address);
 
       // Store initial price for % change tracking
@@ -419,9 +446,9 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 
         // Unique floating bob per bubble — keep existing if re-using prev
         floatPhaseX: prev?.floatPhaseX ?? Math.random() * Math.PI * 2,
         floatPhaseY: prev?.floatPhaseY ?? Math.random() * Math.PI * 2,
-        floatFreqX:  prev?.floatFreqX  ?? (0.00035 + Math.random() * 0.00055),
-        floatFreqY:  prev?.floatFreqY  ?? (0.00030 + Math.random() * 0.00050),
-        floatAmp:    prev?.floatAmp    ?? (3 + Math.random() * 6),
+        floatFreqX:  prev?.floatFreqX  ?? (0.00025 + Math.random() * 0.00040),
+        floatFreqY:  prev?.floatFreqY  ?? (0.00020 + Math.random() * 0.00038),
+        floatAmp:    prev?.floatAmp    ?? (8 + Math.random() * 12), // 8–20px visible bob
         imgLoaded: prev?.imgLoaded ?? false,
         img: prev?.img,
       };
