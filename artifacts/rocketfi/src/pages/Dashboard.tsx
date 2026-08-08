@@ -504,7 +504,7 @@ export default function Dashboard() {
   // tokens entering the top-40 list and refresh the 24h pct-change window.
   // staleTime=55s prevents redundant refetches on window-focus / tab switch.
   // refetchOnWindowFocus=false avoids hammering the API when the user alt-tabs.
-  const bubbleListParams = { sort: ListTokensSort.volume, limit: 40 };
+  const bubbleListParams = { sort: ListTokensSort.volume, limit: 60 };
   const { data: bubbleRawTokens } = useListTokens(
     bubbleListParams,
     {
@@ -665,7 +665,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <BubbleMap
-                  tokens={isMobile ? bubbleTokens.slice(0, 20) : bubbleTokens}
+                  tokens={isMobile ? bubbleTokens.slice(0, 30) : bubbleTokens}
                   liveUpdates={liveTradeStats}
                   solPrice={solPrice}
                   height={isMobile ? 280 : 460}
