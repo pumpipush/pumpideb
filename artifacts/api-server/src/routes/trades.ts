@@ -157,6 +157,40 @@ router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
   res.json(bars);
 });
 
+// GET /tokens/:address/stats  — 24-hour aggregated stats (SQL, no row-limit)
+router.get("/tokens/:address/stats", async (req, res): Promise<void> => {
+  const address = req.params.address as string;
+  if (!address) { res.status(400).json({ error: "address required" }); return; }
+
+  const { rows } = await pool.query<{
+    vol24h_sol:      string;
+    vol24h_buy_sol:  string;
+    vol24h_sell_sol: string;
+    txns_buy:        string;
+    txns_sell:       string;
+  }>(`
+    SELECT
+      COALESCE(SUM(CAST(eth_amount AS NUMERIC)) / 1e9, 0)                                       AS vol24h_sol,
+      COALESCE(SUM(CASE WHEN is_buy     THEN CAST(eth_amount AS NUMERIC) ELSE 0 END) / 1e9, 0)  AS vol24h_buy_sol,
+      COALESCE(SUM(CASE WHEN NOT is_buy THEN CAST(eth_amount AS NUMERIC) ELSE 0 END) / 1e9, 0)  AS vol24h_sell_sol,
+      COUNT(CASE WHEN is_buy     THEN 1 END)                                                     AS txns_buy,
+      COUNT(CASE WHEN NOT is_buy THEN 1 END)                                                     AS txns_sell
+    FROM trades
+    WHERE token_address = $1
+      AND timestamp > NOW() - INTERVAL '24 hours'
+      AND CAST(eth_amount AS NUMERIC) > 0
+  `, [address]);
+
+  const r = rows[0];
+  res.json({
+    vol24hSol:      parseFloat(r.vol24h_sol),
+    vol24hBuySol:   parseFloat(r.vol24h_buy_sol),
+    vol24hSellSol:  parseFloat(r.vol24h_sell_sol),
+    txns24hBuy:     parseInt(r.txns_buy, 10),
+    txns24hSell:    parseInt(r.txns_sell, 10),
+  });
+});
+
 // GET /tokens/:address/trades
 router.get("/tokens/:address/trades", async (req, res): Promise<void> => {
   const params = TradeHistoryParams.safeParse(req.params);

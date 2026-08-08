@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { 
   useCreateToken, 
   useGetToken, 
@@ -318,6 +319,24 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     }
   });
 
+  // ── Server-side 24h stats (SQL aggregate — no 100-row cap) ────────────────
+  // Refreshed every 30 s so Vol 24h stays accurate and real-time.
+  const { data: serverStats } = useQuery({
+    queryKey: ["tokenStats", selectedAddress],
+    queryFn: async (): Promise<{
+      vol24hSol: number; vol24hBuySol: number; vol24hSellSol: number;
+      txns24hBuy: number; txns24hSell: number;
+    } | null> => {
+      if (!selectedAddress) return null;
+      const res = await fetch(`/api/tokens/${selectedAddress}/stats`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!selectedAddress,
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+  });
+
   const recordTrade = useRecordTrade();
   const updateToken = useUpdateToken();
   const { toast } = useToast();
@@ -376,12 +395,31 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     const livePrice = liveToken?.priceEth ? parseFloat(liveToken.priceEth) : null;
     const currentPrice = livePrice ?? (token?.priceEth ? parseFloat(token.priceEth) : 0);
     const allTradesForVol = [...liveTrades, ...(history ?? [])];
-    const vol24h = allTradesForVol.reduce((acc, t) => {
+
+    // ── Client-side fallback (limited to 100-row history + live SSE trades) ──
+    const clientVol24h = allTradesForVol.reduce((acc, t) => {
       const ts = new Date(t.timestamp).getTime();
       if (!Number.isFinite(ts)) return acc;
-      const amt = parseFloat(t.ethAmount ?? "0") / 1e9; // lamports → SOL
+      const amt = parseFloat(t.ethAmount ?? "0") / 1e9;
       return now - ts <= 86_400_000 ? acc + (Number.isFinite(amt) ? amt : 0) : acc;
     }, 0);
+    const trades24h = allTradesForVol.filter(t => {
+      const ts = new Date(t.timestamp).getTime();
+      return Number.isFinite(ts) && now - ts <= 86_400_000;
+    });
+    const clientVol24hBuy  = trades24h.filter(t =>  t.isBuy).reduce((a, t) => a + ((parseFloat(t.ethAmount ?? "0") || 0) / 1e9), 0);
+    const clientVol24hSell = trades24h.filter(t => !t.isBuy).reduce((a, t) => a + ((parseFloat(t.ethAmount ?? "0") || 0) / 1e9), 0);
+    const clientTxns24hBuy  = trades24h.filter(t =>  t.isBuy).length;
+    const clientTxns24hSell = trades24h.filter(t => !t.isBuy).length;
+
+    // ── Server stats override when available (SQL SUM over full 24 h, no row cap) ──
+    // Server refreshes every 30 s; client fallback covers the initial load gap.
+    const vol24h     = serverStats?.vol24hSol    ?? clientVol24h;
+    const vol24hBuy  = serverStats?.vol24hBuySol  ?? clientVol24hBuy;
+    const vol24hSell = serverStats?.vol24hSellSol ?? clientVol24hSell;
+    const txns24hBuy  = serverStats?.txns24hBuy  ?? clientTxns24hBuy;
+    const txns24hSell = serverStats?.txns24hSell ?? clientTxns24hSell;
+
     const priceAt = (cutoffMs: number): number | null => {
       const cutoff = now - cutoffMs;
       const older = (history ?? [])
@@ -396,15 +434,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       const diff = ((currentPrice - old) / old) * 100;
       return { val: (diff >= 0 ? "+" : "") + diff.toFixed(2) + "%", up: diff >= 0 };
     };
-    // Buy / Sell breakdown for last 24h
-    const trades24h = allTradesForVol.filter(t => {
-      const ts = new Date(t.timestamp).getTime();
-      return Number.isFinite(ts) && now - ts <= 86_400_000;
-    });
-    const vol24hBuy  = trades24h.filter(t => t.isBuy) .reduce((a, t) => a + ((parseFloat(t.ethAmount ?? "0") || 0) / 1e9), 0);
-    const vol24hSell = trades24h.filter(t => !t.isBuy).reduce((a, t) => a + ((parseFloat(t.ethAmount ?? "0") || 0) / 1e9), 0);
-    const txns24hBuy  = trades24h.filter(t => t.isBuy).length;
-    const txns24hSell = trades24h.filter(t => !t.isBuy).length;
 
     return {
       currentPrice,
@@ -419,7 +448,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       p24h: pct(priceAt(1440 * 60_000)),
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveToken, token?.priceEth, liveTrades, history]);
+  }, [liveToken, token?.priceEth, liveTrades, history, serverStats]);
 
   // ── Price flash effect — runs after priceStats is declared ──
   useEffect(() => {
