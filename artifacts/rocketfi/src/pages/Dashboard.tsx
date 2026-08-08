@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import {
   useListTokens,
-  useGetTrendingTokens,
   getListTokensQueryKey,
   ListTokensSort,
   type ListTokensPlatform,
@@ -498,7 +497,6 @@ export default function Dashboard() {
     query: { refetchInterval: 30_000, queryKey: getListTokensQueryKey(listParams) },
   });
 
-  const { data: trending, isLoading: loadingTrending } = useGetTrendingTokens({ limit: 8 });
 
   // Bubble map: top 40 tokens by volume.
   // Poll every 60s (not 30s) — real-time price movement is already delivered
@@ -648,112 +646,32 @@ export default function Dashboard() {
       <div className="w-full max-w-[1400px] mx-auto pt-2 md:pt-4 px-3 md:px-5 flex-1">
         <div className="flex flex-col min-w-0">
 
-          {/* ── Top section: Trending leaderboard (left) + Bubble Map (right) ── */}
+          {/* ── Bubble Map — full width ── */}
           <section className="mb-3 md:mb-5">
-            <div className="flex flex-col lg:flex-row gap-3">
-
-              {/* ── LEFT: Trending leaderboard (30%) ──────────────────────── */}
-              <div className="lg:w-[30%] shrink-0 flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-[13px] font-bold uppercase tracking-widest flex items-center gap-1.5" style={{ color: "#e2e8f0" }}>
-                    <Flame className="w-3.5 h-3.5 text-amber-400" /> Trending
-                  </h2>
-                  <Link href="/app" className="text-[11px] hover:underline transition-all" style={{ color: "#4ade80" }}>See all →</Link>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-[13px] font-bold uppercase tracking-widest flex items-center gap-1.5" style={{ color: "#e2e8f0" }}>
+                <BarChart2 className="w-3.5 h-3.5" style={{ color: "#94a3b8" }} /> Market Bubbles
+                <span className="text-[10px] font-normal ml-1" style={{ color: "#475569" }}>· size = volume · color = momentum</span>
+              </h2>
+            </div>
+            <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
+              {bubbleTokens.length === 0 ? (
+                <div className="flex items-center justify-center" style={{ height: 360, background: "#050508" }}>
+                  <div className="flex gap-2.5 items-center">
+                    <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:0ms]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:150ms]" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:300ms]" />
+                  </div>
                 </div>
-
-                <div className="flex flex-col gap-1.5 lg:gap-1 overflow-hidden">
-                  {loadingTrending
-                    ? [1,2,3,4,5,6].map(i => (
-                        <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: "rgba(255,255,255,0.03)" }}>
-                          <Skeleton className="w-7 h-7 rounded-full shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <Skeleton className="h-3 w-20 mb-1" />
-                            <Skeleton className="h-2.5 w-14" />
-                          </div>
-                          <Skeleton className="h-3 w-12" />
-                        </div>
-                      ))
-                    : (trending ?? []).slice(0, 8).map((token, i) => {
-                        const rankStyle = i === 0
-                          ? { bg: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#000" }
-                          : i === 1
-                            ? { bg: "linear-gradient(135deg,#94a3b8,#64748b)", color: "#fff" }
-                            : i === 2
-                              ? { bg: "linear-gradient(135deg,#b45309,#92400e)", color: "#fde68a" }
-                              : { bg: "rgba(255,255,255,0.07)", color: "#94a3b8" };
-                        return (
-                          <Link
-                            key={token.id}
-                            href={`/app?token=${token.address}`}
-                            className="group flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all duration-150"
-                            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}
-                            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.07)")}
-                            onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
-                          >
-                            {/* Rank */}
-                            <div className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black shrink-0"
-                              style={{ background: rankStyle.bg, color: rankStyle.color }}>
-                              {i + 1}
-                            </div>
-                            {/* Avatar */}
-                            <div className="w-7 h-7 rounded-full overflow-hidden shrink-0 bg-muted">
-                              {token.imageUrl
-                                ? <img src={resolveImageUrl(token.imageUrl) ?? ""} alt={token.symbol} className="w-full h-full object-cover" />
-                                : <div className="w-full h-full flex items-center justify-center text-[11px] font-bold" style={{ background: tokenCardBackground(token.symbol) }}>
-                                    {token.symbol.replace(/^\$/, "").charAt(0).toUpperCase()}
-                                  </div>
-                              }
-                            </div>
-                            {/* Info */}
-                            <div className="flex-1 min-w-0">
-                              <div className="text-[13px] font-bold truncate" style={{ color: "#e2e8f0" }}>
-                                {token.symbol.replace(/^\$/, "")}
-                              </div>
-                              <div className="text-[11px] truncate" style={{ color: "#64748b" }}>{token.name}</div>
-                            </div>
-                            {/* MC */}
-                            <div className="text-right shrink-0">
-                              <div className="text-[12px] font-mono font-bold" style={{ color: "#e2e8f0" }}>
-                                {formatMCUsd(token.marketCapEth, solPrice)}
-                              </div>
-                              <div className="text-[10px]" style={{ color: "#64748b" }}>MC</div>
-                            </div>
-                          </Link>
-                        );
-                      })
-                  }
-                </div>
-              </div>
-
-              {/* ── RIGHT: Bubble Map ────────────────────────────────────────── */}
-              <div className="flex-1 min-w-0 flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-[13px] font-bold uppercase tracking-widest flex items-center gap-1.5" style={{ color: "#e2e8f0" }}>
-                    <BarChart2 className="w-3.5 h-3.5" style={{ color: "#94a3b8" }} /> Market Bubbles
-                    <span className="text-[10px] font-normal ml-1" style={{ color: "#475569" }}>· size = volume · color = momentum</span>
-                  </h2>
-                </div>
-                <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
-                  {bubbleTokens.length === 0 ? (
-                    <div className="flex items-center justify-center" style={{ height: 360, background: "#050508" }}>
-                      <div className="flex gap-2.5 items-center">
-                        <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:0ms]" />
-                        <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:150ms]" />
-                        <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:300ms]" />
-                      </div>
-                    </div>
-                  ) : (
-                    <BubbleMap
-                      tokens={isMobile ? bubbleTokens.slice(0, 20) : bubbleTokens}
-                      liveUpdates={liveTradeStats}
-                      solPrice={solPrice}
-                      height={isMobile ? 280 : 460}
-                      radiusScale={isMobile ? 0.6 : 1}
-                    />
-                  )}
-                </div>
-              </div>
-
+              ) : (
+                <BubbleMap
+                  tokens={isMobile ? bubbleTokens.slice(0, 20) : bubbleTokens}
+                  liveUpdates={liveTradeStats}
+                  solPrice={solPrice}
+                  height={isMobile ? 280 : 460}
+                  radiusScale={isMobile ? 0.6 : 1}
+                />
+              )}
             </div>
           </section>
 
