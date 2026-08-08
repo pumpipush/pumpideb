@@ -68,9 +68,10 @@ interface TooltipState {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MIN_R = 14;
-const MAX_R = 80;
-const GAP   = 1.5;
+const MIN_R      = 14;
+const MAX_R      = 80;
+const GAP        = 2;
+const TOP_CIRCLES = 5;   // only these get a transparent circle; rest = text label
 const SOL_PRICE_USD = 160;  // fallback if no solPrice prop
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
@@ -126,13 +127,11 @@ function toHex(n: number) { return Math.round(Math.max(0, Math.min(255, n))).toS
 // (e.g. all pump.fun tokens at bonding-curve start have nearly equal volumes).
 // rank 0 = highest volume → MAX_R; rank n-1 = lowest → MIN_R.
 
-function calcRadius(rank: number, total: number): number {
-  if (total <= 1) return MAX_R;
-  const norm   = 1 - rank / (total - 1);          // 1.0 (rank 0) → 0.0 (rank n-1)
-  // Exponent 2.2 = steep power curve: top 5 tokens are BIG, bottom 60 are small
-  // rank 0 → 72px, rank 4 → ~65px, rank 24 → ~42px, rank 49 → ~24px, rank 74 → ~15px
-  const curved = Math.pow(norm, 2.2);
-  return Math.max(MIN_R, Math.min(MAX_R, MIN_R + curved * (MAX_R - MIN_R)));
+function calcRadius(rank: number, _total: number): number {
+  // Top 5 → explicit large circle sizes; rest → uniform small for text-label layout
+  const topSizes = [80, 70, 62, 56, 50];
+  if (rank < TOP_CIRCLES) return topSizes[rank];
+  return 26; // text-label layout radius (no circle drawn)
 }
 
 // ─── Force layout — inflate-and-pack ─────────────────────────────────────────
@@ -223,83 +222,140 @@ function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 460) {
 }
 
 // ─── Canvas renderer ──────────────────────────────────────────────────────────
-// Solid sphere style — matches BirdEye reference:
-//   vivid color fill with radial gradient (lighter center, darker edge),
-//   subtle top-left specular, thin dark border for definition.
+// Two visual modes based on rank:
 //
-// Text tiers:  r<16 → nothing | 16–26 → % only | 26–40 → sym+% | 40+ → logo+sym+%
+//  rank < TOP_CIRCLES  → transparent glass circle with vivid colored border
+//                         (green border if pct↑, red if pct↓, gray neutral)
+//  rank ≥ TOP_CIRCLES  → floating text label only (no circle shape)
+
+// Helper: derive border / glow / fill-tint from raw pctChange
+function circleColors(pct: number): { border: string; glow: string; fill: string; text: string } {
+  if (pct > 0.15) {
+    const t = Math.min(pct / 20, 1);
+    const g = Math.round(lerp(160, 220, t));
+    return {
+      border: `rgba(30,${g},80,${lerp(0.80,1.0,t)})`,
+      glow:   `rgba(20,${g},60,${lerp(0.40,0.70,t)})`,
+      fill:   `rgba(20,${g},55,0.07)`,
+      text:   `rgb(100,${g},120)`,
+    };
+  } else if (pct < -0.15) {
+    const t  = Math.min(-pct / 20, 1);
+    const rv = Math.round(lerp(190, 248, t));
+    return {
+      border: `rgba(${rv},22,22,${lerp(0.80,1.0,t)})`,
+      glow:   `rgba(${rv},12,12,${lerp(0.40,0.70,t)})`,
+      fill:   `rgba(${rv},15,15,0.07)`,
+      text:   `rgb(${rv},90,90)`,
+    };
+  }
+  return {
+    border: "rgba(90,105,155,0.45)",
+    glow:   "rgba(60,70,120,0.18)",
+    fill:   "rgba(50,55,85,0.06)",
+    text:   "#94a3b8",
+  };
+}
 
 function drawBubble(
   ctx: CanvasRenderingContext2D,
   b: BubbleState,
   isHovered: boolean,
-  colors: ReturnType<typeof pctToColors>,
+  _colors: ReturnType<typeof pctToColors>,
   dpr: number,
+  rank: number,
 ) {
   const x = b.dispX, y = b.dispY, r = b.dispR;
-  const { center: c, mid: m, edge: e } = colors;
+
+  // ── MODE B: Text label (rank ≥ TOP_CIRCLES) ───────────────────────────────
+  if (rank >= TOP_CIRCLES) {
+    const col  = circleColors(b.pctChange);
+    const sym  = b.symbol.replace(/^\$/, "").substring(0, 9);
+    const pct  = (b.pctChange >= 0 ? "+" : "") + b.pctChange.toFixed(2) + "%";
+    const sz   = isHovered ? 11 : 10;
+
+    ctx.save();
+    ctx.textAlign    = "center";
+    ctx.shadowBlur   = isHovered ? 6 : 3;
+    ctx.shadowColor  = "rgba(0,0,0,0.90)";
+
+    // Symbol — light white
+    ctx.font      = `600 ${sz}px Inter,'SF Pro Display',system-ui,sans-serif`;
+    ctx.fillStyle = isHovered ? "#ffffff" : "rgba(210,220,240,0.88)";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(sym, x, y);
+
+    // % change — colored
+    ctx.font      = `700 ${sz}px Inter,'SF Pro Display',system-ui,sans-serif`;
+    ctx.fillStyle = col.text;
+    ctx.textBaseline = "top";
+    ctx.fillText(pct, x, y + 1);
+
+    ctx.restore();
+    return;
+  }
+
+  // ── MODE A: Transparent circle with colored border (top 5) ────────────────
+  const col = circleColors(b.pctChange);
+  const bw  = isHovered ? 3.0 : 2.2;
 
   ctx.save();
 
-  // ── 1. Outer glow (softens edge, gives depth) ─────────────────────────────
-  ctx.shadowBlur  = (isHovered ? 24 : 10) * dpr;
-  ctx.shadowColor = colors.glow;
+  // Outer glow
+  ctx.shadowBlur  = (isHovered ? 32 : 20) * dpr;
+  ctx.shadowColor = col.glow;
 
-  // ── 2. Solid sphere body — off-center radial gradient (light from top-left)
-  const grad = ctx.createRadialGradient(
-    x - r * 0.30, y - r * 0.32, r * 0.02,  // light source
-    x + r * 0.10, y + r * 0.10, r * 1.04,   // shadow side
-  );
-  grad.addColorStop(0.00, `rgb(${c.r},${c.g},${c.b})`);
-  grad.addColorStop(0.45, `rgb(${Math.round(lerp(c.r,m.r,0.55))},${Math.round(lerp(c.g,m.g,0.55))},${Math.round(lerp(c.b,m.b,0.55))})`);
-  grad.addColorStop(0.80, `rgb(${m.r},${m.g},${m.b})`);
-  grad.addColorStop(1.00, `rgb(${e.r},${e.g},${e.b})`);
+  // Transparent tinted fill
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fillStyle = grad;
+  ctx.fillStyle = col.fill;
   ctx.fill();
+
+  // Main border ring
+  ctx.beginPath();
+  ctx.arc(x, y, r - bw / 2, 0, Math.PI * 2);
+  ctx.strokeStyle = col.border;
+  ctx.lineWidth   = bw;
+  ctx.stroke();
 
   ctx.shadowBlur = 0;
 
-  // ── 3. Specular highlight — glass-like sheen top-left ─────────────────────
+  // Inner highlight ring (glass depth)
+  ctx.beginPath();
+  ctx.arc(x, y, r - bw - 2, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(255,255,255,0.07)";
+  ctx.lineWidth   = 0.8;
+  ctx.stroke();
+
+  // Specular sheen top-left
   const shine = ctx.createRadialGradient(
     x - r * 0.32, y - r * 0.36, 0,
-    x - r * 0.14, y - r * 0.18, r * 0.72,
+    x - r * 0.12, y - r * 0.16, r * 0.68,
   );
-  shine.addColorStop(0,    isHovered ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.22)");
-  shine.addColorStop(0.40, "rgba(255,255,255,0.07)");
+  shine.addColorStop(0,    "rgba(255,255,255,0.22)");
+  shine.addColorStop(0.45, "rgba(255,255,255,0.05)");
   shine.addColorStop(1,    "rgba(255,255,255,0)");
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fillStyle = shine;
   ctx.fill();
 
-  // ── 4. Thin dark border — separates touching bubbles cleanly ──────────────
-  ctx.beginPath();
-  ctx.arc(x, y, r - 0.5, 0, Math.PI * 2);
-  ctx.strokeStyle = isHovered ? "rgba(255,255,255,0.40)" : "rgba(0,0,0,0.50)";
-  ctx.lineWidth   = isHovered ? 1.5 : 0.8;
-  ctx.stroke();
-
   ctx.restore();
 
-  if (r < 16) return;
-
-  // ── Text layout ───────────────────────────────────────────────────────────
-  const showLogo   = r >= 40 && b.img && b.imgLoaded && b.img.naturalWidth > 0;
-  const showSymbol = r >= 26;
+  // ── Content inside circle ─────────────────────────────────────────────────
+  const showLogo   = r >= 44 && b.img && b.imgLoaded && b.img.naturalWidth > 0;
+  const showSymbol = r >= 32;
   const pctText    = (b.pctChange >= 0 ? "+" : "") + b.pctChange.toFixed(2) + "%";
-  const pctFontSz  = Math.max(7,  Math.min(r * 0.30, 20));
-  const symFontSz  = Math.max(6,  Math.min(r * 0.20, 13));
-  const logoR      = r * 0.26;
-  const gap        = r * 0.07;
+  const pctFontSz  = Math.max(10, Math.min(r * 0.28, 22));
+  const symFontSz  = Math.max(9,  Math.min(r * 0.20, 15));
+  const logoR      = r * 0.25;
+  const gap        = r * 0.08;
 
   let blockH = pctFontSz;
   if (showSymbol) blockH += symFontSz + gap;
   if (showLogo)   blockH += logoR * 2  + gap;
   let curY = y - blockH / 2;
 
-  // Logo — circular clip
   if (showLogo) {
     const lcy = curY + logoR;
     ctx.save();
@@ -311,10 +367,9 @@ function drawBubble(
     curY += logoR * 2 + gap;
   }
 
-  // Symbol
   if (showSymbol) {
     ctx.save();
-    ctx.font = `700 ${symFontSz}px Inter,'SF Pro Display',system-ui,sans-serif`;
+    ctx.font         = `700 ${symFontSz}px Inter,'SF Pro Display',system-ui,sans-serif`;
     ctx.fillStyle    = "rgba(255,255,255,0.95)";
     ctx.textAlign    = "center";
     ctx.textBaseline = "top";
@@ -325,10 +380,9 @@ function drawBubble(
     curY += symFontSz + gap;
   }
 
-  // % change — bold white (primary)
   ctx.save();
-  ctx.font = `800 ${pctFontSz}px Inter,'SF Pro Display',system-ui,sans-serif`;
-  ctx.fillStyle    = colors.pctHex;
+  ctx.font         = `800 ${pctFontSz}px Inter,'SF Pro Display',system-ui,sans-serif`;
+  ctx.fillStyle    = col.text;
   ctx.textAlign    = "center";
   ctx.textBaseline = "top";
   ctx.shadowBlur   = 6;
@@ -533,18 +587,31 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 
         b.colorB += (b.targetB - b.colorB) * 0.04;
       }
 
-      // Z-ordering: draw smallest → largest so big bubbles appear in front.
-      // bubbles[] is already sorted largest-first, so iterate in reverse.
+      // Z-ordering: draw text labels first (back), then large circles on top.
+      // bubbles[] is sorted largest-first → index 0–4 = top circles, 5+ = text labels.
       const hoveredBubble = hIdx >= 0 && hIdx < bubbles.length ? bubbles[hIdx] : null;
-      for (let i = bubbles.length - 1; i >= 0; i--) {
+
+      // Pass 1: text labels (rank ≥ TOP_CIRCLES), back to front within that group
+      for (let i = bubbles.length - 1; i >= TOP_CIRCLES; i--) {
         const b = bubbles[i];
-        if (b === hoveredBubble) continue; // draw hovered last (top of stack)
+        if (b === hoveredBubble) continue;
         b.dispR += (b.r - b.dispR) * 0.10;
-        drawBubble(ctx, b, false, pctToColors(b.pctChange), dpr);
+        drawBubble(ctx, b, false, pctToColors(b.pctChange), dpr, i);
       }
+
+      // Pass 2: top circles (rank 0–4), smallest-first so rank 0 is on top
+      for (let i = TOP_CIRCLES - 1; i >= 0; i--) {
+        const b = bubbles[i];
+        if (b === hoveredBubble) continue;
+        b.dispR += (b.r - b.dispR) * 0.10;
+        drawBubble(ctx, b, false, pctToColors(b.pctChange), dpr, i);
+      }
+
+      // Pass 3: hovered bubble always on top
       if (hoveredBubble) {
-        hoveredBubble.dispR += (hoveredBubble.r * 1.10 - hoveredBubble.dispR) * 0.16;
-        drawBubble(ctx, hoveredBubble, true, pctToColors(hoveredBubble.pctChange), dpr);
+        const hRank = bubbles.indexOf(hoveredBubble);
+        hoveredBubble.dispR += (hoveredBubble.r * (hRank < TOP_CIRCLES ? 1.08 : 1) - hoveredBubble.dispR) * 0.16;
+        drawBubble(ctx, hoveredBubble, true, pctToColors(hoveredBubble.pctChange), dpr, hRank);
       }
 
       ctx.restore();
