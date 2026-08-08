@@ -107,6 +107,12 @@ export abstract class SolanaRpcIndexer {
   private _watchdogTimer:  ReturnType<typeof setTimeout>  | null = null;
   private _keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
+  // ── Fallback exhaustion tracking ──────────────────────────────────────────
+  // After a complete rotation through every WSS URL with zero events on each,
+  // call onAllRpcsExhausted() so subclasses can activate a last-resort fallback.
+  // Reset on the first event received (call onRpcRecovered()).
+  private _fallbackActive = false;
+
   constructor(opts: {
     programId:   string;
     adapterName: string;
@@ -131,6 +137,21 @@ export abstract class SolanaRpcIndexer {
 
   /** Handle a confirmed, relevant program event */
   protected abstract onEvent(event: LogEvent): Promise<void>;
+
+  /**
+   * Called once after a full round-trip through every WSS URL with zero events
+   * (i.e. all Solana RPC endpoints appear silent / unreachable).
+   * Subclasses can override to activate a last-resort fallback data source.
+   * Default: no-op.
+   */
+  protected onAllRpcsExhausted(): void { /* no-op */ }
+
+  /**
+   * Called on the first valid event received after onAllRpcsExhausted() fired.
+   * Subclasses can override to deactivate the fallback data source.
+   * Default: no-op.
+   */
+  protected onRpcRecovered(): void { /* no-op */ }
 
   // ── RPC helpers ────────────────────────────────────────────────────────────
 
@@ -294,7 +315,7 @@ export abstract class SolanaRpcIndexer {
 
   start(): void {
     this.log.info(
-      { programId: this.programId, rpc: this.wssUrl },
+      { programId: this.programId, rpc: this._wssUrls[0] },
       `${this.constructor.name}: starting`
     );
     this.connect();
@@ -304,7 +325,14 @@ export abstract class SolanaRpcIndexer {
     const wssUrl = this._wssUrls[this._wssIdx % this._wssUrls.length];
     const ws = new WebSocket(wssUrl);
 
+    // Per-connection flags — prevent stale callbacks from touching a newer connection's
+    // timers, and detect pre-open failures (connection closed before `open` fired).
+    let openFired  = false;
+    let connClosed = false;
+
     ws.addEventListener("open", () => {
+      if (connClosed) return; // guard against racing close
+      openFired = true;
       this.delay = 5_000;
       this._eventsSeenThisConnection = 0;
       this.log.info({ programId: this.programId, wss: wssUrl }, `${this.constructor.name}: connected`);
@@ -318,7 +346,7 @@ export abstract class SolanaRpcIndexer {
       // Keepalive: send a getHealth ping every 20 s to prevent silent drops.
       // Some RPCs silently close idle WebSocket connections; this keeps them alive.
       this._keepaliveTimer = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
+        if (!connClosed && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ jsonrpc: "2.0", id: nextId(), method: "getHealth" }));
         }
       }, 20_000);
@@ -326,19 +354,17 @@ export abstract class SolanaRpcIndexer {
       // Watchdog: if 30 s pass with zero events, rotate to the next WSS endpoint
       // and force a close so the reconnect loop kicks in immediately.
       this._watchdogTimer = setTimeout(() => {
+        if (connClosed) return; // stale timer from a now-closed connection — ignore
         if (this._eventsSeenThisConnection === 0) {
-          const nextUrl = this._wssUrls[(this._wssIdx + 1) % this._wssUrls.length];
-          this.log.warn(
-            { programId: this.programId, currentWss: wssUrl, nextWss: nextUrl },
-            `${this.constructor.name}: 30 s with zero events — rotating WSS endpoint and reconnecting`
-          );
-          this._wssIdx++; // rotate before close so the reconnect uses next URL
+          this._rotateEndpoint(wssUrl, "30 s with zero events");
           ws.close();
         }
       }, 30_000);
     });
 
     ws.addEventListener("message", (event) => {
+      if (connClosed) return; // stale message from a connection already closed
+
       let msg: Record<string, unknown>;
       try { msg = JSON.parse(event.data as string) as Record<string, unknown>; }
       catch { return; }
@@ -363,6 +389,15 @@ export abstract class SolanaRpcIndexer {
         clearTimeout(this._watchdogTimer);
         this._watchdogTimer = null;
       }
+      // If a fallback is active and the chain RPC delivers events again, deactivate it.
+      if (this._fallbackActive) {
+        this._fallbackActive = false;
+        this.log.info(
+          { programId: this.programId, wss: wssUrl },
+          `${this.constructor.name}: chain RPC recovered — deactivating fallback`
+        );
+        this.onRpcRecovered();
+      }
 
       void this.onEvent({ signature, logs }).catch((err: unknown) => {
         this.log.error({ err, signature }, "error in onEvent");
@@ -370,11 +405,17 @@ export abstract class SolanaRpcIndexer {
     });
 
     ws.addEventListener("error", (err) => {
+      // error is always followed by close; logging here is sufficient.
       this.log.error({ err: String(err) }, `${this.constructor.name}: WebSocket error`);
     });
 
     ws.addEventListener("close", () => {
-      // Clear watchdog + keepalive on disconnect (reconnect will start fresh ones)
+      if (connClosed) return; // guard against double-fire
+      connClosed = true;
+
+      // Clear watchdog + keepalive for THIS connection only.
+      // The connClosed flag above prevents stale keepalive/watchdog callbacks
+      // from a previous connection from clearing timers installed by the next one.
       if (this._watchdogTimer !== null) {
         clearTimeout(this._watchdogTimer);
         this._watchdogTimer = null;
@@ -383,9 +424,40 @@ export abstract class SolanaRpcIndexer {
         clearInterval(this._keepaliveTimer);
         this._keepaliveTimer = null;
       }
+
+      // Pre-open failure: connection refused, unreachable, or immediately dropped.
+      // The watchdog was never installed, so rotate the endpoint here.
+      if (!openFired) {
+        this._rotateEndpoint(wssUrl, "pre-open connection failure");
+      }
+
       this.log.warn({ retryMs: this.delay }, `${this.constructor.name}: disconnected — reconnecting`);
       setTimeout(() => this.connect(), this.delay);
       this.delay = Math.min(this.delay * 2, this.maxDelay);
     });
+  }
+
+  /**
+   * Increment `_wssIdx` to select the next endpoint on reconnect, then check
+   * whether a full rotation through every WSS URL has been completed without any
+   * events. If so, activate the last-resort fallback by calling onAllRpcsExhausted().
+   */
+  private _rotateEndpoint(currentWss: string, reason: string): void {
+    const nextUrl = this._wssUrls[(this._wssIdx + 1) % this._wssUrls.length];
+    this.log.warn(
+      { programId: this.programId, currentWss, nextWss: nextUrl, reason },
+      `${this.constructor.name}: rotating WSS endpoint`
+    );
+    this._wssIdx++;
+
+    // After every WSS URL has been tried once without any events, activate fallback.
+    if (!this._fallbackActive && this._wssIdx > 0 && this._wssIdx % this._wssUrls.length === 0) {
+      this._fallbackActive = true;
+      this.log.warn(
+        { programId: this.programId },
+        `${this.constructor.name}: all ${this._wssUrls.length} WSS endpoints exhausted — activating fallback`
+      );
+      this.onAllRpcsExhausted();
+    }
   }
 }
