@@ -453,9 +453,10 @@ interface BubbleMapProps {
   liveUpdates?: Map<string, LivePriceUpdate>;
   solPrice?: number | null;
   height?: number;
+  radiusScale?: number; // 1.0 = default desktop sizes; 0.6 = mobile
 }
 
-export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 }: BubbleMapProps) {
+export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420, radiusScale = 1 }: BubbleMapProps) {
   const canvasRef     = useRef<HTMLCanvasElement>(null);
   const containerRef  = useRef<HTMLDivElement>(null);
   const bubblesRef    = useRef<BubbleState[]>([]);
@@ -482,8 +483,8 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 
     const newBubbles: BubbleState[] = tokens.map((t, i) => {
       const volSol = parseFloat(t.volumeEth ?? t.marketCapEth ?? "0") / 1e9;
       const mcSol  = parseFloat(t.marketCapEth ?? "0") / 1e9;
-      // Rank-based sizing: index 0 = highest volume → MAX_R
-      const r      = calcRadius(i, tokens.length);
+      // Rank-based sizing: index 0 = highest volume → MAX_R; scaled for mobile
+      const r      = Math.round(calcRadius(i, tokens.length) * radiusScale);
       const prev   = prevMap.get(t.address);
 
       // Seed initPricesRef with the 24h open price so that live WebSocket

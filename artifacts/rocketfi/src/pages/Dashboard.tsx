@@ -447,6 +447,14 @@ export default function Dashboard() {
     setSeenLiveAddresses(new Set());
   }
 
+  // ── Mobile detection ─────────────────────────────────────────────────────
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   // ── Sort / filter state ───────────────────────────────────────────────────
   const [activeTab, setActiveTab]   = useState<SortTab>("New");
   const [viewMode, setViewMode]     = useState<ViewMode>("grid");
@@ -724,10 +732,11 @@ export default function Dashboard() {
                     </div>
                   ) : (
                     <BubbleMap
-                      tokens={bubbleTokens}
+                      tokens={isMobile ? bubbleTokens.slice(0, 20) : bubbleTokens}
                       liveUpdates={liveTradeStats}
                       solPrice={solPrice}
-                      height={460}
+                      height={isMobile ? 280 : 460}
+                      radiusScale={isMobile ? 0.6 : 1}
                     />
                   )}
                 </div>
