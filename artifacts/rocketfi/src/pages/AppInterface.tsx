@@ -1957,53 +1957,167 @@ function TradePanelForm({
 }
 
 function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSelectToken: (addr: string) => void }) {
-  const creatorFilter = wallet ? { creatorAddress: wallet } : {};
-  const { data: myTokens, isLoading, isError, refetch } = useListTokens(creatorFilter as any, { query: { enabled: !!wallet, queryKey: getListTokensQueryKey(creatorFilter as any) } });
+  const { openWalletModal } = useWallet();
   const solPrice = useSolPrice();
 
+  // Holdings: tokens this wallet has a positive net balance in (all trades in DB)
+  const { data: holdingsData, isLoading, isError, refetch } = useQuery({
+    queryKey: ["holdings", wallet],
+    queryFn: async (): Promise<{
+      address: string; balance: string; name: string; symbol: string;
+      imageUrl: string | null; priceEth: string | null; marketCapEth: string | null; volumeEth: string | null;
+    }[]> => {
+      if (!wallet) return [];
+      const res = await fetch(`/api/wallet/${wallet}/holdings`);
+      if (!res.ok) return [];
+      const json = await res.json();
+      return json.holdings ?? [];
+    },
+    enabled: !!wallet,
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+  });
+
+  // ── No wallet: full-page connect prompt ──
   if (!wallet) {
-    return <div className="text-center py-20 text-muted-foreground font-mono text-sm animate-slideDown">Connect wallet to view your tokens.</div>;
-  }
-
-  if (isLoading) {
-    return <div className="text-center py-20 text-muted-foreground font-mono text-sm animate-slideDown">Loading portfolio...</div>;
-  }
-
-  if (isError) {
     return (
-      <div className="text-center py-20 animate-slideDown">
-        <p className="text-destructive font-mono text-sm mb-3">Failed to load your tokens.</p>
-        <button onClick={() => refetch()} className="text-xs text-primary underline hover:opacity-80 transition-opacity">Retry</button>
+      <div className="flex flex-col items-center justify-center py-24 gap-5 animate-slideDown">
+        <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)" }}>
+          <Users className="h-8 w-8" style={{ color: "#334155" }} />
+        </div>
+        <div className="text-center space-y-1">
+          <p className="text-[16px] font-semibold text-foreground">Connect your wallet</p>
+          <p className="text-[13px]" style={{ color: "#64748b" }}>See all tokens you hold across every trade</p>
+        </div>
+        <button
+          onClick={() => openWalletModal()}
+          className="px-8 py-2.5 rounded-xl text-[14px] font-bold transition-all hover:opacity-90 active:scale-95"
+          style={{
+            background: "linear-gradient(135deg, #16a34a 0%, #22c55e 100%)",
+            color: "#fff",
+            boxShadow: "0 0 20px rgba(34,197,94,0.25)",
+          }}
+        >
+          Connect Wallet
+        </button>
       </div>
     );
   }
 
+  // ── Loading ──
+  if (isLoading) {
+    return (
+      <div className="max-w-[800px] animate-slideDown space-y-3">
+        <div className="flex items-center justify-between mb-4">
+          <div className="h-6 w-32 rounded-lg bg-white/[0.06] animate-pulse" />
+        </div>
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="flex items-center gap-4 p-4 rounded-xl" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
+            <div className="w-10 h-10 rounded-lg bg-white/[0.06] animate-pulse shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="h-3.5 w-28 rounded bg-white/[0.06] animate-pulse" />
+              <div className="h-3 w-20 rounded bg-white/[0.04] animate-pulse" />
+            </div>
+            <div className="h-4 w-16 rounded bg-white/[0.06] animate-pulse" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // ── Error ──
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3 animate-slideDown">
+        <p className="text-[14px]" style={{ color: "#f87171" }}>Failed to load holdings.</p>
+        <button onClick={() => refetch()} className="text-[13px] text-primary underline hover:opacity-80 transition-opacity">Retry</button>
+      </div>
+    );
+  }
+
+  const holdings = holdingsData ?? [];
+
+  // ── Empty ──
+  if (holdings.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-4 animate-slideDown">
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
+          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+          <TrendingUp className="h-7 w-7" style={{ color: "#334155" }} />
+        </div>
+        <div className="text-center space-y-1">
+          <p className="text-[15px] font-semibold text-foreground">No tokens found</p>
+          <p className="text-[13px]" style={{ color: "#64748b" }}>Buy some tokens and they'll appear here</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Holdings list ──
   return (
     <div className="max-w-[800px] animate-slideDown">
-      <h2 className="text-lg font-bold mb-6 text-foreground">Your Created Tokens</h2>
-      {!myTokens || myTokens.length === 0 ? (
-        <div className="text-muted-foreground font-mono text-sm border border-border/50 border-dashed rounded-sm p-8 text-center bg-card/50">
-          You haven't launched any tokens yet.
-        </div>
-      ) : (
-        <div className="grid gap-3">
-          {myTokens.map(token => (
-            <div key={token.id} className="flex items-center justify-between p-3 bg-card border border-border/50 rounded-sm hover:border-primary/40 transition-colors cursor-pointer group" onClick={() => onSelectToken(token.address)}>
-              <div className="flex items-center gap-4">
-                <TokenAvatar symbol={token.symbol} imageUrl={token.imageUrl} size={40} shape="square" />
-                <div>
-                  <div className="font-bold text-sm text-foreground group-hover:text-primary transition-colors">{token.name}</div>
-                  <div className="text-[10px] font-mono text-muted-foreground mt-0.5">MC: {formatMCUsd(token.marketCapEth, solPrice)}</div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-[16px] font-bold text-foreground">
+          My Tokens
+          <span className="ml-2 text-[12px] font-normal px-2 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.07)", color: "#94a3b8" }}>
+            {holdings.length}
+          </span>
+        </h2>
+        <span className="text-[12px] font-mono" style={{ color: "#475569" }}>{formatAddress(wallet)}</span>
+      </div>
+
+      <div className="space-y-2">
+        {holdings.map((token, idx) => {
+          const price = token.priceEth ? parseFloat(token.priceEth) : 0;
+          const balance = parseFloat(token.balance) || 0;
+          const valueEth = price * balance;           // in lamports
+          const valueSol = valueEth / 1e9;
+          const valueUsd = solPrice ? valueSol * solPrice : null;
+
+          return (
+            <div
+              key={token.address}
+              onClick={() => onSelectToken(token.address)}
+              className="flex items-center gap-4 p-3.5 rounded-xl cursor-pointer group transition-all"
+              style={{ border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.04)";
+                (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(255,255,255,0.12)";
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLDivElement).style.background = "rgba(255,255,255,0.02)";
+                (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(255,255,255,0.07)";
+              }}
+            >
+              {/* Rank */}
+              <span className="text-[12px] w-5 text-center shrink-0 tabular-nums" style={{ color: "#475569" }}>{idx + 1}</span>
+
+              {/* Avatar */}
+              <TokenAvatar symbol={token.symbol} imageUrl={token.imageUrl ?? undefined} size={40} shape="square" />
+
+              {/* Name + symbol */}
+              <div className="flex-1 min-w-0">
+                <div className="text-[14px] font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                  {token.name}
+                </div>
+                <div className="text-[12px] font-mono mt-0.5" style={{ color: "#4ade80" }}>${token.symbol}</div>
+              </div>
+
+              {/* Balance */}
+              <div className="text-right shrink-0">
+                <div className="text-[13px] font-mono text-foreground">{formatTokenAmount(token.balance)}</div>
+                <div className="text-[11px] font-mono mt-0.5" style={{ color: "#64748b" }}>
+                  {valueUsd != null && valueUsd > 0 ? formatUSD(valueUsd) : valueSol > 0 ? valueSol.toFixed(4) + " SOL" : "—"}
                 </div>
               </div>
-              <div className="text-right">
-                <div className="font-mono text-xs font-bold text-primary">${token.symbol}</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">Vol: {formatSol(token.volumeEth)}</div>
-              </div>
+
+              {/* Arrow */}
+              <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" style={{ color: "#94a3b8" }} />
             </div>
-          ))}
-        </div>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }

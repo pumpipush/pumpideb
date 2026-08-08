@@ -214,6 +214,70 @@ router.get("/tokens/:address/holders", async (req, res): Promise<void> => {
   res.json({ holders, count: holders.length });
 });
 
+// GET /wallet/:address/holdings — tokens held by a wallet (net balance > 0 across ALL trades)
+router.get("/wallet/:address/holdings", async (req, res): Promise<void> => {
+  const wallet = req.params.address as string;
+  if (!wallet) { res.status(400).json({ error: "address required" }); return; }
+
+  const { rows } = await pool.query<{
+    token_address: string;
+    balance: string;
+    name: string | null;
+    symbol: string | null;
+    image_url: string | null;
+    price_eth: string | null;
+    market_cap_eth: string | null;
+    volume_eth: string | null;
+  }>(`
+    SELECT
+      t.token_address,
+      t.balance,
+      tok.name,
+      tok.symbol,
+      tok.image_url,
+      tok.price_eth,
+      tok.market_cap_eth,
+      tok.volume_eth
+    FROM (
+      SELECT
+        token_address,
+        SUM(
+          CASE WHEN is_buy
+            THEN  CAST(NULLIF(token_amount, '') AS NUMERIC)
+            ELSE -CAST(NULLIF(token_amount, '') AS NUMERIC)
+          END
+        ) AS balance
+      FROM trades
+      WHERE trader_address = $1
+        AND token_amount IS NOT NULL
+        AND token_amount <> ''
+        AND token_amount <> '0'
+      GROUP BY token_address
+      HAVING SUM(
+        CASE WHEN is_buy
+          THEN  CAST(NULLIF(token_amount, '') AS NUMERIC)
+          ELSE -CAST(NULLIF(token_amount, '') AS NUMERIC)
+        END
+      ) > 0
+    ) t
+    LEFT JOIN tokens tok ON tok.address = t.token_address
+    ORDER BY t.balance DESC
+  `, [wallet]);
+
+  const holdings = rows.map(r => ({
+    address: r.token_address,
+    balance: r.balance,
+    name: r.name ?? r.token_address.slice(0, 8),
+    symbol: r.symbol ?? "???",
+    imageUrl: r.image_url ?? null,
+    priceEth: r.price_eth ?? null,
+    marketCapEth: r.market_cap_eth ?? null,
+    volumeEth: r.volume_eth ?? null,
+  }));
+
+  res.json({ holdings, count: holdings.length });
+});
+
 // GET /tokens/:address/stats  — 24-hour aggregated stats (SQL, no row-limit)
 router.get("/tokens/:address/stats", async (req, res): Promise<void> => {
   const address = req.params.address as string;
