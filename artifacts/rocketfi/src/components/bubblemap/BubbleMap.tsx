@@ -48,11 +48,13 @@ interface BubbleState {
   colorR: number; colorG: number; colorB: number; // lerped color
   targetR: number; targetG: number; targetB: number;
   // floating bob (unique per bubble)
-  floatPhaseX: number; // random 0–2π
+  floatPhaseX: number;
   floatPhaseY: number;
-  floatFreqX:  number; // radians/ms ≈ 0.0004–0.0009
-  floatFreqY:  number;
-  floatAmp:    number; // pixels
+  floatFreqX:  number; // base frequency (rad/s)
+  floatFreqY:  number; // = freqX * 1.5 → Lissajous 3:2 ratio = figure-8 paths
+  floatAmp:    number; // pixels amplitude
+  pulsePhase:  number; // for top-5 radius breathing
+  pulseFreq:   number;
   // assets
   img?: HTMLImageElement;
   imgLoaded: boolean;
@@ -520,9 +522,20 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 
         // Unique floating bob per bubble — keep existing if re-using prev
         floatPhaseX: prev?.floatPhaseX ?? Math.random() * Math.PI * 2,
         floatPhaseY: prev?.floatPhaseY ?? Math.random() * Math.PI * 2,
-        floatFreqX:  prev?.floatFreqX  ?? (0.00025 + Math.random() * 0.00040),
-        floatFreqY:  prev?.floatFreqY  ?? (0.00020 + Math.random() * 0.00038),
-        floatAmp:    prev?.floatAmp    ?? (r * 0.10 + Math.random() * r * 0.08), // ~10–18% of radius
+        // Top-5 circles: slow majestic drift (period ~10-14s); labels: faster (5-8s)
+        floatFreqX:  prev?.floatFreqX  ?? (i < TOP_CIRCLES
+          ? 0.00012 + Math.random() * 0.00015   // ~0.45–0.65 rad/s → 9-14s period
+          : 0.00028 + Math.random() * 0.00030), // ~1.0–1.6 rad/s → 4-6s period
+        // Y freq = freqX * 1.5 → Lissajous 3:2 → figure-8 orbital paths
+        floatFreqY:  prev?.floatFreqY  ?? (i < TOP_CIRCLES
+          ? (0.00012 + Math.random() * 0.00015) * 1.5
+          : (0.00028 + Math.random() * 0.00030) * 1.5),
+        // Large circles drift visibly; small labels subtly
+        floatAmp:    prev?.floatAmp    ?? (i < TOP_CIRCLES
+          ? 10 + Math.random() * 8              // 10–18px
+          : 3  + Math.random() * 4),             // 3–7px
+        pulsePhase:  prev?.pulsePhase  ?? Math.random() * Math.PI * 2,
+        pulseFreq:   prev?.pulseFreq   ?? (0.00018 + Math.random() * 0.00012), // ~5-8s breath
         imgLoaded: prev?.imgLoaded ?? false,
         img: prev?.img,
       };
@@ -598,24 +611,40 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 
       const hIdx  = hoverIdxRef.current;
       const bubbles = bubblesRef.current;
 
-      // Float + lerp — compound sine waves for organic non-repeating motion
-      const T = performance.now() * 0.001; // seconds
-      for (const b of bubbles) {
-        // Primary wave + secondary wave at golden-ratio frequency (1.618×) for aperiodic feel
+      // ── Float animation — professional 3-harmonic Lissajous paths ────────────
+      // X uses freqX; Y uses freqX * 1.5 (Lissajous 3:2) → figure-8 / orbital paths
+      // 3 harmonics per axis (primary + golden-ratio + sub) → truly aperiodic motion
+      // Top-5 circles also get radius breathing (±3% pulse)
+      const T    = performance.now() * 0.001; // seconds
+      const PHI  = 1.6180339887;              // golden ratio
+      const SQRT2 = 1.4142135624;
+
+      for (let i = 0; i < bubbles.length; i++) {
+        const b  = bubbles[i];
         const fx = b.floatAmp * (
-          0.65 * Math.sin(T * b.floatFreqX + b.floatPhaseX) +
-          0.35 * Math.sin(T * b.floatFreqX * 1.618 + b.floatPhaseX * 2.1)
+          0.60 * Math.sin(T * b.floatFreqX             + b.floatPhaseX) +
+          0.28 * Math.sin(T * b.floatFreqX * PHI       + b.floatPhaseX * 2.39) +
+          0.12 * Math.sin(T * b.floatFreqX * 0.381     + b.floatPhaseX * 0.72)
         );
+        // Y freq = floatFreqY (already set to freqX * 1.5 → Lissajous 3:2)
         const fy = b.floatAmp * (
-          0.65 * Math.cos(T * b.floatFreqY + b.floatPhaseY) +
-          0.35 * Math.cos(T * b.floatFreqY * 1.414 + b.floatPhaseY * 1.7)
+          0.60 * Math.cos(T * b.floatFreqY             + b.floatPhaseY) +
+          0.28 * Math.cos(T * b.floatFreqY * SQRT2     + b.floatPhaseY * 1.77) +
+          0.12 * Math.cos(T * b.floatFreqY * 0.618     + b.floatPhaseY * 0.54)
         );
-        // Smooth spring lerp toward (layout position + float offset)
-        b.dispX  += (b.x + fx - b.dispX) * 0.04;
-        b.dispY  += (b.y + fy - b.dispY) * 0.04;
+
+        // Smooth exponential lerp — 0.05 feels responsive without jitter
+        b.dispX  += (b.x + fx - b.dispX) * 0.05;
+        b.dispY  += (b.y + fy - b.dispY) * 0.05;
         b.colorR += (b.targetR - b.colorR) * 0.04;
         b.colorG += (b.targetG - b.colorG) * 0.04;
         b.colorB += (b.targetB - b.colorB) * 0.04;
+
+        // Radius breathing — top-5 circles only (±3% gentle pulse)
+        if (i < TOP_CIRCLES) {
+          const pulse = 1 + 0.030 * Math.sin(T * b.pulseFreq + b.pulsePhase);
+          b.dispR += (b.r * pulse - b.dispR) * 0.06;
+        }
       }
 
       // Z-ordering: draw text labels first (back), then large circles on top.
