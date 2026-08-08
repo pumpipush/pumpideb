@@ -75,10 +75,14 @@ export default function AppInterface() {
   const [, setLocation] = useLocation();
   // Use reactive wouter search so query-string changes (e.g. ?token=abc) always trigger re-render
   const search = useSearch();
-  const tokenParam = new URLSearchParams(search).get("token");
+  const _params  = new URLSearchParams(search);
+  const tokenParam = _params.get("token");
+  const tabParam   = _params.get("tab"); // "portfolio" makes My Tokens deep-linkable
 
   const { wallet } = useWallet();
-  const [activeTab, setActiveTab] = useState<string>(tokenParam ? "trade" : "launch");
+  const [activeTab, setActiveTab] = useState<string>(
+    tokenParam ? "trade" : (tabParam === "portfolio" ? "portfolio" : "launch")
+  );
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(tokenParam);
 
   // Sync selectedTokenId to URL param; reset per-token state on every address change
@@ -99,9 +103,18 @@ export default function AppInterface() {
       requestAnimationFrame(() => requestAnimationFrame(scrollToTop));
     } else {
       setSelectedTokenId(null);
-      setActiveTab("launch"); // Return to launch tab when no token is selected
+      // Respect ?tab=portfolio deep-link; otherwise fall back to launch
+      setActiveTab(tabParam === "portfolio" ? "portfolio" : "launch");
     }
-  }, [tokenParam]);
+  }, [tokenParam, tabParam]);
+
+  // Keep tabs in sync with URL so they are deep-linkable and survive refresh
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    if (tab === "portfolio") setLocation("/app?tab=portfolio");
+    else if (tab === "launch") setLocation("/app");
+    // "trade" is token-scoped — URL already carries ?token=
+  };
 
   const selectToken = (address: string) => {
     setSelectedTokenId(address);
@@ -115,7 +128,7 @@ export default function AppInterface() {
     <div className="flex flex-col">
 
       {/* ── Tab strip ── */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 min-h-0">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col flex-1 min-h-0">
         <div className="shrink-0 border-b border-border/30 px-4 md:px-5">
           <TabsList className="flex justify-start bg-transparent p-0 h-auto rounded-none gap-0">
             <TabsTrigger value="launch"    className={TAB_TRIGGER}>Launch Token</TabsTrigger>
@@ -474,7 +487,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const { data: history, refetch: refetchHistory, isLoading: loadingHistory, isError: historyError } = useTradeHistory(selectedAddress || "", {
     query: {
       enabled: !!selectedAddress,
-      queryKey: ["tradeHistory", selectedAddress]
+      queryKey: ["tradeHistory", selectedAddress],
+      // Poll every 10 s as a fallback for when the SSE connection is silently
+      // dead. Responses are 304-cached at the server when no new trades arrive,
+      // so this is cheap for quiet tokens and keeps the table live when SSE fails.
+      refetchInterval: 10_000,
+      staleTime: 8_000,
     }
   });
 
@@ -513,6 +531,26 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     staleTime: 25_000,
   });
 
+  // ── Server-side position (SQL aggregate across ALL trades — no 100-row cap) ─
+  // Client-side position from liveTrades+history misses trades older than the
+  // 100-row history window. This endpoint aggregates every trade in the DB.
+  const { data: serverPosition, isLoading: loadingPosition, refetch: refetchPosition } = useQuery({
+    queryKey: ["position", selectedAddress, wallet],
+    queryFn: async (): Promise<{
+      tokensBought: number; tokensSold: number;
+      solSpent: number; solReceived: number;
+      tradeCount: number; maxTradeId: number;
+    } | null> => {
+      if (!selectedAddress || !wallet) return null;
+      const res = await fetch(`/api/tokens/${selectedAddress}/position?wallet=${encodeURIComponent(wallet)}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!selectedAddress && !!wallet,
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+  });
+
   // ── Server-side 24h stats (SQL aggregate — no 100-row cap) ────────────────
   // Refreshed every 30 s so Vol 24h stays accurate and real-time.
   const { data: serverStats } = useQuery({
@@ -539,13 +577,18 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // Live SSE stream — real-time trade events
   const { liveTrades, liveToken, connected } = useTokenStream(selectedAddress);
 
-  // Re-fetch holders whenever a new live trade arrives — new buys may add holders.
-  // This keeps the count fresh within seconds of a new wallet entering.
-  const liveTradeCount = liveTrades.length;
+  // Re-fetch holders + position whenever a genuinely new live trade arrives.
+  // We watch liveTrades[0]?.id instead of liveTrades.length because the stream
+  // caps at ~200 events — after that, length never changes but the newest
+  // trade ID keeps incrementing, so we still detect every arrival.
+  const latestLiveTradeId = liveTrades[0]?.id ?? null;
   useEffect(() => {
-    if (liveTradeCount > 0) refetchHolders();
+    if (latestLiveTradeId != null) {
+      refetchHolders();
+      if (wallet) refetchPosition();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveTradeCount]);
+  }, [latestLiveTradeId]);
 
   const { openWalletModal } = useWallet();
   const [tradeMode, setTradeMode] = useState<"buy" | "sell">("buy");
@@ -1149,6 +1192,23 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               {(token as any).websiteUrl && (
                 <a href={(token as any).websiteUrl} target="_blank" rel="noopener noreferrer" className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Website"><Globe className="h-4 w-4" /></a>
               )}
+              {/* Platform source link — always visible so users can verify on the origin launchpad */}
+              {getPlatformUrl(token.platform as PlatformId, token.address) && (
+                <a
+                  href={getPlatformUrl(token.platform as PlatformId, token.address)!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-8 px-2.5 flex items-center gap-1.5 rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground text-[11px] font-semibold"
+                  title={`View on ${token.platform}`}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  {token.platform === "pump_fun" ? "Pump.fun" :
+                   token.platform === "moonshot" ? "Moonshot" :
+                   token.platform === "letsbonk" ? "LetsBONK" :
+                   token.platform === "daos_fun" ? "Daos.fun" :
+                   token.platform === "raydium_launchlab" ? "Raydium" : "Source"}
+                </a>
+              )}
               <button className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Copy address" onClick={() => copyToClipboard(token.address)}><Copy className="h-4 w-4" /></button>
             </div>
           </div>
@@ -1516,18 +1576,22 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                             </td>
                             {/* Txn */}
                             <td className="px-3 py-2.5 text-right">
-                              <a
-                                href={`https://solscan.io/tx/${trade.txHash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 font-mono text-[12px] transition-colors"
-                                style={{ color: "#94a3b8" }}
-                                onMouseEnter={e => ((e.currentTarget as HTMLAnchorElement).style.color = "#cbd5e1")}
-                                onMouseLeave={e => ((e.currentTarget as HTMLAnchorElement).style.color = "#94a3b8")}
-                              >
-                                {trade.txHash ? trade.txHash.slice(0, 6) + "…" : "—"}
-                                {trade.txHash && <ExternalLink className="h-3 w-3" />}
-                              </a>
+                              {trade.txHash ? (
+                                <a
+                                  href={`https://solscan.io/tx/${trade.txHash}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 font-mono text-[12px] transition-colors"
+                                  style={{ color: "#94a3b8" }}
+                                  onMouseEnter={e => ((e.currentTarget as HTMLAnchorElement).style.color = "#cbd5e1")}
+                                  onMouseLeave={e => ((e.currentTarget as HTMLAnchorElement).style.color = "#94a3b8")}
+                                >
+                                  {trade.txHash.slice(0, 6)}…
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              ) : (
+                                <span className="font-mono text-[12px]" style={{ color: "#475569" }}>—</span>
+                              )}
                             </td>
                           </tr>
                         );
@@ -1554,13 +1618,81 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   );
                 }
 
-                // Compute position from all trades by this wallet
-                const allTrades = [
-                  ...liveTrades,
-                  ...(history ?? []).filter(h => !liveTrades.find(l => l.txHash === h.txHash)),
-                ].filter(t => t.traderAddress === wallet);
+                // Position tracking is only accurate for pump.fun tokens.
+                // pump.fun mints always use 6 decimals and emit price_eth in
+                // SOL/token. LetsBONK and Raydium mint decimals and price
+                // normalisation differ per adapter and are not yet stored in DB,
+                // so we explicitly scope this feature to avoid showing inflated /
+                // incorrect PnL for those platforms.
+                if (token.platform !== "pump_fun") {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-lg"
+                      style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
+                      <Activity className="h-7 w-7" style={{ color: "#334155" }} />
+                      <p className="text-[14px] font-medium text-center" style={{ color: "#64748b" }}>
+                        Position tracking is only available for Pump.fun tokens
+                      </p>
+                    </div>
+                  );
+                }
 
-                if (allTrades.length === 0) {
+                // Loading skeleton while server fetches full trade history
+                if (loadingPosition) {
+                  return (
+                    <div className="rounded-lg overflow-hidden space-y-px animate-pulse"
+                      style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
+                      <div className="px-4 py-4" style={{ background: "rgba(255,255,255,0.03)" }}>
+                        <div className="h-3 w-24 rounded bg-white/[0.06] mb-2" />
+                        <div className="h-7 w-40 rounded bg-white/[0.06] mb-1" />
+                        <div className="h-4 w-28 rounded bg-white/[0.05]" />
+                      </div>
+                      {[...Array(5)].map((_, i) => (
+                        <div key={i} className="flex justify-between px-4 py-2.5" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+                          <div className="h-3.5 w-24 rounded bg-white/[0.05]" />
+                          <div className="h-3.5 w-20 rounded bg-white/[0.05]" />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+
+                // ── Server-side base + live SSE overlay (id-gated, no double-count) ──
+                // serverPosition aggregates ALL trades in DB for this wallet+token.
+                // freshLiveTrades overlays only SSE trades with id > maxTradeId so
+                // trades already baked into the server aggregate are never counted twice.
+                //
+                // UNIT CONVENTIONS (must be consistent throughout this block):
+                //   solSpent / solReceived   → SOL  (server returns lamports → ÷1e9)
+                //   tokensBought / tokensSold → display tokens (server returns atomic → ÷1e6)
+                //   priceStats.currentPrice  → SOL per display token (already correct)
+                //   ethAmount in SSE trades  → lamports → ÷1e9
+                //   tokenAmount in SSE trades → atomic   → ÷1e6
+                //   pump.fun tokens are always 6 decimals (1e6 atomic = 1 display token)
+                const LAMPORTS_PER_SOL = 1e9;
+                const ATOMIC_PER_DISPLAY = 1e6; // pump.fun fixed 6 decimals
+
+                const maxId = serverPosition?.maxTradeId ?? 0;
+                const freshLiveTrades = liveTrades.filter(
+                  lt => lt.traderAddress === wallet && (lt.id ?? 0) > maxId
+                );
+
+                // Server values: convert from raw DB units to display units
+                let tokensBought = (serverPosition?.tokensBought ?? 0) / ATOMIC_PER_DISPLAY;
+                let tokensSold   = (serverPosition?.tokensSold   ?? 0) / ATOMIC_PER_DISPLAY;
+                let solSpent     = (serverPosition?.solSpent     ?? 0) / LAMPORTS_PER_SOL;
+                let solReceived  = (serverPosition?.solReceived  ?? 0) / LAMPORTS_PER_SOL;
+
+                // Live overlay: same conversions so units stay consistent
+                freshLiveTrades.forEach(t => {
+                  const tok = (parseFloat(t.tokenAmount ?? "0") || 0) / ATOMIC_PER_DISPLAY;
+                  const sol = (parseFloat(t.ethAmount   ?? "0") || 0) / LAMPORTS_PER_SOL;
+                  if (t.isBuy) { tokensBought += tok; solSpent    += sol; }
+                  else          { tokensSold   += tok; solReceived += sol; }
+                });
+
+                const hasAnyTrades = (serverPosition?.tradeCount ?? 0) > 0 || freshLiveTrades.length > 0;
+
+                if (!hasAnyTrades) {
                   return (
                     <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-lg"
                       style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
@@ -1569,16 +1701,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     </div>
                   );
                 }
-
-                let tokensBought = 0, tokensSold = 0;
-                let solSpent = 0, solReceived = 0;
-
-                allTrades.forEach(t => {
-                  const tok = parseFloat(t.tokenAmount ?? "0") || 0;
-                  const sol = parseFloat(t.ethAmount   ?? "0") || 0;
-                  if (t.isBuy) { tokensBought += tok; solSpent    += sol; }
-                  else          { tokensSold   += tok; solReceived += sol; }
-                });
 
                 const netTokens      = Math.max(0, tokensBought - tokensSold);
                 const avgBuyPriceSol = tokensBought > 0 ? solSpent / tokensBought : 0;

@@ -1,175 +1,135 @@
 /**
- * Moonshot adapter — polls DEXScreener every 30 s for Moonshot pairs on Solana
- * and upserts token listings with live price/volume/trade-count stats.
+ * Moonshot adapter — chain-native real-time indexer for moonshot.money on Solana.
  *
- * Data source: https://api.dexscreener.com/latest/dex/search?q=moonshot
- * - Filters: chainId=solana, dexId=moonshot
- * - Inserts new tokens (onConflictDoNothing on address)
- * - Updates priceEth, marketCapEth, tradeCount, volumeEth for existing tokens
+ * Data source: Solana RPC logsSubscribe for the Moonshot bonding-curve program.
  *
- * Individual trade records are not available via DEXScreener's public API;
- * only aggregate stats (trade counts, volume) are synced. A future Solana RPC
- * subscription could supplement this with individual trades.
+ * Program ID: MoonCVVNZFSYkqNXP6bxHLPL6QQXiMbkcrwhefkTnNSo
+ *   Source: moonshot.money JS bundle, verified executable on-chain.
+ *   Override via MOONSHOT_PROGRAM_ID env var if Moonshot upgrades the program.
  *
- * No env vars required.
+ * Why not DEXScreener polling?
+ *   DEXScreener's search API returns tokens *named* "moonshot", not tokens launched
+ *   on the Moonshot platform. The dexId=moonshot filter never matches any result.
+ *
+ * No minimum env vars required — uses the shared free public RPC pool by default.
  */
 
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, tokensTable } from "@workspace/db";
 import { logger } from "../logger";
 import { emitNewToken } from "../tradeEmitter";
+import { SolanaRpcIndexer, type LogEvent } from "./solanaRpcBase";
 
-const POLL_INTERVAL_MS = 30_000;
-const PLATFORM = "moonshot";
-const CHAIN = "solana";
+// Moonshot bonding-curve program on Solana mainnet.
+// Source: moonshot.money JS bundle (verified executable 2025-08-08).
+// Set MOONSHOT_PROGRAM_ID env var to override if Moonshot upgrades.
+const DEFAULT_PROGRAM_ID = "MoonCVVNZFSYkqNXP6bxHLPL6QQXiMbkcrwhefkTnNSo";
+const PLATFORM           = "moonshot";
+const CHAIN              = "solana";
 
-// DEXScreener returns priceNative (price in SOL) which we store as priceEth
-const DEXSCREENER_URL =
-  "https://api.dexscreener.com/latest/dex/search?q=moonshot";
+// ── Moonshot metadata helper ────────────────────────────────────────────────────
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface DexPair {
-  chainId: string;
-  dexId: string;
-  pairAddress: string;
-  baseToken: { address: string; name: string; symbol: string };
-  priceNative?: string; // price in SOL
-  priceUsd?: string;
-  txns?: {
-    h24?: { buys: number; sells: number };
-    h6?: { buys: number; sells: number };
-  };
-  volume?: { h24?: number };
-  liquidity?: { usd?: number };
-  marketCap?: number;
-  fdv?: number;
-  pairCreatedAt?: number;
-  info?: { imageUrl?: string; description?: string; websites?: {url:string}[]; socials?: {type:string; url:string}[] };
+interface MoonshotMeta {
+  name?:        string;
+  symbol?:      string;
+  description?: string;
+  icon?:        string;
 }
 
-interface DexSearchResponse {
-  pairs: DexPair[] | null;
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function tradeCount(pair: DexPair): number {
-  const h24 = pair.txns?.h24;
-  return h24 ? h24.buys + h24.sells : 0;
-}
-
-function volumeEth(pair: DexPair): string {
-  // DEXScreener gives USD volume; without a SOL/USD price oracle we store "0"
-  // A future improvement could convert via priceNative/priceUsd ratio
-  return "0";
-}
-
-// ── Core poll ─────────────────────────────────────────────────────────────────
-
-async function poll(): Promise<void> {
-  const log = logger.child({ adapter: "moonshot" });
+/** Try to fetch token metadata from Moonshot's API */
+async function fetchMoonshotMeta(mint: string): Promise<MoonshotMeta | null> {
   try {
-    const res = await fetch(DEXSCREENER_URL, {
-      signal: AbortSignal.timeout(15_000),
-      headers: { "User-Agent": "RocketFi/1.0" },
-    });
-
-    if (!res.ok) {
-      log.warn({ status: res.status }, "moonshot: DEXScreener returned non-OK status");
-      return;
-    }
-
-    const body = (await res.json()) as DexSearchResponse;
-    const pairs = (body.pairs ?? []).filter(
-      (p) => p.chainId === "solana" && p.dexId === "moonshot"
+    const res = await fetch(
+      `https://api.moonshot.cc/token/v1/solana/${mint}`,
+      { signal: AbortSignal.timeout(8_000), headers: { "User-Agent": "RocketFi/1.0" } }
     );
-
-    log.debug({ count: pairs.length }, "moonshot: fetched pairs from DEXScreener");
-
-    let inserted = 0;
-    let updated = 0;
-
-    for (const pair of pairs) {
-      const addr = pair.baseToken.address;
-      const price = pair.priceNative ?? null;
-      const tc = tradeCount(pair).toString();
-      const vol = volumeEth(pair);
-      const mcap = price != null && pair.fdv != null
-        ? null // Can't compute SOL-denominated mcap without SOL/USD rate
-        : null;
-
-      // Try to insert; if conflict (token already exists), update stats instead
-      const [existing] = await db
-        .select({ address: tokensTable.address })
-        .from(tokensTable)
-        .where(eq(tokensTable.address, addr))
-        .limit(1);
-
-      if (!existing) {
-        await db
-          .insert(tokensTable)
-          .values({
-            address: addr,
-            name: pair.baseToken.name,
-            symbol: pair.baseToken.symbol,
-            description: pair.info?.description ?? null,
-            imageUrl: pair.info?.imageUrl ?? null,
-            creatorAddress: "unknown",
-            totalSupply: "1000000000", // Moonshot typical
-            virtualTokenReserves: "1000000000",
-            virtualEthReserves: "0",
-            priceEth: price,
-            marketCapEth: mcap,
-            tradeCount: tc,
-            volumeEth: vol,
-            twitterUrl: pair.info?.socials?.find(s => s.type === "twitter")?.url ?? null,
-            websiteUrl: pair.info?.websites?.[0]?.url ?? null,
-            platform: PLATFORM,
-            chain: CHAIN,
-          })
-          .onConflictDoNothing();
-        inserted++;
-
-        // Broadcast new token to global feed
-        emitNewToken({
-          type: "newToken",
-          token: {
-            address: addr,
-            name: pair.baseToken.name,
-            symbol: pair.baseToken.symbol,
-            imageUrl: pair.info?.imageUrl ?? null,
-            priceEth: price,
-            marketCapEth: null,
-            platform: PLATFORM,
-            chain: CHAIN,
-            createdAt: pair.pairCreatedAt
-              ? new Date(pair.pairCreatedAt).toISOString()
-              : new Date().toISOString(),
-          },
-        });
-      } else {
-        // Update live stats
-        await db
-          .update(tokensTable)
-          .set({ priceEth: price, marketCapEth: mcap, tradeCount: tc })
-          .where(eq(tokensTable.address, addr));
-        updated++;
-      }
-    }
-
-    if (inserted > 0 || updated > 0) {
-      log.info({ inserted, updated }, "moonshot: poll complete");
-    }
-  } catch (err) {
-    log.error({ err }, "moonshot: poll failed");
+    if (!res.ok) return null;
+    const body = (await res.json()) as {
+      name?: string;
+      symbol?: string;
+      description?: string;
+      icon?: string;
+    };
+    return { name: body.name, symbol: body.symbol, description: body.description, icon: body.icon };
+  } catch {
+    return null;
   }
 }
 
-// ── Exported adapter entry point ──────────────────────────────────────────────
+// ── Indexer ─────────────────────────────────────────────────────────────────────
+
+class MoonshotIndexer extends SolanaRpcIndexer {
+  constructor(programId: string) {
+    super({ programId, adapterName: "moonshot" });
+  }
+
+  // Default shouldProcess from base: create-only — catches new token launches
+  protected override async onEvent(event: LogEvent): Promise<void> {
+    const { signature } = event;
+
+    const tx = await this.getTransaction(signature);
+    if (!tx || tx.meta?.err) return;
+
+    const mint    = this.extractNewMint(tx);
+    const creator = this.extractSigner(tx);
+    if (!mint) {
+      this.log.debug({ signature }, "moonshot: could not extract mint — skipping");
+      return;
+    }
+
+    // Try Moonshot's own metadata API first
+    const meta     = await fetchMoonshotMeta(mint);
+    const name     = meta?.name    ?? mint.slice(0, 8) + "…";
+    const symbol   = meta?.symbol  ?? "???";
+    const imageUrl = meta?.icon    ?? null;
+
+    await db.insert(tokensTable).values({
+      address:              mint,
+      name,
+      symbol,
+      description:          meta?.description ?? null,
+      imageUrl,
+      creatorAddress:       creator,
+      totalSupply:          "1000000000",
+      virtualTokenReserves: "1000000000",
+      virtualEthReserves:   "0",
+      priceEth:             null,
+      marketCapEth:         null,
+      platform:             PLATFORM,
+      chain:                CHAIN,
+    }).onConflictDoNothing();
+
+    this.log.info({ mint, name, symbol }, "moonshot: new token ingested");
+
+    emitNewToken({
+      type: "newToken",
+      token: {
+        address:      mint,
+        name,
+        symbol,
+        imageUrl,
+        priceEth:     null,
+        marketCapEth: null,
+        platform:     PLATFORM,
+        chain:        CHAIN,
+        createdAt:    tx.blockTime
+          ? new Date(tx.blockTime * 1000).toISOString()
+          : new Date().toISOString(),
+      },
+    });
+  }
+}
+
+// ── Exported adapter entry point ───────────────────────────────────────────────
 
 export async function startMoonshotAdapter(): Promise<void> {
-  logger.info({ adapter: "moonshot" }, "moonshot: starting — will poll DEXScreener every 30s");
-  await poll(); // immediate first poll
-  setInterval(() => { void poll(); }, POLL_INTERVAL_MS);
+  const programId = process.env["MOONSHOT_PROGRAM_ID"] ?? DEFAULT_PROGRAM_ID;
+
+  logger.info(
+    { adapter: "moonshot", programId },
+    "moonshot: starting chain-native indexer — subscribing to program logs"
+  );
+
+  const indexer = new MoonshotIndexer(programId);
+  indexer.start();
 }

@@ -297,19 +297,17 @@ async function processLog(
 type JsonValue = string | number | boolean | null | JsonValue[] | { [k: string]: JsonValue };
 
 export async function startLetsBonkAdapter(): Promise<void> {
-  const rpcUrl = process.env["SOLANA_RPC_URL"];
-  if (!rpcUrl) {
-    logger.warn(
-      { adapter: "letsbonk" },
-      "letsbonk: SOLANA_RPC_URL not set — adapter disabled. " +
-      "Set it to a Solana RPC WebSocket URL (e.g. Helius or QuickNode) to enable."
-    );
-    return;
-  }
-
+  // Use SOLANA_RPC_URL if provided; fall back to the same free public RPC pool
+  // used by other chain-native adapters so the adapter works out-of-the-box.
+  const rpcUrl   = process.env["SOLANA_RPC_URL"] ?? "https://solana-rpc.publicnode.com";
   const programId = process.env["LETSBONK_PROGRAM_ID"] ?? DEFAULT_PROGRAM_ID;
-  const wssUrl = toWssUrl(rpcUrl);
-  const httpUrl = toHttpUrl(rpcUrl);
+  const wssUrl   = toWssUrl(rpcUrl);
+  const httpUrl  = toHttpUrl(rpcUrl);
+
+  logger.info(
+    { adapter: "letsbonk", programId, wss: wssUrl },
+    "letsbonk: starting — subscribing to program logs"
+  );
   let delay = RECONNECT_DELAY_MS;
 
   function connect(): void {

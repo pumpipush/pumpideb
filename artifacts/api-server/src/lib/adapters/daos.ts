@@ -205,10 +205,15 @@ export async function startDaosFunAdapter(): Promise<void> {
 
   logger.info(
     { adapter: "daos_fun", programId },
-    process.env["DAOS_FUN_PROGRAM_ID"]
-      ? "daos_fun: starting chain-native mode (DAOS_FUN_PROGRAM_ID env var)"
-      : "daos_fun: starting chain-native mode (default founder_dao program ID)"
+    "daos_fun: starting chain-native mode + DEXScreener polling"
   );
+
+  // Mode A: chain-native real-time indexer (catches new launches as they happen)
   const indexer = new DaosFunChainIndexer(programId);
   indexer.start();
+
+  // Mode B: DEXScreener polling — runs unconditionally alongside the chain indexer
+  // so existing daos.fun tokens are always visible even when chain events are rare.
+  await poll();
+  setInterval(() => { void poll(); }, POLL_INTERVAL_MS);
 }

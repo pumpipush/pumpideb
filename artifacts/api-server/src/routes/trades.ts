@@ -278,6 +278,59 @@ router.get("/wallet/:address/holdings", async (req, res): Promise<void> => {
   res.json({ holdings, count: holdings.length });
 });
 
+// GET /tokens/:address/position?wallet=<address>
+// Per-wallet aggregate across ALL trades in DB — no 100-row cap.
+// Returns tokensBought/Sold (atomic), solSpent/Received (lamports), tradeCount, maxTradeId.
+// maxTradeId lets the client overlay only SSE trades with id > maxTradeId to avoid double-counting.
+router.get("/tokens/:address/position", async (req, res): Promise<void> => {
+  const tokenAddress = req.params.address as string;
+  const wallet = req.query.wallet as string | undefined;
+  if (!tokenAddress) { res.status(400).json({ error: "address required" }); return; }
+  if (!wallet)       { res.status(400).json({ error: "wallet required" });  return; }
+
+  const { rows } = await pool.query<{
+    tokens_bought: string;
+    tokens_sold:   string;
+    sol_spent:     string;
+    sol_received:  string;
+    trade_count:   string;
+    max_trade_id:  string;
+  }>(`
+    SELECT
+      COALESCE(SUM(CASE WHEN is_buy
+        THEN  CAST(NULLIF(token_amount, '') AS NUMERIC) ELSE 0 END), 0) AS tokens_bought,
+      COALESCE(SUM(CASE WHEN NOT is_buy
+        THEN  CAST(NULLIF(token_amount, '') AS NUMERIC) ELSE 0 END), 0) AS tokens_sold,
+      COALESCE(SUM(CASE WHEN is_buy
+        THEN  CAST(NULLIF(eth_amount,   '') AS NUMERIC) ELSE 0 END), 0) AS sol_spent,
+      COALESCE(SUM(CASE WHEN NOT is_buy
+        THEN  CAST(NULLIF(eth_amount,   '') AS NUMERIC) ELSE 0 END), 0) AS sol_received,
+      COUNT(*)          AS trade_count,
+      COALESCE(MAX(id), 0) AS max_trade_id
+    FROM trades
+    WHERE token_address  = $1
+      AND trader_address = $2
+      AND token_amount IS NOT NULL
+      AND token_amount <> ''
+      AND token_amount <> '0'
+  `, [tokenAddress, wallet]);
+
+  const r = rows[0];
+  if (!r || r.trade_count === "0") {
+    res.json({ tokensBought: 0, tokensSold: 0, solSpent: 0, solReceived: 0, tradeCount: 0, maxTradeId: 0 });
+    return;
+  }
+
+  res.json({
+    tokensBought: parseFloat(r.tokens_bought),
+    tokensSold:   parseFloat(r.tokens_sold),
+    solSpent:     parseFloat(r.sol_spent),
+    solReceived:  parseFloat(r.sol_received),
+    tradeCount:   parseInt(r.trade_count,  10),
+    maxTradeId:   parseInt(r.max_trade_id, 10),
+  });
+});
+
 // GET /tokens/:address/stats  — 24-hour aggregated stats (SQL, no row-limit)
 router.get("/tokens/:address/stats", async (req, res): Promise<void> => {
   const address = req.params.address as string;
