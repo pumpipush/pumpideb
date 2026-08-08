@@ -19,4 +19,7 @@ export type { TokenInput }              from "./generated/types/tokenInput";
 export type { TokenUpdate }             from "./generated/types/tokenUpdate";
 export type { Trade }                   from "./generated/types/trade";
 export type { TradeInput }              from "./generated/types/tradeInput";
-export * from './generated/types';
+// New generated types from storage endpoints
+export type { ErrorEnvelope }      from "./generated/types/errorEnvelope";
+export type { UploadUrlRequest }   from "./generated/types/uploadUrlRequest";
+export type { UploadUrlResponse }  from "./generated/types/uploadUrlResponse";

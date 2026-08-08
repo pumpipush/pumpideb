@@ -185,6 +185,22 @@ export interface ActivityItem {
   timestamp: string;
 }
 
+export interface UploadUrlRequest {
+  name: string;
+  size: number;
+  contentType: string;
+}
+
+export interface UploadUrlResponse {
+  uploadURL: string;
+  objectPath: string;
+  metadata?: UploadUrlRequest;
+}
+
+export interface ErrorEnvelope {
+  error: string;
+}
+
 export type ListTokensParams = {
 sort?: ListTokensSort;
 limit?: number;

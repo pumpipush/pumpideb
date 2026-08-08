@@ -171,6 +171,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const [symbol, setSymbol] = useState("");
   const [desc, setDesc] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const createToken = useCreateToken();
   const { toast } = useToast();
@@ -183,8 +185,53 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       toast({ title: "Invalid file", description: "Please upload an image file.", variant: "destructive" });
       return;
     }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Image must be 5 MB or smaller.", variant: "destructive" });
+      return;
+    }
+    setImageFile(file);
     const url = URL.createObjectURL(file);
     setImagePreview(url);
+  };
+
+  const uploadImage = async (file: File): Promise<string | null> => {
+    const contentType = file.type || "image/jpeg";
+
+    // Step 1: Request a presigned upload URL from the server
+    const urlRes = await fetch("/api/storage/uploads/request-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: file.name, size: file.size, contentType }),
+    });
+    if (!urlRes.ok) {
+      const body = await urlRes.json().catch(() => ({})) as { error?: string };
+      throw new Error(body.error ?? "Failed to get upload URL");
+    }
+    const { uploadURL, objectPath } = await urlRes.json() as { uploadURL: string; objectPath: string };
+
+    // Step 2: PUT file bytes directly to GCS via the presigned URL
+    const putRes = await fetch(uploadURL, {
+      method: "PUT",
+      body: file,
+      headers: { "Content-Type": contentType },
+    });
+    if (!putRes.ok) {
+      throw new Error("Failed to upload image to storage");
+    }
+
+    // Step 3: Confirm the upload — server verifies GCS object exists,
+    // checks actual size, and sets a public ACL so the serving URL works.
+    const confirmRes = await fetch("/api/storage/uploads/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ objectPath, contentType }),
+    });
+    if (!confirmRes.ok) {
+      const body = await confirmRes.json().catch(() => ({})) as { error?: string };
+      throw new Error(body.error ?? "Failed to confirm image upload");
+    }
+    const { servingUrl } = await confirmRes.json() as { servingUrl: string };
+    return servingUrl;
   };
 
   const handleLaunch = async (e: React.FormEvent) => {
@@ -204,6 +251,19 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     }
 
     try {
+      let imageUrl: string | undefined;
+
+      if (imageFile) {
+        setIsUploading(true);
+        try {
+          imageUrl = await uploadImage(imageFile) ?? undefined;
+        } catch (uploadErr) {
+          toast({ title: "Image upload failed", description: "Could not upload the image. Launching without it.", variant: "destructive" });
+        } finally {
+          setIsUploading(false);
+        }
+      }
+
       const mockAddr = ethers.Wallet.createRandom().address;
       const initialSupply = parseEth("1000000000"); // 1B tokens
       
@@ -220,6 +280,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           totalSupply: initialSupply,
           virtualEthReserves: vEth,
           virtualTokenReserves: vToken,
+          imageUrl,
         }
       });
 
@@ -376,19 +437,21 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           <div className="px-5 pt-5 pb-5 space-y-3">
             <button
               type="submit"
-              disabled={createToken.isPending}
+              disabled={isUploading || createToken.isPending}
               className="w-full h-12 rounded-xl text-[15px] font-bold flex items-center justify-center gap-2 transition-all duration-150 active:scale-[0.98]"
               style={{
-                background: createToken.isPending
+                background: (isUploading || createToken.isPending)
                   ? "rgba(255,255,255,0.06)"
                   : "linear-gradient(135deg, #16a34a 0%, #22c55e 60%, #4ade80 100%)",
-                color: createToken.isPending ? "#475569" : "#fff",
+                color: (isUploading || createToken.isPending) ? "#475569" : "#fff",
                 border: "none",
-                boxShadow: createToken.isPending ? "none" : "0 0 28px rgba(34,197,94,0.28)",
-                cursor: createToken.isPending ? "not-allowed" : "pointer",
+                boxShadow: (isUploading || createToken.isPending) ? "none" : "0 0 28px rgba(34,197,94,0.28)",
+                cursor: (isUploading || createToken.isPending) ? "not-allowed" : "pointer",
               }}
             >
-              {createToken.isPending ? (
+              {isUploading ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Uploading image...</>
+              ) : createToken.isPending ? (
                 <><Loader2 className="w-4 h-4 animate-spin" /> Deploying on-chain...</>
               ) : (
                 <><Rocket className="w-4 h-4" /> Launch Token</>

@@ -7,6 +7,7 @@
  */
 
 export * from './activityItem';
+export * from './errorEnvelope';
 export * from './getRecentActivityParams';
 export * from './getTokenOhlcvParams';
 export * from './getTrendingTokensParams';
@@ -24,3 +25,5 @@ export * from './tokenInput';
 export * from './tokenUpdate';
 export * from './trade';
 export * from './tradeInput';
+export * from './uploadUrlRequest';
+export * from './uploadUrlResponse';
