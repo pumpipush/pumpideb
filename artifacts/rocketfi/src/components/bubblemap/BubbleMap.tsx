@@ -686,15 +686,6 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 
         onWheel={onWheel}
       />
 
-      {/* Reset view button */}
-      <button
-        onClick={resetView}
-        className="absolute bottom-3 right-3 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md transition-all"
-        style={{ background: "rgba(255,255,255,0.07)", color: "#64748b", border: "1px solid rgba(255,255,255,0.08)" }}
-      >
-        Reset
-      </button>
-
       {/* Tooltip */}
       {tooltip.visible && tooltip.token && (() => {
         const b = tooltip.token;
