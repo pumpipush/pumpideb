@@ -6,7 +6,7 @@ import {
   type ListTokensPlatform,
 } from "@workspace/api-client-react";
 
-import { formatMC, formatMCUsd, cn, timeAgo } from "@/lib/utils";
+import { formatMC, formatMCUsd, cn, timeAgo, resolveImageUrl } from "@/lib/utils";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { PlatformBadge, PlatformDot, type PlatformId } from "@/components/shared/PlatformBadge";
@@ -221,7 +221,7 @@ function TableView({ tokens, solPrice }: { tokens: DisplayToken[]; solPrice: num
                     <div className="relative shrink-0">
                       <div className="w-9 h-9 rounded-sm overflow-hidden">
                         {token.imageUrl ? (
-                          <img src={token.imageUrl} alt={token.symbol} className="w-full h-full object-cover" />
+                          <img src={resolveImageUrl(token.imageUrl) ?? ""} alt={token.symbol} className="w-full h-full object-cover" loading="eager" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center font-bold text-base text-white/80" style={{ background: tokenCardBackground(token.symbol) }}>
                             {isPlaceholder(token.symbol) ? (
@@ -300,7 +300,7 @@ function TokenCard({ token, rank, solPrice }: { token: DisplayToken; rank: numbe
     >
       <div className="aspect-square w-full bg-muted border-b border-border/50 relative overflow-hidden rounded-t-sm">
         {token.imageUrl ? (
-          <img src={token.imageUrl} alt={token.symbol} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500 ease-out" />
+          <img src={resolveImageUrl(token.imageUrl) ?? ""} alt={token.symbol} className="w-full h-full object-cover group-hover:scale-[1.07] transition-transform duration-500 ease-out" loading="eager" />
         ) : (
           <div className="w-full h-full flex items-center justify-center font-bold text-5xl text-white/80 group-hover:scale-105 transition-transform duration-300" style={{ background: tokenCardBackground(token.symbol) }}>
             {isPlaceholder(token.symbol) ? (
@@ -566,7 +566,7 @@ export default function Dashboard() {
                   className="snap-start shrink-0 group relative w-[160px] h-[120px] md:w-[220px] md:h-[160px] rounded-sm overflow-hidden bg-muted border border-border/60 transition-all duration-300 animate-scaleIn hover:-translate-y-1 hover:border-primary/60 hover:shadow-[0_8px_24px_hsl(142_100%_45%/0.2)]"
                 >
                   {token.imageUrl ? (
-                    <img src={token.imageUrl} alt={token.symbol} className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.06] transition-transform duration-500 ease-out" />
+                    <img src={resolveImageUrl(token.imageUrl) ?? ""} alt={token.symbol} className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.06] transition-transform duration-500 ease-out" loading="eager" />
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center font-bold text-5xl text-white/80" style={{ background: tokenCardBackground(token.symbol) }}>
                       {isPlaceholder(token.symbol) ? (

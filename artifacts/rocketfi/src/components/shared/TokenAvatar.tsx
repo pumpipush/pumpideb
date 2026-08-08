@@ -50,8 +50,16 @@ export function tokenCardBackground(symbol: string): string {
 export function TokenAvatar({ symbol, imageUrl, size = 40, className, shape = "square" }: TokenAvatarProps) {
   const [imgError, setImgError] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
   // Reset both states when imageUrl changes so new URLs are retried
   useEffect(() => { setImgError(false); setImgLoaded(false); }, [imageUrl]);
+  // Cached images load before onLoad is attached — check .complete after mount/URL change.
+  // naturalWidth > 0 distinguishes a successful load from a broken image (both set complete=true).
+  useEffect(() => {
+    if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
+      setImgLoaded(true);
+    }
+  }, [imageUrl]);
 
   const shapeClass =
     shape === "circle"  ? "rounded-full" :
@@ -77,6 +85,7 @@ export function TokenAvatar({ symbol, imageUrl, size = 40, className, shape = "s
         }}
       >
         <img
+          ref={imgRef}
           src={resolvedUrl}
           alt={symbol}
           className="w-full h-full object-cover"
