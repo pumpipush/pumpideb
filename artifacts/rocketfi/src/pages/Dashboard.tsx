@@ -253,9 +253,6 @@ function TableView({ tokens, solPrice }: { tokens: DisplayToken[]; solPrice: num
                 </td>
                 <td className="px-3 py-3 hidden sm:table-cell">
                   <span className="text-sm font-bold text-foreground font-mono tabular-nums inline-flex items-center gap-1.5">
-                    {token.lastTradeAt && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" title="Live trade activity" />
-                    )}
                     {formatMCUsd(token.marketCapEth, solPrice)}
                   </span>
                 </td>
@@ -329,9 +326,6 @@ function TokenCard({ token, rank, solPrice }: { token: DisplayToken; rank: numbe
         <div className="flex justify-between items-center">
           <span className="text-muted-foreground font-mono text-[14px]">{displaySymbol(token.symbol)}</span>
           <span className="text-foreground font-mono text-[16px] font-semibold">
-            {token.lastTradeAt && (
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse mr-1 align-middle" title="Live trade activity" />
-            )}
             {formatMCUsd(token.marketCapEth, solPrice)} <span className="text-muted-foreground/60 font-normal text-[14px]">MC</span>
           </span>
         </div>
@@ -522,19 +516,13 @@ export default function Dashboard() {
     }
     if (!rawTokens) return undefined; // still loading
 
-    // Trending tab: only show tokens with market cap above $50k
-    // Applied to both apiDisplay and liveOnly (SSE-fed) tokens.
-    if (activeTab === "Trending" && solPrice) {
-      const minLamports = (50_000 / solPrice) * 1e9;
-      const meetsThreshold = (t: DisplayToken) =>
-        (parseFloat(t.marketCapEth ?? "0") || 0) >= minLamports;
-      apiDisplay = apiDisplay.filter(meetsThreshold);
-      // liveOnly tokens are brand-new (MC ~$2-4k) and will never pass this threshold
-      // but filter them explicitly for correctness
-      return [...liveOnly.filter(meetsThreshold), ...apiDisplay.filter((t) => t.isLive), ...apiDisplay.filter((t) => !t.isLive)];
+    // Trending tab: only show API tokens sorted by tradeCount — exclude live-feed
+    // tokens (0s brand-new launches) which have zero trades and pollute the list.
+    if (activeTab === "Trending") {
+      return apiDisplay;
     }
 
-    // liveOnly tokens at the top; within apiDisplay, live (isNew) rows sort first
+    // All other tabs: liveOnly tokens at the top; within apiDisplay, live rows first
     const filteredLiveOnly = onlyWithImage ? liveOnly.filter((t) => !!t.imageUrl) : liveOnly;
     const apiLive    = apiDisplay.filter((t) => t.isLive);
     const apiNonLive = apiDisplay.filter((t) => !t.isLive);

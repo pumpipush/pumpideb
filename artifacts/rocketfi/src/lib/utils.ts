@@ -123,8 +123,15 @@ export function formatMCUsd(lamportStr: string | null | undefined, solPrice: num
 export function formatSol(lamportStr: string | null | undefined): string {
   const sol = lamportsToSol(lamportStr);
   if (sol === 0) return "0 SOL";
-  if (sol < 0.000_1) return `${sol.toExponential(2)} SOL`;
-  return `${sol.toLocaleString(undefined, { maximumFractionDigits: 4 })} SOL`;
+  // Always use plain decimal — no scientific notation.
+  let decimals: number;
+  if      (sol >= 1)        decimals = 4;
+  else if (sol >= 0.01)     decimals = 4;
+  else if (sol >= 0.001)    decimals = 5;
+  else if (sol >= 0.0001)   decimals = 6;
+  else if (sol >= 0.000_01) decimals = 7;
+  else                      decimals = 8;
+  return `${sol.toFixed(decimals)} SOL`;
 }
 
 /** Format raw token amount (Pump.fun tokenAmount is in whole token units) */

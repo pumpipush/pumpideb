@@ -86,11 +86,17 @@ export default function AppInterface() {
     if (tokenParam) {
       setActiveTab("trade");
       setSelectedTokenId(tokenParam);
-      // Scroll both outer <main> and inner scrollable panel to top
-      requestAnimationFrame(() => {
+      // Double-rAF: first rAF fires after React's paint; second fires after the
+      // browser has laid out and scrolled to any auto-focused/rendered element,
+      // ensuring our reset wins on mobile.
+      const scrollToTop = () => {
+        window.scrollTo({ top: 0, behavior: "instant" });
+        document.documentElement.scrollTo({ top: 0, behavior: "instant" });
+        document.body.scrollTo({ top: 0, behavior: "instant" });
         document.querySelector("main")?.scrollTo({ top: 0, behavior: "instant" });
         document.querySelector("[data-token-panel]")?.scrollTo({ top: 0, behavior: "instant" });
-      });
+      };
+      requestAnimationFrame(() => requestAnimationFrame(scrollToTop));
     } else {
       setSelectedTokenId(null);
       setActiveTab("launch"); // Return to launch tab when no token is selected
@@ -333,8 +339,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       return res.json();
     },
     enabled: !!selectedAddress,
-    refetchInterval: 60_000,
-    staleTime: 55_000,
+    refetchInterval: 15_000,
+    staleTime: 12_000,
   });
 
   // ── Server-side 24h stats (SQL aggregate — no 100-row cap) ────────────────
@@ -462,7 +468,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     const pct = (old: number | null): { val: string; up: boolean } | null => {
       if (!old || old === 0 || currentPrice === 0) return null;
       const diff = ((currentPrice - old) / old) * 100;
-      return { val: (diff >= 0 ? "+" : "") + diff.toFixed(2) + "%", up: diff >= 0 };
+      const abs = Math.abs(diff);
+      const fmt = abs >= 10_000 ? (abs / 1000).toFixed(1) + "K"
+                : abs >= 1_000  ? (abs / 1000).toFixed(2) + "K"
+                : abs.toFixed(2);
+      return { val: (diff >= 0 ? "+" : "-") + fmt + "%", up: diff >= 0 };
     };
 
     return {
@@ -957,26 +967,40 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           );
         })()}
 
-        {/* ── Info strip above chart: MC | Bonding Curve | Price (horizontal) ── */}
-        <div className="mb-2 px-3 md:px-0 flex items-center gap-3">
+        {/* ── Info strip above chart ── */}
+        <div className="mb-2 px-3 md:px-0">
 
-          {/* Market Cap — left, takes equal space */}
-          <div className="flex-1 flex flex-col justify-center">
-            <span className="text-[14px] font-medium mb-0.5" style={{ color: "#94a3b8" }}>Market Cap</span>
-            <span
-              key={priceFlash.key}
-              className={`text-[20px] font-bold text-foreground font-mono tabular-nums leading-tight${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
-            >
-              {formatMCUsd(effectiveMcEth, solPrice)}
-            </span>
+          {/* ── MOBILE: Row 1 — MC (left) + Price (right) ── */}
+          <div className="flex items-start justify-between mb-2 md:hidden">
+            <div className="flex flex-col justify-center">
+              <span className="text-[12px] font-medium mb-0.5" style={{ color: "#94a3b8" }}>Market Cap</span>
+              <span
+                key={priceFlash.key}
+                className={`text-[18px] font-bold text-foreground font-mono tabular-nums leading-tight${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
+              >
+                {formatMCUsd(effectiveMcEth, solPrice)}
+              </span>
+            </div>
+            <div className="flex flex-col justify-center items-end">
+              <span className="text-[12px] font-medium mb-0.5" style={{ color: "#94a3b8" }}>Price</span>
+              <span
+                key={`price-${priceFlash.key}`}
+                className={`text-[18px] font-bold font-mono tabular-nums leading-tight${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
+                style={{ color: "#e2e8f0" }}
+              >
+                {priceStats.currentPrice > 0
+                  ? formatTokenPrice(solPrice ? priceStats.currentPrice * solPrice : priceStats.currentPrice)
+                  : "—"}
+              </span>
+            </div>
           </div>
 
-          {/* Bonding Curve — compact fixed width, truly centred */}
-          <div className="w-[380px] shrink-0 flex flex-col justify-center">
+          {/* ── MOBILE: Row 2 — Bonding Curve full width ── */}
+          <div className="md:hidden">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[14px] font-medium" style={{ color: "#94a3b8" }}>Bonding Curve</span>
+              <span className="text-[12px] font-medium" style={{ color: "#94a3b8" }}>Bonding Curve</span>
               <span
-                className="text-[12px] font-bold font-mono px-1.5 py-0.5 rounded-full"
+                className="text-[11px] font-bold font-mono px-1.5 py-0.5 rounded-full"
                 style={{
                   background: isGraduated ? "rgba(34,197,94,0.12)" : "rgba(16,185,129,0.10)",
                   color: isGraduated ? "#22c55e" : "#10b981",
@@ -1019,23 +1043,100 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             )}
           </div>
 
-          {/* Price — right, takes equal space */}
-          <div className="flex-1 flex flex-col justify-center items-end">
-            <span className="text-[12px] font-medium mb-0.5" style={{ color: "#94a3b8" }}>Price USD</span>
-            <span
-              key={`price-${priceFlash.key}`}
-              className={`text-[16px] font-bold font-mono tabular-nums leading-tight${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
-              style={{ color: "#e2e8f0" }}
-            >
-              {priceStats.currentPrice > 0
-                ? formatTokenPrice(solPrice ? priceStats.currentPrice * solPrice : priceStats.currentPrice)
-                : "—"}
-            </span>
+          {/* ── DESKTOP (md+): original 3-column horizontal ── */}
+          <div className="hidden md:flex items-center gap-3">
+            {/* Market Cap */}
+            <div className="flex-1 flex flex-col justify-center">
+              <span className="text-[14px] font-medium mb-0.5" style={{ color: "#94a3b8" }}>Market Cap</span>
+              <span
+                key={priceFlash.key}
+                className={`text-[20px] font-bold text-foreground font-mono tabular-nums leading-tight${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
+              >
+                {formatMCUsd(effectiveMcEth, solPrice)}
+              </span>
+            </div>
+            {/* Bonding Curve */}
+            <div className="w-[380px] shrink-0 flex flex-col justify-center">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[14px] font-medium" style={{ color: "#94a3b8" }}>Bonding Curve</span>
+                <span
+                  className="text-[12px] font-bold font-mono px-1.5 py-0.5 rounded-full"
+                  style={{
+                    background: isGraduated ? "rgba(34,197,94,0.12)" : "rgba(16,185,129,0.10)",
+                    color: isGraduated ? "#22c55e" : "#10b981",
+                    border: `1px solid ${isGraduated ? "rgba(34,197,94,0.28)" : "rgba(16,185,129,0.22)"}`,
+                  }}
+                >
+                  {progressPercent >= 100 ? "100%" : `${progressPercent.toFixed(1)}%`}
+                </span>
+              </div>
+              <div className="relative h-2 w-full rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+                {[25, 50, 75].map(m => (
+                  <div key={m} className="absolute top-0 h-full w-px pointer-events-none" style={{ left: `${m}%`, background: "rgba(0,0,0,0.45)", zIndex: 2 }} />
+                ))}
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: `${Math.min(progressPercent, 100)}%`,
+                    background: isGraduated
+                      ? "linear-gradient(90deg, #16a34a 0%, #22c55e 55%, #4ade80 100%)"
+                      : "linear-gradient(90deg, #059669 0%, #10b981 55%, #34d399 100%)",
+                    boxShadow: isGraduated ? "0 0 8px rgba(34,197,94,0.40)" : "0 0 7px rgba(16,185,129,0.38)",
+                  }}
+                />
+              </div>
+              {isGraduated ? (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span style={{ fontSize: 9, color: "#22c55e" }}>✓</span>
+                  <span className="text-[11px] font-semibold" style={{ color: "#22c55e" }}>Graduated to Raydium</span>
+                  {token.graduatedAt && <span className="text-[10px]" style={{ color: "#64748b" }}>· {timeAgo(token.graduatedAt)} ago</span>}
+                </div>
+              ) : (
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-[12px] font-mono text-foreground">
+                    {realSolInCurve.toFixed(2)}<span className="text-muted-foreground ml-1">/ 85 SOL</span>
+                  </span>
+                  <span className="text-[12px] font-medium" style={{ color: "#94a3b8" }}>
+                    {(85 - realSolInCurve).toFixed(2)} SOL left
+                  </span>
+                </div>
+              )}
+            </div>
+            {/* Price */}
+            <div className="flex-1 flex flex-col justify-center items-end">
+              <span className="text-[12px] font-medium mb-0.5" style={{ color: "#94a3b8" }}>Price USD</span>
+              <span
+                key={`price-${priceFlash.key}`}
+                className={`text-[16px] font-bold font-mono tabular-nums leading-tight${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
+                style={{ color: "#e2e8f0" }}
+              >
+                {priceStats.currentPrice > 0
+                  ? formatTokenPrice(solPrice ? priceStats.currentPrice * solPrice : priceStats.currentPrice)
+                  : "—"}
+              </span>
+            </div>
           </div>
+
         </div>
 
         {/* Chart Area */}
         {ChartSection}
+
+        {/* ── MOBILE ONLY: Buy/Sell form below chart ── */}
+        <div className="md:hidden px-3 pt-3 pb-1">
+          <div className="bg-card border border-border/60 rounded-sm overflow-hidden shadow-sm">
+            <TradePanelForm
+              tradeMode={tradeMode}
+              setTradeMode={setTradeMode}
+              amount={amount}
+              setAmount={setAmount}
+              token={token}
+              wallet={wallet}
+              handleTrade={handleTrade}
+              isPending={recordTrade.isPending || updateToken.isPending}
+            />
+          </div>
+        </div>
 
         {/* Indicator picker modal */}
         <IndicatorModal
@@ -1157,12 +1258,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                                   style={{ color: isBuy ? "#4ade80" : "#f87171" }}>
                                   {isBuy ? "Buy" : "Sell"}
                                 </span>
-                                {isLive && (
-                                  <span className="animate-badge-pop text-[9px] px-1.5 py-0.5 rounded-full font-bold"
-                                    style={{ background: "rgba(59,130,246,0.15)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.25)", display: "inline-block" }}>
-                                    New
-                                  </span>
-                                )}
                               </div>
                             </td>
                             {/* Amount SOL */}
@@ -1174,7 +1269,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               {formatTokenAmount(trade.tokenAmount)}
                             </td>
                             {/* Time */}
-                            <td className="px-3 py-2.5 text-right text-[14px]" style={{ color: "#64748b" }}>
+                            <td className="px-3 py-2.5 text-right text-[14px]" style={{ color: "#94a3b8" }}>
                               {timeAgo(trade.timestamp)}
                             </td>
                             {/* Txn */}
@@ -1184,9 +1279,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 font-mono text-[12px] transition-colors"
-                                style={{ color: "#475569" }}
-                                onMouseEnter={e => ((e.currentTarget as HTMLAnchorElement).style.color = "#94a3b8")}
-                                onMouseLeave={e => ((e.currentTarget as HTMLAnchorElement).style.color = "#475569")}
+                                style={{ color: "#94a3b8" }}
+                                onMouseEnter={e => ((e.currentTarget as HTMLAnchorElement).style.color = "#cbd5e1")}
+                                onMouseLeave={e => ((e.currentTarget as HTMLAnchorElement).style.color = "#94a3b8")}
                               >
                                 {trade.txHash ? trade.txHash.slice(0, 6) + "…" : "—"}
                                 {trade.txHash && <ExternalLink className="h-3 w-3" />}
@@ -1365,8 +1460,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         })()}
       </div>
 
-      {/* ── RIGHT: sticky buy panel ── */}
-      <div className="w-full md:w-[280px] xl:w-[300px] shrink-0 md:overflow-y-auto md:h-full px-3 py-3 md:px-4 md:py-4 space-y-3">
+      {/* ── RIGHT: sticky buy panel — hidden on mobile (buy/sell is inlined below chart) ── */}
+      <div className="hidden md:flex md:flex-col w-full md:w-[280px] xl:w-[300px] shrink-0 md:overflow-y-auto md:h-full px-3 py-3 md:px-4 md:py-4 space-y-3">
 
         {/* Stats: Price / Vol 24h / % changes */}
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}>

@@ -201,44 +201,70 @@ router.get("/tokens/:address/price-history", async (req, res): Promise<void> => 
   const address = req.params.address as string;
   if (!address) { res.status(400).json({ error: "address required" }); return; }
 
+  // Helper CTE: the oldest valid price for this token (= launch price fallback).
+  // If the token is younger than the cutoff window (e.g. < 5 min old) there is no
+  // trade before the cutoff, so we fall back to the first-ever trade so that
+  // percentages are shown immediately from launch instead of waiting.
   const { rows } = await pool.query<{
     p5m:  string | null;
     p1h:  string | null;
     p6h:  string | null;
     p24h: string | null;
   }>(`
+    WITH oldest AS (
+      SELECT CAST(price_eth AS DOUBLE PRECISION)::text AS price
+      FROM   trades
+      WHERE  token_address = $1
+        AND  price_eth IS NOT NULL
+        AND  CAST(price_eth AS DOUBLE PRECISION) > 0
+        AND  CAST(price_eth AS DOUBLE PRECISION) < 1.0
+      ORDER BY timestamp ASC
+      LIMIT 1
+    )
     SELECT
-      (SELECT CAST(price_eth AS DOUBLE PRECISION)::text FROM trades
-       WHERE token_address = $1
-         AND price_eth IS NOT NULL
-         AND CAST(price_eth AS DOUBLE PRECISION) > 0
-         AND CAST(price_eth AS DOUBLE PRECISION) < 1.0
-         AND timestamp <= NOW() - INTERVAL  '5 minutes'
-       ORDER BY timestamp DESC LIMIT 1) AS p5m,
+      COALESCE(
+        (SELECT CAST(price_eth AS DOUBLE PRECISION)::text FROM trades
+         WHERE token_address = $1
+           AND price_eth IS NOT NULL
+           AND CAST(price_eth AS DOUBLE PRECISION) > 0
+           AND CAST(price_eth AS DOUBLE PRECISION) < 1.0
+           AND timestamp <= NOW() - INTERVAL '5 minutes'
+         ORDER BY timestamp DESC LIMIT 1),
+        (SELECT price FROM oldest)
+      ) AS p5m,
 
-      (SELECT CAST(price_eth AS DOUBLE PRECISION)::text FROM trades
-       WHERE token_address = $1
-         AND price_eth IS NOT NULL
-         AND CAST(price_eth AS DOUBLE PRECISION) > 0
-         AND CAST(price_eth AS DOUBLE PRECISION) < 1.0
-         AND timestamp <= NOW() - INTERVAL  '1 hour'
-       ORDER BY timestamp DESC LIMIT 1) AS p1h,
+      COALESCE(
+        (SELECT CAST(price_eth AS DOUBLE PRECISION)::text FROM trades
+         WHERE token_address = $1
+           AND price_eth IS NOT NULL
+           AND CAST(price_eth AS DOUBLE PRECISION) > 0
+           AND CAST(price_eth AS DOUBLE PRECISION) < 1.0
+           AND timestamp <= NOW() - INTERVAL '1 hour'
+         ORDER BY timestamp DESC LIMIT 1),
+        (SELECT price FROM oldest)
+      ) AS p1h,
 
-      (SELECT CAST(price_eth AS DOUBLE PRECISION)::text FROM trades
-       WHERE token_address = $1
-         AND price_eth IS NOT NULL
-         AND CAST(price_eth AS DOUBLE PRECISION) > 0
-         AND CAST(price_eth AS DOUBLE PRECISION) < 1.0
-         AND timestamp <= NOW() - INTERVAL  '6 hours'
-       ORDER BY timestamp DESC LIMIT 1) AS p6h,
+      COALESCE(
+        (SELECT CAST(price_eth AS DOUBLE PRECISION)::text FROM trades
+         WHERE token_address = $1
+           AND price_eth IS NOT NULL
+           AND CAST(price_eth AS DOUBLE PRECISION) > 0
+           AND CAST(price_eth AS DOUBLE PRECISION) < 1.0
+           AND timestamp <= NOW() - INTERVAL '6 hours'
+         ORDER BY timestamp DESC LIMIT 1),
+        (SELECT price FROM oldest)
+      ) AS p6h,
 
-      (SELECT CAST(price_eth AS DOUBLE PRECISION)::text FROM trades
-       WHERE token_address = $1
-         AND price_eth IS NOT NULL
-         AND CAST(price_eth AS DOUBLE PRECISION) > 0
-         AND CAST(price_eth AS DOUBLE PRECISION) < 1.0
-         AND timestamp <= NOW() - INTERVAL '24 hours'
-       ORDER BY timestamp DESC LIMIT 1) AS p24h
+      COALESCE(
+        (SELECT CAST(price_eth AS DOUBLE PRECISION)::text FROM trades
+         WHERE token_address = $1
+           AND price_eth IS NOT NULL
+           AND CAST(price_eth AS DOUBLE PRECISION) > 0
+           AND CAST(price_eth AS DOUBLE PRECISION) < 1.0
+           AND timestamp <= NOW() - INTERVAL '24 hours'
+         ORDER BY timestamp DESC LIMIT 1),
+        (SELECT price FROM oldest)
+      ) AS p24h
   `, [address]);
 
   const r = rows[0];

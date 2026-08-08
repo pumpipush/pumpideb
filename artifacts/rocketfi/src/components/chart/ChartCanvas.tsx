@@ -651,6 +651,10 @@ export const ChartCanvas = memo(function ChartCanvas({
         const w2 = e.clientWidth || e.offsetWidth || window.innerWidth || 400;
         const vb2 = calcVisibleBars(w2);
         try { c.timeScale().setVisibleLogicalRange({ from: lastIdx - vb2 + 1, to: lastIdx + 3 }); } catch { /* ignore */ }
+        // Re-enable autoScale after every data update so the Y-axis always fits
+        // visible candles even if the user previously dragged the price axis on
+        // a different token (which disables autoScale for that chart instance).
+        try { c.priceScale("right").applyOptions({ autoScale: true }); } catch { /* ignore */ }
       });
 
       clearTimeout(loadTimeoutRef.current);
