@@ -195,6 +195,57 @@ router.get("/tokens/:address/stats", async (req, res): Promise<void> => {
   });
 });
 
+// GET /tokens/:address/price-history  — reference prices at 5m / 1h / 6h / 24h ago
+// Used by the frontend to compute % changes without relying on the 100-row history cap.
+router.get("/tokens/:address/price-history", async (req, res): Promise<void> => {
+  const address = req.params.address as string;
+  if (!address) { res.status(400).json({ error: "address required" }); return; }
+
+  const { rows } = await pool.query<{
+    p5m:  string | null;
+    p1h:  string | null;
+    p6h:  string | null;
+    p24h: string | null;
+  }>(`
+    SELECT
+      (SELECT CAST(price_eth AS DOUBLE PRECISION)::text FROM trades
+       WHERE token_address = $1
+         AND price_eth IS NOT NULL
+         AND CAST(price_eth AS DOUBLE PRECISION) > 0
+         AND CAST(price_eth AS DOUBLE PRECISION) < 1.0
+         AND timestamp <= NOW() - INTERVAL  '5 minutes'
+       ORDER BY timestamp DESC LIMIT 1) AS p5m,
+
+      (SELECT CAST(price_eth AS DOUBLE PRECISION)::text FROM trades
+       WHERE token_address = $1
+         AND price_eth IS NOT NULL
+         AND CAST(price_eth AS DOUBLE PRECISION) > 0
+         AND CAST(price_eth AS DOUBLE PRECISION) < 1.0
+         AND timestamp <= NOW() - INTERVAL  '1 hour'
+       ORDER BY timestamp DESC LIMIT 1) AS p1h,
+
+      (SELECT CAST(price_eth AS DOUBLE PRECISION)::text FROM trades
+       WHERE token_address = $1
+         AND price_eth IS NOT NULL
+         AND CAST(price_eth AS DOUBLE PRECISION) > 0
+         AND CAST(price_eth AS DOUBLE PRECISION) < 1.0
+         AND timestamp <= NOW() - INTERVAL  '6 hours'
+       ORDER BY timestamp DESC LIMIT 1) AS p6h,
+
+      (SELECT CAST(price_eth AS DOUBLE PRECISION)::text FROM trades
+       WHERE token_address = $1
+         AND price_eth IS NOT NULL
+         AND CAST(price_eth AS DOUBLE PRECISION) > 0
+         AND CAST(price_eth AS DOUBLE PRECISION) < 1.0
+         AND timestamp <= NOW() - INTERVAL '24 hours'
+       ORDER BY timestamp DESC LIMIT 1) AS p24h
+  `, [address]);
+
+  const r = rows[0];
+  const toNum = (v: string | null) => (v != null ? parseFloat(v) : null);
+  res.json({ p5m: toNum(r.p5m), p1h: toNum(r.p1h), p6h: toNum(r.p6h), p24h: toNum(r.p24h) });
+});
+
 // GET /tokens/:address/trades
 router.get("/tokens/:address/trades", async (req, res): Promise<void> => {
   const params = TradeHistoryParams.safeParse(req.params);

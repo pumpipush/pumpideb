@@ -319,6 +319,24 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     }
   });
 
+  // ── Server-side reference prices for % change (SQL — no 100-row cap) ────────
+  // High-volume tokens exhaust the 100-row history in < 2 min, so we query DB
+  // directly for the closest valid price before each cutoff.
+  const { data: serverPriceHistory } = useQuery({
+    queryKey: ["priceHistory", selectedAddress],
+    queryFn: async (): Promise<{
+      p5m: number | null; p1h: number | null; p6h: number | null; p24h: number | null;
+    } | null> => {
+      if (!selectedAddress) return null;
+      const res = await fetch(`/api/tokens/${selectedAddress}/price-history`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!selectedAddress,
+    refetchInterval: 60_000,
+    staleTime: 55_000,
+  });
+
   // ── Server-side 24h stats (SQL aggregate — no 100-row cap) ────────────────
   // Refreshed every 30 s so Vol 24h stays accurate and real-time.
   const { data: serverStats } = useQuery({
@@ -420,19 +438,27 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     const txns24hBuy  = serverStats?.txns24hBuy  ?? clientTxns24hBuy;
     const txns24hSell = serverStats?.txns24hSell ?? clientTxns24hSell;
 
-    const priceAt = (cutoffMs: number): number | null => {
+    // ── % change helpers ──────────────────────────────────────────────────────
+    // priceAt: fallback for when serverPriceHistory hasn't loaded yet.
+    // Uses the 100-row history; works for low-volume tokens where 100 rows
+    // cover more than 5 m. Skips null/zero priceEth rows from old heal path.
+    const priceAtFromHistory = (cutoffMs: number): number | null => {
       const cutoff = now - cutoffMs;
       const older = (history ?? [])
         .filter(t => { const ts = new Date(t.timestamp).getTime(); return Number.isFinite(ts) && ts <= cutoff; })
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      // Walk from most-recent-before-cutoff backward; skip null/zero priceEth rows
-      // (legacy heal-path trades stored priceEth = null).
       for (const t of older) {
         const p = parseFloat(t.priceEth ?? "0");
         if (Number.isFinite(p) && p > 0) return p;
       }
       return null;
     };
+    // Server prices override the history fallback (accurate for high-volume tokens).
+    const refP5m  = serverPriceHistory?.p5m  ?? priceAtFromHistory(5    * 60_000);
+    const refP1h  = serverPriceHistory?.p1h  ?? priceAtFromHistory(60   * 60_000);
+    const refP6h  = serverPriceHistory?.p6h  ?? priceAtFromHistory(360  * 60_000);
+    const refP24h = serverPriceHistory?.p24h ?? priceAtFromHistory(1440 * 60_000);
+
     const pct = (old: number | null): { val: string; up: boolean } | null => {
       if (!old || old === 0 || currentPrice === 0) return null;
       const diff = ((currentPrice - old) / old) * 100;
@@ -446,13 +472,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       vol24hSell,
       txns24hBuy,
       txns24hSell,
-      p5m:  pct(priceAt(5    * 60_000)),
-      p1h:  pct(priceAt(60  * 60_000)),
-      p6h:  pct(priceAt(360 * 60_000)),
-      p24h: pct(priceAt(1440 * 60_000)),
+      p5m:  pct(refP5m),
+      p1h:  pct(refP1h),
+      p6h:  pct(refP6h),
+      p24h: pct(refP24h),
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveToken, token?.priceEth, liveTrades, history, serverStats]);
+  }, [liveToken, token?.priceEth, liveTrades, history, serverStats, serverPriceHistory]);
 
   // ── Price flash effect — runs after priceStats is declared ──
   useEffect(() => {
