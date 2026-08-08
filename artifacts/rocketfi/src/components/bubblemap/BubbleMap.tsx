@@ -267,29 +267,60 @@ function drawBubble(
 ) {
   const x = b.dispX, y = b.dispY, r = b.dispR;
 
-  // ── MODE B: Text label (rank ≥ TOP_CIRCLES) ───────────────────────────────
+  // ── MODE B: Small label (rank ≥ TOP_CIRCLES) — logo + name + % ───────────
   if (rank >= TOP_CIRCLES) {
-    const col  = circleColors(b.pctChange);
-    const sym  = b.symbol.replace(/^\$/, "").substring(0, 9);
-    const pct  = (b.pctChange >= 0 ? "+" : "") + b.pctChange.toFixed(2) + "%";
-    const sz   = isHovered ? 11 : 10;
+    const col     = circleColors(b.pctChange);
+    const pct     = (b.pctChange >= 0 ? "+" : "") + b.pctChange.toFixed(2) + "%";
+    const name    = b.name.substring(0, 11);
+    const logoR   = 7;
+    const nameSz  = 8;
+    const pctSz   = 10;
+    const gap     = 2;
+
+    // Total block height: logo + gap + name + gap + pct
+    const blockH = logoR * 2 + gap + nameSz + gap + pctSz;
+    let cy = y - blockH / 2;
+
+    // Logo
+    if (b.img && b.imgLoaded && b.img.naturalWidth > 0) {
+      const lcy = cy + logoR;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, lcy, logoR, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(b.img, x - logoR, lcy - logoR, logoR * 2, logoR * 2);
+      ctx.restore();
+      // Subtle ring around logo
+      ctx.beginPath();
+      ctx.arc(x, lcy, logoR, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(160,170,210,0.25)";
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    } else {
+      // Placeholder dot
+      ctx.beginPath();
+      ctx.arc(x, cy + logoR, logoR, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(80,90,130,0.55)";
+      ctx.fill();
+    }
+    cy += logoR * 2 + gap;
 
     ctx.save();
-    ctx.textAlign    = "center";
-    ctx.shadowBlur   = isHovered ? 6 : 3;
-    ctx.shadowColor  = "rgba(0,0,0,0.90)";
+    ctx.textAlign   = "center";
+    ctx.shadowBlur  = 3;
+    ctx.shadowColor = "rgba(0,0,0,0.92)";
 
-    // Symbol — light white
-    ctx.font      = `600 ${sz}px Inter,'SF Pro Display',system-ui,sans-serif`;
-    ctx.fillStyle = isHovered ? "#ffffff" : "rgba(210,220,240,0.88)";
-    ctx.textBaseline = "bottom";
-    ctx.fillText(sym, x, y);
-
-    // % change — colored
-    ctx.font      = `700 ${sz}px Inter,'SF Pro Display',system-ui,sans-serif`;
-    ctx.fillStyle = col.text;
+    // Name
+    ctx.font         = `500 ${nameSz}px Inter,'SF Pro Display',system-ui,sans-serif`;
+    ctx.fillStyle    = isHovered ? "#ffffff" : "rgba(200,212,235,0.85)";
     ctx.textBaseline = "top";
-    ctx.fillText(pct, x, y + 1);
+    ctx.fillText(name, x, cy);
+    cy += nameSz + gap;
+
+    // % change — 10px
+    ctx.font      = `700 ${pctSz}px Inter,'SF Pro Display',system-ui,sans-serif`;
+    ctx.fillStyle = col.text;
+    ctx.fillText(pct, x, cy);
 
     ctx.restore();
     return;
@@ -346,8 +377,8 @@ function drawBubble(
   const showLogo   = r >= 44 && b.img && b.imgLoaded && b.img.naturalWidth > 0;
   const showSymbol = r >= 32;
   const pctText    = (b.pctChange >= 0 ? "+" : "") + b.pctChange.toFixed(2) + "%";
-  const pctFontSz  = Math.max(10, Math.min(r * 0.28, 22));
-  const symFontSz  = Math.max(9,  Math.min(r * 0.20, 15));
+  const pctFontSz  = 10;
+  const symFontSz  = Math.max(9,  Math.min(r * 0.18, 13));
   const logoR      = r * 0.25;
   const gap        = r * 0.08;
 
