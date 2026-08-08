@@ -131,13 +131,8 @@ export default function AppInterface() {
 
         {/* ── Other tabs — contained ── */}
         <TabsContent value="launch" className="mt-0 outline-none">
-          <div className="max-w-[1200px] mx-auto px-3 md:px-6 py-3 md:py-5 flex flex-col lg:flex-row gap-4 md:gap-6">
-            <div className="flex-1 min-w-0">
-              <LaunchTab wallet={wallet} onLaunch={(address) => selectToken(address)} />
-            </div>
-            <div className="w-full lg:w-[300px] shrink-0">
-              <TrendingSidebar onSelectToken={selectToken} />
-            </div>
+          <div className="max-w-[1200px] mx-auto px-3 md:px-6 py-3 md:py-5">
+            <LaunchTab wallet={wallet} onLaunch={(address) => selectToken(address)} />
           </div>
         </TabsContent>
 
