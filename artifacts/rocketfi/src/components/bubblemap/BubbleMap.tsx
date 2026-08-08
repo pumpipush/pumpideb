@@ -638,8 +638,9 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
         b.colorR += (b.targetR - b.colorR) * 0.04;
         b.colorG += (b.targetG - b.colorG) * 0.04;
         b.colorB += (b.targetB - b.colorB) * 0.04;
-        b.dispX = b.x;
-        b.dispY = b.y;
+        // Slow lerp → visible ~3s spread animation on open; static after settling
+        b.dispX += (b.x - b.dispX) * 0.018;
+        b.dispY += (b.y - b.dispY) * 0.018;
       }
 
       // Z-ordering: draw text labels first (back), then large circles on top.
@@ -650,7 +651,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
       for (let i = bubbles.length - 1; i >= TOP_CIRCLES; i--) {
         const b = bubbles[i];
         if (b === hoveredBubble) continue;
-        b.dispR += (b.r - b.dispR) * 0.10;
+        b.dispR += (b.r - b.dispR) * 0.018; // slow grow matches XY spread speed
         drawBubble(ctx, b, false, pctToColors(b.pctChange), dpr, i);
       }
 
@@ -658,7 +659,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
       for (let i = TOP_CIRCLES - 1; i >= 0; i--) {
         const b = bubbles[i];
         if (b === hoveredBubble) continue;
-        b.dispR += (b.r - b.dispR) * 0.10;
+        b.dispR += (b.r - b.dispR) * 0.018;
         drawBubble(ctx, b, false, pctToColors(b.pctChange), dpr, i);
       }
 
