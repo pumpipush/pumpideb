@@ -1221,10 +1221,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           return (
             <div className="mt-0 px-3 md:px-0">
               {/* Bug fix: React state-based sub-tabs (no more document.getElementById) */}
-              <div className="flex gap-2 mb-2">
+              <div className="flex gap-2 mb-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
                 <button
                   onClick={() => setActiveSubTab("tx")}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all shrink-0"
                   style={{
                     background: activeSubTab === "tx" ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
                     color: activeSubTab === "tx" ? "#e2e8f0" : "#64748b",
@@ -1235,7 +1235,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 </button>
                 <button
                   onClick={() => setActiveSubTab("holders")}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all shrink-0"
                   style={{
                     background: activeSubTab === "holders" ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
                     color: activeSubTab === "holders" ? "#e2e8f0" : "#64748b",
@@ -1246,7 +1246,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 </button>
                 <button
                   onClick={() => setActiveSubTab("positions")}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all shrink-0"
                   style={{
                     background: activeSubTab === "positions" ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
                     color: activeSubTab === "positions" ? "#e2e8f0" : "#64748b",
