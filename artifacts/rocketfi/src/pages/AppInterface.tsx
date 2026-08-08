@@ -903,7 +903,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
           {/* Market Cap — left, takes equal space */}
           <div className="flex-1 flex flex-col justify-center">
-            <span className="text-[10px] font-semibold uppercase tracking-widest mb-0.5" style={{ color: "#475569" }}>Market Cap</span>
+            <span className="text-[10px] font-semibold uppercase tracking-widest mb-0.5" style={{ color: "#94a3b8" }}>Market Cap</span>
             <span
               key={priceFlash.key}
               className={`text-[20px] font-bold text-foreground font-mono tabular-nums leading-tight${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
@@ -915,7 +915,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           {/* Bonding Curve — compact fixed width, truly centred */}
           <div className="w-[380px] shrink-0 flex flex-col justify-center">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-semibold tracking-widest uppercase" style={{ color: "#475569" }}>Bonding Curve</span>
+              <span className="text-[10px] font-semibold tracking-widest uppercase" style={{ color: "#94a3b8" }}>Bonding Curve</span>
               <span
                 className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-full"
                 style={{
@@ -953,7 +953,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 <span className="text-[10px] font-mono text-foreground">
                   {realSolInCurve.toFixed(2)}<span className="text-muted-foreground ml-1">/ 85 SOL</span>
                 </span>
-                <span className="text-[10px] font-mono" style={{ color: "#475569" }}>
+                <span className="text-[10px] font-mono" style={{ color: "#94a3b8" }}>
                   {(85 - realSolInCurve).toFixed(2)} SOL left
                 </span>
               </div>
@@ -962,7 +962,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
           {/* Price — right, takes equal space */}
           <div className="flex-1 flex flex-col justify-center items-end">
-            <span className="text-[10px] font-semibold uppercase tracking-widest mb-0.5" style={{ color: "#475569" }}>Price</span>
+            <span className="text-[10px] font-semibold uppercase tracking-widest mb-0.5" style={{ color: "#94a3b8" }}>Price</span>
             <span
               key={`price-${priceFlash.key}`}
               className={`text-[16px] font-bold font-mono tabular-nums leading-tight${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
