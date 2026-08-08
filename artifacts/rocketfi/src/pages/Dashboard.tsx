@@ -412,7 +412,7 @@ export default function Dashboard() {
   const [search, setSearch]         = useState("");
   const [minMcap, setMinMcap]       = useState("");
   const [onlyGraduated, setOnlyGraduated] = useState(false);
-  const [onlyWithImage, setOnlyWithImage] = useState(false);
+  const [onlyWithImage, setOnlyWithImage] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
 
   // ── Live feed ─────────────────────────────────────────────────────────────
@@ -535,9 +535,10 @@ export default function Dashboard() {
     }
 
     // liveOnly tokens at the top; within apiDisplay, live (isNew) rows sort first
+    const filteredLiveOnly = onlyWithImage ? liveOnly.filter((t) => !!t.imageUrl) : liveOnly;
     const apiLive    = apiDisplay.filter((t) => t.isLive);
     const apiNonLive = apiDisplay.filter((t) => !t.isLive);
-    return [...liveOnly, ...apiLive, ...apiNonLive];
+    return [...filteredLiveOnly, ...apiLive, ...apiNonLive];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawTokens, liveTokens, liveTradeStats, platformFilter, search, onlyGraduated, onlyWithImage, minMcap, activeTab, solPrice]);
 
