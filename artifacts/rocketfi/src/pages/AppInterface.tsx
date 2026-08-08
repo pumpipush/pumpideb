@@ -1314,7 +1314,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           {/* Price + Vol 24h */}
           <div className="grid grid-cols-2 divide-x divide-white/[0.08]" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
             <div className="flex flex-col px-4 py-3">
-              <span className="text-[13px] font-medium mb-1" style={{ color: "#94a3b8" }}>Price</span>
+              <span className="text-[13px] font-medium mb-1" style={{ color: "#94a3b8" }}>Price in SOL</span>
               <span
                 key={`price-${priceFlash.key}`}
                 className={`font-mono font-bold text-[15px]${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
