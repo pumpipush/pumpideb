@@ -537,25 +537,22 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
         // Unique floating bob per bubble — keep existing if re-using prev
         floatPhaseX: prev?.floatPhaseX ?? Math.random() * Math.PI * 2,
         floatPhaseY: prev?.floatPhaseY ?? Math.random() * Math.PI * 2,
-        // T is in ms; freq in rad/ms. Period = 2π/freq.
-        // Top-5: 8-15s period → freq = 2π/8000–2π/15000 ≈ 0.00042–0.00079
-        // Labels: 4-8s period  → freq = 2π/4000–2π/8000  ≈ 0.00079–0.00157
-        // Always regenerate so stale (pre-fix) values don't persist
+        // ── Circular orbit params (top-5 only) ───────────────────────────────
+        // Circular orbit: X = amp·cos(ωt + φ), Y = amp·sin(ωt + φ)
+        // Same ω for X and Y → perfect circle (no Lissajous reversal artifacts).
+        // Each bubble gets a random phase so they orbit at different positions.
+        // Period 22–38s → slow, majestic, clearly visible drift.
+        // Amplitude is rank-based: biggest circle gets largest orbit.
         floatFreqX:  i < TOP_CIRCLES
-          ? 0.00042 + Math.random() * 0.00037   // 8–15s period
-          : 0.00079 + Math.random() * 0.00079,  // 4–8s period
-        // Y = freqX * 1.5 → Lissajous 3:2 ratio → figure-8 / orbital paths
-        floatFreqY:  i < TOP_CIRCLES
-          ? (0.00042 + Math.random() * 0.00037) * 1.5
-          : (0.00079 + Math.random() * 0.00079) * 1.5,
-        // Amplitude must be small enough to NOT push bubbles into neighbors.
-        // Layout packs bubbles touching → even 5px drift looks smooth; 12+px = crash.
-        // Always regenerate (drop prev) so stale large values don't persist.
+          ? 0.000165 + Math.random() * 0.000121  // 22–38s period
+          : 0,                                    // labels: no orbit
+        floatFreqY:  i < TOP_CIRCLES              // same ω → circular (not ellipse)
+          ? 0.000165 + Math.random() * 0.000121
+          : 0,
         floatAmp:    i < TOP_CIRCLES
-          ? 3.5 + Math.random() * 2.5           // 3.5–6px — visible but won't overlap
-          : 1.5 + Math.random() * 1.5,          // 1.5–3px — very subtle drift
+          ? [9, 8, 7, 6.5, 6][i]                 // rank-based, always regenerate
+          : 0,
         pulsePhase:  prev?.pulsePhase ?? Math.random() * Math.PI * 2,
-        // Breath: 5-8s period → freq = 2π/5000–2π/8000 ≈ 0.00079–0.00126
         pulseFreq:   0.00079 + Math.random() * 0.00047,
         imgLoaded: prev?.imgLoaded ?? false,
         img: prev?.img,
@@ -652,27 +649,33 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
         b.colorB += (b.targetB - b.colorB) * 0.04;
 
         if (i < TOP_CIRCLES) {
-          // ── Only the 5 big circles animate — text labels stay perfectly still ──
-          // Each circle gets its own independent Lissajous 3:2 path
-          // (X freq * 1.5 = Y freq → figure-8 orbital) with small amplitude
-          // so circles never crash into each other.
-          const fx = b.floatAmp * (
-            0.65 * Math.sin(T * b.floatFreqX + b.floatPhaseX) +
-            0.35 * Math.sin(T * b.floatFreqX * PHI + b.floatPhaseX * 1.9)
-          );
-          const fy = b.floatAmp * (
-            0.65 * Math.cos(T * b.floatFreqY + b.floatPhaseY) +
-            0.35 * Math.cos(T * b.floatFreqY * PHI + b.floatPhaseY * 1.6)
-          );
-          // Slow viscous lerp → smooth, no snapping
-          b.dispX += (b.x + fx - b.dispX) * 0.018;
-          b.dispY += (b.y + fy - b.dispY) * 0.018;
+          // ── Circular orbit + spring physics (top-5 only) ─────────────────────
+          // Target traces a perfect circle around the layout anchor point.
+          // X = amp·cos(ωt + φ),  Y = amp·sin(ωt + φ)  — same ω → no Lissajous
+          // reversal artifacts; direction is always tangential → feels like orbit.
+          //
+          // Spring pulls dispX/Y toward the moving target with inertia (vx/vy).
+          // Inertia means the bubble overshoots slightly and curves back →
+          // motion looks physical/alive, not mechanical.
+          const ω   = b.floatFreqX;              // rad/ms (same for X and Y)
+          const φ   = b.floatPhaseX;
+          const amp = b.floatAmp;
 
-          // Radius breathing ±1.5%
+          const targetX = b.x + amp * Math.cos(ω * T + φ);
+          const targetY = b.y + amp * Math.sin(ω * T + φ);
+
+          // Spring: F = k · (target − pos); k = 0.004 (gentle, not snappy)
+          // Damping: 0.88 — enough friction to prevent oscillation, smooth glide
+          b.vx = (b.vx + (targetX - b.dispX) * 0.004) * 0.88;
+          b.vy = (b.vy + (targetY - b.dispY) * 0.004) * 0.88;
+          b.dispX += b.vx;
+          b.dispY += b.vy;
+
+          // Radius breathing ±1.5% — subtle inhale/exhale
           const pulse = 1 + 0.015 * Math.sin(T * b.pulseFreq + b.pulsePhase);
-          b.dispR += (b.r * pulse - b.dispR) * 0.04;
+          b.dispR += (b.r * pulse - b.dispR) * 0.035;
         } else {
-          // Text labels — snap to layout position, zero animation
+          // Text labels — locked to layout, zero animation
           b.dispX = b.x;
           b.dispY = b.y;
         }
