@@ -17,6 +17,34 @@ import {
 
 const router: IRouter = Router();
 
+// ── In-memory response cache for GET /tokens ──────────────────────────────────
+// The token list (especially the expensive 24h pct-change query) does not need
+// to be recomputed on every request.  A 60-second TTL is plenty — real-time
+// price movement is already delivered via the WebSocket live-update feed, so
+// the REST poll only needs to pick up new tokens entering the top-40 list.
+//
+// Cache key = serialised query-param object so different sort/limit combos
+// each get their own slot.  Max entries capped at 50 to bound memory.
+const _tokenListCache = new Map<string, { payload: unknown; expiresAt: number }>();
+const TOKEN_LIST_TTL = 60_000;   // ms — how long a cached response is valid
+const TOKEN_LIST_MAX = 50;        // max distinct cache slots
+
+function _cacheGet(key: string): unknown | null {
+  const entry = _tokenListCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) { _tokenListCache.delete(key); return null; }
+  return entry.payload;
+}
+
+function _cacheSet(key: string, payload: unknown): void {
+  if (_tokenListCache.size >= TOKEN_LIST_MAX) {
+    // Evict oldest entry
+    const oldest = _tokenListCache.keys().next().value;
+    if (oldest !== undefined) _tokenListCache.delete(oldest);
+  }
+  _tokenListCache.set(key, { payload, expiresAt: Date.now() + TOKEN_LIST_TTL });
+}
+
 // ── Helper: fetch 24-hour price % change for a set of token addresses ────────
 // Returns a Map<address, pctChange24h>. Tokens with no trades in the window
 // are absent from the map (caller should treat as null).
@@ -65,6 +93,19 @@ router.get("/tokens", async (req, res): Promise<void> => {
   }
 
   const { sort = "newest", limit = 20, offset = 0, search, graduated, platform } = parsed.data;
+
+  // ── Cache check ─────────────────────────────────────────────────────────────
+  // 60-second in-memory cache keyed on all query params.
+  // Real-time price movement comes from the WebSocket feed; the REST poll
+  // only needs to catch new tokens entering the list and 24h pct refreshes.
+  const cacheKey = JSON.stringify({ sort, limit, offset, search, graduated, platform });
+  const cached = _cacheGet(cacheKey);
+  if (cached !== null) {
+    res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
+    res.setHeader("X-Cache", "HIT");
+    res.json(cached);
+    return;
+  }
 
   // ── Trending: pre-aggregated JOIN to avoid correlated subquery per-row ──────
   if (sort === "trending") {
@@ -136,7 +177,11 @@ router.get("/tokens", async (req, res): Promise<void> => {
       updatedAt:            r["updated_at"] as string,
     }));
     const pctChanges = await fetch24hPctChanges(mapped.map(r => r.address));
-    res.json(ListTokensResponse.parse(mapped.map(r => formatToken(r, pctChanges.get(r.address)))));
+    const payload = ListTokensResponse.parse(mapped.map(r => formatToken(r, pctChanges.get(r.address))));
+    _cacheSet(cacheKey, payload);
+    res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
+    res.setHeader("X-Cache", "MISS");
+    res.json(payload);
     return;
   }
 
@@ -183,7 +228,11 @@ router.get("/tokens", async (req, res): Promise<void> => {
   }).slice(0, Number(limit));
 
   const pctChanges = await fetch24hPctChanges(tokens.map(t => t.address));
-  res.json(ListTokensResponse.parse(tokens.map(t => formatToken(t, pctChanges.get(t.address)))));
+  const payload = ListTokensResponse.parse(tokens.map(t => formatToken(t, pctChanges.get(t.address))));
+  _cacheSet(cacheKey, payload);
+  res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
+  res.setHeader("X-Cache", "MISS");
+  res.json(payload);
 });
 
 // POST /tokens

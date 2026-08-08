@@ -500,11 +500,23 @@ export default function Dashboard() {
 
   const { data: trending, isLoading: loadingTrending } = useGetTrendingTokens({ limit: 8 });
 
-  // Bubble map: top 40 tokens by volume (separate fetch, updates every 30s)
+  // Bubble map: top 40 tokens by volume.
+  // Poll every 60s (not 30s) — real-time price movement is already delivered
+  // via the WebSocket live-update feed; the REST poll only needs to catch new
+  // tokens entering the top-40 list and refresh the 24h pct-change window.
+  // staleTime=55s prevents redundant refetches on window-focus / tab switch.
+  // refetchOnWindowFocus=false avoids hammering the API when the user alt-tabs.
   const bubbleListParams = { sort: ListTokensSort.volume, limit: 40 };
   const { data: bubbleRawTokens } = useListTokens(
     bubbleListParams,
-    { query: { refetchInterval: 30_000, queryKey: getListTokensQueryKey(bubbleListParams) } }
+    {
+      query: {
+        refetchInterval:      60_000,
+        staleTime:            55_000,
+        refetchOnWindowFocus: false,
+        queryKey:             getListTokensQueryKey(bubbleListParams),
+      },
+    }
   );
   const bubbleTokens = useMemo<TokenBubbleInput[]>(() => {
     if (!bubbleRawTokens) return [];
