@@ -68,9 +68,9 @@ interface TooltipState {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MIN_R = 16;
-const MAX_R = 86;
-const GAP   = 2;            // tight pack — bubbles nearly touching like the reference
+const MIN_R = 12;
+const MAX_R = 72;
+const GAP   = 2;
 const SOL_PRICE_USD = 160;  // fallback if no solPrice prop
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
@@ -127,8 +127,10 @@ function toHex(n: number) { return Math.round(Math.max(0, Math.min(255, n))).toS
 
 function calcRadius(rank: number, total: number): number {
   if (total <= 1) return MAX_R;
-  const norm    = 1 - rank / (total - 1);        // 1.0 → 0.0
-  const curved  = Math.pow(norm, 0.55);           // sqrt-ish: top tokens get disproportionately bigger
+  const norm   = 1 - rank / (total - 1);          // 1.0 (rank 0) → 0.0 (rank n-1)
+  // Exponent 2.2 = steep power curve: top 5 tokens are BIG, bottom 60 are small
+  // rank 0 → 72px, rank 4 → ~65px, rank 24 → ~42px, rank 49 → ~24px, rank 74 → ~15px
+  const curved = Math.pow(norm, 2.2);
   return Math.max(MIN_R, Math.min(MAX_R, MIN_R + curved * (MAX_R - MIN_R)));
 }
 
@@ -138,7 +140,7 @@ function calcRadius(rank: number, total: number): number {
 
 const GOLDEN_ANGLE = 2.39996; // radians — fills plane without clustering
 
-function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 450) {
+function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 320) {
   if (W <= 0 || H <= 0) return;
   const cx = W / 2;
   const cy = H / 2;
@@ -283,21 +285,21 @@ function drawBubble(
   ctx.lineWidth = isHovered ? 1.5 : 0.8;
   ctx.stroke();
 
-  if (r < 30) return; // too small — skip all text/logo
+  if (r < 20) return; // too small — skip all text/logo
 
-  // ── Determine content tier ────────────────────────────────────────────────
-  const showLogo   = r >= 58 && b.img && b.imgLoaded;
-  const showSymbol = r >= 42;
-  const showPct    = true; // always for r >= 30
+  // ── Determine content tier based on radius ────────────────────────────────
+  const showLogo   = r >= 46 && b.img && b.imgLoaded;
+  const showSymbol = r >= 26;
+  const showPct    = r >= 20;
+
+  if (!showPct) return;
 
   const pctText = b.pctChange >= 0
     ? `+${b.pctChange.toFixed(2)}%`
     : `${b.pctChange.toFixed(2)}%`;
 
-  // Vertical layout: distribute logo / symbol / pct within bubble
-  // Total text block height = sum of font sizes + gaps
-  const pctFontSize    = Math.max(9,  Math.min(r * 0.30, 22));
-  const symFontSize    = Math.max(8,  Math.min(r * 0.22, 16));
+  const pctFontSize    = Math.max(7,  Math.min(r * 0.28, 19));
+  const symFontSize    = Math.max(6,  Math.min(r * 0.20, 13));
   const logoR          = r * 0.28;
   const logoDiameter   = logoR * 2;
   const gap            = r * 0.06;
@@ -448,7 +450,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 
         floatPhaseY: prev?.floatPhaseY ?? Math.random() * Math.PI * 2,
         floatFreqX:  prev?.floatFreqX  ?? (0.00025 + Math.random() * 0.00040),
         floatFreqY:  prev?.floatFreqY  ?? (0.00020 + Math.random() * 0.00038),
-        floatAmp:    prev?.floatAmp    ?? (8 + Math.random() * 12), // 8–20px visible bob
+        floatAmp:    prev?.floatAmp    ?? (r * 0.10 + Math.random() * r * 0.08), // ~10–18% of radius
         imgLoaded: prev?.imgLoaded ?? false,
         img: prev?.img,
       };
