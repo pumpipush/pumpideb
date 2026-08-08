@@ -114,6 +114,8 @@ function TokenImage({ imageUrl, symbol, className, textSize = "text-5xl" }: {
   textSize?: string;
 }) {
   const [broken, setBroken] = useState(false);
+  // Reset broken state when imageUrl changes — enrichment can replace a bad URL
+  useEffect(() => { setBroken(false); }, [imageUrl]);
   const src = resolveImageUrl(imageUrl ?? "") ?? "";
   if (!imageUrl || broken) {
     return (
@@ -191,7 +193,7 @@ function SortTh({
 }
 
 // ─── Table view ───────────────────────────────────────────────────────────────
-function TableView({ tokens, solPrice, activeTab }: { tokens: DisplayToken[]; solPrice: number | null; activeTab: SortTab }) {
+function TableView({ tokens, solPrice, activeTab, startRank }: { tokens: DisplayToken[]; solPrice: number | null; activeTab: SortTab; startRank: number }) {
   const [sortKey, setSortKey] = useState<TableSortKey>("rank");
   const [sortDir, setSortDir] = useState<TableSortDir>("asc");
 
@@ -257,7 +259,7 @@ function TableView({ tokens, solPrice, activeTab }: { tokens: DisplayToken[]; so
                       : "border-l-transparent hover:border-l-primary/40"
                 )}
               >
-                <td className="px-3 py-3 text-xs text-muted-foreground/50 font-mono tabular-nums">{idx + 1}</td>
+                <td className="px-3 py-3 text-xs text-muted-foreground/50 font-mono tabular-nums">{startRank + idx}</td>
                 <td className="px-3 py-3">
                   <Link href={`/app?token=${token.address}`} className="flex items-center gap-2.5 min-w-0">
                     <div className="relative shrink-0">
@@ -931,7 +933,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="mt-1">
-                <TableView tokens={tokens} solPrice={solPrice} activeTab={activeTab} />
+                <TableView tokens={tokens} solPrice={solPrice} activeTab={activeTab} startRank={(page - 1) * PAGE_SIZE + 1} />
               </div>
             )}
 

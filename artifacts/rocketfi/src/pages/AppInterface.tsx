@@ -309,7 +309,13 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
 function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string | null, selectedAddress: string | null, onSelectToken: (addr: string) => void }) {
   const [search, setSearch] = useState("");
-  const { data: searchResults } = useListTokens({ search }, { query: { enabled: search.length > 1, queryKey: getListTokensQueryKey({ search }) } });
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  // Debounce: only fire API after 300ms idle — prevents a request per keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  const { data: searchResults } = useListTokens({ search: debouncedSearch }, { query: { enabled: debouncedSearch.length > 1, queryKey: getListTokensQueryKey({ search: debouncedSearch }) } });
   
   const { data: token, refetch: refetchToken, isLoading: loadingToken, isError: tokenError } = useGetToken(selectedAddress || "", { 
     query: { 
