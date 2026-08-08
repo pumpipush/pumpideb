@@ -425,9 +425,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       const older = (history ?? [])
         .filter(t => { const ts = new Date(t.timestamp).getTime(); return Number.isFinite(ts) && ts <= cutoff; })
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      if (!older.length) return null;
-      const p = parseFloat(older[0].priceEth ?? "0");
-      return Number.isFinite(p) && p > 0 ? p : null;
+      // Walk from most-recent-before-cutoff backward; skip null/zero priceEth rows
+      // (legacy heal-path trades stored priceEth = null).
+      for (const t of older) {
+        const p = parseFloat(t.priceEth ?? "0");
+        if (Number.isFinite(p) && p > 0) return p;
+      }
+      return null;
     };
     const pct = (old: number | null): { val: string; up: boolean } | null => {
       if (!old || old === 0 || currentPrice === 0) return null;
