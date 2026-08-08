@@ -522,20 +522,24 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 
         // Unique floating bob per bubble — keep existing if re-using prev
         floatPhaseX: prev?.floatPhaseX ?? Math.random() * Math.PI * 2,
         floatPhaseY: prev?.floatPhaseY ?? Math.random() * Math.PI * 2,
-        // Top-5 circles: slow majestic drift (period ~10-14s); labels: faster (5-8s)
-        floatFreqX:  prev?.floatFreqX  ?? (i < TOP_CIRCLES
-          ? 0.00012 + Math.random() * 0.00015   // ~0.45–0.65 rad/s → 9-14s period
-          : 0.00028 + Math.random() * 0.00030), // ~1.0–1.6 rad/s → 4-6s period
-        // Y freq = freqX * 1.5 → Lissajous 3:2 → figure-8 orbital paths
-        floatFreqY:  prev?.floatFreqY  ?? (i < TOP_CIRCLES
-          ? (0.00012 + Math.random() * 0.00015) * 1.5
-          : (0.00028 + Math.random() * 0.00030) * 1.5),
-        // Large circles drift visibly; small labels subtly
-        floatAmp:    prev?.floatAmp    ?? (i < TOP_CIRCLES
-          ? 10 + Math.random() * 8              // 10–18px
-          : 3  + Math.random() * 4),             // 3–7px
-        pulsePhase:  prev?.pulsePhase  ?? Math.random() * Math.PI * 2,
-        pulseFreq:   prev?.pulseFreq   ?? (0.00018 + Math.random() * 0.00012), // ~5-8s breath
+        // T is in ms; freq in rad/ms. Period = 2π/freq.
+        // Top-5: 8-15s period → freq = 2π/8000–2π/15000 ≈ 0.00042–0.00079
+        // Labels: 4-8s period  → freq = 2π/4000–2π/8000  ≈ 0.00079–0.00157
+        // Always regenerate so stale (pre-fix) values don't persist
+        floatFreqX:  i < TOP_CIRCLES
+          ? 0.00042 + Math.random() * 0.00037   // 8–15s period
+          : 0.00079 + Math.random() * 0.00079,  // 4–8s period
+        // Y = freqX * 1.5 → Lissajous 3:2 ratio → figure-8 / orbital paths
+        floatFreqY:  i < TOP_CIRCLES
+          ? (0.00042 + Math.random() * 0.00037) * 1.5
+          : (0.00079 + Math.random() * 0.00079) * 1.5,
+        // Large circles drift more; small labels subtler
+        floatAmp:    prev?.floatAmp ?? (i < TOP_CIRCLES
+          ? 12 + Math.random() * 8              // 12–20px
+          : 3  + Math.random() * 4),            // 3–7px
+        pulsePhase:  prev?.pulsePhase ?? Math.random() * Math.PI * 2,
+        // Breath: 5-8s period → freq = 2π/5000–2π/8000 ≈ 0.00079–0.00126
+        pulseFreq:   0.00079 + Math.random() * 0.00047,
         imgLoaded: prev?.imgLoaded ?? false,
         img: prev?.img,
       };
@@ -612,11 +616,10 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420 
       const bubbles = bubblesRef.current;
 
       // ── Float animation — professional 3-harmonic Lissajous paths ────────────
-      // X uses freqX; Y uses freqX * 1.5 (Lissajous 3:2) → figure-8 / orbital paths
-      // 3 harmonics per axis (primary + golden-ratio + sub) → truly aperiodic motion
+      // T in MILLISECONDS so freq values (rad/ms) give visible periods
       // Top-5 circles also get radius breathing (±3% pulse)
-      const T    = performance.now() * 0.001; // seconds
-      const PHI  = 1.6180339887;              // golden ratio
+      const T     = performance.now();   // ms
+      const PHI   = 1.6180339887;        // golden ratio
       const SQRT2 = 1.4142135624;
 
       for (let i = 0; i < bubbles.length; i++) {
