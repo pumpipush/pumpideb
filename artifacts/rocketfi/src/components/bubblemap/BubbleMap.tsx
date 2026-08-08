@@ -286,7 +286,7 @@ function drawBubble(
   if (r < 16) return;
 
   // ── Text layout ───────────────────────────────────────────────────────────
-  const showLogo   = r >= 40 && b.img && b.imgLoaded;
+  const showLogo   = r >= 40 && b.img && b.imgLoaded && b.img.naturalWidth > 0;
   const showSymbol = r >= 26;
   const pctText    = (b.pctChange >= 0 ? "+" : "") + b.pctChange.toFixed(2) + "%";
   const pctFontSz  = Math.max(7,  Math.min(r * 0.30, 20));
