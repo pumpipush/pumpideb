@@ -1284,11 +1284,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 <table className="text-[14px]" style={{ minWidth: "520px", width: "100%" }}>
                   <thead style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
                     <tr>
-                      <th className="text-left px-3 py-2.5 font-medium text-[14px]" style={{ color: "#94a3b8" }}>Type</th>
-                      <th className="text-right px-3 py-2.5 font-medium text-[14px]" style={{ color: "#94a3b8" }}>Amount SOL</th>
-                      <th className="text-right px-3 py-2.5 font-medium text-[14px]" style={{ color: "#94a3b8" }}>{token.symbol}</th>
-                      <th className="text-right px-3 py-2.5 font-medium text-[14px]" style={{ color: "#94a3b8" }}>Time</th>
-                      <th className="text-right px-3 py-2.5 font-medium text-[14px]" style={{ color: "#94a3b8" }}>Txn</th>
+                      <th className="text-left px-3 py-2.5 font-normal text-[14px]" style={{ color: "#94a3b8" }}>Type</th>
+                      <th className="text-right px-3 py-2.5 font-normal text-[14px]" style={{ color: "#94a3b8" }}>Amount SOL</th>
+                      <th className="text-right px-3 py-2.5 font-normal text-[14px]" style={{ color: "#94a3b8" }}>{token.symbol}</th>
+                      <th className="text-right px-3 py-2.5 font-normal text-[14px]" style={{ color: "#94a3b8" }}>Time</th>
+                      <th className="text-right px-3 py-2.5 font-normal text-[14px]" style={{ color: "#94a3b8" }}>Txn</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1332,7 +1332,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                             {/* Type */}
                             <td className="px-3 py-2.5">
                               <div className="flex items-center gap-2">
-                                <span className="text-[14px] font-semibold"
+                                <span className="text-[14px] font-normal"
                                   style={{ color: isBuy ? "#4ade80" : "#f87171" }}>
                                   {isBuy ? "Buy" : "Sell"}
                                 </span>
