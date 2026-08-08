@@ -725,7 +725,7 @@ export default function Dashboard() {
                       tokens={bubbleTokens}
                       liveUpdates={liveTradeStats}
                       solPrice={solPrice}
-                      height={400}
+                      height={440}
                     />
                   )}
                 </div>
