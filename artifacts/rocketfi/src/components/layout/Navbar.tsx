@@ -109,7 +109,7 @@ export function Navbar() {
       {/* Desktop: full search bar */}
       <button
         onClick={openSearch}
-        className="hidden md:flex relative items-center w-full max-w-sm h-8 rounded-sm bg-card border border-white/[0.14] px-2.5 gap-2.5 text-left hover:border-white/25 hover:bg-card/80 transition-colors group"
+        className="hidden md:flex relative items-center w-full max-w-sm h-8 rounded-sm bg-card border border-white/30 px-2.5 gap-2.5 text-left hover:border-white/50 hover:bg-card/80 transition-colors group"
       >
         <Search className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0 group-hover:text-primary/60 transition-colors" />
         <span className="flex-1 text-xs text-muted-foreground/50 truncate">Search coins…</span>
