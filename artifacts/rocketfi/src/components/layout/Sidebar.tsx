@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Flame, LayoutGrid, ArrowRightLeft, Plus, UserCircle2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, diceBearUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useWallet } from "@/contexts/WalletContext";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
@@ -62,15 +62,12 @@ export function Sidebar() {
                 : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
             )}
           >
-            {profile?.avatarUrl ? (
-              <img
-                src={profile.avatarUrl}
-                alt="avatar"
-                className="w-4 h-4 rounded-full object-cover shrink-0"
-              />
-            ) : (
-              <UserCircle2 className={cn("w-4 h-4 shrink-0 transition-transform duration-200", location === `/profile/${wallet}` ? "text-primary" : "group-hover:scale-110")} />
-            )}
+            <img
+              src={profile?.avatarUrl || diceBearUrl(wallet)}
+              alt="avatar"
+              className="w-4 h-4 rounded-full object-cover shrink-0"
+              style={{ imageRendering: profile?.avatarUrl ? "auto" : "pixelated" }}
+            />
             <span className="flex-1 truncate">
               {profile?.username ?? formatAddress(wallet)}
             </span>

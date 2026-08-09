@@ -171,3 +171,8 @@ export function symbolColor(symbol: string): string {
   for (let i = 0; i < symbol.length; i++) h = (h * 31 + symbol.charCodeAt(i)) & 0xffffffff;
   return colors[(h >>> 0) % colors.length];
 }
+
+/** Generate a DiceBear pixel-art avatar URL. Seed is wallet address or any unique string. */
+export function diceBearUrl(seed: string): string {
+  return `https://api.dicebear.com/9.x/pixel-art/svg?seed=${encodeURIComponent(seed)}`;
+}

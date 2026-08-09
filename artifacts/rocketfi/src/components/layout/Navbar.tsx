@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Search, Wallet } from "lucide-react";
 import { useWallet } from "@/contexts/WalletContext";
 import { useGetProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
-import { formatAddress } from "@/lib/utils";
+import { formatAddress, diceBearUrl } from "@/lib/utils";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Link } from "wouter";
 import { openSearch } from "@/components/shared/SearchDialog";
@@ -69,15 +69,12 @@ function WalletButton() {
       {/* Profile avatar — always visible */}
       <Link href={`/profile/${wallet}`}>
         <button className="relative h-8 w-8 rounded-full overflow-hidden border-2 border-border hover:border-primary/50 transition-colors shrink-0">
-          {profile?.avatarUrl ? (
-            <img src={profile.avatarUrl} alt={profile.username} className="w-full h-full object-cover" />
-          ) : (
-            <TokenAvatar
-              symbol={profile?.username || wallet.slice(0, 4)}
-              size={32}
-              shape="circle"
-            />
-          )}
+          <img
+            src={profile?.avatarUrl || diceBearUrl(wallet)}
+            alt={profile?.username ?? wallet}
+            className="w-full h-full object-cover"
+            style={{ imageRendering: profile?.avatarUrl ? "auto" : "pixelated" }}
+          />
         </button>
       </Link>
 

@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { copyToClipboard } from "@/components/shared/CopyToast";
 import { useWallet } from "@/contexts/WalletContext";
-import { formatAddress, formatMC, formatEth, formatSol, timeAgo, cn } from "@/lib/utils";
+import { formatAddress, formatMC, formatEth, formatSol, timeAgo, cn, diceBearUrl } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Link } from "wouter";
@@ -70,20 +70,13 @@ function bannerGradient(address: string): string {
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 function AvatarDisplay({ profile, size = 80 }: { profile: Profile; size?: number }) {
-  if (profile.avatarUrl) {
-    return (
-      <img
-        src={profile.avatarUrl}
-        alt={profile.username}
-        className="rounded-full object-cover w-full h-full"
-      />
-    );
-  }
+  const src = profile.avatarUrl || diceBearUrl(profile.address);
   return (
-    <TokenAvatar
-      symbol={profile.username || profile.address.slice(2, 6)}
-      size={size}
-      shape="circle"
+    <img
+      src={src}
+      alt={profile.username ?? profile.address}
+      className="rounded-full object-cover w-full h-full"
+      style={{ imageRendering: "pixelated" }}
     />
   );
 }
@@ -682,11 +675,12 @@ export default function ProfilePage() {
             {/* ── Avatar upload ── */}
             <div className="flex items-center gap-4 mb-6">
               <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-border bg-muted shrink-0">
-                {editForm.avatarPreview ? (
-                  <img src={editForm.avatarPreview} alt="avatar" className="w-full h-full object-cover" />
-                ) : (
-                  <TokenAvatar symbol={editForm.username || address.slice(2, 6)} size={80} shape="circle" />
-                )}
+                <img
+                  src={editForm.avatarPreview || diceBearUrl(address)}
+                  alt="avatar"
+                  className="w-full h-full object-cover"
+                  style={{ imageRendering: editForm.avatarPreview ? "auto" : "pixelated" }}
+                />
                 {avatarUploading && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/50">
                     <Loader2 className="w-5 h-5 animate-spin text-white" />
