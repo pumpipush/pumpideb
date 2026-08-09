@@ -321,16 +321,9 @@ export default function ProfilePage() {
     : (profile.username ?? generateUsername(address));
 
   return (
-    <div className="w-full max-w-3xl mx-auto pb-16 md:pb-20">
+    <div className="w-full max-w-3xl pb-16 md:pb-20">
 
       {/* ── Back ── */}
-      <button
-        onClick={() => setLocation("/")}
-        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-4 pt-4 pb-0"
-      >
-        <ArrowLeft className="w-3.5 h-3.5" /> Back to Explore
-      </button>
-
       {/* ── Banner ── */}
       <div
         className="relative mt-2 h-24 sm:h-36 w-full overflow-hidden"
