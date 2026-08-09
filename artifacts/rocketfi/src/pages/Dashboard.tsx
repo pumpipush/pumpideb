@@ -788,7 +788,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-2 justify-between overflow-x-auto scrollbar-none">
               {/* Sort tabs */}
               <div className="flex gap-1 bg-card border border-border/40 rounded-sm p-0.5">
-                {(["New", "Trending", "Volume", "Graduated"] as SortTab[]).map((tab) => (
+                {(["Trending", "New", "Volume", "Graduated"] as SortTab[]).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => { setActiveTab(tab); setPage(1); }}
