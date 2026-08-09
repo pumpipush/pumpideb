@@ -1511,8 +1511,15 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             </div>
           </div>
 
-          {/* ── MOBILE: Row 2 — Bonding Curve full width ── */}
-          <div className="md:hidden">
+          {/* ── MOBILE: Row 2 — Bonding Curve (pump.fun only) / Platform badge (others) ── */}
+          <div className="md:hidden">{token.platform !== "pump_fun" ? (
+            <div className="flex items-center gap-2 py-1">
+              <span className="text-[12px] font-medium" style={{ color: "#94a3b8" }}>Platform</span>
+              <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.25)" }}>
+                {token.platform === "raydium_launchlab" ? "Raydium LaunchLab" : token.platform}
+              </span>
+            </div>
+          ) : <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-[12px] font-medium" style={{ color: "#94a3b8" }}>Bonding Curve</span>
               <span
@@ -1557,7 +1564,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 </span>
               </div>
             )}
-          </div>
+          </div>}</div>
 
           {/* ── MOBILE: Row 3 — Vol 24h (left) + 5m / 1h / 6h % (right) ── */}
           <div className="flex items-center justify-between mt-2 md:hidden">
@@ -1598,7 +1605,25 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 {formatMCUsd(effectiveMcEth, solPrice)}
               </span>
             </div>
-            {/* Bonding Curve */}
+            {/* Bonding Curve — pump.fun only; for other platforms show a platform badge */}
+            {token.platform !== "pump_fun" ? (
+              <div className="w-[380px] shrink-0 flex flex-col justify-center">
+                <span className="text-[14px] font-medium mb-1" style={{ color: "#94a3b8" }}>Platform</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[14px] font-semibold px-3 py-1 rounded-full" style={{ background: "rgba(99,102,241,0.12)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.25)" }}>
+                    {token.platform === "raydium_launchlab" ? "⚡ Raydium LaunchLab" :
+                     token.platform === "moonshot"         ? "🌙 Moonshot" :
+                     token.platform === "letsbonk"         ? "🔨 LetsBONK" :
+                     token.platform === "daos_fun"         ? "🏛️ Daos.fun" : token.platform}
+                  </span>
+                  {token.graduated && (
+                    <span className="text-[12px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(34,197,94,0.12)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.28)" }}>
+                      ✓ Graduated
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
             <div className="w-[380px] shrink-0 flex flex-col justify-center">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[14px] font-medium" style={{ color: "#94a3b8" }}>Bonding Curve</span>
@@ -1645,6 +1670,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 </div>
               )}
             </div>
+            )}
             {/* Price */}
             <div className="flex-1 flex flex-col justify-center items-end">
               <span className="text-[12px] font-medium mb-0.5" style={{ color: "#94a3b8" }}>Price USD</span>

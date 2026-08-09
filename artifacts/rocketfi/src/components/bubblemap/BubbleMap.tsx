@@ -6,6 +6,7 @@
  * - Hover tooltip, zoom/pan, click-to-navigate
  */
 import { useEffect, useRef, useCallback, useState } from "react";
+import { useLocation } from "wouter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -507,6 +508,7 @@ interface BubbleMapProps {
 }
 
 export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420, radiusScale = 1 }: BubbleMapProps) {
+  const [, navigate]  = useLocation();
   const canvasRef     = useRef<HTMLCanvasElement>(null);
   const containerRef  = useRef<HTMLDivElement>(null);
   const bubblesRef    = useRef<BubbleState[]>([]);
@@ -803,9 +805,11 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
     const idx         = findBubble(x, y);
     if (idx >= 0) {
       const token = bubblesRef.current[idx];
-      window.location.href = `/app?token=${token.address}`;
+      // Use SPA navigation (wouter) instead of a hard reload so the animation
+      // doesn't abruptly stop and the browser doesn't flash a blank page.
+      navigate(`/app?token=${token.address}`);
     }
-  }, [canvasToWorld, clientToCanvas, findBubble]);
+  }, [canvasToWorld, clientToCanvas, findBubble, navigate]);
 
   const onMouseLeave = useCallback(() => {
     hoverIdxRef.current = -1;
