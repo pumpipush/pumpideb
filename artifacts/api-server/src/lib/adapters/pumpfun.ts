@@ -208,8 +208,8 @@ function decodePumpCreate(tx: RpcTx): { name: string; symbol: string; uri: strin
 /** Swap slow public IPFS gateway to Cloudflare's CDN-backed gateway. */
 function resolveIpfs(url: string): string {
   return url
-    .replace(/^ipfs:\/\//, "https://cf-ipfs.com/ipfs/")
-    .replace(/https?:\/\/ipfs\.io\/ipfs\//, "https://cf-ipfs.com/ipfs/");
+    .replace(/^ipfs:\/\//, "https://ipfs.io/ipfs/")
+    .replace(/https?:\/\/cf-ipfs\.com\/ipfs\//, "https://ipfs.io/ipfs/");
 }
 
 async function fetchImageFromUri(uri: string): Promise<string | null> {
@@ -343,7 +343,7 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
       // shows a gradient placeholder that immediately flips to a real image.
       //
       // Race plan:
-      //  • cf-ipfs.com typically resolves in <2 s → broadcast WITH image, done.
+      //  • ipfs.io resolves the image → broadcast WITH image, done.
       //  • If it takes >3 s → broadcast now with null so the card at least appears,
       //    then broadcast again with the image when it eventually resolves.
       let broadcasted = false;

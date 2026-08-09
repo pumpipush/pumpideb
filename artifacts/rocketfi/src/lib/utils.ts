@@ -66,15 +66,15 @@ export function formatUSD(usd: number): string {
 }
 
 /**
- * Swap slow public IPFS gateways for Cloudflare's CDN-backed gateway.
- * ipfs.io cold-loads in 5-10 s; cf-ipfs.com is typically <500 ms.
+ * Normalise IPFS URLs to the ipfs.io public gateway.
+ * cf-ipfs.com was shut down by Cloudflare — ipfs.io is the canonical fallback.
  */
 export function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.startsWith("ipfs://"))
-    return "https://cf-ipfs.com/ipfs/" + url.slice(7);
-  if (url.includes("ipfs.io/ipfs/"))
-    return url.replace(/https?:\/\/ipfs\.io\/ipfs\//, "https://cf-ipfs.com/ipfs/");
+    return "https://ipfs.io/ipfs/" + url.slice(7);
+  if (url.includes("cf-ipfs.com/ipfs/"))
+    return url.replace(/https?:\/\/cf-ipfs\.com\/ipfs\//, "https://ipfs.io/ipfs/");
   return url;
 }
 
