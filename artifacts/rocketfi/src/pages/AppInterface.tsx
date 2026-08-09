@@ -131,7 +131,7 @@ export default function AppInterface() {
       <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col flex-1 min-h-0">
         <div className="shrink-0 border-b border-border/30 px-4 md:px-5 overflow-x-auto">
           <TabsList className="flex justify-start bg-transparent p-0 h-auto rounded-none gap-0 min-w-max">
-            <TabsTrigger value="launch"    className={TAB_TRIGGER}><Rocket className="w-3.5 h-3.5 mr-1.5" />Launch Token</TabsTrigger>
+            <TabsTrigger value="launch"    className={TAB_TRIGGER}><Rocket className="w-3.5 h-3.5 mr-1.5" />Launch</TabsTrigger>
             <TabsTrigger value="trade"     className={TAB_TRIGGER}><ArrowRightLeft className="w-3.5 h-3.5 mr-1.5" />Trade</TabsTrigger>
             <TabsTrigger value="portfolio" className={TAB_TRIGGER}><Wallet className="w-3.5 h-3.5 mr-1.5" />My Tokens</TabsTrigger>
           </TabsList>
