@@ -597,16 +597,45 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
       ? new Date(tx.blockTime * 1000)
       : new Date();
 
-    // graduated=true is always written (idempotent).
-    // graduated_at uses COALESCE so the first recorded timestamp wins —
-    // replayed or duplicate migration events do not overwrite it.
+    // Extract fee payer from the migration tx — used as a creatorAddress fallback
+    // when the token was never indexed (creation event missed during a reconnect gap).
+    const migKeys = tx.transaction?.message?.accountKeys ?? [];
+    const migK0   = migKeys[0];
+    const migFeePayer = migK0 ? (typeof migK0 === "string" ? migK0 : (migK0 as { pubkey?: string }).pubkey ?? "") : "";
+
+    // Upsert: create a minimal stub if this token was never indexed, then mark as
+    // graduated. This handles tokens that launched and graduated while the WebSocket
+    // had a reconnect gap — without this they'd be invisible to the PumpSwap indexer
+    // and their post-graduation trades would never update the token stats.
+    // The enrichment job fills in name, symbol, and image from on-chain metadata.
     await db
-      .update(tokensTable)
-      .set({
-        graduated:   true,
-        graduatedAt: sql`COALESCE(${tokensTable.graduatedAt}, ${graduatedAt})`,
+      .insert(tokensTable)
+      .values({
+        address:              mint,
+        name:                 "???",       // placeholder — enrichment will overwrite
+        symbol:               "???",       // placeholder — enrichment will overwrite
+        description:          null,
+        imageUrl:             null,
+        creatorAddress:       migFeePayer || "unknown",
+        totalSupply:          PUMP_TOTAL_SUPPLY.toString(),
+        virtualTokenReserves: "0",
+        virtualEthReserves:   "0",
+        marketCapEth:         "0",
+        priceEth:             null,
+        platform:             PLATFORM,
+        chain:                CHAIN,
+        graduated:            true,
+        graduatedAt,
       })
-      .where(eq(tokensTable.address, mint));
+      .onConflictDoUpdate({
+        target: tokensTable.address,
+        set: {
+          // Only update graduation fields — never overwrite real data written during
+          // the bonding-curve phase (name, symbol, price, etc. stay intact).
+          graduated:   true,
+          graduatedAt: sql`COALESCE(${tokensTable.graduatedAt}, EXCLUDED.graduated_at)`,
+        },
+      });
 
     // Immediately register with the Raydium adapter — no need to wait for its
     // next periodic DB refresh.

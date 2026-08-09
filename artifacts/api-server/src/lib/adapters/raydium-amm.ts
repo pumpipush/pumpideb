@@ -436,6 +436,26 @@ class RaydiumMultiSubscriber {
 
     if (!trade) return; // duplicate tx
 
+    // Lazy-insert a minimal token stub if this mint was never indexed.
+    // This handles tokens that graduated during a WebSocket gap — the pumpfun
+    // graduation handler does an upsert now, but older gaps before that fix are
+    // also covered here. The enrichment job will overwrite name/symbol/image.
+    // Pump.fun standard total supply: 1,000,000,000 × 10^6 atoms = 1_000_000_000_000_000.
+    await db.insert(tokensTable).values({
+      address:              mint,
+      name:                 "???",
+      symbol:               "???",
+      creatorAddress:       traderAddress,         // best available: first post-graduation trader
+      totalSupply:          "1000000000000000",     // pump.fun standard
+      virtualTokenReserves: "0",
+      virtualEthReserves:   "0",
+      marketCapEth:         "0",
+      priceEth:             null,
+      platform:             "pump_fun",             // token origin (always pump.fun for graduated tokens)
+      chain:                CHAIN,
+      graduated:            true,
+    }).onConflictDoNothing();
+
     // Update token aggregate stats.
     // market_cap_eth (lamports) = total_supply_atoms × sol_lamports / token_atoms
     await db.update(tokensTable).set({

@@ -10,6 +10,7 @@ import {
 } from "@workspace/api-zod";
 import { emitTrade, emitSnapshot, tradeEmitter, type TradeEvent, type SnapshotEvent } from "../lib/tradeEmitter";
 import type { NewTokenEvent } from "../lib/tradeEmitter"; // imported for type completeness
+import { registerGraduatedMint } from "../lib/adapters/raydium-amm";
 
 const router: IRouter = Router();
 
@@ -36,6 +37,23 @@ router.get("/tokens/:address/stream", async (req: Request, res: Response) => {
     .select()
     .from(tokensTable)
     .where(eq(tokensTable.address, address));
+
+  // On-demand PumpSwap tracking.
+  //
+  // Case 1: Token is in DB and marked graduated — ensure per-mint subscription is
+  // active even if this token graduated between periodic refreshes or during a
+  // reconnect gap (registerGraduatedMint is a no-op if already registered).
+  //
+  // Case 2: Token not in DB (missed during creation due to a WebSocket gap) but its
+  // address ends in "pump" — register it for per-mint tracking proactively. Since
+  // detectDexPlatform checks the PumpSwap program ID in logs explicitly, subscribing
+  // to a bonding-curve token is safe: those swaps are filtered out because they don't
+  // mention the PumpSwap program. Only post-graduation PumpSwap swaps will match.
+  // The lazy-insert in handleSwap will create a DB stub on the first trade received.
+  const isPumpFun = address.endsWith("pump");
+  if (tokenRow?.graduated || (!tokenRow && isPumpFun)) {
+    registerGraduatedMint(address);
+  }
 
   if (tokenRow) {
     const snapshot: SnapshotEvent = {
