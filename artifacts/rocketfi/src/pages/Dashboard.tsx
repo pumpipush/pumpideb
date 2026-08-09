@@ -583,8 +583,8 @@ export default function Dashboard() {
     bubbleListParams,
     {
       query: {
-        refetchInterval:      60_000,
-        staleTime:            55_000,
+        refetchInterval:      20_000,
+        staleTime:            18_000,
         refetchOnWindowFocus: false,
         queryKey:             getListTokensQueryKey(bubbleListParams),
       },

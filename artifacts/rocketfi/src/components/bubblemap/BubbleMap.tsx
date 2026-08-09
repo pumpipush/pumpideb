@@ -476,8 +476,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
   const hoverIdxRef   = useRef<number>(-1);
   const rafRef        = useRef<number>(0);
   const initPricesRef = useRef<Map<string, number>>(new Map());
-  const isDragging    = useRef(false);
-  const dragStart     = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
+  // drag + zoom intentionally disabled — map is static (no pan/zoom)
 
   const [tooltip, setTooltip] = useState<TooltipState>({ visible: false, x: 0, y: 0, token: null });
 
@@ -742,36 +741,17 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
     const idx         = findBubble(x, y);
     hoverIdxRef.current = idx;
 
-    if (isDragging.current) {
-      const { x: sx, y: sy, ox, oy } = dragStart.current;
-      transformRef.current.ox = ox + (e.clientX - sx);
-      transformRef.current.oy = oy + (e.clientY - sy);
-      setTooltip(t => ({ ...t, visible: false }));
-      return;
-    }
-
     if (idx >= 0) {
       const b = bubblesRef.current[idx];
       canvasRef.current!.style.cursor = "pointer";
-      // Position tooltip near bubble
       const bScreenX = b.dispX * transformRef.current.scale + transformRef.current.ox;
       const bScreenY = b.dispY * transformRef.current.scale + transformRef.current.oy;
       setTooltip({ visible: true, x: bScreenX, y: bScreenY, token: b });
     } else {
-      canvasRef.current!.style.cursor = isDragging.current ? "grabbing" : "grab";
+      canvasRef.current!.style.cursor = "default";
       setTooltip(t => ({ ...t, visible: false }));
     }
   }, [canvasToWorld, clientToCanvas, findBubble]);
-
-  const onMouseDown = useCallback((e: React.MouseEvent) => {
-    isDragging.current = true;
-    dragStart.current  = {
-      x: e.clientX, y: e.clientY,
-      ox: transformRef.current.ox, oy: transformRef.current.oy,
-    };
-  }, []);
-
-  const onMouseUp = useCallback(() => { isDragging.current = false; }, []);
 
   const onClick = useCallback((e: React.MouseEvent) => {
     const { cx, cy } = clientToCanvas(e);
@@ -783,25 +763,8 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
     }
   }, [canvasToWorld, clientToCanvas, findBubble]);
 
-  const onWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta  = e.deltaY > 0 ? 0.9 : 1.1;
-    const { cx, cy } = clientToCanvas(e as unknown as React.MouseEvent);
-    const t = transformRef.current;
-    const newScale = Math.max(0.4, Math.min(4, t.scale * delta));
-    // Zoom toward cursor
-    t.ox = cx - (cx - t.ox) * (newScale / t.scale);
-    t.oy = cy - (cy - t.oy) * (newScale / t.scale);
-    t.scale = newScale;
-  }, [clientToCanvas]);
-
-  const resetView = useCallback(() => {
-    transformRef.current = { scale: 1, ox: 0, oy: 0 };
-  }, []);
-
   const onMouseLeave = useCallback(() => {
     hoverIdxRef.current = -1;
-    isDragging.current  = false;
     setTooltip(t => ({ ...t, visible: false }));
   }, []);
 
@@ -812,13 +775,10 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
       <canvas
         ref={canvasRef}
         className="rounded-xl block"
-        style={{ width: "100%", height, cursor: "grab", background: "#050508" }}
+        style={{ width: "100%", height, cursor: "default", background: "#050508" }}
         onMouseMove={onMouseMove}
-        onMouseDown={onMouseDown}
-        onMouseUp={onMouseUp}
         onMouseLeave={onMouseLeave}
         onClick={onClick}
-        onWheel={onWheel}
       />
 
       {/* Tooltip */}
