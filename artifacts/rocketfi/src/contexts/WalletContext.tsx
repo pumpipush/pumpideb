@@ -152,7 +152,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const provider = descriptor.getProvider();
     if (!provider) return;
 
-    // onlyIfTrusted: won't show a popup; resolves only if already trusted
+    // onlyIfTrusted: won't show a popup; resolves only if already trusted.
+    // On failure we do NOT clear localStorage — the wallet may simply be locked.
+    // Keeping the stored name means the next page load will silently reconnect
+    // once the user unlocks their wallet. We only clear on explicit disconnect().
     provider.connect({ onlyIfTrusted: true })
       .then(result => {
         const address = result.publicKey.toBase58();
@@ -165,8 +168,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setWalletName(savedName);
       })
       .catch(() => {
-        // Wallet not trusted / locked — silently clear stored name
-        localStorage.removeItem(STORAGE_KEY);
+        // Silent failure — wallet locked or permission revoked.
+        // Do not clear localStorage so we can retry on next reload.
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

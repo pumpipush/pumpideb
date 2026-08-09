@@ -26,7 +26,7 @@ import { ethers } from "ethers";
 import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, formatTokenPrice, cn, timeAgo } from "@/lib/utils";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { ShareModal } from "@/components/shared/ShareModal";
-import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare, Rocket, ShieldCheck, Zap, CheckCircle2, UploadCloud } from "lucide-react";
+import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare, Rocket, ShieldCheck, Zap, CheckCircle2, UploadCloud, Wallet } from "lucide-react";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { formatSol, formatTokenAmount } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -1668,14 +1668,22 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               {activeSubTab === "positions" && (() => {
                 if (!wallet) {
                   return (
-                    <div className="flex flex-col items-center justify-center py-16 gap-4 rounded-lg"
+                    <div className="flex flex-col items-center justify-center py-14 gap-4 rounded-lg"
                       style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center"
+                        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                        <Wallet className="h-5 w-5" style={{ color: "#475569" }} />
+                      </div>
+                      <div className="text-center space-y-1">
+                        <p className="text-[14px] font-semibold" style={{ color: "#cbd5e1" }}>Connect your wallet</p>
+                        <p className="text-[12px]" style={{ color: "#475569" }}>Track your position and PnL for this token</p>
+                      </div>
                       <button
                         onClick={() => openWalletModal()}
-                        className="px-8 py-2.5 rounded-md text-[14px] font-semibold tracking-wide transition-all hover:opacity-90 active:scale-95"
-                        style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.18)", color: "#e2e8f0" }}
+                        className="px-6 py-2 rounded-lg text-[13px] font-semibold tracking-wide transition-all hover:opacity-90 active:scale-95"
+                        style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.25)", color: "#4ade80" }}
                       >
-                        CONNECT WALLET
+                        Connect Wallet
                       </button>
                     </div>
                   );
@@ -2143,16 +2151,33 @@ function TradePanelForm({
           </div>
         </div>
 
-        {/* Trade button */}
-        <Button
-          className={`w-full h-11 text-sm font-bold rounded-sm shadow-none transition-all duration-200 active:scale-[0.98] ${tradeMode === "buy" ? "bg-primary hover:bg-primary/90 hover:shadow-[0_0_16px_hsl(142_100%_45%/0.35)] text-white" : "bg-destructive hover:bg-destructive/90 hover:shadow-[0_0_16px_hsl(0_84%_60%/0.3)] text-white"}`}
-          onClick={handleTrade}
-          disabled={isPending}
-        >
-          {isPending
-            ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /></span>
-            : !wallet ? "Connect wallet to trade" : "place trade"}
-        </Button>
+        {/* Trade button — changes appearance when wallet not connected */}
+        {!wallet ? (
+          <button
+            onClick={handleTrade}
+            className="w-full h-11 text-sm font-bold rounded-sm transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2"
+            style={{
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.14)",
+              color: "#e2e8f0",
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.09)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)"; }}
+          >
+            <Wallet className="h-4 w-4" style={{ color: "#94a3b8" }} />
+            Connect Wallet to Trade
+          </button>
+        ) : (
+          <Button
+            className={`w-full h-11 text-sm font-bold rounded-sm shadow-none transition-all duration-200 active:scale-[0.98] ${tradeMode === "buy" ? "bg-primary hover:bg-primary/90 hover:shadow-[0_0_16px_hsl(142_100%_45%/0.35)] text-white" : "bg-destructive hover:bg-destructive/90 hover:shadow-[0_0_16px_hsl(0_84%_60%/0.3)] text-white"}`}
+            onClick={handleTrade}
+            disabled={isPending}
+          >
+            {isPending
+              ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /></span>
+              : "Place Trade"}
+          </Button>
+        )}
       </div>
     </>
   );

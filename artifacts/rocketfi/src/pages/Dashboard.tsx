@@ -590,23 +590,26 @@ export default function Dashboard() {
       },
     }
   );
+  // NOTE: liveTradeStats is intentionally NOT in this dep array.
+  // Adding it would recompute bubbleTokens on every incoming trade, producing a
+  // new array reference → BubbleMap's layout useEffect fires → runLayout() runs
+  // → all bubbles scatter on every tick. Live price/color updates reach BubbleMap
+  // via the separate `liveUpdates` prop which updates colors without re-layout.
   const bubbleTokens = useMemo<TokenBubbleInput[]>(() => {
     if (!bubbleRawTokens) return [];
-    return bubbleRawTokens.map(t => {
-      const snap = liveTradeStats.get(t.address);
-      return {
-        address:      t.address,
-        symbol:       t.symbol,
-        name:         t.name,
-        imageUrl:     t.imageUrl,
-        marketCapEth: snap?.marketCapEth ?? t.marketCapEth,
-        volumeEth:    snap?.volumeEth    ?? t.volumeEth,
-        priceEth:     snap?.priceEth     ?? t.priceEth,
-        platform:     t.platform ?? "unknown",
-        pctChange24h: t.pctChange24h ?? null,
-      };
-    });
-  }, [bubbleRawTokens, liveTradeStats]);
+    return bubbleRawTokens.map(t => ({
+      address:      t.address,
+      symbol:       t.symbol,
+      name:         t.name,
+      imageUrl:     t.imageUrl,
+      marketCapEth: t.marketCapEth,
+      volumeEth:    t.volumeEth,
+      priceEth:     t.priceEth,
+      platform:     t.platform ?? "unknown",
+      pctChange24h: t.pctChange24h ?? null,
+    }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bubbleRawTokens]);
 
   // ── Merge live + API tokens ───────────────────────────────────────────────
   const tokens = useMemo<DisplayToken[] | undefined>(() => {
