@@ -437,10 +437,12 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               style={{
                 background: (isUploading || createToken.isPending)
                   ? "rgba(255,255,255,0.06)"
+                  : !wallet
+                  ? "rgba(255,255,255,0.08)"
                   : "hsl(var(--primary))",
                 color: (isUploading || createToken.isPending) ? "#475569" : "hsl(var(--primary-foreground))",
-                border: "none",
-                boxShadow: (isUploading || createToken.isPending) ? "none" : "0 0 20px rgba(255,255,255,0.08)",
+                border: !wallet && !isUploading && !createToken.isPending ? "1px solid rgba(255,255,255,0.15)" : "none",
+                boxShadow: (isUploading || createToken.isPending || !wallet) ? "none" : "0 0 20px rgba(255,255,255,0.08)",
                 cursor: (isUploading || createToken.isPending) ? "not-allowed" : "pointer",
               }}
             >
@@ -448,6 +450,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 <><Loader2 className="w-4 h-4 animate-spin" /> Uploading image...</>
               ) : createToken.isPending ? (
                 <><Loader2 className="w-4 h-4 animate-spin" /> Deploying on-chain...</>
+              ) : !wallet ? (
+                <><Wallet className="w-4 h-4" /> Connect Wallet to Launch</>
               ) : (
                 <><Rocket className="w-4 h-4" /> Launch Token</>
               )}
