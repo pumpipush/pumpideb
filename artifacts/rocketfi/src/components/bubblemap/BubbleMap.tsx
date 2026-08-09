@@ -268,13 +268,13 @@ function circleColors(pct: number): CircleStyle {
     };
   }
   return {
-    border:     "rgba(85,105,175,0.78)",
-    rimOuter:   "rgba(55,70,130,0.32)",
-    glow:       "rgba(65,85,155,0.38)",
-    fill:       "rgba(55,65,105,0.12)",
-    fillCenter: "rgba(22,26,52,0.0)",
-    fillMid:    "rgba(30,36,68,0.10)",
-    fillEdge:   "rgba(48,58,105,0.28)",
+    border:     "rgba(100,120,200,0.90)",
+    rimOuter:   "rgba(70,90,160,0.45)",
+    glow:       "rgba(80,105,185,0.50)",
+    fill:       "rgba(60,75,130,0.18)",
+    fillCenter: "rgba(28,34,68,0.08)",
+    fillMid:    "rgba(40,50,95,0.22)",
+    fillEdge:   "rgba(65,80,145,0.48)",
     text:       "#94a3b8",
   };
 }

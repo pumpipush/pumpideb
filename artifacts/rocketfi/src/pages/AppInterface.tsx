@@ -129,8 +129,8 @@ export default function AppInterface() {
 
       {/* ── Tab strip ── */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col flex-1 min-h-0">
-        <div className="shrink-0 border-b border-border/30 px-4 md:px-5">
-          <TabsList className="flex justify-start bg-transparent p-0 h-auto rounded-none gap-0">
+        <div className="shrink-0 border-b border-border/30 px-4 md:px-5 overflow-x-auto">
+          <TabsList className="flex justify-start bg-transparent p-0 h-auto rounded-none gap-0 min-w-max">
             <TabsTrigger value="launch"    className={TAB_TRIGGER}><Rocket className="w-3.5 h-3.5 mr-1.5" />Launch Token</TabsTrigger>
             <TabsTrigger value="trade"     className={TAB_TRIGGER}><ArrowRightLeft className="w-3.5 h-3.5 mr-1.5" />Trade</TabsTrigger>
             <TabsTrigger value="portfolio" className={TAB_TRIGGER}><Wallet className="w-3.5 h-3.5 mr-1.5" />My Tokens</TabsTrigger>
@@ -138,19 +138,19 @@ export default function AppInterface() {
         </div>
 
         {/* ── Token trade view — full-bleed, no container ── */}
-        <TabsContent value="trade" className="flex-1 mt-0 outline-none min-h-0">
+        <TabsContent value="trade" className="flex-1 mt-0 outline-none min-h-0 overflow-x-auto">
           <TradeTab wallet={wallet} selectedAddress={selectedTokenId} onSelectToken={selectToken} />
         </TabsContent>
 
         {/* ── Other tabs — contained ── */}
-        <TabsContent value="launch" className="mt-0 outline-none">
-          <div className="max-w-[1200px] mx-auto px-3 md:px-6 py-3 md:py-5">
+        <TabsContent value="launch" className="mt-0 outline-none overflow-x-auto">
+          <div className="max-w-[1200px] mx-auto px-3 md:px-6 py-3 md:py-5 min-w-[340px]">
             <LaunchTab wallet={wallet} onLaunch={(address) => selectToken(address)} />
           </div>
         </TabsContent>
 
-        <TabsContent value="portfolio" className="mt-0 outline-none">
-          <div className="max-w-[1200px] mx-auto px-3 md:px-6 py-3 md:py-5">
+        <TabsContent value="portfolio" className="mt-0 outline-none overflow-x-auto">
+          <div className="max-w-[1200px] mx-auto px-3 md:px-6 py-3 md:py-5 min-w-[340px]">
             <PortfolioTab wallet={wallet} onSelectToken={selectToken} />
           </div>
         </TabsContent>
@@ -1242,7 +1242,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
   return (
     /* Full-bleed two-column layout — mirrors pump.fun */
-    <div className="flex flex-col md:flex-row w-full animate-slideDown md:h-[calc(100dvh-96px)]">
+    <div className="flex flex-col md:flex-row w-full animate-slideDown md:h-[calc(100dvh-96px)] min-w-[320px] md:min-w-[680px]">
 
       {/* ── LEFT: scrollable chart + info ── */}
       <div data-token-panel className="flex-1 min-w-0 overflow-y-auto border-r border-border/20 px-0 md:px-5 py-0 md:py-4 pb-20 md:pb-6">
