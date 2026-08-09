@@ -4,7 +4,7 @@ import { useWallet } from "@/contexts/WalletContext";
 import { useGetProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
 import { formatAddress, diceBearUrl } from "@/lib/utils";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { openSearch } from "@/components/shared/SearchDialog";
 import { useState } from "react";
 import { WalletSelectModal } from "@/components/shared/WalletSelectModal";
@@ -14,6 +14,7 @@ function WalletButton() {
   const { wallet, walletName, disconnect } = useWallet();
   const [walletModal, setWalletModal] = useState(false);
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   async function handleDisconnect() {
     await disconnect();
@@ -29,28 +30,22 @@ function WalletButton() {
       <>
         {/* Mobile: icon only */}
         <button
-          onClick={() => setWalletModal(true)}
+          onClick={() => navigate("/signin")}
           className="md:hidden flex items-center justify-center h-8 w-8 rounded-sm border border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
-          aria-label="Connect Wallet"
+          aria-label="Sign In"
         >
           <Wallet className="h-4 w-4" />
         </button>
 
-        {/* Desktop: text button */}
+        {/* Desktop: Sign In button */}
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setWalletModal(true)}
+          onClick={() => navigate("/signin")}
           className="hidden md:flex h-8 text-xs font-semibold rounded-sm border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
         >
-          Connect Wallet
+          Sign In
         </Button>
-
-        <WalletSelectModal
-          open={walletModal}
-          onOpenChange={setWalletModal}
-          onSuccess={() => toast({ title: "Wallet connected", description: "You're ready to trade on Solana." })}
-        />
       </>
     );
   }
