@@ -785,7 +785,7 @@ export default function Dashboard() {
             />
 
             {/* Sort tabs + view controls */}
-            <div className="flex flex-wrap items-center gap-2 justify-between">
+            <div className="flex items-center gap-2 justify-between overflow-x-auto scrollbar-none">
               {/* Sort tabs */}
               <div className="flex gap-1 bg-card border border-border/40 rounded-sm p-0.5">
                 {(["New", "Trending", "Volume", "Graduated"] as SortTab[]).map((tab) => (
@@ -805,7 +805,7 @@ export default function Dashboard() {
               </div>
 
               {/* Right controls: Filters + Grid/Table toggle */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 {/* Filter toggle */}
                 <button
                   onClick={() => setShowFilters((v) => !v)}
