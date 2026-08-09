@@ -335,6 +335,16 @@ export default function ProfilePage() {
 
           {/* Actions */}
           <div className="flex items-center gap-2 pb-2">
+            <a
+              href={`https://solscan.io/account/${address}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="h-8 px-2.5 flex items-center gap-1.5 rounded-sm border border-border/50 bg-card hover:bg-muted transition-colors"
+              title="View on Solscan"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground font-medium hidden sm:inline">Solscan</span>
+            </a>
             <button
               onClick={() => copyToClipboard(window.location.href, "Link copied")}
               className="h-8 w-8 flex items-center justify-center rounded-sm border border-border/50 bg-card hover:bg-muted transition-colors"
