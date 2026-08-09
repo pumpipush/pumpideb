@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   useGetProfile,
@@ -21,6 +21,7 @@ import { formatAddress, formatMC, formatEth, formatSol, timeAgo, cn } from "@/li
 import { useToast } from "@/hooks/use-toast";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   Twitter,
   Globe,
@@ -36,6 +37,8 @@ import {
   TrendingUp,
   ExternalLink,
   Loader2,
+  Wallet,
+  AlertCircle,
 } from "lucide-react";
 
 // ─── Auto-username generator (deterministic from address) ─────────────────────
@@ -117,7 +120,24 @@ function ProfileSkeleton() {
 }
 
 // ─── Main component ────────────────────────────────────────────────────────────
-type Tab = "tokens" | "activity";
+type Tab = "tokens" | "activity" | "wallet";
+
+type WalletToken = {
+  mint: string;
+  balance: number;
+  decimals: number;
+  name: string | null;
+  symbol: string | null;
+  imageUrl: string | null;
+  marketCapEth: string | null;
+  priceSol: number | null;
+  valueSol: number | null;
+  inDb: boolean;
+};
+type WalletPortfolio = {
+  solBalance: number;
+  tokens: WalletToken[];
+};
 
 export default function ProfilePage() {
   const params = useParams<{ address: string }>();
@@ -127,6 +147,19 @@ export default function ProfilePage() {
   const isOwner = wallet?.toLowerCase() === address.toLowerCase();
 
   const [activeTab, setActiveTab] = useState<Tab>("tokens");
+
+  // ── Wallet portfolio (on-chain balances) ──────────────────────────────────
+  const { data: portfolio, isLoading: portfolioLoading, error: portfolioError } = useQuery<WalletPortfolio>({
+    queryKey: ["wallet-portfolio", address],
+    queryFn: async () => {
+      const res = await fetch(`/api/wallet/${address}/portfolio`);
+      if (!res.ok) throw new Error("Failed to fetch portfolio");
+      return res.json() as Promise<WalletPortfolio>;
+    },
+    enabled: activeTab === "wallet" && !!address,
+    staleTime: 60_000,
+    retry: 1,
+  });
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<{
     username: string;
@@ -421,7 +454,7 @@ export default function ProfilePage() {
 
         {/* ── Tabs ── */}
         <div className="flex border-b border-border/50 mb-5 -mx-1">
-          {(["tokens", "activity"] as Tab[]).map((tab) => (
+          {(["tokens", "activity", "wallet"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -432,7 +465,7 @@ export default function ProfilePage() {
                   : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
-              {tab === "tokens" ? `Tokens${tokens ? ` (${tokens.length})` : ""}` : "Activity"}
+              {tab === "tokens" ? `Tokens${tokens ? ` (${tokens.length})` : ""}` : tab === "wallet" ? "Wallet" : "Activity"}
             </button>
           ))}
         </div>
@@ -530,6 +563,148 @@ export default function ProfilePage() {
             )}
           </div>
         )}
+
+        {/* ── Wallet tab ── */}
+        {activeTab === "wallet" && (() => {
+          // derive totals
+          const tokenTotalSol = portfolio?.tokens.reduce((s, t) => s + (t.valueSol ?? 0), 0) ?? 0;
+          const totalSol = (portfolio?.solBalance ?? 0) + tokenTotalSol;
+
+          // top holding: highest value item (SOL or a token)
+          const solEntry = portfolio ? { symbol: "SOL", valueSol: portfolio.solBalance, pct: totalSol > 0 ? portfolio.solBalance / totalSol * 100 : 100 } : null;
+          const topToken = portfolio?.tokens[0];
+          const topHolding = topToken && topToken.valueSol !== null && topToken.valueSol > (portfolio?.solBalance ?? 0)
+            ? { symbol: topToken.symbol ?? topToken.mint.slice(0, 4), valueSol: topToken.valueSol, pct: totalSol > 0 ? topToken.valueSol / totalSol * 100 : 0 }
+            : solEntry;
+
+          return (
+            <div>
+              {/* ── Loading state ── */}
+              {portfolioLoading && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-20 rounded-sm" />)}
+                  </div>
+                  <Skeleton className="h-64 rounded-sm" />
+                </div>
+              )}
+
+              {/* ── Error state ── */}
+              {portfolioError && !portfolioLoading && (
+                <div className="py-16 flex flex-col items-center gap-3 text-center border border-border/30 border-dashed rounded-sm">
+                  <AlertCircle className="w-8 h-8 text-muted-foreground/40" />
+                  <p className="text-sm text-muted-foreground">Could not load wallet data. RPC may be rate-limited.</p>
+                </div>
+              )}
+
+              {/* ── Data ── */}
+              {portfolio && !portfolioLoading && (
+                <>
+                  {/* Stats row */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
+                    <div className="bg-card border border-border/50 rounded-sm p-4">
+                      <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium mb-1">Total Value</p>
+                      <p className="text-lg font-bold text-foreground font-mono">{totalSol.toFixed(4)} SOL</p>
+                    </div>
+                    <div className="bg-card border border-border/50 rounded-sm p-4">
+                      <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium mb-1">Top Holding</p>
+                      <p className="text-lg font-bold text-foreground">{topHolding?.symbol ?? "—"}</p>
+                      {topHolding && totalSol > 0 && (
+                        <p className="text-xs text-muted-foreground font-mono">{topHolding.pct.toFixed(1)}% of wallet</p>
+                      )}
+                    </div>
+                    <div className="bg-card border border-border/50 rounded-sm p-4 col-span-2 sm:col-span-1">
+                      <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium mb-1">Tokens Held</p>
+                      <p className="text-lg font-bold text-foreground">{portfolio.tokens.length}</p>
+                      <p className="text-xs text-muted-foreground">SPL tokens</p>
+                    </div>
+                  </div>
+
+                  {/* Balances table */}
+                  <div className="border border-border/50 rounded-sm overflow-hidden">
+                    <div className="bg-muted/30 px-4 py-2.5 border-b border-border/40">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Balances</p>
+                    </div>
+
+                    {/* Header */}
+                    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-2 border-b border-border/20 text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide">
+                      <span>Coin</span>
+                      <span className="text-right w-24">Balance</span>
+                      <span className="text-right w-24">Value (SOL)</span>
+                      <span className="text-right w-24">Market Cap</span>
+                    </div>
+
+                    {/* SOL row */}
+                    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-3 border-b border-border/10 items-center hover:bg-white/[0.02] transition-colors">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#9945FF] to-[#14F195] flex items-center justify-center shrink-0">
+                          <span className="text-[10px] font-bold text-white">SOL</span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground">Solana</p>
+                          <p className="text-xs text-muted-foreground font-mono">SOL</p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-mono text-right w-24">{portfolio.solBalance.toFixed(4)}</span>
+                      <span className="text-sm font-mono text-right w-24">{portfolio.solBalance.toFixed(4)}</span>
+                      <span className="text-sm font-mono text-right w-24 text-muted-foreground">—</span>
+                    </div>
+
+                    {/* Token rows */}
+                    {portfolio.tokens.length === 0 && (
+                      <div className="py-10 text-center text-sm text-muted-foreground">No SPL token holdings found.</div>
+                    )}
+                    {portfolio.tokens.map((token) => (
+                      <div
+                        key={token.mint}
+                        className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-3 border-b border-border/10 last:border-0 items-center hover:bg-white/[0.02] transition-colors cursor-pointer"
+                        onClick={() => token.inDb && setLocation(`/app?token=${token.mint}`)}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {token.imageUrl ? (
+                            <img src={token.imageUrl} alt={token.symbol ?? ""} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 text-[11px] font-bold text-muted-foreground">
+                              {(token.symbol ?? token.mint.slice(0, 2)).charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground truncate">{token.name ?? "Unknown Token"}</p>
+                            <p className="text-xs text-muted-foreground font-mono truncate">{token.symbol ?? token.mint.slice(0, 8) + "…"}</p>
+                          </div>
+                        </div>
+                        <span className="text-sm font-mono text-right w-24 tabular-nums">
+                          {token.balance >= 1_000_000 ? `${(token.balance / 1_000_000).toFixed(2)}M`
+                            : token.balance >= 1_000 ? `${(token.balance / 1_000).toFixed(2)}K`
+                            : token.balance.toFixed(2)}
+                        </span>
+                        <span className="text-sm font-mono text-right w-24 tabular-nums">
+                          {token.valueSol !== null ? token.valueSol.toFixed(4) : <span className="text-muted-foreground">—</span>}
+                        </span>
+                        <span className="text-sm font-mono text-right w-24 tabular-nums">
+                          {token.marketCapEth ? formatSol((BigInt(token.marketCapEth) / BigInt(1e9)).toString()) : <span className="text-muted-foreground">—</span>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Solscan link */}
+                  <div className="mt-3 flex justify-end">
+                    <a
+                      href={`https://solscan.io/account/${address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      View full history on Solscan
+                    </a>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* ══ Edit Profile Modal ══════════════════════════════════════════════════ */}

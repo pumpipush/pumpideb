@@ -7,6 +7,7 @@ import profilesRouter from "./profiles";
 import feedRouter from "./feed";
 import proxyRouter from "./proxy";
 import storageRouter from "./storage";
+import walletRouter from "./wallet";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(statsRouter);
 router.use(profilesRouter);
 router.use(proxyRouter);
 router.use(storageRouter);
+router.use(walletRouter);
 
 export default router;
