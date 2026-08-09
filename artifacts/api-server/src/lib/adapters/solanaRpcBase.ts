@@ -113,13 +113,20 @@ export abstract class SolanaRpcIndexer {
   // Reset on the first event received (call onRpcRecovered()).
   private _fallbackActive = false;
 
+  // Configurable watchdog — low-frequency programs (e.g. Raydium LaunchLab) need
+  // a longer window before concluding the connection is silent/dead.
+  private readonly _watchdogMs: number;
+
   constructor(opts: {
     programId:   string;
     adapterName: string;
     wssUrl?:     string;
     httpUrl?:    string;
+    /** How long (ms) to wait with zero events before rotating endpoint. Default: 30 000 */
+    watchdogMs?: number;
   }) {
-    this.programId = opts.programId;
+    this.programId   = opts.programId;
+    this._watchdogMs = opts.watchdogMs ?? 30_000;
     // Round-robin WSS pool: start with caller-supplied or PublicNode, then fallbacks
     const primary = opts.wssUrl ?? PUBLICNODE_WSS;
     this._wssUrls = [primary, ...FALLBACK_WSS_RPCS.filter(u => u !== primary)];
@@ -351,15 +358,16 @@ export abstract class SolanaRpcIndexer {
         }
       }, 20_000);
 
-      // Watchdog: if 30 s pass with zero events, rotate to the next WSS endpoint
+      // Watchdog: if watchdogMs pass with zero events, rotate to the next WSS endpoint
       // and force a close so the reconnect loop kicks in immediately.
+      // Low-frequency programs (e.g. Raydium LaunchLab) should use a longer watchdogMs.
       this._watchdogTimer = setTimeout(() => {
         if (connClosed) return; // stale timer from a now-closed connection — ignore
         if (this._eventsSeenThisConnection === 0) {
-          this._rotateEndpoint(wssUrl, "30 s with zero events");
+          this._rotateEndpoint(wssUrl, `${this._watchdogMs / 1000} s with zero events`);
           ws.close();
         }
-      }, 30_000);
+      }, this._watchdogMs);
     });
 
     ws.addEventListener("message", (event) => {

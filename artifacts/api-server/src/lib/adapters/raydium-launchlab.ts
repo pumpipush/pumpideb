@@ -58,10 +58,23 @@ async function fetchRaydiumMeta(mint: string): Promise<RaydiumTokenMeta | null> 
 
 class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
   constructor(programId: string) {
-    super({ programId, adapterName: "raydium_launchlab" });
+    super({
+      programId,
+      adapterName: "raydium_launchlab",
+      // Raydium LaunchLab launches far fewer tokens than pump.fun.
+      // 30 s watchdog caused constant endpoint rotations on healthy connections.
+      // 180 s gives enough time to see at least one event on an active network.
+      watchdogMs: 180_000,
+    });
   }
 
-  // Default shouldProcess from base: create-only
+  // Accept ALL instructions from this program — Raydium uses non-standard names
+  // (e.g. "Initialize", "CreatePool") that don't match the base "Create" pattern.
+  // We filter in onEvent by checking whether a new mint can be extracted.
+  protected override shouldProcess(_logs: string[]): boolean {
+    return true;
+  }
+
   protected override async onEvent(event: LogEvent): Promise<void> {
     const { signature } = event;
 
