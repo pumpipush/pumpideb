@@ -474,36 +474,42 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           </div>
 
           {/* Token card preview */}
-          <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.13)", background: "rgba(255,255,255,0.025)" }}>
+          <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.18)", background: "rgba(255,255,255,0.05)" }}>
 
             {/* Card header */}
             <div className="px-4 pt-4 pb-3 flex items-center gap-3">
               {imagePreview ? (
                 <img src={imagePreview} alt="Token" className="w-11 h-11 rounded-xl object-cover shrink-0"
-                  style={{ border: "1px solid rgba(255,255,255,0.12)" }} />
+                  style={{ border: "1px solid rgba(255,255,255,0.15)" }} />
               ) : (
                 <TokenAvatar symbol={symbol || "?"} size={44} shape="square" />
               )}
               <div className="min-w-0 flex-1">
-                <div className="font-semibold text-foreground truncate text-[14px] leading-tight">
-                  {name || <span style={{ color: "#475569" }}>Token Name</span>}
+                <div className="font-semibold truncate text-[14px] leading-tight">
+                  {name
+                    ? <span className="text-foreground">{name}</span>
+                    : <span style={{ color: "#94a3b8" }}>Token Name</span>}
                 </div>
-                <div className="text-[11px] font-mono mt-0.5 truncate" style={{ color: "#94a3b8" }}>
-                  ${symbol ? symbol.toUpperCase() : <span style={{ color: "#475569" }}>TICKER</span>}
+                <div className="text-[11px] font-mono mt-0.5 truncate">
+                  {symbol
+                    ? <span style={{ color: "#94a3b8" }}>${symbol.toUpperCase()}</span>
+                    : <span style={{ color: "#64748b" }}>$TICKER</span>}
                 </div>
               </div>
               <div className="shrink-0 px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wide"
-                style={{ background: "rgba(255,255,255,0.06)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.12)" }}>
+                style={{ background: "rgba(255,255,255,0.08)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.18)" }}>
                 NEW
               </div>
             </div>
 
-            <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 16px" }} />
+            <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "0 16px" }} />
 
             {/* Card body */}
             <div className="px-4 pt-3 pb-4 space-y-3">
-              <p className="text-[12px] leading-relaxed line-clamp-3" style={{ color: "#94a3b8" }}>
-                {desc || <span style={{ color: "#475569" }}>Your description will appear here. Tell the community what makes this token unique.</span>}
+              <p className="text-[12px] leading-relaxed line-clamp-3">
+                {desc
+                  ? <span style={{ color: "#cbd5e1" }}>{desc}</span>
+                  : <span style={{ color: "#64748b" }}>Your description will appear here. Tell the community what makes this token unique.</span>}
               </p>
 
               {/* Mock stats */}
@@ -514,16 +520,18 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                   { label: "Holders", value: "1" },
                 ].map(({ label, value }) => (
                   <div key={label} className="rounded-lg px-2 py-2 text-center"
-                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                    style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)" }}>
                     <div className="text-[9px] mb-1 font-medium" style={{ color: "#94a3b8" }}>{label}</div>
                     <div className="text-[11px] font-mono font-semibold text-foreground">{value}</div>
                   </div>
                 ))}
               </div>
 
-              <div className="text-[10px] font-mono flex items-center gap-1" style={{ color: "#64748b", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 10 }}>
+              <div className="text-[10px] font-mono flex items-center gap-1" style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 10 }}>
                 <span style={{ color: "#64748b" }}>by</span>
-                {wallet ? formatAddress(wallet) : <span style={{ color: "#475569" }}>— connect wallet</span>}
+                {wallet
+                  ? <span style={{ color: "#94a3b8" }}>{formatAddress(wallet)}</span>
+                  : <span style={{ color: "#64748b" }}>— connect wallet</span>}
               </div>
             </div>
           </div>
