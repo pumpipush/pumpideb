@@ -30,6 +30,7 @@ import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, U
 import { SwapSettingsPopover } from "@/components/shared/SwapSettingsPopover";
 import { useSwapSettings, formatSlippage, formatPriorityFee, getSwapSettings } from "@/stores/swapSettings";
 import { useTxToast } from "@/hooks/useTxToast";
+import { buildPumpFunBuyTx, buildPumpFunSellTx, waitForTxConfirmation } from "@/lib/pumpfun-swap";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { formatSol, formatTokenAmount } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -666,9 +667,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestLiveTradeId]);
 
-  const { openWalletModal } = useWallet();
+  const { openWalletModal, signAndSendTransaction } = useWallet();
   const [tradeMode, setTradeMode] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
+  /** True while a trade is in-flight (signing + broadcast + on-chain confirmation). */
+  const [isTradePending, setIsTradePending] = useState(false);
   const [timeframe, setTimeframe] = useState<Timeframe>("1h");
   const [shareOpen, setShareOpen] = useState(false);
   // Bug fix: React state for tx/holders sub-tab instead of imperative DOM manipulation
@@ -1095,37 +1098,40 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       return;
     }
     if (!token || !amount) return;
+    // Prevent concurrent submissions: user must wait for signing + on-chain confirmation.
+    if (isTradePending) return;
 
     // Read current swap settings at execution time
     const { slippageBps, priorityFee } = getSwapSettings();
 
-    // Core trade logic — returns "" for simulated trades (no real on-chain signature until task #103)
+    // Core trade logic — builds, signs, and sends a real pump.fun bonding curve tx.
     const doTrade = async (): Promise<string> => {
       const numAmount = parseFloat(amount);
       if (isNaN(numAmount) || numAmount <= 0) throw new Error("Invalid amount");
 
       // ── Platform guard ────────────────────────────────────────────────────────
-      // The bonding-curve simulation below is correct only for pump.fun tokens:
-      //   • virtualEthReserves  = decimal SOL string (e.g. "30.000000")
-      //   • virtualTokenReserves = atom integer string (6-decimal mint)
-      // Other platforms (moonshot, letsbonk, raydium_launchlab, raydium_amm,
-      // daos_fun, locally-launched) use different reserve units/semantics.
-      // Task #103 (pump.fun on-chain) and #104 (Jupiter) will handle those.
+      // Real on-chain swaps are only available for pump.fun bonding curve tokens.
+      //   • graduated=true  → token is on PumpSwap/Raydium (task #104 — Jupiter)
+      //   • other platforms → moonshot, letsbonk, etc. (coming soon)
       if (token.platform !== "pump_fun") {
         throw new Error(
-          `On-chain trading for ${token.platform ?? "this platform"} is coming soon. ` +
-          `Simulated trades are only supported for Pump.fun tokens right now.`
+          `On-chain trading for ${token.platform ?? "this platform"} is coming soon.`
+        );
+      }
+      if (token.graduated) {
+        throw new Error(
+          "This token has graduated to Raydium/PumpSwap. Jupiter routing coming soon."
         );
       }
 
-      // Settings are already validated in the store; read at execution time
-      const safeBps = slippageBps;   // already clamped [0,9999] by setSwapSettings/loadFromStorage
-      void priorityFee;              // applied to ComputeBudget instruction in task #103
+      // Settings are already validated in the store; read at execution time.
+      // slippageBps is clamped [0, 9999] by the store's sanitise() helper.
+      const safeBps = slippageBps;
 
       // pump.fun: 6 decimal places → 1 display token = 1,000,000 token atoms
       const ATOMS_PER_TOKEN = 1_000_000;
 
-      // ── Parse reserves using server-native units (matches pumpfun.ts convention) ──
+      // ── Parse reserves (server-native units) ──────────────────────────────────
       // virtualEthReserves   = decimal SOL string  (e.g. "30.000000")
       // virtualTokenReserves = atom integer string (e.g. "1073000191045000")
       const vSolSol  = parseFloat(token.virtualEthReserves ?? "0");
@@ -1136,34 +1142,37 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
       const k = vSolLam * vTokAtom; // constant-product invariant (lamports × atoms)
 
-      let ethAmtLam:    bigint;
-      let tokenAmtAtom: bigint;
+      let ethAmtLam:    bigint;  // SOL lamports involved (in for buy, out estimate for sell)
+      let tokenAmtAtom: bigint;  // token atoms involved (out for buy, in for sell)
       let newVSolLam:   bigint;
       let newVTokAtom:  bigint;
+      // Instruction limit params (set below per trade direction)
+      let solLimitLamports: bigint;
 
       if (tradeMode === "buy") {
-        ethAmtLam  = BigInt(Math.round(numAmount * 1e9));   // SOL → lamports
-        newVSolLam = vSolLam + ethAmtLam;
-        newVTokAtom = k / newVSolLam;                       // integer floor division
-        tokenAmtAtom = vTokAtom - newVTokAtom;              // atoms received
+        ethAmtLam    = BigInt(Math.round(numAmount * 1e9));  // SOL user spends → lamports
+        newVSolLam   = vSolLam + ethAmtLam;
+        newVTokAtom  = k / newVSolLam;
+        tokenAmtAtom = vTokAtom - newVTokAtom;              // atoms received at spot
 
         if (tokenAmtAtom <= 0n) throw new Error("Insufficient token reserves");
 
-        // ── Slippage: compare AMM atoms received vs spot-quoted atoms ──
-        // Spot quote is derived from current reserves (no priceEth dependency):
-        //   quotedAtoms = ethAmtLam × vTokAtom / vSolLam   (BigInt, floor)
-        // This is the linear approximation at the current spot price; the CP curve
-        // gives fewer atoms (positive impact = price moved against the user).
+        // ── Slippage pre-check (client-side) ─────────────────────────────────
+        // Spot quote: quotedAtoms = ethAmtLam × vTokAtom / vSolLam (linear approx)
+        // The CP curve gives fewer atoms (impact > 0 means price moved against user).
         const quotedAtoms = (ethAmtLam * vTokAtom) / vSolLam;
-        // Convert to float for ratio — no unit ambiguity since both are atoms
         const impact = Number(quotedAtoms - tokenAmtAtom) / Number(quotedAtoms);
         if (impact > safeBps / 10_000) {
           throw new Error(
             `Slippage exceeded — price moved ${(impact * 100).toFixed(2)}%, tolerance is ${(safeBps / 100).toFixed(1)}%`
           );
         }
+
+        // maxSolCost = solIn × (1 + slippage/10000): allows execution if price
+        // rose by up to slippage% between quote and on-chain settlement.
+        solLimitLamports = ethAmtLam * BigInt(10_000 + safeBps) / 10_000n;
       } else {
-        // ── Sell: display tokens → atoms; reverse CP curve for SOL out ──
+        // ── Sell: display tokens → atoms; reverse CP curve for SOL out ─────────
         tokenAmtAtom = BigInt(Math.round(numAmount * ATOMS_PER_TOKEN));
         newVTokAtom  = vTokAtom + tokenAmtAtom;
         newVSolLam   = k / newVTokAtom;
@@ -1171,8 +1180,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
         if (solOutLam <= 0n) throw new Error("Insufficient SOL reserves");
 
-        // ── Slippage: compare AMM lamports received vs spot-quoted lamports ──
-        // Spot quote from reserves: quotedSolLam = tokenAmtAtom × vSolLam / vTokAtom
+        // ── Slippage pre-check (client-side) ─────────────────────────────────
         const quotedSolLam = (tokenAmtAtom * vSolLam) / vTokAtom;
         const impact = Number(quotedSolLam - solOutLam) / Number(quotedSolLam);
         if (impact > safeBps / 10_000) {
@@ -1182,53 +1190,60 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         }
 
         ethAmtLam = solOutLam;
+        // minSolOutput = solOut × (1 - slippage/10000): revert if price drops more.
+        solLimitLamports = solOutLam * BigInt(10_000 - safeBps) / 10_000n;
       }
 
-      // ── Record trade (lamports + atoms — consistent with server read conventions) ──
-      const mockTxId = `sim_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      await recordTrade.mutateAsync({
-        address: token.address,
-        data: {
-          traderAddress: wallet,
-          isBuy:         tradeMode === "buy",
-          ethAmount:     ethAmtLam.toString(),
-          tokenAmount:   tokenAmtAtom.toString(),
-          txHash:        mockTxId,
-          timestamp:     new Date().toISOString(),
-        },
-      });
+      // ── Build and broadcast on-chain transaction ──────────────────────────────
+      const swapParams = {
+        mint:                     token.address,
+        user:                     wallet,
+        tokenAtoms:               tokenAmtAtom,
+        solLimitLamports,
+        priorityFeeMicroLamports: priorityFee,
+        solEstimateLamports:      ethAmtLam,
+      };
 
-      // ── Update reserves in server-native units ──
-      // virtualEthReserves   → decimal SOL string (matches server format)
-      // virtualTokenReserves → atom integer string
-      // volumeEth            → cumulative lamports (same convention as marketCapEth)
-      const newVSolStr = (Number(newVSolLam) / 1e9).toFixed(6).replace(/\.?0+$/, "");
-      const newVTokStr = newVTokAtom.toString();
-      const prevVolLam = BigInt((token.volumeEth ?? "0").replace(/\..*/, ""));
-      await updateToken.mutateAsync({
-        address: token.address,
-        data: {
-          virtualTokenReserves: newVTokStr,
-          virtualEthReserves:   newVSolStr,
-          volumeEth:            (prevVolLam + ethAmtLam).toString(),
-          tradeCount:           (Number(token.tradeCount) || 0) + 1,
-        },
-      });
+      const { transaction: tx, blockhash, lastValidBlockHeight } =
+        tradeMode === "buy"
+          ? await buildPumpFunBuyTx(swapParams)
+          : await buildPumpFunSellTx(swapParams);
 
+      // Wallet signs and broadcasts to the network. Throws on user rejection
+      // or preflight failure; returns the base58 tx signature on submission.
+      const txSignature = await signAndSendTransaction(tx);
+
+      // ── Wait for on-chain confirmation ────────────────────────────────────────
+      // We MUST confirm before treating the trade as settled. A broadcast
+      // signature is NOT a guarantee — the tx can expire or fail on-chain.
+      // waitForTxConfirmation throws if the tx fails on-chain (e.g. slippage
+      // check reverted), times out gracefully otherwise.
+      await waitForTxConfirmation(txSignature, blockhash, lastValidBlockHeight);
+
+      // ── Refetch from server (indexer is the authoritative source) ─────────────
+      // The pump_fun adapter has already seen the on-chain TradeEvent by now and
+      // written the confirmed trade + updated reserves. We do NOT write to the
+      // DB from the client — stale browser quotes would corrupt aggregates.
       setAmount("");
       refetchToken();
       refetchHistory();
 
-      // Empty string → useTxToast shows "Order Filled (Simulated)" without Solscan link.
-      // Task #103 replaces this with a real Solana transaction signature.
-      return "";
+      // Real Solana signature (≥60 chars) → useTxToast shows Solscan link.
+      return txSignature;
     };
 
-    // submitTx shows pending → simulated-success/confirmed/failed feedback
-    await submitTx(
-      doTrade(),
-      tradeMode === "buy" ? "Buy" : "Sell",
-    );
+    // submitTx shows pending → confirmed/failed toast feedback.
+    // isTradePending gates the trade button for the full lifecycle:
+    //   build tx → wallet popup → broadcast → on-chain confirmation
+    setIsTradePending(true);
+    try {
+      await submitTx(
+        doTrade(),
+        tradeMode === "buy" ? "Buy" : "Sell",
+      );
+    } finally {
+      setIsTradePending(false);
+    }
   };
 
   const copyToClipboard = (text: string, label?: string) => {
@@ -1564,7 +1579,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               token={token}
               wallet={wallet}
               handleTrade={handleTrade}
-              isPending={recordTrade.isPending || updateToken.isPending}
+              isPending={isTradePending}
             />
           </div>
         </div>
@@ -2113,7 +2128,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             token={token}
             wallet={wallet}
             handleTrade={handleTrade}
-            isPending={recordTrade.isPending || updateToken.isPending}
+            isPending={isTradePending}
           />
         </div>
 

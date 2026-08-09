@@ -41,6 +41,14 @@ interface WalletContextValue {
   disconnect: () => Promise<void>;
   /** Open the Connect Wallet modal from anywhere in the app */
   openWalletModal: () => void;
+  /**
+   * Sign a pre-built @solana/web3.js Transaction (with blockhash + feePayer already set)
+   * using the connected wallet extension, then broadcast it via the wallet's RPC node.
+   *
+   * Throws if no wallet is connected or the wallet does not support signAndSendTransaction.
+   * Returns the base58 transaction signature on success.
+   */
+  signAndSendTransaction: (transaction: unknown) => Promise<string>;
 }
 
 const WalletContext = createContext<WalletContextValue>({
@@ -50,6 +58,7 @@ const WalletContext = createContext<WalletContextValue>({
   connectWallet: async () => { throw new Error("WalletContext not mounted"); },
   disconnect: async () => {},
   openWalletModal: () => {},
+  signAndSendTransaction: async () => { throw new Error("WalletContext not mounted"); },
 });
 
 export function WalletProvider({ children }: { children: ReactNode }) {
@@ -189,6 +198,25 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const openWalletModal = useCallback(() => setModalOpen(true), []);
 
+  /**
+   * Sign and send a pre-built transaction via the connected wallet.
+   * Delegates to provider.signAndSendTransaction — supported by Phantom,
+   * Backpack, and Solflare. The transaction must already have blockhash +
+   * feePayer set before calling this.
+   */
+  const signAndSendTransaction = useCallback(async (transaction: unknown): Promise<string> => {
+    const provider = providerRef.current;
+    if (!provider) throw new Error("No wallet connected. Please connect your wallet first.");
+    if (typeof provider.signAndSendTransaction !== "function") {
+      throw new Error("Your wallet does not support signAndSendTransaction. Please update your wallet extension.");
+    }
+    const result = await provider.signAndSendTransaction(transaction, {
+      skipPreflight: false,
+      preflightCommitment: "confirmed",
+    });
+    return result.signature;
+  }, []);
+
   return (
     <WalletContext.Provider value={{
       wallet,
@@ -197,6 +225,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       connectWallet,
       disconnect,
       openWalletModal,
+      signAndSendTransaction,
     }}>
       {children}
       {/* Global wallet modal — accessible from any component via openWalletModal() */}

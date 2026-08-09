@@ -34,6 +34,16 @@ export interface SolanaProvider {
   disconnect(): Promise<void>;
   on(event: "connect" | "disconnect" | "accountChanged", handler: (arg?: unknown) => void): void;
   off(event: "connect" | "disconnect" | "accountChanged", handler: (arg?: unknown) => void): void;
+  /**
+   * Sign a transaction and send it to the network via the wallet's RPC.
+   * Supported by Phantom, Backpack, and Solflare.
+   * `transaction` accepts a @solana/web3.js Transaction or VersionedTransaction.
+   * Returns an object with a base58-encoded `signature`.
+   */
+  signAndSendTransaction?(
+    transaction: unknown,
+    options?: { skipPreflight?: boolean; preflightCommitment?: string; maxRetries?: number }
+  ): Promise<{ signature: string }>;
 }
 
 export type WalletName = "Phantom" | "Backpack" | "Solflare";
