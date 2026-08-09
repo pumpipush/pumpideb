@@ -133,7 +133,7 @@ export default function AppInterface() {
           <TabsList className="flex justify-start bg-transparent p-0 h-auto rounded-none gap-0">
             <TabsTrigger value="launch"    className={TAB_TRIGGER}>Launch Token</TabsTrigger>
             <TabsTrigger value="trade"     className={TAB_TRIGGER}>Trade</TabsTrigger>
-            <TabsTrigger value="portfolio" className={TAB_TRIGGER}>My Tokens</TabsTrigger>
+            <TabsTrigger value="portfolio" className={TAB_TRIGGER}><Wallet className="w-3.5 h-3.5 mr-1.5" />My Tokens</TabsTrigger>
           </TabsList>
         </div>
 
