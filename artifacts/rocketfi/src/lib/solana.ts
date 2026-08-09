@@ -28,7 +28,9 @@ export interface SolanaProvider {
   isPhantom?: boolean;
   isBackpack?: boolean;
   isSolflare?: boolean;
-  connect(options?: { onlyIfTrusted?: boolean }): Promise<{ publicKey: SolanaPublicKey }>;
+  // Phantom/Backpack return { publicKey } from connect(); Solflare may return
+  // undefined or void — read provider.publicKey directly after connecting instead.
+  connect(options?: { onlyIfTrusted?: boolean }): Promise<{ publicKey: SolanaPublicKey } | undefined | void>;
   disconnect(): Promise<void>;
   on(event: "connect" | "disconnect" | "accountChanged", handler: (arg?: unknown) => void): void;
   off(event: "connect" | "disconnect" | "accountChanged", handler: (arg?: unknown) => void): void;

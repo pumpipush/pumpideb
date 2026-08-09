@@ -96,7 +96,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     name: WalletName
   ): Promise<string> => {
     const result = await provider.connect();
-    const address = result.publicKey.toBase58();
+    // Solflare returns undefined/void from connect() — public key lives on
+    // provider.publicKey directly. Phantom/Backpack return it in the result object.
+    const publicKey = (result as { publicKey?: SolanaPublicKey } | undefined)?.publicKey
+      ?? provider.publicKey;
+    if (!publicKey) throw new Error("Wallet connected but no public key available");
+    const address = publicKey.toBase58();
 
     // Clean up old provider listeners before switching
     if (providerRef.current && providerRef.current !== provider) {
