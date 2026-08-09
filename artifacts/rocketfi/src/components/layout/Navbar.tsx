@@ -40,8 +40,9 @@ function WalletButton() {
         <Button
           size="sm"
           onClick={() => setWalletModal(true)}
-          className="hidden md:flex h-8 text-xs font-semibold rounded-[8px] bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-150 shrink-0"
+          className="hidden md:flex items-center gap-1.5 h-8 text-xs font-semibold rounded-[8px] bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-150 shrink-0"
         >
+          <Wallet className="h-3.5 w-3.5" />
           Connect Wallet
         </Button>
 
