@@ -98,7 +98,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const result = await provider.connect();
     // Solflare returns undefined/void from connect() — public key lives on
     // provider.publicKey directly. Phantom/Backpack return it in the result object.
-    const publicKey = (result as { publicKey?: SolanaPublicKey } | undefined)?.publicKey
+    const publicKey = (result as { publicKey?: { toBase58(): string } } | undefined)?.publicKey
       ?? provider.publicKey;
     if (!publicKey) throw new Error("Wallet connected but no public key available");
     const address = publicKey.toBase58();
@@ -163,7 +163,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     // once the user unlocks their wallet. We only clear on explicit disconnect().
     provider.connect({ onlyIfTrusted: true })
       .then(result => {
-        const address = result.publicKey.toBase58();
+        // Solflare returns void from connect(); public key lives on provider.publicKey.
+        // Phantom/Backpack return it in the result object. Use the same fallback as
+        // the explicit connect path to support both wallet families.
+        const publicKey =
+          (result as { publicKey?: { toBase58(): string } } | undefined)?.publicKey
+          ?? provider.publicKey;
+        if (!publicKey) return; // wallet locked or permission not yet granted
+        const address = publicKey.toBase58();
+        if (!address) return;
         try {
           provider.on("disconnect", handleDisconnect);
           provider.on("accountChanged", handleAccountChanged);

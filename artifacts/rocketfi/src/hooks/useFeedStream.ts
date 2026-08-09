@@ -26,6 +26,8 @@ export interface FeedToken {
   platform: string;
   chain: string;
   createdAt: string;
+  /** Set when the token has graduated from a bonding curve (e.g. pump.fun → Raydium) */
+  graduated?: boolean;
   /** True for the first BADGE_TTL_MS after arrival — drives the "NEW" badge */
   isNew: boolean;
 }

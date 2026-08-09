@@ -27,6 +27,9 @@ import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, f
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { ShareModal } from "@/components/shared/ShareModal";
 import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare, Rocket, ShieldCheck, Zap, CheckCircle2, UploadCloud, Wallet, Eye } from "lucide-react";
+import { SwapSettingsPopover } from "@/components/shared/SwapSettingsPopover";
+import { useSwapSettings, formatSlippage, formatPriorityFee, getSwapSettings } from "@/stores/swapSettings";
+import { useTxToast } from "@/hooks/useTxToast";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { formatSol, formatTokenAmount } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -644,6 +647,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const recordTrade = useRecordTrade();
   const updateToken = useUpdateToken();
   const { toast } = useToast();
+  const { submitTx } = useTxToast();
   const solPrice = useSolPrice();
 
   // Live SSE stream — real-time trade events
@@ -1092,90 +1096,139 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     }
     if (!token || !amount) return;
 
-    try {
+    // Read current swap settings at execution time
+    const { slippageBps, priorityFee } = getSwapSettings();
+
+    // Core trade logic — returns "" for simulated trades (no real on-chain signature until task #103)
+    const doTrade = async (): Promise<string> => {
       const numAmount = parseFloat(amount);
       if (isNaN(numAmount) || numAmount <= 0) throw new Error("Invalid amount");
 
-      let ethAmt = "0";
-      let tokenAmt = "0";
-      
-      const currentPrice = token.priceEth ? parseFloat(token.priceEth) : 0.00001;
-
-      if (tradeMode === "buy") {
-        ethAmt = parseEth(amount);
-        tokenAmt = parseEth((numAmount / currentPrice).toString());
-      } else {
-        tokenAmt = parseEth(amount);
-        ethAmt = parseEth((numAmount * currentPrice).toString());
+      // ── Platform guard ────────────────────────────────────────────────────────
+      // The bonding-curve simulation below is correct only for pump.fun tokens:
+      //   • virtualEthReserves  = decimal SOL string (e.g. "30.000000")
+      //   • virtualTokenReserves = atom integer string (6-decimal mint)
+      // Other platforms (moonshot, letsbonk, raydium_launchlab, raydium_amm,
+      // daos_fun, locally-launched) use different reserve units/semantics.
+      // Task #103 (pump.fun on-chain) and #104 (Jupiter) will handle those.
+      if (token.platform !== "pump_fun") {
+        throw new Error(
+          `On-chain trading for ${token.platform ?? "this platform"} is coming soon. ` +
+          `Simulated trades are only supported for Pump.fun tokens right now.`
+        );
       }
 
+      // Settings are already validated in the store; read at execution time
+      const safeBps = slippageBps;   // already clamped [0,9999] by setSwapSettings/loadFromStorage
+      void priorityFee;              // applied to ComputeBudget instruction in task #103
+
+      // pump.fun: 6 decimal places → 1 display token = 1,000,000 token atoms
+      const ATOMS_PER_TOKEN = 1_000_000;
+
+      // ── Parse reserves using server-native units (matches pumpfun.ts convention) ──
+      // virtualEthReserves   = decimal SOL string  (e.g. "30.000000")
+      // virtualTokenReserves = atom integer string (e.g. "1073000191045000")
+      const vSolSol  = parseFloat(token.virtualEthReserves ?? "0");
+      const vSolLam  = BigInt(Math.round(vSolSol * 1e9));
+      const vTokAtom = BigInt((token.virtualTokenReserves ?? "0").replace(/\..*/, ""));
+
+      if (vSolLam === 0n || vTokAtom === 0n) throw new Error("Invalid reserves — cannot price trade");
+
+      const k = vSolLam * vTokAtom; // constant-product invariant (lamports × atoms)
+
+      let ethAmtLam:    bigint;
+      let tokenAmtAtom: bigint;
+      let newVSolLam:   bigint;
+      let newVTokAtom:  bigint;
+
+      if (tradeMode === "buy") {
+        ethAmtLam  = BigInt(Math.round(numAmount * 1e9));   // SOL → lamports
+        newVSolLam = vSolLam + ethAmtLam;
+        newVTokAtom = k / newVSolLam;                       // integer floor division
+        tokenAmtAtom = vTokAtom - newVTokAtom;              // atoms received
+
+        if (tokenAmtAtom <= 0n) throw new Error("Insufficient token reserves");
+
+        // ── Slippage: compare AMM atoms received vs spot-quoted atoms ──
+        // Spot quote is derived from current reserves (no priceEth dependency):
+        //   quotedAtoms = ethAmtLam × vTokAtom / vSolLam   (BigInt, floor)
+        // This is the linear approximation at the current spot price; the CP curve
+        // gives fewer atoms (positive impact = price moved against the user).
+        const quotedAtoms = (ethAmtLam * vTokAtom) / vSolLam;
+        // Convert to float for ratio — no unit ambiguity since both are atoms
+        const impact = Number(quotedAtoms - tokenAmtAtom) / Number(quotedAtoms);
+        if (impact > safeBps / 10_000) {
+          throw new Error(
+            `Slippage exceeded — price moved ${(impact * 100).toFixed(2)}%, tolerance is ${(safeBps / 100).toFixed(1)}%`
+          );
+        }
+      } else {
+        // ── Sell: display tokens → atoms; reverse CP curve for SOL out ──
+        tokenAmtAtom = BigInt(Math.round(numAmount * ATOMS_PER_TOKEN));
+        newVTokAtom  = vTokAtom + tokenAmtAtom;
+        newVSolLam   = k / newVTokAtom;
+        const solOutLam = vSolLam - newVSolLam;              // lamports user receives
+
+        if (solOutLam <= 0n) throw new Error("Insufficient SOL reserves");
+
+        // ── Slippage: compare AMM lamports received vs spot-quoted lamports ──
+        // Spot quote from reserves: quotedSolLam = tokenAmtAtom × vSolLam / vTokAtom
+        const quotedSolLam = (tokenAmtAtom * vSolLam) / vTokAtom;
+        const impact = Number(quotedSolLam - solOutLam) / Number(quotedSolLam);
+        if (impact > safeBps / 10_000) {
+          throw new Error(
+            `Slippage exceeded — price moved ${(impact * 100).toFixed(2)}%, tolerance is ${(safeBps / 100).toFixed(1)}%`
+          );
+        }
+
+        ethAmtLam = solOutLam;
+      }
+
+      // ── Record trade (lamports + atoms — consistent with server read conventions) ──
+      const mockTxId = `sim_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       await recordTrade.mutateAsync({
         address: token.address,
         data: {
           traderAddress: wallet,
-          isBuy: tradeMode === "buy",
-          ethAmount: ethAmt,
-          tokenAmount: tokenAmt,
-          txHash: ethers.Wallet.createRandom().address,
-          timestamp: new Date().toISOString()
-        }
+          isBuy:         tradeMode === "buy",
+          ethAmount:     ethAmtLam.toString(),
+          tokenAmount:   tokenAmtAtom.toString(),
+          txHash:        mockTxId,
+          timestamp:     new Date().toISOString(),
+        },
       });
 
-      // Guard: only accept non-negative integer strings (BigInt-safe)
-      const safeBI = (v: string | null | undefined) => {
-        if (!v) return BigInt(0);
-        const clean = v.replace(/\..*/, ""); // strip decimals if any
-        return /^\d+$/.test(clean) ? BigInt(clean) : BigInt(0);
-      };
-      const vt = safeBI(token.virtualTokenReserves);
-      const ve = safeBI(token.virtualEthReserves);
-      const ethAmtBI = safeBI(ethAmt);
-      const tokenAmtBI = safeBI(tokenAmt);
-
-      // Abort if reserves are insufficient — prevents invalid on-chain state
-      if (tradeMode === "buy" && vt < tokenAmtBI) {
-        throw new Error("Insufficient token reserves");
-      }
-      if (tradeMode === "sell" && ve < ethAmtBI) {
-        throw new Error("Insufficient SOL reserves");
-      }
-
-      let newVt = vt;
-      let newVe = ve;
-
-      if (tradeMode === "buy") {
-        newVe += ethAmtBI;
-        newVt -= tokenAmtBI;
-      } else {
-        newVe -= ethAmtBI;
-        newVt += tokenAmtBI;
-      }
-
+      // ── Update reserves in server-native units ──
+      // virtualEthReserves   → decimal SOL string (matches server format)
+      // virtualTokenReserves → atom integer string
+      // volumeEth            → cumulative lamports (same convention as marketCapEth)
+      const newVSolStr = (Number(newVSolLam) / 1e9).toFixed(6).replace(/\.?0+$/, "");
+      const newVTokStr = newVTokAtom.toString();
+      const prevVolLam = BigInt((token.volumeEth ?? "0").replace(/\..*/, ""));
       await updateToken.mutateAsync({
         address: token.address,
         data: {
-          virtualTokenReserves: newVt.toString(),
-          virtualEthReserves: newVe.toString(),
-          volumeEth: (safeBI(token.volumeEth) + ethAmtBI).toString(),
-          tradeCount: (Number(token.tradeCount) || 0) + 1,
-        }
-      });
-
-      toast({
-        title: tradeMode === "buy" ? "Buy order filled" : "Sell order filled",
-        description: tradeMode === "buy"
-          ? `${amount} SOL → ${token.symbol} executed on-chain.`
-          : `${amount} ${token.symbol} → SOL executed on-chain.`,
+          virtualTokenReserves: newVTokStr,
+          virtualEthReserves:   newVSolStr,
+          volumeEth:            (prevVolLam + ethAmtLam).toString(),
+          tradeCount:           (Number(token.tradeCount) || 0) + 1,
+        },
       });
 
       setAmount("");
       refetchToken();
       refetchHistory();
 
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Something went wrong";
-      toast({ title: "Trade failed", description: msg, variant: "destructive" });
-    }
+      // Empty string → useTxToast shows "Order Filled (Simulated)" without Solscan link.
+      // Task #103 replaces this with a real Solana transaction signature.
+      return "";
+    };
+
+    // submitTx shows pending → simulated-success/confirmed/failed feedback
+    await submitTx(
+      doTrade(),
+      tradeMode === "buy" ? "Buy" : "Sell",
+    );
   };
 
   const copyToClipboard = (text: string, label?: string) => {
@@ -2105,6 +2158,8 @@ interface TradePanelFormProps {
 function TradePanelForm({
   tradeMode, setTradeMode, amount, setAmount, token, wallet, handleTrade, isPending,
 }: TradePanelFormProps) {
+  const swapSettings = useSwapSettings();
+
   return (
     <>
       {/* Mode tabs — sliding pill */}
@@ -2123,6 +2178,16 @@ function TradePanelForm({
       </div>
 
       <div className="p-3 space-y-3">
+        {/* Settings row — slippage + priority fee summary with popover trigger */}
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] text-muted-foreground tabular-nums">
+            Slippage&nbsp;<span className="text-foreground/70 font-mono">{formatSlippage(swapSettings.slippageBps)}</span>
+            <span className="mx-1 opacity-30">·</span>
+            <span className="text-foreground/70 font-mono">{formatPriorityFee(swapSettings.priorityFee)}</span>
+          </span>
+          <SwapSettingsPopover />
+        </div>
+
         {/* Preset amounts */}
         <div className="flex gap-2">
           {tradeMode === "buy"
