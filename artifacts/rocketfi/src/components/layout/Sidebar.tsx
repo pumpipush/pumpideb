@@ -1,10 +1,19 @@
 import { Link, useLocation } from "wouter";
-import { Flame, LayoutGrid, ArrowRightLeft, Plus } from "lucide-react";
+import { Flame, LayoutGrid, ArrowRightLeft, Plus, UserCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useWallet } from "@/contexts/WalletContext";
+import { TokenAvatar } from "@/components/shared/TokenAvatar";
+import { useGetProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
+import { formatAddress } from "@/lib/utils";
 
 export function Sidebar() {
   const [location] = useLocation();
+  const { wallet, walletName } = useWallet();
+
+  const { data: profile } = useGetProfile(wallet ?? "", {
+    query: { enabled: !!wallet, retry: false, queryKey: getGetProfileQueryKey(wallet ?? "") },
+  });
 
   return (
     <div className="hidden md:flex fixed left-0 top-0 h-full w-[220px] border-r border-border bg-background flex-col z-50">
@@ -41,6 +50,32 @@ export function Sidebar() {
           <ArrowRightLeft className={cn("w-4 h-4 transition-transform duration-200", location === "/app" ? "text-primary" : "group-hover:scale-110")} />
           Trade
         </Link>
+
+        {/* Profile link — only visible when wallet connected */}
+        {wallet && (
+          <Link
+            href={`/profile/${wallet}`}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-all duration-200 rounded-sm group",
+              location === `/profile/${wallet}`
+                ? "bg-primary/15 text-foreground nav-active-bar"
+                : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+            )}
+          >
+            {profile?.avatarUrl ? (
+              <img
+                src={profile.avatarUrl}
+                alt="avatar"
+                className="w-4 h-4 rounded-full object-cover shrink-0"
+              />
+            ) : (
+              <UserCircle2 className={cn("w-4 h-4 shrink-0 transition-transform duration-200", location === `/profile/${wallet}` ? "text-primary" : "group-hover:scale-110")} />
+            )}
+            <span className="flex-1 truncate">
+              {profile?.username ?? formatAddress(wallet)}
+            </span>
+          </Link>
+        )}
       </nav>
 
       <div className="p-4 border-t border-border/50 flex flex-col gap-4">
@@ -57,6 +92,11 @@ export function Sidebar() {
 
 export function BottomNav() {
   const [location] = useLocation();
+  const { wallet } = useWallet();
+
+  const { data: profile } = useGetProfile(wallet ?? "", {
+    query: { enabled: !!wallet, retry: false, queryKey: getGetProfileQueryKey(wallet ?? "") },
+  });
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border/60 flex items-stretch h-16 safe-area-pb">
@@ -80,15 +120,33 @@ export function BottomNav() {
         </div>
       </Link>
 
+      {/* Profile tab (mobile) — shows avatar when connected, generic icon when not */}
       <Link
-        href="/app"
+        href={wallet ? `/profile/${wallet}` : "/app"}
         className={cn(
           "flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-wide transition-all duration-200",
-          location === "/app" ? "text-primary" : "text-muted-foreground"
+          wallet && location === `/profile/${wallet}` ? "text-primary" : "text-muted-foreground"
         )}
       >
-        <ArrowRightLeft className={cn("w-5 h-5 transition-transform duration-200", location === "/app" ? "text-primary scale-110" : "")} />
-        Trade
+        {wallet && profile?.avatarUrl ? (
+          <img
+            src={profile.avatarUrl}
+            alt="avatar"
+            className={cn(
+              "w-5 h-5 rounded-full object-cover border",
+              location === `/profile/${wallet}` ? "border-primary" : "border-border"
+            )}
+          />
+        ) : wallet ? (
+          <TokenAvatar
+            symbol={profile?.username || wallet.slice(0, 4)}
+            size={20}
+            shape="circle"
+          />
+        ) : (
+          <UserCircle2 className="w-5 h-5" />
+        )}
+        Profile
       </Link>
     </div>
   );
