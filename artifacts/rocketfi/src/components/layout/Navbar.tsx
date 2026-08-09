@@ -14,7 +14,6 @@ function WalletButton() {
   const { wallet, walletName, disconnect } = useWallet();
   const [walletModal, setWalletModal] = useState(false);
   const { toast } = useToast();
-  const [, navigate] = useLocation();
 
   async function handleDisconnect() {
     await disconnect();
@@ -30,22 +29,28 @@ function WalletButton() {
       <>
         {/* Mobile: icon only */}
         <button
-          onClick={() => navigate("/signin")}
+          onClick={() => setWalletModal(true)}
           className="md:hidden flex items-center justify-center h-8 w-8 rounded-sm border border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
-          aria-label="Sign In"
+          aria-label="Connect Wallet"
         >
           <Wallet className="h-4 w-4" />
         </button>
 
-        {/* Desktop: Sign In button */}
+        {/* Desktop: text button */}
         <Button
           variant="outline"
           size="sm"
-          onClick={() => navigate("/signin")}
+          onClick={() => setWalletModal(true)}
           className="hidden md:flex h-8 text-xs font-semibold rounded-sm border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
         >
-          Sign In
+          Connect Wallet
         </Button>
+
+        <WalletSelectModal
+          open={walletModal}
+          onOpenChange={setWalletModal}
+          onSuccess={() => toast({ title: "Wallet connected", description: "You're ready to trade on Solana." })}
+        />
       </>
     );
   }
