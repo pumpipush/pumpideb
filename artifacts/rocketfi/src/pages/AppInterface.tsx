@@ -26,7 +26,7 @@ import { ethers } from "ethers";
 import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, formatTokenPrice, cn, timeAgo } from "@/lib/utils";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { ShareModal } from "@/components/shared/ShareModal";
-import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare, Rocket, ShieldCheck, Zap, CheckCircle2, UploadCloud, Wallet } from "lucide-react";
+import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare, Rocket, ShieldCheck, Zap, CheckCircle2, UploadCloud, Wallet, Eye } from "lucide-react";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { formatSol, formatTokenAmount } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -348,7 +348,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                     placeholder="DOGE"
                     value={symbol}
                     onChange={e => setSymbol(e.target.value.toUpperCase())}
-                    className="h-10 pl-7 rounded-lg bg-background/40 border-white/10 focus-visible:ring-white/20 font-mono uppercase tracking-widest text-[14px]"
+                    className="h-10 pl-7 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 font-mono uppercase tracking-widest text-[14px]"
                     maxLength={10}
                     required
                   />
@@ -467,59 +467,63 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         <div className="sticky top-4 space-y-4">
 
           {/* Header */}
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "#64748b" }}>Live Preview</span>
+          <div className="flex items-center gap-2 mb-1">
+            <Eye className="h-3.5 w-3.5 shrink-0" style={{ color: "#475569" }} />
+            <span className="text-[12px] font-medium" style={{ color: "#64748b" }}>Live Preview</span>
             <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
           </div>
 
           {/* Token card preview */}
-          <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.09)", background: "rgba(255,255,255,0.02)" }}>
+          <div className="rounded-2xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.13)", background: "rgba(255,255,255,0.025)" }}>
 
             {/* Card header */}
-            <div className="p-4 flex items-center gap-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <div className="px-4 pt-4 pb-3 flex items-center gap-3">
               {imagePreview ? (
-                <img src={imagePreview} alt="Token" className="w-12 h-12 rounded-xl object-cover shrink-0"
-                  style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
+                <img src={imagePreview} alt="Token" className="w-11 h-11 rounded-xl object-cover shrink-0"
+                  style={{ border: "1px solid rgba(255,255,255,0.12)" }} />
               ) : (
-                <TokenAvatar symbol={symbol || "?"} size={48} shape="square" />
+                <TokenAvatar symbol={symbol || "?"} size={44} shape="square" />
               )}
               <div className="min-w-0 flex-1">
-                <div className="font-bold text-foreground truncate text-[15px] leading-tight">
-                  {name || <span style={{ color: "#475569" }}>Token Name</span>}
+                <div className="font-semibold text-foreground truncate text-[14px] leading-tight">
+                  {name || <span style={{ color: "#334155" }}>Token Name</span>}
                 </div>
-                <div className="text-[12px] font-mono mt-0.5 truncate" style={{ color: "#94a3b8" }}>
-                  ${symbol ? symbol.toUpperCase() : <span style={{ color: "#475569" }}>TICKER</span>}
+                <div className="text-[11px] font-mono mt-0.5 truncate" style={{ color: "#64748b" }}>
+                  ${symbol ? symbol.toUpperCase() : <span style={{ color: "#334155" }}>TICKER</span>}
                 </div>
               </div>
-              <div className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold"
-                style={{ background: "rgba(255,255,255,0.07)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.16)" }}>
+              <div className="shrink-0 px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wide"
+                style={{ background: "rgba(255,255,255,0.06)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.12)" }}>
                 NEW
               </div>
             </div>
 
+            <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 16px" }} />
+
             {/* Card body */}
-            <div className="p-4 space-y-4">
-              <p className="text-[13px] leading-relaxed line-clamp-4" style={{ color: "#64748b" }}>
-                {desc || "Your description will appear here. Tell the community what makes this token unique."}
+            <div className="px-4 pt-3 pb-4 space-y-3">
+              <p className="text-[12px] leading-relaxed line-clamp-3" style={{ color: "#475569" }}>
+                {desc || <span style={{ color: "#334155" }}>Your description will appear here. Tell the community what makes this token unique.</span>}
               </p>
 
               {/* Mock stats */}
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-1.5">
                 {[
                   { label: "Price",   value: "$0.000028" },
                   { label: "Mkt Cap", value: "$28K" },
                   { label: "Holders", value: "1" },
                 ].map(({ label, value }) => (
-                  <div key={label} className="rounded-lg p-2 text-center"
-                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                    <div className="text-[10px] mb-0.5" style={{ color: "#94a3b8" }}>{label}</div>
-                    <div className="text-[12px] font-mono font-semibold text-foreground">{value}</div>
+                  <div key={label} className="rounded-lg px-2 py-2 text-center"
+                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                    <div className="text-[9px] mb-1 font-medium" style={{ color: "#475569" }}>{label}</div>
+                    <div className="text-[11px] font-mono font-semibold text-foreground">{value}</div>
                   </div>
                 ))}
               </div>
 
-              <div className="text-[11px] font-mono pt-1" style={{ color: "#64748b", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 12 }}>
-                Created by {wallet ? formatAddress(wallet) : "— connect wallet"}
+              <div className="text-[10px] font-mono flex items-center gap-1" style={{ color: "#334155", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10 }}>
+                <span style={{ color: "#475569" }}>by</span>
+                {wallet ? formatAddress(wallet) : <span style={{ color: "#334155" }}>— connect wallet</span>}
               </div>
             </div>
           </div>
