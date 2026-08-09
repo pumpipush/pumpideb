@@ -667,8 +667,14 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Pure black background (like reference — gaps between bubbles show as black)
-      ctx.fillStyle = "#000000";
+      // Dark navy background — matches project's --background: hsl(220 49% 8%)
+      const bgGrad = ctx.createRadialGradient(
+        canvas.width / 2, canvas.height / 2, 0,
+        canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) * 0.7
+      );
+      bgGrad.addColorStop(0,   "#0e1628");
+      bgGrad.addColorStop(1,   "#080d18");
+      ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Apply dpr scale + pan/zoom in CSS space
