@@ -333,7 +333,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                   placeholder="e.g. Doge on Solana"
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  className="h-10 rounded-lg bg-background/40 border-white/10 focus-visible:ring-white/20 text-[14px]"
+                  className="h-10 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 text-[14px]"
                   required
                 />
               </div>
@@ -378,8 +378,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               className="cursor-pointer rounded-xl transition-all duration-200 group"
               style={{
                 border: imagePreview
-                  ? "1px solid rgba(255,255,255,0.20)"
-                  : "2px dashed rgba(255,255,255,0.09)",
+                  ? "1px solid rgba(255,255,255,0.28)"
+                  : "2px dashed rgba(255,255,255,0.25)",
                 background: imagePreview ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.015)",
               }}
             >
@@ -427,7 +427,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               placeholder="Tell the community what makes this token special — lore, utility, meme origin, anything..."
               value={desc}
               onChange={e => setDesc(e.target.value.slice(0, 300))}
-              className="rounded-lg bg-background/40 border-white/10 focus-visible:ring-white/20 min-h-[90px] resize-none text-[14px]"
+              className="rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 min-h-[90px] resize-none text-[14px]"
             />
           </div>
 
