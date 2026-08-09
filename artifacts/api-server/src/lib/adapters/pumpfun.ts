@@ -740,11 +740,28 @@ async function healTokenTrades(mint: string): Promise<void> {
       if (needsFix) {
         // price_eth = SOL per token = (lamports / base_unit) / 1000
         // (same formula as the main trade handler — must divide by 1000)
-        const priceEth = (Number(solLam) / Number(tokenDelta) / 1000).toFixed(15);
-        await db.update(tradesTable)
-          .set({ tokenAmount: tokenDelta.toString(), priceEth })
-          .where(eq(tradesTable.id, trade.id));
-        healed++;
+        const derivedPriceEth = Number(solLam) / Number(tokenDelta) / 1000;
+
+        // Sanity ceiling: pump.fun bonding-curve prices are never legitimately
+        // above ~0.001 SOL/token (graduation happens around 0.00005). If the
+        // replay diverged due to missing/reordered trades the derived price can
+        // spike far beyond this. Skip writing rather than corrupt the DB — the
+        // OHLCV query has a matching < 1.0 guard as a second line of defence,
+        // but it is better to never write bad data in the first place.
+        const HEAL_PRICE_CEILING = 0.01; // 0.01 SOL/token — 200× graduation price
+        if (derivedPriceEth > HEAL_PRICE_CEILING) {
+          healLog.warn(
+            { mint, tradeId: trade.id, derivedPriceEth, ceiling: HEAL_PRICE_CEILING },
+            "zero-heal: derived price exceeds ceiling — skipping write to protect chart",
+          );
+          // Still advance reserves so subsequent rows stay consistent
+        } else {
+          const priceEth = derivedPriceEth.toFixed(15);
+          await db.update(tradesTable)
+            .set({ tokenAmount: tokenDelta.toString(), priceEth })
+            .where(eq(tradesTable.id, trade.id));
+          healed++;
+        }
       }
 
       // Always advance reserves — even for already-good rows — so the

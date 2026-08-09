@@ -319,13 +319,17 @@ const PUMP_TOTAL_SUPPLY  = 1_000_000_000_000_000n;
 const PUMP_K0            = PUMP_INIT_VSOL_LAM * PUMP_INIT_VTOK;
 
 async function backfillBondingCurves(): Promise<void> {
-  // Tokens that still have the initial reserves despite having trades
+  // Tokens that still have the initial reserves despite having trades.
+  // Graduated tokens are excluded: the bonding-curve constant-product formula
+  // is invalid after migration to Raydium/PumpSwap, so replaying their trades
+  // would produce wrong reserve values and corrupt the displayed market cap.
   const stale = await db
     .select({ address: tokensTable.address, tradeCount: tokensTable.tradeCount })
     .from(tokensTable)
     .where(
       and(
         eq(tokensTable.platform, "pump_fun"),
+        eq(tokensTable.graduated, false),
         eq(tokensTable.virtualEthReserves, "30"),
         sql`${tokensTable.tradeCount}::int > 0`,
       ),
