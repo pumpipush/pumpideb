@@ -46,6 +46,11 @@ const WSOL_MINT  = "So11111111111111111111111111111111111111112";
 const PLATFORM   = "raydium_amm";
 const CHAIN      = "solana";
 
+// PumpSwap — pump.fun's native AMM for graduated tokens (launched March 2025).
+// Tokens that graduate after March 2025 trade here instead of Raydium AMM v4.
+const PUMPSWAP_PROGRAM   = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
+const PLATFORM_PUMPSWAP  = "pumpswap";
+
 // Refresh interval for the graduated-mints cache (5 minutes).
 // The primary update path is registerGraduatedMint(); the periodic refresh is a
 // safety net so the adapter recovers mints that graduated while offline.
@@ -133,14 +138,32 @@ async function getTransaction(sig: string): Promise<RpcTx | null> {
 
 // ── Swap detection ──────────────────────────────────────────────────────────────
 
-/** True when the log lines indicate a Raydium AMM swap instruction. */
-function isRaydiumSwap(logs: string[]): boolean {
+/**
+ * Detect which DEX platform executed a swap in these log lines.
+ *
+ * Returns the platform string ("raydium_amm" | "pumpswap") if a known swap
+ * instruction is found, or null when the transaction is not a tracked swap
+ * (e.g. a token transfer, approval, or an unknown program interaction).
+ *
+ * Detection strategy:
+ *   - Raydium AMM v4:  look for SwapBaseIn / SwapBaseOut instruction names.
+ *   - Raydium CPMM:    look for "Swap" instruction name.
+ *   - PumpSwap:        look for the PumpSwap program ID + Buy / Sell instruction.
+ *     PumpSwap was launched by pump.fun in March 2025 to replace the Raydium AMM v4
+ *     migration path. Graduated tokens after that date trade on PumpSwap.
+ */
+function detectDexPlatform(logs: string[]): string | null {
   for (const l of logs) {
-    if (/Instruction:\s*SwapBase(In|Out)/i.test(l)) return true;
-    // Raydium CPMM (newer pool type) uses "swap" without the Base* suffix
-    if (/Instruction:\s*Swap\b/i.test(l)) return true;
+    if (/Instruction:\s*SwapBase(In|Out)/i.test(l)) return PLATFORM;          // Raydium AMM v4
+    if (/Instruction:\s*Swap\b/i.test(l))           return PLATFORM;          // Raydium CPMM
   }
-  return false;
+  // PumpSwap: confirm the PumpSwap program is actually invoked before accepting
+  // a Buy/Sell instruction (those same names appear in the bonding-curve program).
+  const hasPumpSwap = logs.some(l => l.includes(PUMPSWAP_PROGRAM));
+  if (hasPumpSwap && logs.some(l => /Instruction:\s*(Buy|Sell)\b/i.test(l))) {
+    return PLATFORM_PUMPSWAP;
+  }
+  return null;
 }
 
 // ── WSOL-aware swap parser ─────────────────────────────────────────────────────
@@ -353,10 +376,11 @@ class RaydiumMultiSubscriber {
       const logs      = value["logs"]      as string[] | undefined;
 
       if (!mint || !signature || !Array.isArray(logs)) return;
-      if (!isRaydiumSwap(logs)) return; // not a swap (e.g., approval/transfer)
+      const swapPlatform = detectDexPlatform(logs);
+      if (!swapPlatform) return; // not a tracked swap (approval/transfer/unknown)
 
-      void this.handleSwap(signature, mint).catch((err: unknown) => {
-        this.log.error({ err, signature, mint }, "raydium_amm: error processing swap");
+      void this.handleSwap(signature, mint, swapPlatform).catch((err: unknown) => {
+        this.log.error({ err, signature, mint, swapPlatform }, "raydium_amm: error processing swap");
       });
     });
 
@@ -374,13 +398,13 @@ class RaydiumMultiSubscriber {
     });
   }
 
-  private async handleSwap(signature: string, mint: string): Promise<void> {
+  private async handleSwap(signature: string, mint: string, platform: string): Promise<void> {
     const tx = await getTransaction(signature);
     if (!tx || tx.meta?.err) return;
 
     const swap = parseRaydiumSwap(tx, mint);
     if (!swap) {
-      this.log.debug({ signature, mint }, "raydium_amm: could not parse swap — skipping");
+      this.log.debug({ signature, mint, platform }, "raydium_amm: could not parse swap — skipping");
       return;
     }
 
@@ -404,7 +428,7 @@ class RaydiumMultiSubscriber {
         tokenAmount,
         priceEth,
         txHash:        signature,
-        platform:      PLATFORM,
+        platform,          // "raydium_amm" or "pumpswap" depending on which DEX
         timestamp:     new Date(),
       })
       .onConflictDoNothing()
@@ -414,7 +438,6 @@ class RaydiumMultiSubscriber {
 
     // Update token aggregate stats.
     // market_cap_eth (lamports) = total_supply_atoms × sol_lamports / token_atoms
-    // Mirrors the pump.fun formula: (PUMP_TOTAL_SUPPLY × vSol / vTok).
     await db.update(tokensTable).set({
       tradeCount: sql`${tokensTable.tradeCount} + 1`,
       volumeEth:  sql`CAST(CAST(${tokensTable.volumeEth} AS NUMERIC) + ${solLamports} AS TEXT)`,
@@ -431,8 +454,8 @@ class RaydiumMultiSubscriber {
     }).where(eq(tokensTable.address, mint));
 
     this.log.info(
-      { mint, isBuy, solLamports, tokenAmount, priceEth },
-      "raydium_amm: post-graduation trade ingested"
+      { mint, isBuy, solLamports, tokenAmount, priceEth, platform },
+      `${platform}: post-graduation trade ingested`
     );
 
     // Fetch latest token state for the SSE payload
@@ -459,7 +482,7 @@ class RaydiumMultiSubscriber {
         tokenAmount:   trade.tokenAmount,
         priceEth:      trade.priceEth,
         txHash:        trade.txHash,
-        platform:      PLATFORM,
+        platform,
         timestamp:     trade.timestamp.toISOString(),
       },
       token: {
@@ -469,11 +492,11 @@ class RaydiumMultiSubscriber {
         priceEth,
         marketCapEth:         tokenRow?.marketCapEth ?? null,
         volumeEth:            tokenRow?.volumeEth    ?? solLamports,
-        // Raydium uses a standard xy=k pool — no "virtual reserves" concept.
+        // xy=k pool — no "virtual reserves" concept on either Raydium or PumpSwap.
         virtualEthReserves:   "0",
         virtualTokenReserves: "0",
         tradeCount:           Number(tokenRow?.tradeCount ?? 0),
-        platform:             PLATFORM,
+        platform,
         chain:                CHAIN,
       },
     });

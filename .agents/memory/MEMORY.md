@@ -5,3 +5,4 @@
 - [Pump.fun Anchor event log parsing](pumpfun-anchor-events.md) — parse "Program data:" base64 from WS logs; eliminates all getTransaction calls; TradeEvent gives exact virtual reserves
 - [pump.fun price_eth unit convention](pumpfun-price-units.md) — price_eth must be SOL/token (divide raw AMM ratio by 1000); market_cap_eth stays in lamports; verification SQL included
 - [pump.fun on-chain swap structure](pumpfun-onchain-swap.md) — discriminators, account ordering (buy vs sell differ), PDA seeds, Vite polyfill requirement, slippage & platform fee conventions
+- [PumpSwap indexer integration](pumpswap-indexer.md) — detection embedded in raydium-amm.ts (not a separate file); detectDexPlatform routes by log instruction names; platform="pumpswap" in trades table
