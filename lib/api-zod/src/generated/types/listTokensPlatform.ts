@@ -10,7 +10,9 @@ export type ListTokensPlatform = typeof ListTokensPlatform[keyof typeof ListToke
 
 
 export const ListTokensPlatform = {
-  pump_fun: 'pump_fun',
-  moonshot: 'moonshot',
-  letsbonk: 'letsbonk',
+  pump_fun:          'pump_fun',
+  moonshot:          'moonshot',
+  letsbonk:          'letsbonk',
+  raydium_launchlab: 'raydium_launchlab',
+  daos_fun:          'daos_fun',
 } as const;

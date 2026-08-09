@@ -616,7 +616,11 @@ export default function Dashboard() {
     // Filter live tokens by selected platform
     const filteredLive: FeedToken[] = platformFilter === "all"
       ? liveTokens
-      : liveTokens.filter((t) => t.platform === platformFilter);
+      : liveTokens.filter((t) =>
+          platformFilter === "raydium_launchlab"
+            ? (t.platform === "raydium_launchlab" || (t.platform === "pump_fun" && t.graduated))
+            : t.platform === platformFilter
+        );
 
     // Build a lookup: address → live FeedToken (for merging into API rows)
     const liveByAddress = new Map<string, FeedToken>(

@@ -28,7 +28,7 @@ export const ListTokensQueryParams = zod.object({
   "offset": zod.coerce.number().default(listTokensQueryOffsetDefault),
   "search": zod.coerce.string().optional(),
   "graduated": zod.coerce.boolean().optional(),
-  "platform": zod.enum(['pump_fun', 'moonshot', 'letsbonk']).optional()
+  "platform": zod.enum(['pump_fun', 'moonshot', 'letsbonk', 'raydium_launchlab', 'daos_fun']).optional()
 })
 
 export const listTokensResponsePlatformDefault = `unknown`;

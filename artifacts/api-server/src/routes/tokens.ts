@@ -121,8 +121,14 @@ router.get("/tokens", async (req, res): Promise<void> => {
       where.push(`t.graduated = $${params.length}`);
     }
     if (platform) {
-      params.push(platform);
-      where.push(`t.platform = $${params.length}`);
+      if (platform === "raydium_launchlab") {
+        // "Raydium" tab: show native Raydium LaunchLab tokens AND pump.fun tokens
+        // that graduated (migrated) to Raydium/PumpSwap — all from our own DB.
+        where.push(`(t.platform = 'raydium_launchlab' OR (t.platform = 'pump_fun' AND t.graduated = TRUE))`);
+      } else {
+        params.push(platform);
+        where.push(`t.platform = $${params.length}`);
+      }
     }
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
     params.push(fetchLimit);
@@ -203,7 +209,14 @@ router.get("/tokens", async (req, res): Promise<void> => {
     conditions.push(eq(tokensTable.graduated, graduated));
   }
   if (platform) {
-    conditions.push(eq(tokensTable.platform, platform));
+    if (platform === "raydium_launchlab") {
+      // "Raydium" tab: native Raydium LaunchLab tokens + graduated pump.fun tokens
+      conditions.push(
+        sql`(${tokensTable.platform} = 'raydium_launchlab' OR (${tokensTable.platform} = 'pump_fun' AND ${tokensTable.graduated} = TRUE))`
+      );
+    } else {
+      conditions.push(eq(tokensTable.platform, platform));
+    }
   }
   if (conditions.length > 0) {
     query = query.where(and(...conditions));
