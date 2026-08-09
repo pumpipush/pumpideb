@@ -31,6 +31,11 @@ import { SwapSettingsPopover } from "@/components/shared/SwapSettingsPopover";
 import { useSwapSettings, formatSlippage, formatPriorityFee, getSwapSettings } from "@/stores/swapSettings";
 import { useTxToast } from "@/hooks/useTxToast";
 import { buildPumpFunBuyTx, buildPumpFunSellTx, waitForTxConfirmation } from "@/lib/pumpfun-swap";
+import {
+  getJupiterQuote, buildJupiterSwapTx, waitForJupiterTxConfirmation,
+  WSOL_MINT, getRouteLabel, formatJupiterOutput,
+  type JupiterQuoteResponse,
+} from "@/lib/jupiter-swap";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { formatSol, formatTokenAmount } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -672,6 +677,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [amount, setAmount] = useState("");
   /** True while a trade is in-flight (signing + broadcast + on-chain confirmation). */
   const [isTradePending, setIsTradePending] = useState(false);
+
+  // ── Jupiter quote state (graduated tokens routed through Jupiter DEX) ─────
+  const [jupiterQuote, setJupiterQuote]               = useState<JupiterQuoteResponse | null>(null);
+  const [jupiterQuoteLoading, setJupiterQuoteLoading] = useState(false);
+  const [jupiterQuoteError, setJupiterQuoteError]     = useState<string | null>(null);
+
   const [timeframe, setTimeframe] = useState<Timeframe>("1h");
   const [shareOpen, setShareOpen] = useState(false);
   // Bug fix: React state for tx/holders sub-tab instead of imperative DOM manipulation
@@ -684,7 +695,60 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     setAmount("");
     setActiveSubTab("tx");
     setDescExpanded(false);
+    // Reset Jupiter quote when switching tokens
+    setJupiterQuote(null);
+    setJupiterQuoteError(null);
   }, [selectedAddress]);
+
+  // ── Jupiter quote auto-fetch for graduated tokens ─────────────────────────
+  // Fetches a preview quote on amount / mode change (debounced 400ms) and then
+  // auto-refreshes every 15 s so the displayed estimate stays fresh.
+  // Only runs when the token is graduated (= on Raydium/PumpSwap via Jupiter).
+  useEffect(() => {
+    if (!token?.graduated || !amount || parseFloat(amount) <= 0) {
+      setJupiterQuote(null);
+      setJupiterQuoteError(null);
+      setJupiterQuoteLoading(false);
+      return;
+    }
+
+    const { slippageBps } = getSwapSettings();
+
+    const fetchQuote = async () => {
+      setJupiterQuoteLoading(true);
+      setJupiterQuoteError(null);
+      try {
+        const numAmount = parseFloat(amount);
+        if (isNaN(numAmount) || numAmount <= 0) return;
+
+        const amountBaseUnits = tradeMode === "buy"
+          ? BigInt(Math.round(numAmount * 1e9))   // SOL → lamports
+          : BigInt(Math.round(numAmount * 1e6));   // tokens → atoms (pump.fun = 6 dec)
+
+        const inputMint  = tradeMode === "buy" ? WSOL_MINT : token.address;
+        const outputMint = tradeMode === "buy" ? token.address : WSOL_MINT;
+
+        const quote = await getJupiterQuote(inputMint, outputMint, amountBaseUnits, slippageBps);
+        setJupiterQuote(quote);
+      } catch (err) {
+        setJupiterQuoteError(err instanceof Error ? err.message.slice(0, 120) : "Quote unavailable");
+        setJupiterQuote(null);
+      } finally {
+        setJupiterQuoteLoading(false);
+      }
+    };
+
+    // Initial fetch (debounced so rapid typing doesn't spam the API)
+    const debounceTimer = setTimeout(fetchQuote, 400);
+    // Auto-refresh every 15 s — Jupiter quotes expire in ~30 s
+    const refreshTimer  = setInterval(fetchQuote, 15_000);
+
+    return () => {
+      clearTimeout(debounceTimer);
+      clearInterval(refreshTimer);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token?.graduated, token?.address, amount, tradeMode]);
 
   // New chart state
   const [chartTf, setChartTf] = useState<ChartTimeframe>("1m");
@@ -1118,15 +1182,48 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           `On-chain trading for ${token.platform ?? "this platform"} is coming soon.`
         );
       }
-      if (token.graduated) {
-        throw new Error(
-          "This token has graduated to Raydium/PumpSwap. Jupiter routing coming soon."
-        );
-      }
-
-      // Settings are already validated in the store; read at execution time.
-      // slippageBps is clamped [0, 9999] by the store's sanitise() helper.
+      // Settings are validated by the store; clamped [0, 9999] by sanitise().
+      // Declared early so both the Jupiter path and the pump.fun path can use it.
       const safeBps = slippageBps;
+
+      if (token.graduated) {
+        // ── Jupiter swap path for graduated tokens ───────────────────────────
+        // Token has left the bonding curve and is now tradeable on Raydium/PumpSwap.
+        // Jupiter aggregator auto-routes to the best available pool.
+        const numAmt = parseFloat(amount);
+        if (isNaN(numAmt) || numAmt <= 0) throw new Error("Invalid amount");
+
+        const amtBaseUnits = tradeMode === "buy"
+          ? BigInt(Math.round(numAmt * 1e9))   // SOL → lamports
+          : BigInt(Math.round(numAmt * 1e6));   // tokens → atoms (pump.fun = 6 dec)
+
+        const inputMint  = tradeMode === "buy" ? WSOL_MINT : token.address;
+        const outputMint = tradeMode === "buy" ? token.address : WSOL_MINT;
+
+        // Always fetch a fresh quote at submission — the preview quote can be up to
+        // 15 s old; fetching fresh avoids submitting with a stale price reference.
+        const freshQuote = await getJupiterQuote(
+          inputMint,
+          outputMint,
+          amtBaseUnits,
+          safeBps,
+        );
+
+        const { transaction: jupTx, lastValidBlockHeight: jupLastBlock } =
+          await buildJupiterSwapTx(freshQuote, wallet);
+
+        const jupSig = await signAndSendTransaction(jupTx);
+
+        // Extract blockhash from the VersionedTransaction (both v0 + legacy have .recentBlockhash)
+        const jupBlockhash = jupTx.message.recentBlockhash;
+        await waitForJupiterTxConfirmation(jupSig, jupBlockhash, jupLastBlock);
+
+        setAmount("");
+        refetchToken();
+        refetchHistory();
+
+        return jupSig;
+      }
 
       // pump.fun: 6 decimal places → 1 display token = 1,000,000 token atoms
       const ATOMS_PER_TOKEN = 1_000_000;
@@ -1580,6 +1677,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               wallet={wallet}
               handleTrade={handleTrade}
               isPending={isTradePending}
+              isGraduated={!!token?.graduated}
+              jupiterQuote={jupiterQuote}
+              jupiterQuoteLoading={jupiterQuoteLoading}
+              jupiterQuoteError={jupiterQuoteError}
             />
           </div>
         </div>
@@ -2129,6 +2230,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             wallet={wallet}
             handleTrade={handleTrade}
             isPending={isTradePending}
+            isGraduated={!!token?.graduated}
+            jupiterQuote={jupiterQuote}
+            jupiterQuoteLoading={jupiterQuoteLoading}
+            jupiterQuoteError={jupiterQuoteError}
           />
         </div>
 
@@ -2164,14 +2269,21 @@ interface TradePanelFormProps {
   setTradeMode: (m: "buy" | "sell") => void;
   amount: string;
   setAmount: (v: string) => void;
-  token: { symbol: string; virtualTokenReserves?: string | null };
+  token: { symbol: string; virtualTokenReserves?: string | null; address: string };
   wallet: string | null;
   handleTrade: () => Promise<void>;
   isPending: boolean;
+  /** True when the token has graduated the bonding curve and trades via Jupiter DEX routing */
+  isGraduated?: boolean;
+  /** Current Jupiter quote (auto-refreshed every 15 s, only present when isGraduated + amount set) */
+  jupiterQuote?: JupiterQuoteResponse | null;
+  jupiterQuoteLoading?: boolean;
+  jupiterQuoteError?: string | null;
 }
 
 function TradePanelForm({
   tradeMode, setTradeMode, amount, setAmount, token, wallet, handleTrade, isPending,
+  isGraduated, jupiterQuote, jupiterQuoteLoading, jupiterQuoteError,
 }: TradePanelFormProps) {
   const swapSettings = useSwapSettings();
 
@@ -2190,6 +2302,13 @@ function TradePanelForm({
           className={`relative flex-1 py-2 text-sm font-bold transition-colors duration-150 rounded-[8px] z-10 ${tradeMode === "sell" ? "text-white" : "text-muted-foreground hover:text-foreground"}`}
           onClick={() => setTradeMode("sell")}
         >Sell</button>
+        {/* DEX badge — shown for graduated tokens to signal Jupiter routing is active */}
+        {isGraduated && (
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide uppercase"
+            style={{ background: "rgba(139,92,246,0.18)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.35)" }}>
+            <Zap className="w-2.5 h-2.5" />DEX
+          </div>
+        )}
       </div>
 
       <div className="p-3 space-y-3">
@@ -2239,6 +2358,36 @@ function TradePanelForm({
             <span className="font-bold text-muted-foreground font-mono text-sm">{tradeMode === "buy" ? "SOL" : token.symbol}</span>
           </div>
         </div>
+
+        {/* Jupiter quote preview — only shown for graduated/DEX tokens when amount is set */}
+        {isGraduated && amount && parseFloat(amount) > 0 && (
+          <div className="flex items-center justify-between rounded px-2.5 py-1.5 text-[11px]"
+            style={{ background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.18)" }}>
+            {jupiterQuoteLoading ? (
+              <span className="flex items-center gap-1.5" style={{ color: "#94a3b8" }}>
+                <span className="w-2.5 h-2.5 border border-slate-500 border-t-purple-400 rounded-full animate-spin" />
+                Fetching best price…
+              </span>
+            ) : jupiterQuoteError ? (
+              <span style={{ color: "#f87171" }}>⚠ {jupiterQuoteError}</span>
+            ) : jupiterQuote ? (
+              <>
+                <span style={{ color: "#94a3b8" }}>
+                  You receive&nbsp;≈&nbsp;
+                  <span className="font-semibold font-mono" style={{ color: "#e2e8f0" }}>
+                    {formatJupiterOutput(jupiterQuote, tradeMode, token.symbol)}
+                  </span>
+                </span>
+                <span className="flex items-center gap-1" style={{ color: "#a78bfa" }}>
+                  <Zap className="w-2.5 h-2.5" />
+                  {getRouteLabel(jupiterQuote)}
+                </span>
+              </>
+            ) : (
+              <span style={{ color: "#64748b" }}>Enter an amount for price estimate</span>
+            )}
+          </div>
+        )}
 
         {/* Trade button — changes appearance when wallet not connected */}
         {!wallet ? (
