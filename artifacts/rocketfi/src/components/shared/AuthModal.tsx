@@ -44,8 +44,8 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
 
             <div className="px-6 pt-8 pb-7 flex flex-col items-center text-center">
               {/* Icon */}
-              <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center shadow-[0_0_32px_rgba(59,130,246,0.45)] mb-5">
-                <Rocket className="w-7 h-7 text-white" />
+              <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center shadow-[0_0_32px_rgba(255,255,255,0.18)] mb-5">
+                <Rocket className="w-7 h-7 text-black" />
               </div>
 
               {/* Heading */}
@@ -60,7 +60,7 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
               <button
                 type="button"
                 onClick={() => setWalletModal(true)}
-                className="w-full h-12 rounded-xl bg-primary text-white text-sm font-semibold flex items-center justify-center gap-2.5 hover:bg-primary/90 active:scale-[0.98] transition-all shadow-[0_0_24px_rgba(59,130,246,0.3)]"
+                className="w-full h-12 rounded-xl bg-primary text-primary-foreground text-sm font-semibold flex items-center justify-center gap-2.5 hover:bg-primary/90 active:scale-[0.98] transition-all shadow-[0_0_24px_rgba(255,255,255,0.1)]"
               >
                 <Wallet className="w-4 h-4" />
                 Connect Wallet
