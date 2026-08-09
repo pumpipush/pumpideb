@@ -75,10 +75,10 @@ interface PlatformOption {
 const PLATFORM_OPTIONS: PlatformOption[] = [
   { id: "all",      label: "All",      emoji: "⚡" },
   { id: "pump_fun", label: "Pump.fun", emoji: "🐸", logoUrl: "/pumpfun.png" },
-  { id: "raydium",  label: "Raydium",  emoji: "⚡" },
-  { id: "pumpswap", label: "PumpSwap", emoji: "🚀" },
-  { id: "meteora",  label: "Meteora",  emoji: "🌠" },
-  { id: "orca",     label: "Orca",     emoji: "🐳" },
+  { id: "raydium",  label: "Raydium",  emoji: "⚡", logoUrl: "/raydium.jpg" },
+  { id: "pumpswap", label: "PumpSwap", emoji: "🚀", logoUrl: "/pumpswap.png" },
+  { id: "meteora",  label: "Meteora",  emoji: "🌠", logoUrl: "/meteora.png" },
+  { id: "orca",     label: "Orca",     emoji: "🐳", logoUrl: "/orca.png" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
