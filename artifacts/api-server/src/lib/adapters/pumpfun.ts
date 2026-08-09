@@ -301,6 +301,19 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
       return;
     }
 
+    // Guard: never insert WSOL or system programs as pump.fun tokens — they can
+    // appear as the "mint" account in transactions where a bonding-curve account
+    // is created for WSOL-related operations.
+    const CREATION_SKIP = new Set([
+      "So11111111111111111111111111111111111111112",    // WSOL
+      "11111111111111111111111111111111",               // system program
+      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",  // SPL Token program
+    ]);
+    if (CREATION_SKIP.has(mint)) {
+      this.log.debug({ mint, signature }, "pump_fun: create: skipping known non-token address");
+      return;
+    }
+
     await db.insert(tokensTable).values({
       address:              mint,
       name,
@@ -602,6 +615,18 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
     const migKeys = tx.transaction?.message?.accountKeys ?? [];
     const migK0   = migKeys[0];
     const migFeePayer = migK0 ? (typeof migK0 === "string" ? migK0 : (migK0 as { pubkey?: string }).pubkey ?? "") : "";
+
+    // Guard: WSOL and system programs can appear as the "mint" in malformed
+    // migration transactions and must never be treated as a graduated token.
+    const GRADUATION_SKIP = new Set([
+      "So11111111111111111111111111111111111111112",   // WSOL
+      "11111111111111111111111111111111",              // system program
+      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // SPL Token program
+    ]);
+    if (GRADUATION_SKIP.has(mint)) {
+      this.log.warn({ mint, signature }, "pump_fun: graduation: skipping known non-token address");
+      return;
+    }
 
     // Upsert: create a minimal stub if this token was never indexed, then mark as
     // graduated. This handles tokens that launched and graduated while the WebSocket
