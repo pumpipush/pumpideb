@@ -55,7 +55,16 @@ async function fetchList(): Promise<void> {
       log.info({ count: _tokens.length }, "jupiter-tokens: strict list refreshed");
     }
   } catch (err) {
-    log.warn({ err }, "jupiter-tokens: list fetch failed (will retry at next interval)");
+    // DNS failures (e.g. tokens.jup.ag unreachable in sandboxed envs) are expected
+    // in dev — log at debug level after first attempt to avoid startup noise.
+    // err.cause holds the actual DNS/network error; String(err) only gives "TypeError: fetch failed"
+    const errFull = `${String(err)} ${String((err as NodeJS.ErrnoException)?.cause ?? "")}`;
+    const isDns   = errFull.includes("ENOTFOUND") || errFull.includes("getaddrinfo");
+    if (isDns) {
+      log.debug({ reason: errFull.split("\n")[0] }, "jupiter-tokens: DNS unreachable (dev env) — search uses DB only");
+    } else {
+      log.warn({ err }, "jupiter-tokens: list fetch failed (will retry at next interval)");
+    }
   } finally {
     _fetching = false;
   }

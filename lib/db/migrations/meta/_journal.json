@@ -15,6 +15,13 @@
       "when": 1786290000000,
       "tag": "0001_repair_heal_price_eth",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786305900000,
+      "tag": "0002_add_dex_columns",
+      "breakpoints": true
     }
   ]
 }

@@ -28,7 +28,7 @@ export const ListTokensQueryParams = zod.object({
   "offset": zod.coerce.number().default(listTokensQueryOffsetDefault),
   "search": zod.coerce.string().optional(),
   "graduated": zod.coerce.boolean().optional(),
-  "platform": zod.enum(['pump_fun', 'moonshot', 'letsbonk', 'raydium_launchlab', 'daos_fun']).optional()
+  "platform": zod.enum(['pump_fun', 'moonshot', 'letsbonk', 'raydium_launchlab', 'daos_fun', 'raydium', 'pumpswap', 'meteora', 'orca']).optional()
 })
 
 export const listTokensResponsePlatformDefault = `unknown`;
@@ -59,7 +59,14 @@ export const ListTokensResponseItem = zod.object({
   "websiteUrl": zod.string().nullish(),
   "platform": zod.string().default(listTokensResponsePlatformDefault).describe('Source platform: pump_fun | moonshot | letsbonk | unknown'),
   "chain": zod.string().default(listTokensResponseChainDefault).describe('Chain: solana | base'),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  // ── Multi-DEX fields (nullable — only present for non-pump.fun tokens) ──────
+  "priceUsd": zod.number().nullish(),
+  "marketCapUsd": zod.number().nullish(),
+  "liquidityUsd": zod.number().nullish(),
+  "poolAddress": zod.string().nullish(),
+  "quoteMint": zod.string().nullish(),
+  "pctChange24h": zod.number().nullish(),
 })
 export const ListTokensResponse = zod.array(ListTokensResponseItem)
 
@@ -112,7 +119,13 @@ export const CreateTokenResponse = zod.object({
   "websiteUrl": zod.string().nullish(),
   "platform": zod.string().default(createTokenResponsePlatformDefault).describe('Source platform: pump_fun | moonshot | letsbonk | unknown'),
   "chain": zod.string().default(createTokenResponseChainDefault).describe('Chain: solana | base'),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "priceUsd": zod.number().nullish(),
+  "marketCapUsd": zod.number().nullish(),
+  "liquidityUsd": zod.number().nullish(),
+  "poolAddress": zod.string().nullish(),
+  "quoteMint": zod.string().nullish(),
+  "pctChange24h": zod.number().nullish(),
 })
 
 
@@ -153,7 +166,13 @@ export const GetTrendingTokensResponseItem = zod.object({
   "websiteUrl": zod.string().nullish(),
   "platform": zod.string().default(getTrendingTokensResponsePlatformDefault).describe('Source platform: pump_fun | moonshot | letsbonk | unknown'),
   "chain": zod.string().default(getTrendingTokensResponseChainDefault).describe('Chain: solana | base'),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "priceUsd": zod.number().nullish(),
+  "marketCapUsd": zod.number().nullish(),
+  "liquidityUsd": zod.number().nullish(),
+  "poolAddress": zod.string().nullish(),
+  "quoteMint": zod.string().nullish(),
+  "pctChange24h": zod.number().nullish(),
 })
 export const GetTrendingTokensResponse = zod.array(GetTrendingTokensResponseItem)
 
@@ -193,7 +212,13 @@ export const GetTokenResponse = zod.object({
   "websiteUrl": zod.string().nullish(),
   "platform": zod.string().default(getTokenResponsePlatformDefault).describe('Source platform: pump_fun | moonshot | letsbonk | unknown'),
   "chain": zod.string().default(getTokenResponseChainDefault).describe('Chain: solana | base'),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "priceUsd": zod.number().nullish(),
+  "marketCapUsd": zod.number().nullish(),
+  "liquidityUsd": zod.number().nullish(),
+  "poolAddress": zod.string().nullish(),
+  "quoteMint": zod.string().nullish(),
+  "pctChange24h": zod.number().nullish(),
 })
 
 
@@ -245,7 +270,13 @@ export const UpdateTokenResponse = zod.object({
   "websiteUrl": zod.string().nullish(),
   "platform": zod.string().default(updateTokenResponsePlatformDefault).describe('Source platform: pump_fun | moonshot | letsbonk | unknown'),
   "chain": zod.string().default(updateTokenResponseChainDefault).describe('Chain: solana | base'),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "priceUsd": zod.number().nullish(),
+  "marketCapUsd": zod.number().nullish(),
+  "liquidityUsd": zod.number().nullish(),
+  "poolAddress": zod.string().nullish(),
+  "quoteMint": zod.string().nullish(),
+  "pctChange24h": zod.number().nullish(),
 })
 
 

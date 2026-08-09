@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, numeric, doublePrecision } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -28,6 +28,12 @@ export const tokensTable = pgTable("tokens", {
   platform: text("platform").notNull().default("unknown"),
   chain: text("chain").notNull().default("base"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // ── Multi-DEX columns (nullable — only set for non-pump.fun tokens) ─────────
+  poolAddress:   text("pool_address"),
+  quoteMint:     text("quote_mint"),
+  liquidityUsd:  doublePrecision("liquidity_usd"),
+  priceUsd:      doublePrecision("price_usd"),
+  marketCapUsd:  doublePrecision("market_cap_usd"),
 });
 
 export const insertTokenSchema = createInsertSchema(tokensTable).omit({

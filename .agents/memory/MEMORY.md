@@ -5,4 +5,6 @@
 - [Pump.fun Anchor event log parsing](pumpfun-anchor-events.md) — parse "Program data:" base64 from WS logs; eliminates all getTransaction calls; TradeEvent gives exact virtual reserves
 - [pump.fun price_eth unit convention](pumpfun-price-units.md) — price_eth must be SOL/token (divide raw AMM ratio by 1000); market_cap_eth stays in lamports; verification SQL included
 - [pump.fun on-chain swap structure](pumpfun-onchain-swap.md) — discriminators, account ordering (buy vs sell differ), PDA seeds, Vite polyfill requirement, slippage & platform fee conventions
-- [PumpSwap indexer lessons](pumpswap-indexer.md) — stubbed out; correct strategy is lazy pool discovery via Program data log decode; per-mint subscribe & getSignaturesForAddress both fail on free RPCs
+- [PumpSwap indexer lessons](pumpswap-indexer.md) — too high volume for free RPC streaming (queue saturates in <1s); gated behind ENABLE_STREAMING_ADAPTERS=1 env var; Raydium and pump.fun only in dev
+- [Multi-DEX adapter pattern](multidex-adapters.md) — Raydium=REST polling 60s; PumpSwap/Meteora/Orca=logsSubscribe gated for prod; backfill via native DEX APIs; schema has priceUsd/marketCapUsd/poolAddress/quoteMint/liquidityUsd columns (migration 0002)
+- [Multi-DEX backfill sources](multidex-backfill.md) — Birdeye exchange filter broken (all DEXes return same tokens); use native APIs per DEX; Meteora=amm.meteora.ag/pools; Orca=api.orca.so/v1/whirlpool/list; PumpSwap=graduated pump_fun tokens in DB (route handles this)

@@ -15,4 +15,8 @@ export const ListTokensPlatform = {
   letsbonk:          'letsbonk',
   raydium_launchlab: 'raydium_launchlab',
   daos_fun:          'daos_fun',
+  raydium:           'raydium',
+  pumpswap:          'pumpswap',
+  meteora:           'meteora',
+  orca:              'orca',
 } as const;

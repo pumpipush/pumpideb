@@ -123,9 +123,15 @@ router.get("/tokens", async (req, res): Promise<void> => {
     }
     if (platform) {
       if (platform === "raydium_launchlab") {
-        // "Raydium" tab: show native Raydium LaunchLab tokens AND pump.fun tokens
-        // that graduated (migrated) to Raydium/PumpSwap — all from our own DB.
+        // "Raydium LaunchLab" tab: native tokens + graduated pump.fun that migrated
         where.push(`(t.platform = 'raydium_launchlab' OR (t.platform = 'pump_fun' AND t.graduated = TRUE))`);
+      } else if (platform === "pumpswap") {
+        // "PumpSwap" tab: tokens indexed as pumpswap + graduated pump.fun tokens
+        // (pump.fun tokens graduate to PumpSwap when bonding curve fills)
+        where.push(`(t.platform = 'pumpswap' OR (t.platform = 'pump_fun' AND t.graduated = TRUE))`);
+      } else if (platform === "raydium") {
+        // "Raydium" tab: tokens indexed via Raydium polling adapter
+        where.push(`(t.platform = 'raydium')`);
       } else {
         params.push(platform);
         where.push(`t.platform = $${params.length}`);
@@ -211,9 +217,13 @@ router.get("/tokens", async (req, res): Promise<void> => {
   }
   if (platform) {
     if (platform === "raydium_launchlab") {
-      // "Raydium" tab: native Raydium LaunchLab tokens + graduated pump.fun tokens
       conditions.push(
         sql`(${tokensTable.platform} = 'raydium_launchlab' OR (${tokensTable.platform} = 'pump_fun' AND ${tokensTable.graduated} = TRUE))`
+      );
+    } else if (platform === "pumpswap") {
+      // PumpSwap tab: pumpswap-indexed tokens + graduated pump.fun tokens
+      conditions.push(
+        sql`(${tokensTable.platform} = 'pumpswap' OR (${tokensTable.platform} = 'pump_fun' AND ${tokensTable.graduated} = TRUE))`
       );
     } else {
       conditions.push(eq(tokensTable.platform, platform));
