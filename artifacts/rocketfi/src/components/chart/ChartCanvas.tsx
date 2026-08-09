@@ -667,32 +667,7 @@ export const ChartCanvas = memo(function ChartCanvas({
         barBucketSecRef.current = (clean[1]!.time - clean[0]!.time) || 60;
       }
 
-      // ── Graduation marker (lightweight-charts v5 plugin API) ──────────────
-      // createSeriesMarkers() was called in useLayoutEffect; the plugin ref is
-      // always attached to the current main series. Update its marker list here
-      // so any change to bars OR graduatedAt causes the annotation to re-render.
-      const markerPlugin = seriesMarkersRef.current;
-      if (markerPlugin) {
-        if (graduatedAt && clean.length > 0) {
-          const gradTs = new Date(graduatedAt).getTime() / 1000; // unix seconds
-          // Walk forward to find the last bar whose time ≤ graduatedAt
-          let bestBar = clean[0]!;
-          for (const b of clean) {
-            if (b.time <= gradTs) bestBar = b;
-            else break;
-          }
-          markerPlugin.setMarkers([{
-            time: bestBar.time as Time,
-            position: "aboveBar",
-            color: "#a78bfa",
-            shape: "arrowUp",
-            text: "Raydium ↑",
-          }]);
-        } else {
-          // No graduation timestamp — clear any stale marker
-          markerPlugin.setMarkers([]);
-        }
-      }
+      // Graduation marker removed — no annotation on chart
     } catch (err) { console.warn("[ChartCanvas] setData:", err); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bars, chartType, graduatedAt]);
@@ -930,24 +905,6 @@ export const ChartCanvas = memo(function ChartCanvas({
       <ChartSkeleton visible={!chartReady} />
       <ChartNoData visible={chartReady && !bars.length} />
       <div ref={mainRef} style={{ flex: 1, minHeight: 0 }} />
-
-      {/* ── Graduated badge — top-right, visible only for graduated tokens ── */}
-      {graduated && (
-        <div
-          className="absolute top-2 right-2 z-20 select-none flex items-center gap-1.5 pointer-events-none"
-          style={{
-            background: "rgba(34,197,94,0.12)",
-            border: "1px solid rgba(34,197,94,0.40)",
-            borderRadius: 6,
-            padding: "3px 8px",
-            backdropFilter: "blur(6px)",
-          }}
-        >
-          <span style={{ fontSize: 10, color: "#4ade80", fontWeight: 700, letterSpacing: "0.05em" }}>
-            🎓 GRADUATED TO RAYDIUM
-          </span>
-        </div>
-      )}
 
       {/* ── In-chart symbol + OHLC overlay — single row ── */}
       <div
