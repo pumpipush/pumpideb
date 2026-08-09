@@ -1246,7 +1246,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2 flex-wrap leading-tight">
               <h1 className="text-lg font-bold text-foreground">{displayName}</h1>
-              <span className="text-primary font-mono text-sm font-bold whitespace-nowrap">${displaySymbol}</span>
+              <span className="text-[#94a3b8] font-mono text-sm font-semibold whitespace-nowrap tracking-wide">${displaySymbol}</span>
             </div>
             <div className="flex items-center gap-2 mt-2">
               {(token as any).twitterUrl && (
@@ -2321,7 +2321,7 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
                 <div className="text-[14px] font-semibold text-foreground truncate group-hover:text-primary transition-colors">
                   {token.name}
                 </div>
-                <div className="text-[12px] font-mono mt-0.5" style={{ color: "#4ade80" }}>${token.symbol}</div>
+                <div className="text-[12px] font-mono mt-0.5 text-[#94a3b8] tracking-wide">${token.symbol}</div>
               </div>
 
               {/* Balance */}
