@@ -786,25 +786,26 @@ export default function Dashboard() {
 
             {/* Sort tabs + view controls */}
             <div className="flex flex-wrap items-center gap-2 justify-between">
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* Sort tabs */}
-                <div className="flex gap-1 bg-card border border-border/40 rounded-sm p-0.5">
-                  {(["New", "Trending", "Volume", "Graduated"] as SortTab[]).map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => { setActiveTab(tab); setPage(1); }}
-                      className={cn(
-                        "px-3 py-1 text-[14px] font-bold rounded-[3px] transition-all duration-150",
-                        activeTab === tab
-                          ? "bg-primary text-black shadow-sm"
-                          : "text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </div>
+              {/* Sort tabs */}
+              <div className="flex gap-1 bg-card border border-border/40 rounded-sm p-0.5">
+                {(["New", "Trending", "Volume", "Graduated"] as SortTab[]).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => { setActiveTab(tab); setPage(1); }}
+                    className={cn(
+                      "px-3 py-1 text-[14px] font-bold rounded-[3px] transition-all duration-150",
+                      activeTab === tab
+                        ? "bg-primary text-black shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
 
+              {/* Right controls: Filters + Grid/Table toggle */}
+              <div className="flex items-center gap-2">
                 {/* Filter toggle */}
                 <button
                   onClick={() => setShowFilters((v) => !v)}
@@ -821,24 +822,24 @@ export default function Dashboard() {
                     <span className="bg-primary text-black text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{activeFilterCount}</span>
                   )}
                 </button>
-              </div>
 
-              {/* Grid/Table toggle */}
-              <div className="flex bg-card border border-border/40 rounded-sm p-0.5 gap-0.5">
-                <button
-                  onClick={() => setViewMode("grid")}
-                  className={cn("p-1.5 rounded-[3px] transition-all duration-150", viewMode === "grid" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
-                  title="Grid view"
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode("table")}
-                  className={cn("p-1.5 rounded-[3px] transition-all duration-150", viewMode === "table" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
-                  title="Table view"
-                >
-                  <List className="w-4 h-4" />
-                </button>
+                {/* Grid/Table toggle */}
+                <div className="flex bg-card border border-border/40 rounded-sm p-0.5 gap-0.5">
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={cn("p-1.5 rounded-[3px] transition-all duration-150", viewMode === "grid" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
+                    title="Grid view"
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode("table")}
+                    className={cn("p-1.5 rounded-[3px] transition-all duration-150", viewMode === "table" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}
+                    title="Table view"
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
 
