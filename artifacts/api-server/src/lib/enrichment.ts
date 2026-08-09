@@ -27,6 +27,7 @@ import { and, desc, gte, isNull, like, or, not, eq, inArray, sql, gt } from "dri
 import { db, tokensTable, tradesTable } from "@workspace/db";
 import { logger } from "./logger";
 import { emitSnapshot } from "./tradeEmitter";
+import { registerGraduatedMint } from "./adapters/raydium-amm";
 
 const POLL_INTERVAL_MS       = 30_000;
 const IDENTITY_BATCH_SIZE    = 20;  // max tokens per identity tick
@@ -373,12 +374,85 @@ async function backfillBondingCurves(): Promise<void> {
   log.info({ count: stale.length }, "enrichment: bonding curve backfill complete");
 }
 
+// ── Graduation detection ───────────────────────────────────────────────────────
+// Periodically checks pump.fun tokens still marked graduated=false that have
+// significant trade activity. Uses DexScreener to confirm they have a
+// PumpSwap/Raydium pool (i.e. they graduated but the migration event was missed).
+
+const GRADUATION_DETECT_INTERVAL_MS = 5 * 60_000; // every 5 minutes
+const GRADUATION_DETECT_BATCH       = 20;          // mints per DexScreener call
+const GRADUATION_DEX_IDS = new Set(["pumpswap", "raydium", "raydium-clmm", "raydium-cp"]);
+
+interface DexScreenerPair { dexId: string; baseToken: { address: string } }
+interface DexScreenerResponse { pairs: DexScreenerPair[] | null }
+
+async function detectGraduations(): Promise<void> {
+  // Find pump.fun tokens with significant trade activity still marked ungraduated.
+  // tradeCount > 50 avoids wasting API calls on brand-new tokens.
+  const candidates = await db
+    .select({ address: tokensTable.address })
+    .from(tokensTable)
+    .where(
+      and(
+        eq(tokensTable.platform, "pump_fun"),
+        eq(tokensTable.graduated, false),
+        sql`${tokensTable.tradeCount}::int > 50`,
+      ),
+    )
+    .orderBy(desc(tokensTable.tradeCount))
+    .limit(60);
+
+  if (candidates.length === 0) return;
+
+  const newly: string[] = [];
+
+  // DexScreener supports up to ~30 mints per request, comma-separated.
+  for (let i = 0; i < candidates.length; i += GRADUATION_DETECT_BATCH) {
+    const batch = candidates.slice(i, i + GRADUATION_DETECT_BATCH).map(c => c.address);
+    try {
+      const res = await fetch(
+        `https://api.dexscreener.com/latest/dex/tokens/${batch.join(",")}`,
+        { signal: AbortSignal.timeout(10_000), headers: { "User-Agent": "Mintix/1.0" } },
+      );
+      if (!res.ok) continue;
+      const body = (await res.json()) as DexScreenerResponse;
+      const pairs = body.pairs ?? [];
+
+      // Collect mints that have a confirmed DEX pair (graduated from bonding curve)
+      const graduatedInBatch = new Set(
+        pairs
+          .filter(p => GRADUATION_DEX_IDS.has(p.dexId))
+          .map(p => p.baseToken.address),
+      );
+
+      for (const mint of graduatedInBatch) {
+        await db
+          .update(tokensTable)
+          .set({ graduated: true, graduatedAt: sql`COALESCE(${tokensTable.graduatedAt}, NOW())` })
+          .where(and(eq(tokensTable.address, mint), eq(tokensTable.graduated, false)));
+
+        registerGraduatedMint(mint);
+        newly.push(mint);
+      }
+    } catch (err) {
+      log.warn({ err }, "enrichment: graduation detection batch failed");
+    }
+  }
+
+  if (newly.length > 0) {
+    log.info({ count: newly.length, mints: newly }, "enrichment: detected and registered newly-graduated tokens");
+  }
+}
+
 // ── Entry point ────────────────────────────────────────────────────────────────
 
 export function startEnrichmentLoop(): void {
   log.info({ intervalMs: POLL_INTERVAL_MS }, "enrichment: background loop started");
   // Run bonding-curve backfill immediately so existing tokens get real MC values
   void backfillBondingCurves();
+  // Detect tokens that graduated while the indexer was offline (missed migration events)
+  void detectGraduations();
+  setInterval(() => void detectGraduations(), GRADUATION_DETECT_INTERVAL_MS);
   // First tick slightly delayed so adapters can connect and insert initial records
   setTimeout(() => {
     void enrichTick();
