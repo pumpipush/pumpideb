@@ -233,31 +233,49 @@ function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 460) {
 //  rank ≥ TOP_CIRCLES  → floating text label only (no circle shape)
 
 // Helper: derive border / glow / fill-tint from raw pctChange
-function circleColors(pct: number): { border: string; glow: string; fill: string; text: string } {
+interface CircleStyle {
+  border: string; glow: string; fill: string; text: string;
+  fillCenter: string; fillMid: string; fillEdge: string;
+  rimOuter: string;
+}
+
+function circleColors(pct: number): CircleStyle {
   if (pct > 0.15) {
     const t = Math.min(pct / 20, 1);
-    const g = Math.round(lerp(160, 220, t));
+    const g = Math.round(lerp(155, 215, t));
     return {
-      border: `rgba(30,${g},80,${lerp(0.80,1.0,t)})`,
-      glow:   `rgba(20,${g},60,${lerp(0.40,0.70,t)})`,
-      fill:   `rgba(20,${g},55,0.07)`,
-      text:   `rgb(100,${g},120)`,
+      border:     `rgba(28,${g},72,${lerp(0.82,1.0,t)})`,
+      rimOuter:   `rgba(18,${Math.round(g*0.55)},50,${lerp(0.30,0.55,t)})`,
+      glow:       `rgba(15,${g},55,${lerp(0.38,0.68,t)})`,
+      fill:       `rgba(18,${g},50,0.07)`,
+      fillCenter: `rgba(6,${Math.round(g*0.18)},18,0.0)`,
+      fillMid:    `rgba(10,${Math.round(g*0.28)},28,0.10)`,
+      fillEdge:   `rgba(8,${Math.round(g*0.52)},32,0.32)`,
+      text:       `rgb(90,${g},110)`,
     };
   } else if (pct < -0.15) {
     const t  = Math.min(-pct / 20, 1);
-    const rv = Math.round(lerp(190, 248, t));
+    const rv = Math.round(lerp(188, 245, t));
     return {
-      border: `rgba(${rv},22,22,${lerp(0.80,1.0,t)})`,
-      glow:   `rgba(${rv},12,12,${lerp(0.40,0.70,t)})`,
-      fill:   `rgba(${rv},15,15,0.07)`,
-      text:   `rgb(${rv},90,90)`,
+      border:     `rgba(${rv},20,20,${lerp(0.82,1.0,t)})`,
+      rimOuter:   `rgba(${Math.round(rv*0.52)},10,10,${lerp(0.28,0.52,t)})`,
+      glow:       `rgba(${rv},10,10,${lerp(0.38,0.68,t)})`,
+      fill:       `rgba(${rv},14,14,0.07)`,
+      fillCenter: `rgba(${Math.round(rv*0.22)},4,4,0.0)`,
+      fillMid:    `rgba(${Math.round(rv*0.20)},5,5,0.10)`,
+      fillEdge:   `rgba(${Math.round(rv*0.40)},7,7,0.32)`,
+      text:       `rgb(${rv},85,85)`,
     };
   }
   return {
-    border: "rgba(110,130,200,0.80)",
-    glow:   "rgba(80,100,170,0.40)",
-    fill:   "rgba(60,70,110,0.12)",
-    text:   "#94a3b8",
+    border:     "rgba(85,105,175,0.78)",
+    rimOuter:   "rgba(55,70,130,0.32)",
+    glow:       "rgba(65,85,155,0.38)",
+    fill:       "rgba(55,65,105,0.12)",
+    fillCenter: "rgba(22,26,52,0.0)",
+    fillMid:    "rgba(30,36,68,0.10)",
+    fillEdge:   "rgba(48,58,105,0.28)",
+    text:       "#94a3b8",
   };
 }
 
@@ -340,24 +358,35 @@ function drawBubble(
     return;
   }
 
-  // ── MODE A: Transparent circle with colored border (top 5) ────────────────
+  // ── MODE A: Professional circle (top 5) ──────────────────────────────────
   const col = circleColors(b.pctChange);
-  const bw  = isHovered ? 3.0 : 2.2;
+  const bw  = isHovered ? 2.2 : 1.6;
 
   ctx.globalAlpha = fadeAlpha;
   ctx.save();
 
-  // Outer glow
-  ctx.shadowBlur  = (isHovered ? 32 : 20) * dpr;
-  ctx.shadowColor = col.glow;
-
-  // Transparent tinted fill
+  // 1. Radial fill — dark transparent center fading to colored tinted edge
+  const fillGrad = ctx.createRadialGradient(x, y, 0, x, y, r);
+  fillGrad.addColorStop(0,    col.fillCenter);
+  fillGrad.addColorStop(0.55, col.fillMid);
+  fillGrad.addColorStop(1,    col.fillEdge);
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fillStyle = col.fill;
+  ctx.fillStyle = fillGrad;
   ctx.fill();
 
-  // Main border ring
+  // 2. Outer diffuse rim (wide soft ring behind main border)
+  ctx.shadowBlur  = (isHovered ? 48 : 30) * dpr;
+  ctx.shadowColor = col.glow;
+  ctx.beginPath();
+  ctx.arc(x, y, r - bw / 2, 0, Math.PI * 2);
+  ctx.strokeStyle = col.rimOuter;
+  ctx.lineWidth   = bw + 4;
+  ctx.stroke();
+
+  // 3. Main crisp border ring
+  ctx.shadowBlur  = (isHovered ? 18 : 10) * dpr;
+  ctx.shadowColor = col.glow;
   ctx.beginPath();
   ctx.arc(x, y, r - bw / 2, 0, Math.PI * 2);
   ctx.strokeStyle = col.border;
@@ -366,23 +395,32 @@ function drawBubble(
 
   ctx.shadowBlur = 0;
 
-  // Inner highlight ring (glass depth)
+  // 4. Inner thin ring (glass depth)
   ctx.beginPath();
-  ctx.arc(x, y, r - bw - 2, 0, Math.PI * 2);
-  ctx.strokeStyle = "rgba(255,255,255,0.07)";
-  ctx.lineWidth   = 0.8;
+  ctx.arc(x, y, r - bw - 1.8, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(255,255,255,0.06)";
+  ctx.lineWidth   = 0.7;
   ctx.stroke();
 
-  // Specular sheen top-left
+  // 5. Bottom inner shadow — gives sphere depth
+  const bottomShad = ctx.createRadialGradient(x, y + r * 0.28, r * 0.05, x, y + r * 0.55, r * 0.85);
+  bottomShad.addColorStop(0, "rgba(0,0,0,0.28)");
+  bottomShad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.beginPath();
+  ctx.arc(x, y, r - bw, 0, Math.PI * 2);
+  ctx.fillStyle = bottomShad;
+  ctx.fill();
+
+  // 6. Top-left specular sheen — crisp highlight like a light source
   const shine = ctx.createRadialGradient(
-    x - r * 0.32, y - r * 0.36, 0,
-    x - r * 0.12, y - r * 0.16, r * 0.68,
+    x - r * 0.30, y - r * 0.32, 0,
+    x - r * 0.08, y - r * 0.10, r * 0.52,
   );
-  shine.addColorStop(0,    "rgba(255,255,255,0.22)");
-  shine.addColorStop(0.45, "rgba(255,255,255,0.05)");
+  shine.addColorStop(0,    "rgba(255,255,255,0.20)");
+  shine.addColorStop(0.42, "rgba(255,255,255,0.04)");
   shine.addColorStop(1,    "rgba(255,255,255,0)");
   ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.arc(x, y, r - bw, 0, Math.PI * 2);
   ctx.fillStyle = shine;
   ctx.fill();
 
