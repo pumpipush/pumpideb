@@ -809,7 +809,7 @@ export default function Dashboard() {
                 <button
                   onClick={() => setShowFilters((v) => !v)}
                   className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-sm border text-[14px] font-medium transition-all duration-150",
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] border text-[14px] font-medium transition-all duration-150",
                     showFilters || activeFilterCount > 0
                       ? "bg-primary/10 border-primary/40 text-primary"
                       : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
@@ -880,7 +880,7 @@ export default function Dashboard() {
                 <button
                   onClick={() => setOnlyGraduated((v) => !v)}
                   className={cn(
-                    "flex items-center gap-1.5 h-8 px-3 rounded-sm border text-xs font-medium transition-all duration-150",
+                    "flex items-center gap-1.5 h-8 px-3 rounded-[10px] border text-xs font-medium transition-all duration-150",
                     onlyGraduated
                       ? "bg-primary/15 border-primary/50 text-primary"
                       : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
@@ -894,7 +894,7 @@ export default function Dashboard() {
                 <button
                   onClick={() => setOnlyWithImage((v) => !v)}
                   className={cn(
-                    "flex items-center gap-1.5 h-8 px-3 rounded-sm border text-xs font-medium transition-all duration-150",
+                    "flex items-center gap-1.5 h-8 px-3 rounded-[10px] border text-xs font-medium transition-all duration-150",
                     onlyWithImage
                       ? "bg-primary/15 border-primary/50 text-primary"
                       : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
@@ -908,7 +908,7 @@ export default function Dashboard() {
                 {activeFilterCount > 0 && (
                   <button
                     onClick={clearFilters}
-                    className="flex items-center gap-1 h-8 px-3 rounded-sm text-xs text-muted-foreground hover:text-destructive transition-colors ml-auto"
+                    className="flex items-center gap-1 h-8 px-3 rounded-[10px] text-xs text-muted-foreground hover:text-destructive transition-colors ml-auto"
                   >
                     <X className="w-3.5 h-3.5" /> Clear all
                   </button>
@@ -955,7 +955,7 @@ export default function Dashboard() {
                 <button
                   disabled={page === 1}
                   onClick={() => { setPage(p => p - 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                  className="flex items-center gap-1 h-8 px-3 rounded-sm text-[13px] font-medium border transition-all disabled:opacity-30 disabled:cursor-not-allowed border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
+                  className="flex items-center gap-1 h-8 px-3 rounded-[10px] text-[13px] font-medium border transition-all disabled:opacity-30 disabled:cursor-not-allowed border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" /> Previous
                 </button>
@@ -964,7 +964,7 @@ export default function Dashboard() {
                 {page > 2 && (
                   <>
                     <button onClick={() => { setPage(1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                      className="h-8 w-8 rounded-sm text-[13px] font-medium border border-border/50 text-muted-foreground hover:text-foreground hover:border-border transition-all">
+                      className="h-8 w-8 rounded-[10px] text-[13px] font-medium border border-border/50 text-muted-foreground hover:text-foreground hover:border-border transition-all">
                       1
                     </button>
                     {page > 3 && <span className="text-muted-foreground text-[13px] px-1">…</span>}
@@ -972,16 +972,16 @@ export default function Dashboard() {
                 )}
                 {page > 1 && (
                   <button onClick={() => { setPage(p => p - 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                    className="h-8 w-8 rounded-sm text-[13px] font-medium border border-border/50 text-muted-foreground hover:text-foreground hover:border-border transition-all">
+                    className="h-8 w-8 rounded-[10px] text-[13px] font-medium border border-border/50 text-muted-foreground hover:text-foreground hover:border-border transition-all">
                     {page - 1}
                   </button>
                 )}
-                <button className="h-8 w-8 rounded-sm text-[13px] font-bold border border-primary bg-primary/15 text-primary cursor-default">
+                <button className="h-8 w-8 rounded-[10px] text-[13px] font-bold border border-primary bg-primary/15 text-primary cursor-default">
                   {page}
                 </button>
                 {hasMore && (
                   <button onClick={() => { setPage(p => p + 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                    className="h-8 w-8 rounded-sm text-[13px] font-medium border border-border/50 text-muted-foreground hover:text-foreground hover:border-border transition-all">
+                    className="h-8 w-8 rounded-[10px] text-[13px] font-medium border border-border/50 text-muted-foreground hover:text-foreground hover:border-border transition-all">
                     {page + 1}
                   </button>
                 )}
@@ -990,7 +990,7 @@ export default function Dashboard() {
                 <button
                   disabled={!hasMore}
                   onClick={() => { setPage(p => p + 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                  className="flex items-center gap-1 h-8 px-3 rounded-sm text-[13px] font-medium border transition-all disabled:opacity-30 disabled:cursor-not-allowed border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
+                  className="flex items-center gap-1 h-8 px-3 rounded-[10px] text-[13px] font-medium border transition-all disabled:opacity-30 disabled:cursor-not-allowed border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
                 >
                   Next <ChevronRight className="w-3.5 h-3.5" />
                 </button>

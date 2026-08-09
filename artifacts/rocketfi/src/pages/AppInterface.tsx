@@ -2101,14 +2101,14 @@ function TradePanelForm({
       {/* Mode tabs — sliding pill */}
       <div className="relative flex border-b border-border/40 p-1 gap-1 bg-muted/30">
         <div
-          className={`absolute top-1 bottom-1 w-[calc(50%-6px)] rounded-sm transition-all duration-250 ease-out ${tradeMode === "buy" ? "left-1 bg-[#16a34a] shadow-[0_0_12px_rgba(22,163,74,0.45)]" : "left-[calc(50%+2px)] bg-destructive shadow-[0_0_12px_hsl(0_84%_60%/0.3)]"}`}
+          className={`absolute top-1 bottom-1 w-[calc(50%-6px)] rounded-[10px] transition-all duration-250 ease-out ${tradeMode === "buy" ? "left-1 bg-[#16a34a] shadow-[0_0_12px_rgba(22,163,74,0.45)]" : "left-[calc(50%+2px)] bg-destructive shadow-[0_0_12px_hsl(0_84%_60%/0.3)]"}`}
         />
         <button
-          className={`relative flex-1 py-2 text-sm font-bold transition-colors duration-150 rounded-sm z-10 ${tradeMode === "buy" ? "text-white" : "text-muted-foreground hover:text-foreground"}`}
+          className={`relative flex-1 py-2 text-sm font-bold transition-colors duration-150 rounded-[10px] z-10 ${tradeMode === "buy" ? "text-white" : "text-muted-foreground hover:text-foreground"}`}
           onClick={() => setTradeMode("buy")}
         >Buy</button>
         <button
-          className={`relative flex-1 py-2 text-sm font-bold transition-colors duration-150 rounded-sm z-10 ${tradeMode === "sell" ? "text-white" : "text-muted-foreground hover:text-foreground"}`}
+          className={`relative flex-1 py-2 text-sm font-bold transition-colors duration-150 rounded-[10px] z-10 ${tradeMode === "sell" ? "text-white" : "text-muted-foreground hover:text-foreground"}`}
           onClick={() => setTradeMode("sell")}
         >Sell</button>
       </div>
@@ -2155,7 +2155,7 @@ function TradePanelForm({
         {!wallet ? (
           <button
             onClick={handleTrade}
-            className="w-full h-11 text-sm font-bold rounded-sm transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2"
+            className="w-full h-11 text-sm font-bold rounded-[10px] transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2"
             style={{
               background: "rgba(255,255,255,0.05)",
               border: "1px solid rgba(255,255,255,0.14)",
@@ -2169,7 +2169,7 @@ function TradePanelForm({
           </button>
         ) : (
           <Button
-            className={`w-full h-11 text-sm font-bold rounded-sm shadow-none transition-all duration-200 active:scale-[0.98] ${tradeMode === "buy" ? "bg-[#16a34a] hover:bg-[#15803d] hover:shadow-[0_0_16px_rgba(22,163,74,0.4)] text-white" : "bg-destructive hover:bg-destructive/90 hover:shadow-[0_0_16px_hsl(0_84%_60%/0.3)] text-white"}`}
+            className={`w-full h-11 text-sm font-bold rounded-[10px] shadow-none transition-all duration-200 active:scale-[0.98] ${tradeMode === "buy" ? "bg-[#16a34a] hover:bg-[#15803d] hover:shadow-[0_0_16px_rgba(22,163,74,0.4)] text-white" : "bg-destructive hover:bg-destructive/90 hover:shadow-[0_0_16px_hsl(0_84%_60%/0.3)] text-white"}`}
             onClick={handleTrade}
             disabled={isPending}
           >

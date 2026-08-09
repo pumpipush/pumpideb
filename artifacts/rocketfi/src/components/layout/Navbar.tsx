@@ -30,7 +30,7 @@ function WalletButton() {
         {/* Mobile: icon only */}
         <button
           onClick={() => setWalletModal(true)}
-          className="md:hidden flex items-center justify-center h-8 w-8 rounded-sm border border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
+          className="md:hidden flex items-center justify-center h-8 w-8 rounded-[10px] border border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
           aria-label="Connect Wallet"
         >
           <Wallet className="h-4 w-4" />
@@ -41,7 +41,7 @@ function WalletButton() {
           variant="outline"
           size="sm"
           onClick={() => setWalletModal(true)}
-          className="hidden md:flex h-8 text-xs font-semibold rounded-sm border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
+          className="hidden md:flex h-8 text-xs font-semibold rounded-[10px] border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
         >
           Connect Wallet
         </Button>

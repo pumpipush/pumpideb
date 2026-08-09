@@ -77,7 +77,7 @@ export function Sidebar() {
 
       <div className="p-4 border-t border-border/50 flex flex-col gap-4">
         <Link href="/app" className="block w-full">
-          <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 rounded-sm font-bold text-sm h-9 transition-all duration-200 hover:shadow-[0_0_20px_rgba(255,255,255,0.15)] active:scale-[0.98]">
+          <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 rounded-[10px] font-bold text-sm h-9 transition-all duration-200 hover:shadow-[0_0_20px_rgba(255,255,255,0.15)] active:scale-[0.98]">
             Create
           </Button>
         </Link>
