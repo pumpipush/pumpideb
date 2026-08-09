@@ -437,12 +437,10 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               style={{
                 background: (isUploading || createToken.isPending)
                   ? "rgba(255,255,255,0.06)"
-                  : !wallet
-                  ? "rgba(255,255,255,0.08)"
                   : "hsl(var(--primary))",
                 color: (isUploading || createToken.isPending) ? "#475569" : "hsl(var(--primary-foreground))",
-                border: !wallet && !isUploading && !createToken.isPending ? "1px solid rgba(255,255,255,0.15)" : "none",
-                boxShadow: (isUploading || createToken.isPending || !wallet) ? "none" : "0 0 20px rgba(255,255,255,0.08)",
+                border: "none",
+                boxShadow: (isUploading || createToken.isPending) ? "none" : "0 0 20px rgba(255,255,255,0.08)",
                 cursor: (isUploading || createToken.isPending) ? "not-allowed" : "pointer",
               }}
             >
