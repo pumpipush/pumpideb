@@ -81,7 +81,7 @@ export function Sidebar() {
             Create
           </Button>
         </Link>
-        <div className="text-center text-[10px] text-muted-foreground/40 font-mono">v1.0 beta</div>
+        <div className="text-center text-[10px] text-muted-foreground/70 font-mono">v1.0 beta</div>
       </div>
     </div>
   );

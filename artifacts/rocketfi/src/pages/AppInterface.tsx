@@ -527,12 +527,12 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 ))}
               </div>
 
-              <div className="text-[10px] font-mono flex items-center gap-1" style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 10 }}>
-                <span style={{ color: "#64748b" }}>by</span>
-                {wallet
-                  ? <span style={{ color: "#94a3b8" }}>{formatAddress(wallet)}</span>
-                  : <span style={{ color: "#64748b" }}>— connect wallet</span>}
-              </div>
+              {wallet && (
+                <div className="text-[10px] font-mono flex items-center gap-1" style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 10 }}>
+                  <span style={{ color: "#64748b" }}>by</span>
+                  <span style={{ color: "#94a3b8" }}>{formatAddress(wallet)}</span>
+                </div>
+              )}
             </div>
           </div>
 
