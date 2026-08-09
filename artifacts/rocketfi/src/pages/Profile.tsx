@@ -61,11 +61,14 @@ function generateUsername(address: string): string {
   return `${adj}${noun}${num}`;
 }
 
-// ─── Banner gradient from address ─────────────────────────────────────────────
+// ─── Banner gradient + accent from address ────────────────────────────────────
+function accentHue(address: string): number {
+  return parseInt(address.slice(2, 6), 16) % 360;
+}
 function bannerGradient(address: string): string {
-  const h1 = parseInt(address.slice(2, 6), 16) % 360;
+  const h1 = accentHue(address);
   const h2 = (h1 + 140) % 360;
-  return `linear-gradient(135deg, hsl(${h1},60%,18%) 0%, hsl(${h2},55%,12%) 100%)`;
+  return `linear-gradient(135deg, hsl(${h1},65%,16%) 0%, hsl(${h2},55%,10%) 100%)`;
 }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -82,12 +85,11 @@ function AvatarDisplay({ profile, size = 80 }: { profile: Profile; size?: number
 }
 
 // ─── Stat card ────────────────────────────────────────────────────────────────
-function StatCard({ label, value, icon: Icon }: { label: string; value: string | number; icon: React.ElementType }) {
+function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="flex-1 flex flex-col items-center gap-1 py-4 px-2 bg-card border border-border/40 rounded-sm">
-      <Icon className="w-4 h-4 text-muted-foreground mb-0.5" />
-      <span className="text-lg font-bold text-foreground leading-none">{value}</span>
-      <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</span>
+    <div className="flex-1 flex flex-col items-center py-4 px-3">
+      <span className="text-2xl sm:text-3xl font-bold text-foreground tabular-nums leading-none">{value}</span>
+      <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground mt-1.5">{label}</span>
     </div>
   );
 }
@@ -307,18 +309,28 @@ export default function ProfilePage() {
       {/* ── Back ── */}
       {/* ── Banner ── */}
       <div
-        className="relative mt-2 h-24 sm:h-36 w-full overflow-hidden"
+        className="relative mt-2 h-28 sm:h-40 w-full overflow-hidden"
         style={{ background: bannerGradient(address) }}
       >
-        {/* subtle grid overlay */}
+        {/* radial accent glow */}
         <div
-          className="absolute inset-0 opacity-10"
+          className="absolute inset-0"
           style={{
-            backgroundImage:
-              "linear-gradient(rgba(255,255,255,.15) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.15) 1px,transparent 1px)",
-            backgroundSize: "40px 40px",
+            background: `radial-gradient(ellipse at 25% 70%, hsl(${accentHue(address)},70%,30%) 0%, transparent 65%)`,
+            opacity: 0.55,
           }}
         />
+        {/* subtle grid overlay */}
+        <div
+          className="absolute inset-0 opacity-[0.07]"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(255,255,255,.6) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.6) 1px,transparent 1px)",
+            backgroundSize: "32px 32px",
+          }}
+        />
+        {/* bottom fade to background */}
+        <div className="absolute bottom-0 inset-x-0 h-8 bg-gradient-to-t from-background/60 to-transparent" />
       </div>
 
       {/* ── Avatar + header ── */}
@@ -326,7 +338,12 @@ export default function ProfilePage() {
         <div className="flex items-end justify-between -mt-12 mb-4">
           {/* Avatar */}
           <div className="relative">
-            <div className="w-24 h-24 rounded-full border-4 border-background overflow-hidden bg-card">
+            <div
+              className="w-24 h-24 rounded-full border-4 border-background overflow-hidden bg-card"
+              style={{
+                boxShadow: `0 0 0 2px hsl(${accentHue(address)},65%,52%), 0 0 24px hsl(${accentHue(address)},65%,38%)`,
+              }}
+            >
               <AvatarDisplay profile={{ ...profile, username: displayUsername }} size={96} />
             </div>
             {isOwner && (
@@ -374,7 +391,24 @@ export default function ProfilePage() {
 
         {/* Name + address */}
         <div className="mb-1">
-          <h1 className="text-xl font-bold text-foreground leading-tight">{displayUsername}</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl font-bold text-foreground leading-tight">{displayUsername}</h1>
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border"
+              style={{
+                borderColor: `hsl(${accentHue(address)},60%,50%,0.35)`,
+                background: `hsl(${accentHue(address)},60%,50%,0.1)`,
+                color: `hsl(${accentHue(address)},70%,65%)`,
+              }}
+            >
+              <img
+                src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                className="w-2.5 h-2.5 rounded-full"
+                alt="SOL"
+              />
+              On-chain
+            </span>
+          </div>
           <button
             onClick={() => copyToClipboard(address)}
             className="inline-flex items-center gap-1 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors mt-0.5"
@@ -420,13 +454,13 @@ export default function ProfilePage() {
         )}
 
         {/* ── Stats row ── */}
-        <div className="flex gap-2 sm:gap-3 mb-6">
-          <StatCard label="Trades" value={totalTrades || "—"} icon={Activity} />
-          <StatCard label="Volume" value={totalVolume > 0 ? formatSol(totalVolume.toFixed(0)) : "—"} icon={TrendingUp} />
+        <div className="flex divide-x divide-border/30 mb-6 backdrop-blur-sm bg-white/[0.03] border border-border/25 rounded-sm overflow-hidden">
+          <StatCard label="Trades" value={totalTrades || "—"} />
+          <StatCard label="Volume" value={totalVolume > 0 ? formatSol(totalVolume.toFixed(0)) : "—"} />
         </div>
 
         {/* ── Tabs ── */}
-        <div className="flex border-b border-border/50 mb-5 -mx-1">
+        <div className="flex border-b border-border/30 mb-5 -mx-1">
           {(["activity", "wallet"] as Tab[]).map((tab) => (
             <button
               key={tab}
