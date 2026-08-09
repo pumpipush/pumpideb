@@ -3,12 +3,9 @@ import { useParams, useLocation } from "wouter";
 import {
   useGetProfile,
   useUpdateProfile,
-  useListTokens,
   useGetRecentActivity,
   getGetProfileQueryKey,
-  getListTokensQueryKey,
   getGetRecentActivityQueryKey,
-  ListTokensSort,
   Profile,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -19,7 +16,7 @@ import { copyToClipboard } from "@/components/shared/CopyToast";
 import { useWallet } from "@/contexts/WalletContext";
 import { formatAddress, formatMC, formatEth, formatSol, timeAgo, cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
+import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -120,7 +117,7 @@ function ProfileSkeleton() {
 }
 
 // ─── Main component ────────────────────────────────────────────────────────────
-type Tab = "tokens" | "activity" | "wallet";
+type Tab = "activity" | "wallet";
 
 type WalletToken = {
   mint: string;
@@ -146,7 +143,7 @@ export default function ProfilePage() {
   const { wallet } = useWallet();
   const isOwner = wallet?.toLowerCase() === address.toLowerCase();
 
-  const [activeTab, setActiveTab] = useState<Tab>("tokens");
+  const [activeTab, setActiveTab] = useState<Tab>("activity");
 
   // ── Wallet portfolio (on-chain balances) ──────────────────────────────────
   const { data: portfolio, isLoading: portfolioLoading, error: portfolioError } = useQuery<WalletPortfolio>({
@@ -178,15 +175,6 @@ export default function ProfilePage() {
   });
 
   const updateProfile = useUpdateProfile();
-
-  const tokenParams = { sort: ListTokensSort.newest, limit: 200 };
-  const { data: allTokens } = useListTokens(tokenParams, {
-    query: { enabled: activeTab === "tokens" && !!address, queryKey: getListTokensQueryKey(tokenParams) },
-  });
-  // Bug fix: guard toLowerCase() against null/undefined creatorAddress
-  const tokens = allTokens?.filter(
-    (t) => (t.creatorAddress ?? "").toLowerCase() === address.toLowerCase()
-  );
 
   const activityParams = { limit: 200 };
   const { data: allActivity } = useGetRecentActivity(activityParams, {
@@ -440,14 +428,13 @@ export default function ProfilePage() {
 
         {/* ── Stats row ── */}
         <div className="flex gap-2 sm:gap-3 mb-6">
-          <StatCard label="Tokens" value={tokens?.length ?? "—"} icon={Coins} />
           <StatCard label="Trades" value={totalTrades || "—"} icon={Activity} />
           <StatCard label="Volume" value={totalVolume > 0 ? formatSol(totalVolume.toFixed(0)) : "—"} icon={TrendingUp} />
         </div>
 
         {/* ── Tabs ── */}
         <div className="flex border-b border-border/50 mb-5 -mx-1">
-          {(["tokens", "activity", "wallet"] as Tab[]).map((tab) => (
+          {(["activity", "wallet"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -458,55 +445,10 @@ export default function ProfilePage() {
                   : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
-              {tab === "tokens" ? `Tokens${tokens ? ` (${tokens.length})` : ""}` : tab === "wallet" ? "Wallet" : "Activity"}
+              {tab === "wallet" ? "Wallet" : "Activity"}
             </button>
           ))}
         </div>
-
-        {/* ── Tokens tab ── */}
-        {activeTab === "tokens" && (
-          <div>
-            {!tokens ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-36 rounded-sm" />)}
-              </div>
-            ) : tokens.length === 0 ? (
-              <div className="py-16 text-center text-muted-foreground text-sm border border-border/30 border-dashed rounded-sm">
-                No tokens launched yet.
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {tokens.map((token) => (
-                  <Link
-                    key={token.id}
-                    href={`/app?token=${token.address}`}
-                    className="group flex flex-col bg-card border border-border hover:border-primary/50 hover:shadow-[0_0_0_1px_hsl(var(--primary)/0.25)] transition-all duration-200 rounded-sm overflow-hidden cursor-pointer"
-                  >
-                    <div className="aspect-square w-full overflow-hidden relative">
-                      {token.imageUrl ? (
-                        <img src={token.imageUrl} alt={token.symbol} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                      ) : (
-                        <div
-                          className="w-full h-full flex items-center justify-center text-5xl font-bold text-white/80"
-                          style={{ background: tokenCardBackground(token.symbol) }}
-                        >
-                          {token.symbol.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-2.5">
-                      <div className="font-bold text-foreground text-sm truncate">{token.name}</div>
-                      <div className="flex justify-between items-center mt-0.5">
-                        <span className="text-muted-foreground font-mono text-xs">${token.symbol}</span>
-                        <span className="text-primary font-mono text-xs font-bold">{formatMC(token.marketCapEth)}</span>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* ── Activity tab ── */}
         {activeTab === "activity" && (
