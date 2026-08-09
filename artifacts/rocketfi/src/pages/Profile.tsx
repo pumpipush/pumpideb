@@ -637,7 +637,18 @@ export default function ProfilePage() {
                     {/* SOL row */}
                     <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-3 border-b border-border/10 items-center hover:bg-white/[0.02] transition-colors">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#9945FF] to-[#14F195] flex items-center justify-center shrink-0">
+                        <img
+                          src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                          alt="SOL"
+                          className="w-8 h-8 rounded-full shrink-0 object-cover"
+                          onError={(e) => {
+                            const t = e.currentTarget;
+                            t.style.display = "none";
+                            const next = t.nextElementSibling as HTMLElement | null;
+                            if (next) next.style.display = "flex";
+                          }}
+                        />
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#9945FF] to-[#14F195] items-center justify-center shrink-0 hidden">
                           <span className="text-[10px] font-bold text-white">SOL</span>
                         </div>
                         <div className="min-w-0">
@@ -662,12 +673,21 @@ export default function ProfilePage() {
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           {token.imageUrl ? (
-                            <img src={token.imageUrl} alt={token.symbol ?? ""} className="w-8 h-8 rounded-full object-cover shrink-0" />
-                          ) : (
-                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 text-[11px] font-bold text-muted-foreground">
-                              {(token.symbol ?? token.mint.slice(0, 2)).charAt(0).toUpperCase()}
-                            </div>
-                          )}
+                            <img
+                              src={token.imageUrl}
+                              alt={token.symbol ?? ""}
+                              className="w-8 h-8 rounded-full object-cover shrink-0"
+                              onError={(e) => {
+                                const t = e.currentTarget;
+                                t.style.display = "none";
+                                const next = t.nextElementSibling as HTMLElement | null;
+                                if (next) next.style.display = "flex";
+                              }}
+                            />
+                          ) : null}
+                          <div className={`shrink-0 ${token.imageUrl ? "hidden" : ""}`}>
+                            <TokenAvatar symbol={token.symbol ?? token.mint.slice(0, 4)} size={32} shape="circle" />
+                          </div>
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-foreground truncate">{token.name ?? "Unknown Token"}</p>
                             <p className="text-xs text-muted-foreground font-mono truncate">{token.symbol ?? token.mint.slice(0, 8) + "…"}</p>
