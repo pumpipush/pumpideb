@@ -73,12 +73,8 @@ interface PlatformOption {
   logoUrl?: string;
 }
 const PLATFORM_OPTIONS: PlatformOption[] = [
-  { id: "all",       label: "All",       emoji: "⚡" },
-  { id: "pump_fun",  label: "Pump.fun",  emoji: "🐸", logoUrl: "/pumpfun.png" },
-  { id: "moonshot",  label: "Moonshot",  emoji: "🌙" },
-  { id: "letsbonk",  label: "LetsBONK", emoji: "🔨" },
-  { id: "daos_fun",          label: "Daos.fun",  emoji: "🏛️" },
-  { id: "raydium_launchlab", label: "Raydium",   emoji: "⚡" },
+  { id: "all",      label: "All",      emoji: "⚡" },
+  { id: "pump_fun", label: "Pump.fun", emoji: "🐸", logoUrl: "/pumpfun.png" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
