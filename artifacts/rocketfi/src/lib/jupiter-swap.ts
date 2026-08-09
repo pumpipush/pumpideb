@@ -198,23 +198,27 @@ export function getRouteLabel(quote: JupiterQuoteResponse): string {
 /**
  * Format the Jupiter quote output for display in the UI.
  *
- * For buy  (SOL → TOKEN): outAmount is in token atoms (6 decimals) → "X.XX TOKEN"
- * For sell (TOKEN → SOL): outAmount is in lamports (9 decimals)    → "0.XXX SOL"
+ * For buy  (SOL → TOKEN): outAmount is in token atoms → "X.XX TOKEN"
+ * For sell (TOKEN → SOL): outAmount is in lamports (9 decimals) → "0.XXX SOL"
+ *
+ * @param decimals  Token's SPL decimal count.  Defaults to 6 (pump.fun standard).
+ *                  Pass the actual value for external / non-pump.fun tokens.
  */
 export function formatJupiterOutput(
   quote:     JupiterQuoteResponse,
   tradeMode: "buy" | "sell",
   symbol:    string,
+  decimals   = 6,
 ): string {
   const raw = BigInt(quote.outAmount);
   if (tradeMode === "buy") {
-    // outAmount = token atoms (pump.fun always 6 decimals)
-    const display = Number(raw) / 1_000_000;
+    const divisor = Math.pow(10, decimals);
+    const display = Number(raw) / divisor;
     const formatted = display >= 1_000_000
       ? `${(display / 1_000_000).toFixed(2)}M`
       : display >= 1_000
         ? `${(display / 1_000).toFixed(2)}K`
-        : display.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        : display.toLocaleString(undefined, { maximumFractionDigits: 4 });
     return `${formatted} ${symbol}`;
   } else {
     // outAmount = lamports → SOL

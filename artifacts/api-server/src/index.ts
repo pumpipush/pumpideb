@@ -4,6 +4,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { startAdapters } from "./lib/adapters/index";
 import { startEnrichmentLoop } from "./lib/enrichment";
+import { startJupiterTokenSync } from "./lib/jupiter-tokens";
 import { runMigrations } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
@@ -52,6 +53,9 @@ async function start(): Promise<void> {
       // Start background enrichment loop — retries metadata for tokens that
       // got placeholder names/symbols because the upstream API wasn't ready yet
       startEnrichmentLoop();
+
+      // Download and cache Jupiter strict token list (enables "All Solana Tokens" search)
+      startJupiterTokenSync();
 
       resolve();
     });

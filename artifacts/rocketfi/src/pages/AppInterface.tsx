@@ -36,6 +36,10 @@ import {
   WSOL_MINT, getRouteLabel, formatJupiterOutput,
   type JupiterQuoteResponse,
 } from "@/lib/jupiter-swap";
+import {
+  getExternalToken, setExternalToken, ensureJupiterList, getJupiterTokenByAddress,
+  type ExternalSolanaToken,
+} from "@/lib/external-tokens";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { formatSol, formatTokenAmount } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -1381,18 +1385,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   }
 
   if (loadingToken && !token) return <TokenDetailSkeleton />;
-  if (tokenError) return (
-    <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
-      <span className="text-3xl">⚠️</span>
-      <p className="text-muted-foreground font-mono text-sm">Failed to load token data.</p>
-      <button
-        onClick={() => refetchToken()}
-        className="mt-1 px-4 py-1.5 rounded-sm bg-primary/10 text-primary text-xs font-bold border border-primary/20 hover:bg-primary hover:text-black transition-all"
-      >
-        Retry
-      </button>
-    </div>
-  );
+  if (tokenError) {
+    // Token not in our DB — render the external token page instead of an error.
+    // ExternalTokenLoader resolves metadata from:
+    //   1. Module-level cache (set when user clicked a search result)
+    //   2. Client-side Jupiter strict list (handles direct URL / page reload)
+    //   3. Generic error if still not found after list loads
+    return <ExternalTokenLoader address={selectedAddress} wallet={wallet} />;
+  }
   if (!token) return <div className="text-center py-20 text-muted-foreground font-mono">Token not found.</div>;
 
   // virtualEthReserves stores integer SOL (Pump.fun: starts with 30 virtual SOL, graduates at +85 real SOL)
@@ -2279,11 +2279,17 @@ interface TradePanelFormProps {
   jupiterQuote?: JupiterQuoteResponse | null;
   jupiterQuoteLoading?: boolean;
   jupiterQuoteError?: string | null;
+  /**
+   * SPL token decimal places used to format Jupiter output amounts.
+   * Defaults to 6 (pump.fun standard). Pass the token's actual value for
+   * external / non-pump.fun tokens (e.g. 9 for SOL, 6 for USDC, etc.).
+   */
+  tokenDecimals?: number;
 }
 
 function TradePanelForm({
   tradeMode, setTradeMode, amount, setAmount, token, wallet, handleTrade, isPending,
-  isGraduated, jupiterQuote, jupiterQuoteLoading, jupiterQuoteError,
+  isGraduated, jupiterQuote, jupiterQuoteLoading, jupiterQuoteError, tokenDecimals = 6,
 }: TradePanelFormProps) {
   const swapSettings = useSwapSettings();
 
@@ -2375,7 +2381,7 @@ function TradePanelForm({
                 <span style={{ color: "#94a3b8" }}>
                   You receive&nbsp;≈&nbsp;
                   <span className="font-semibold font-mono" style={{ color: "#e2e8f0" }}>
-                    {formatJupiterOutput(jupiterQuote, tradeMode, token.symbol)}
+                    {formatJupiterOutput(jupiterQuote, tradeMode, token.symbol, tokenDecimals)}
                   </span>
                 </span>
                 <span className="flex items-center gap-1" style={{ color: "#a78bfa" }}>
@@ -2603,6 +2609,240 @@ function TrendingSidebar({ onSelectToken }: { onSelectToken: (addr: string) => v
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ── ExternalTokenLoader ─────────────────────────────────────────────────────
+// Resolves external token metadata by address and renders the trading page.
+// Handles three sources in order:
+//   1. Module-level cache (populated when user clicked a search result)
+//   2. Client-side Jupiter strict list (handles direct URL / page reload)
+//   3. Generic error state if address is not in the Jupiter list at all
+
+function ExternalTokenLoader({ address, wallet }: { address: string | null; wallet: string | null }) {
+  const [extToken, setExtToken]   = useState<ExternalSolanaToken | null>(() =>
+    address ? getExternalToken(address) : null
+  );
+  const [notFound, setNotFound]   = useState(false);
+
+  useEffect(() => {
+    if (!address) { setNotFound(true); return; }
+    // If already in module cache, render immediately
+    const cached = getExternalToken(address);
+    if (cached) { setExtToken(cached); return; }
+
+    let cancelled = false;
+    // Download the Jupiter strict list (cached for the session) then look up the address
+    ensureJupiterList().then(() => {
+      if (cancelled) return;
+      // getJupiterTokenByAddress looks up the loaded list by mint address
+      const found = getJupiterTokenByAddress(address);
+      if (found) {
+        setExternalToken(found); // populate module cache for next navigation
+        setExtToken(found);
+      } else {
+        setNotFound(true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [address]);
+
+  // While Jupiter list is loading, show a skeleton
+  if (!extToken && !notFound) return <TokenDetailSkeleton />;
+
+  if (notFound || !extToken) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
+        <span className="text-3xl">🔍</span>
+        <p className="font-bold text-foreground">Token not found</p>
+        <p className="text-muted-foreground font-mono text-sm max-w-xs">
+          This address is not in our platform index or the Jupiter strict token list.
+        </p>
+        <p className="text-[11px] font-mono text-muted-foreground/50 break-all max-w-xs">{address}</p>
+      </div>
+    );
+  }
+
+  return <ExternalTokenTrade token={extToken} wallet={wallet} />;
+}
+
+// ── External token trading page (for Solana tokens not in our DB) ─────────────
+// Shown when a user clicks a "All Solana Tokens" result in the search dialog.
+// Token data comes from the ExternalTokenLoader above.
+// Trading is always routed through Jupiter (same path as graduated tokens).
+
+interface ExternalTokenTradeProps {
+  token:  ExternalSolanaToken;
+  wallet: string | null;
+}
+
+function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
+  const { openWalletModal, signAndSendTransaction } = useWallet();
+  const { submitTx } = useTxToast();
+  const [tradeMode, setTradeMode]           = useState<"buy" | "sell">("buy");
+  const [amount, setAmount]                 = useState("");
+  const [isTradePending, setIsTradePending] = useState(false);
+  const [jupiterQuote, setJupiterQuote]     = useState<JupiterQuoteResponse | null>(null);
+  const [jupiterQuoteLoading, setJupiterQuoteLoading] = useState(false);
+  const [jupiterQuoteError, setJupiterQuoteError]     = useState<string | null>(null);
+  // Live reference price: SOL per token (derived from quoting 0.1 SOL → token)
+  const [refPrice, setRefPrice] = useState<number | null>(null);
+
+  // Reference price fetch — 0.1 SOL quote gives SOL/token rate without market impact
+  useEffect(() => {
+    let cancelled = false;
+    getJupiterQuote(WSOL_MINT, token.address, BigInt(1e8), 100)
+      .then((q) => {
+        if (cancelled) return;
+        const divisor = Math.pow(10, token.decimals);
+        const tokensOut = Number(q.outAmount) / divisor;
+        const solPerToken = tokensOut > 0 ? 0.1 / tokensOut : null;
+        setRefPrice(solPerToken);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [token.address, token.decimals]);
+
+  // Quote auto-fetch for the trade panel (debounced + 15 s refresh)
+  useEffect(() => {
+    if (!amount || parseFloat(amount) <= 0) {
+      setJupiterQuote(null); setJupiterQuoteError(null); setJupiterQuoteLoading(false);
+      return;
+    }
+    const { slippageBps } = getSwapSettings();
+    const fetchQuote = async () => {
+      setJupiterQuoteLoading(true); setJupiterQuoteError(null);
+      try {
+        const numAmount    = parseFloat(amount);
+        const amtBaseUnits = tradeMode === "buy"
+          ? BigInt(Math.round(numAmount * 1e9))
+          : BigInt(Math.round(numAmount * Math.pow(10, token.decimals)));
+        const q = await getJupiterQuote(
+          tradeMode === "buy" ? WSOL_MINT : token.address,
+          tradeMode === "buy" ? token.address : WSOL_MINT,
+          amtBaseUnits, slippageBps,
+        );
+        setJupiterQuote(q);
+      } catch (err) {
+        setJupiterQuoteError(err instanceof Error ? err.message.slice(0, 120) : "Quote unavailable");
+        setJupiterQuote(null);
+      } finally { setJupiterQuoteLoading(false); }
+    };
+    const d = setTimeout(fetchQuote, 400);
+    const r = setInterval(fetchQuote, 15_000);
+    return () => { clearTimeout(d); clearInterval(r); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token.address, token.decimals, amount, tradeMode]);
+
+  const handleTrade = async () => {
+    if (!wallet) { openWalletModal(); return; }
+    if (!amount || parseFloat(amount) <= 0) return;
+    if (isTradePending) return;
+
+    const doTrade = async (): Promise<string> => {
+      const numAmount    = parseFloat(amount);
+      const { slippageBps } = getSwapSettings();
+      const amtBaseUnits = tradeMode === "buy"
+        ? BigInt(Math.round(numAmount * 1e9))
+        : BigInt(Math.round(numAmount * Math.pow(10, token.decimals)));
+      const freshQuote = await getJupiterQuote(
+        tradeMode === "buy" ? WSOL_MINT : token.address,
+        tradeMode === "buy" ? token.address : WSOL_MINT,
+        amtBaseUnits, slippageBps,
+      );
+      const { transaction, lastValidBlockHeight } = await buildJupiterSwapTx(freshQuote, wallet);
+      const txSignature = await signAndSendTransaction(transaction);
+      await waitForJupiterTxConfirmation(txSignature, transaction.message.recentBlockhash, lastValidBlockHeight);
+      setAmount("");
+      return txSignature;
+    };
+
+    setIsTradePending(true);
+    try {
+      await submitTx(doTrade(), tradeMode === "buy" ? "Buy" : "Sell");
+    } finally {
+      setIsTradePending(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col md:flex-row w-full animate-slideDown md:h-[calc(100dvh-96px)] min-w-[320px] md:min-w-[680px]">
+
+      {/* ── LEFT: token info ── */}
+      <div className="flex-1 min-w-0 overflow-y-auto border-r border-border/20 px-3 md:px-5 py-4 pb-20 md:pb-6">
+
+        {/* Header */}
+        <div className="flex gap-3 items-start mb-6">
+          {token.logoURI ? (
+            <img src={token.logoURI} alt={token.symbol}
+              className="h-14 w-14 rounded-lg object-cover shrink-0"
+              style={{ border: "1px solid rgba(255,255,255,0.12)" }}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          ) : (
+            <TokenAvatar symbol={token.symbol} size={56} shape="square" className="border border-border/40" />
+          )}
+          <div className="flex-1 min-w-0 pt-0.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-bold text-foreground leading-tight truncate">{token.name}</h1>
+              <span className="font-mono text-sm text-primary shrink-0">${token.symbol}</span>
+              {/* DEX badge */}
+              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide uppercase shrink-0"
+                style={{ background: "rgba(139,92,246,0.18)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.35)" }}>
+                <Zap className="w-2.5 h-2.5" />DEX · Jupiter
+              </span>
+            </div>
+            {refPrice != null && (
+              <p className="text-sm font-mono mt-1" style={{ color: "#94a3b8" }}>
+                ≈ {refPrice < 0.0001
+                  ? refPrice.toExponential(3)
+                  : refPrice.toFixed(6)} SOL / {token.symbol}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Info notice */}
+        <div className="rounded-lg px-4 py-3 text-[12px] flex items-start gap-3"
+          style={{ background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.2)" }}>
+          <Globe className="h-4 w-4 shrink-0 mt-0.5" style={{ color: "#a78bfa" }} />
+          <div style={{ color: "#94a3b8" }}>
+            <span className="font-semibold text-foreground">{token.name}</span> is a Solana token not launched on our
+            platform. Trading routes through <span className="font-semibold" style={{ color: "#a78bfa" }}>Jupiter DEX aggregator</span> for best execution.
+            Historical charts are not available for external tokens.
+          </div>
+        </div>
+
+        {/* Mint address */}
+        <div className="mt-4 text-[11px] font-mono text-muted-foreground/50 break-all">
+          Mint: {token.address}
+        </div>
+      </div>
+
+      {/* ── RIGHT: trade panel ── */}
+      <div className="w-full md:w-[340px] shrink-0 pl-0 md:pl-0 md:sticky top-6 self-start">
+        <div className="md:pt-4 md:px-5">
+          <div className="bg-card border border-border/60 rounded-sm overflow-hidden shadow-sm">
+            <TradePanelForm
+              tradeMode={tradeMode}
+              setTradeMode={setTradeMode}
+              amount={amount}
+              setAmount={setAmount}
+              token={{ symbol: token.symbol, address: token.address, virtualTokenReserves: null }}
+              wallet={wallet}
+              handleTrade={handleTrade}
+              isPending={isTradePending}
+              isGraduated={true}
+              jupiterQuote={jupiterQuote}
+              jupiterQuoteLoading={jupiterQuoteLoading}
+              jupiterQuoteError={jupiterQuoteError}
+              tokenDecimals={token.decimals}
+            />
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }

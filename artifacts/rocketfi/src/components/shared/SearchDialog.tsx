@@ -1,13 +1,18 @@
 /**
  * Global search command palette — triggered by Navbar click or ⌘K / Ctrl+K.
- * Uses the built-in CommandDialog (cmdk + Radix Dialog) with live API search.
+ *
+ * Search results come from two sources:
+ *  1. Platform Tokens — tokens indexed in our DB (pump.fun, Raydium LaunchLab, etc.)
+ *  2. All Solana Tokens — from the Jupiter strict token list (~2K curated tokens)
+ *
+ * Both sections are fetched from the unified /api/tokens/search endpoint which
+ * caches the Jupiter list server-side and never leaks ~100K entries to the client.
  */
 import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
-  useListTokens,
   useGetTrendingTokens,
-  getListTokensQueryKey,
   getGetTrendingTokensQueryKey,
   ListTokensSort,
 } from "@workspace/api-client-react";
@@ -15,10 +20,14 @@ import {
   CommandDialog,
   CommandList,
 } from "@/components/ui/command";
-import { formatMC, formatAddress } from "@/lib/utils";
+import { formatMC } from "@/lib/utils";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
-import { Rocket, TrendingUp, Zap, Search, ArrowRight, User } from "lucide-react";
+import { Rocket, TrendingUp, Zap, Search, ArrowRight, Globe } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  setExternalToken, ensureJupiterList, searchClientJupiterTokens,
+  subscribeToJupiterAttempts, type ExternalSolanaToken,
+} from "@/lib/external-tokens";
 
 /* ─────────────────────────────────────── shared open state (module-level) */
 type Listener = (open: boolean) => void;
@@ -52,12 +61,48 @@ export function useSearchOpen() {
   return { open, toggle, close };
 }
 
+/* ─────────────────────────────────────── types */
+
+interface PlatformToken {
+  id: number | string;
+  address: string;
+  name: string;
+  symbol: string;
+  imageUrl?: string | null;
+  marketCapEth?: string | null;
+  tradeCount: number;
+  graduated?: boolean;
+}
+
+export interface SolanaToken {
+  address: string;
+  name: string;
+  symbol: string;
+  logoURI: string | null;
+  decimals: number;
+}
+
+interface SearchResult {
+  platformTokens: PlatformToken[];
+  solanaTokens:   SolanaToken[];
+}
+
+/* ─────────────────────────────────────── SolanaToken alias */
+// ExternalSolanaToken from external-tokens.ts already matches this shape.
+// Re-export it as SolanaToken for internal use in this file.
 
 /* ─────────────────────────────────────── main dialog */
 export function SearchDialog() {
   const { open, close } = useSearchOpen();
   const [query, setQuery] = useState("");
   const [, setLocation] = useLocation();
+
+  // Increments after every Jupiter fetch attempt (success or failure with backoff).
+  // Including this counter in the queryKey makes React Query automatically re-fetch
+  // the search both when the list first loads AND when a retry succeeds after
+  // a transient failure — no polling needed, and retries work across searches.
+  const [jupiterAttempts, setJupiterAttempts] = useState(0);
+  useEffect(() => subscribeToJupiterAttempts(() => setJupiterAttempts((n) => n + 1)), []);
 
   /* ── global ⌘K / Ctrl+K shortcut ── */
   useEffect(() => {
@@ -76,18 +121,48 @@ export function SearchDialog() {
     return () => document.removeEventListener("keydown", down);
   }, []);
 
-  /* ── API queries ── */
-  const searchParams = { search: query, limit: 12, sort: ListTokensSort.trending };
-  const { data: searchResults, isFetching } = useListTokens(searchParams, {
-    query: { enabled: query.length >= 1, queryKey: getListTokensQueryKey(searchParams) },
+  /* ── Unified search: platform DB + Jupiter strict list ── */
+  // queryKey includes jupiterReady so React Query auto-refetches when the
+  // client-side Jupiter list finishes downloading (even if server DNS blocked).
+  const { data: searchResult, isFetching } = useQuery<SearchResult>({
+    queryKey: ["token-search", query, jupiterAttempts],
+    queryFn: async () => {
+      // Start fetching the Jupiter list if not already in progress.
+      // We don't await here — if it's not ready yet, searchClientJupiterTokens
+      // returns [] and jupiterReady (above) will flip when it finishes, causing
+      // a re-fetch automatically via the queryKey change.
+      void ensureJupiterList();
+
+      const res = await fetch(`/api/tokens/search?q=${encodeURIComponent(query)}`);
+      if (!res.ok) throw new Error("Search failed");
+      const serverResult = await res.json() as SearchResult;
+
+      // Merge server results with client-side Jupiter search.
+      // The client-side search covers tokens the server can't reach when DNS
+      // is blocked (Replit sandbox), or adds results the server list missed.
+      const platformAddresses     = new Set(serverResult.platformTokens.map((t) => t.address));
+      const serverSolanaAddresses = new Set(serverResult.solanaTokens.map((t) => t.address));
+      const excludedAddresses     = new Set([...platformAddresses, ...serverSolanaAddresses]);
+
+      const clientResults = searchClientJupiterTokens(query, 5, excludedAddresses);
+
+      return {
+        platformTokens: serverResult.platformTokens,
+        solanaTokens: [...serverResult.solanaTokens, ...clientResults].slice(0, 5),
+      };
+    },
+    enabled: query.length >= 1,
+    staleTime: 10_000,
+    placeholderData: (prev) => prev,
   });
 
+  /* ── Trending (empty query state) ── */
   const trendingParams = { limit: 6 };
   const { data: trending } = useGetTrendingTokens(trendingParams, {
     query: { enabled: query.length === 0, queryKey: getGetTrendingTokensQueryKey(trendingParams) },
   });
 
-  /* ── navigation helper ── */
+  /* ── Navigation helpers ── */
   const go = useCallback(
     (href: string) => {
       close();
@@ -97,8 +172,34 @@ export function SearchDialog() {
     [close, setLocation]
   );
 
-  const showSearch   = query.length >= 1;
-  const showTrending = query.length === 0;
+  /** Navigate to a platform token (already in our DB) */
+  const goPlatform = useCallback(
+    (token: PlatformToken) => go(`/app?token=${token.address}`),
+    [go]
+  );
+
+  /** Navigate to an external Solana token (not in our DB) — cache its metadata first */
+  const goExternal = useCallback(
+    (token: SolanaToken) => {
+      setExternalToken({
+        address:  token.address,
+        name:     token.name,
+        symbol:   token.symbol,
+        logoURI:  token.logoURI,
+        decimals: token.decimals,
+      });
+      go(`/app?token=${token.address}`);
+    },
+    [go]
+  );
+
+  const platformTokens = searchResult?.platformTokens ?? [];
+  const solanaTokens   = searchResult?.solanaTokens   ?? [];
+  const showSearch     = query.length >= 1;
+  const showTrending   = query.length === 0;
+  const noPlatform     = platformTokens.length === 0;
+  const noSolana       = solanaTokens.length   === 0;
+  const noResults      = noPlatform && noSolana && !isFetching;
 
   return (
     <CommandDialog
@@ -107,10 +208,10 @@ export function SearchDialog() {
         if (!v) { _open = false; listeners.forEach((fn) => fn(false)); setQuery(""); }
       }}
     >
-      {/* Override default dialog styles for a larger, darker palette */}
+      {/* Override default dialog styles */}
       <style>{`
         [role="dialog"][data-state="open"] > div {
-          max-width: 620px !important;
+          max-width: 640px !important;
           border: 1px solid hsl(var(--border) / 0.5) !important;
           background: #0B1220 !important;
           box-shadow: 0 25px 60px rgba(0,0,0,0.6), 0 0 0 1px hsl(var(--primary)/0.15) !important;
@@ -123,7 +224,7 @@ export function SearchDialog() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search coins by name or symbol…"
+          placeholder="Search any Solana token by name or symbol…"
           className="flex-1 h-14 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/60 font-mono"
           autoFocus
         />
@@ -135,19 +236,13 @@ export function SearchDialog() {
         </kbd>
       </div>
 
-      <CommandList className="max-h-[480px] overflow-y-auto overflow-x-hidden scrollbar-none p-0">
+      <CommandList className="max-h-[520px] overflow-y-auto overflow-x-hidden scrollbar-none p-0">
 
         {/* ── Search results ── */}
         {showSearch && (
           <>
-            {searchResults && searchResults.length === 0 && !isFetching && (
-              <div className="py-10 text-center">
-                <Search className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">No coins found for <span className="font-mono text-foreground">"{query}"</span></p>
-              </div>
-            )}
-
-            {isFetching && !searchResults && (
+            {/* Loading skeletons */}
+            {isFetching && platformTokens.length === 0 && solanaTokens.length === 0 && (
               <div className="p-3 space-y-1">
                 {[...Array(4)].map((_, i) => (
                   <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-sm">
@@ -162,16 +257,30 @@ export function SearchDialog() {
               </div>
             )}
 
-            {searchResults && searchResults.length > 0 && (
+            {/* No results at all */}
+            {noResults && (
+              <div className="py-10 text-center">
+                <Search className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  No tokens found for <span className="font-mono text-foreground">"{query}"</span>
+                </p>
+                <p className="text-xs text-muted-foreground/50 mt-1">
+                  Try a different name or symbol
+                </p>
+              </div>
+            )}
+
+            {/* ── Section 1: Platform Tokens (from our DB) ── */}
+            {platformTokens.length > 0 && (
               <div className="p-2">
-                <div className="px-2 py-1.5 text-[10px] uppercase tracking-widest font-bold text-muted-foreground/60">
-                  Coins — {searchResults.length} result{searchResults.length !== 1 ? "s" : ""}
+                <div className="px-2 py-1.5 flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-muted-foreground/60">
+                  <Rocket className="h-3 w-3" /> Platform Tokens
                 </div>
-                {searchResults.map((token) => (
+                {platformTokens.map((token) => (
                   <button
                     key={token.id}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-sm hover:bg-white/[0.05] transition-colors group text-left"
-                    onClick={() => go(`/app?token=${token.address}`)}
+                    onClick={() => goPlatform(token)}
                   >
                     <TokenAvatar symbol={token.symbol} imageUrl={token.imageUrl} size={36} />
                     <div className="flex-1 min-w-0">
@@ -197,10 +306,62 @@ export function SearchDialog() {
                 ))}
               </div>
             )}
+
+            {/* Divider between sections when both have results */}
+            {platformTokens.length > 0 && solanaTokens.length > 0 && (
+              <div className="border-t border-border/20 mx-2" />
+            )}
+
+            {/* ── Section 2: All Solana Tokens (from Jupiter strict list) ── */}
+            {solanaTokens.length > 0 && (
+              <div className="p-2">
+                <div className="px-2 py-1.5 flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-muted-foreground/60">
+                  <Globe className="h-3 w-3" /> All Solana Tokens
+                  <span className="ml-auto text-[9px] font-normal normal-case tracking-normal" style={{ color: "#a78bfa" }}>
+                    Powered by Jupiter
+                  </span>
+                </div>
+                {solanaTokens.map((token) => (
+                  <button
+                    key={token.address}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-sm hover:bg-white/[0.05] transition-colors group text-left"
+                    onClick={() => goExternal(token)}
+                  >
+                    {/* Logo from Jupiter metadata */}
+                    {token.logoURI ? (
+                      <img
+                        src={token.logoURI}
+                        alt={token.symbol}
+                        className="h-9 w-9 rounded object-cover shrink-0"
+                        style={{ border: "1px solid rgba(255,255,255,0.1)" }}
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    ) : (
+                      <TokenAvatar symbol={token.symbol} size={36} />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-foreground truncate">{token.name}</span>
+                        <span className="text-xs font-mono text-primary shrink-0">${token.symbol}</span>
+                        {/* External token badge */}
+                        <span className="flex items-center gap-0.5 text-[9px] font-bold px-1 py-0.5 rounded shrink-0"
+                          style={{ color: "#a78bfa", background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)" }}>
+                          <Zap className="w-2 h-2" />DEX
+                        </span>
+                      </div>
+                      <div className="text-[10px] font-mono text-muted-foreground mt-0.5 truncate">
+                        {token.address.slice(0, 8)}…{token.address.slice(-4)}
+                      </div>
+                    </div>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-primary transition-colors shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
           </>
         )}
 
-        {/* ── Trending (empty state) ── */}
+        {/* ── Trending (empty query state) ── */}
         {showTrending && (
           <>
             <div className="p-2">

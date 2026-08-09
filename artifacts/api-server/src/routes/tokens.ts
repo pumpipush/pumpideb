@@ -14,6 +14,7 @@ import {
   UpdateTokenBody,
   UpdateTokenResponse,
 } from "@workspace/api-zod";
+import { searchJupiterTokens } from "../lib/jupiter-tokens";
 
 const router: IRouter = Router();
 
@@ -281,6 +282,45 @@ router.post("/tokens", async (req, res): Promise<void> => {
     .returning();
 
   res.status(201).json(CreateTokenResponse.parse(formatToken(token)));
+});
+
+// GET /tokens/search — combined platform + Solana-wide search
+// Returns { platformTokens, solanaTokens } so the client can show two sections.
+// Must be registered before /:address so "search" is not treated as an address.
+router.get("/tokens/search", async (req, res): Promise<void> => {
+  const q = String(req.query["q"] ?? "").trim();
+  if (!q) {
+    res.json({ platformTokens: [], solanaTokens: [] });
+    return;
+  }
+
+  // ── Platform tokens (from DB) — limit 5, sorted by trade activity ────────
+  const dbRows = await db
+    .select()
+    .from(tokensTable)
+    .where(
+      and(
+        not(eq(tokensTable.symbol, "???")),
+        sql`(${ilike(tokensTable.name, `%${q}%`)} OR ${ilike(tokensTable.symbol, `%${q}%`)})`,
+      ),
+    )
+    .orderBy(desc(tokensTable.tradeCount))
+    .limit(5);
+
+  const platformAddresses = new Set(dbRows.map((t) => t.address));
+  const platformTokens    = dbRows.map((t) => formatToken(t));
+
+  // ── Solana-wide tokens (from Jupiter strict list) — limit 5, excl. platform ─
+  const jupiterResults = searchJupiterTokens(q, 5, platformAddresses);
+  const solanaTokens   = jupiterResults.map((t) => ({
+    address:  t.address,
+    name:     t.name,
+    symbol:   t.symbol,
+    logoURI:  t.logoURI ?? null,
+    decimals: t.decimals,
+  }));
+
+  res.json({ platformTokens, solanaTokens });
 });
 
 // GET /tokens/trending
