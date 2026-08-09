@@ -306,8 +306,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         <div>
           <div className="flex items-center gap-2.5 mb-1.5">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-              style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.25)" }}>
-              <Rocket className="h-4 w-4" style={{ color: "#4ade80" }} />
+              style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.14)" }}>
+              <Rocket className="h-4 w-4" style={{ color: "#e2e8f0" }} />
             </div>
             <h2 className="text-[20px] font-bold text-foreground tracking-tight">Launch a Token</h2>
           </div>
@@ -321,7 +321,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           <div className="px-5 pt-5 pb-5">
             <div className="flex items-center gap-2 mb-4">
               <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
-                style={{ background: "rgba(34,197,94,0.15)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.30)" }}>1</span>
+                style={{ background: "rgba(255,255,255,0.08)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.18)" }}>1</span>
               <span className="text-[13px] font-semibold text-foreground">Token Identity</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -333,7 +333,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                   placeholder="e.g. Doge on Solana"
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  className="h-10 rounded-lg bg-background/40 border-white/10 focus-visible:ring-green-500/30 text-[14px]"
+                  className="h-10 rounded-lg bg-background/40 border-white/10 focus-visible:ring-white/20 text-[14px]"
                   required
                 />
               </div>
@@ -343,12 +343,12 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[14px] font-bold pointer-events-none"
-                    style={{ color: "#4ade80" }}>$</span>
+                    style={{ color: "#94a3b8" }}>$</span>
                   <Input
                     placeholder="DOGE"
                     value={symbol}
                     onChange={e => setSymbol(e.target.value.toUpperCase())}
-                    className="h-10 pl-7 rounded-lg bg-background/40 border-white/10 focus-visible:ring-green-500/30 font-mono uppercase tracking-widest text-[14px]"
+                    className="h-10 pl-7 rounded-lg bg-background/40 border-white/10 focus-visible:ring-white/20 font-mono uppercase tracking-widest text-[14px]"
                     maxLength={10}
                     required
                   />
@@ -368,7 +368,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           <div className="px-5 pt-5 pb-5">
             <div className="flex items-center gap-2 mb-4">
               <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
-                style={{ background: "rgba(34,197,94,0.15)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.30)" }}>2</span>
+                style={{ background: "rgba(255,255,255,0.08)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.18)" }}>2</span>
               <span className="text-[13px] font-semibold text-foreground">Token Logo</span>
               <span className="ml-auto text-[11px]" style={{ color: "#94a3b8" }}>PNG · JPG · GIF · Max 5MB</span>
             </div>
@@ -378,9 +378,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               className="cursor-pointer rounded-xl transition-all duration-200 group"
               style={{
                 border: imagePreview
-                  ? "1px solid rgba(34,197,94,0.35)"
+                  ? "1px solid rgba(255,255,255,0.20)"
                   : "2px dashed rgba(255,255,255,0.09)",
-                background: imagePreview ? "rgba(34,197,94,0.04)" : "rgba(255,255,255,0.015)",
+                background: imagePreview ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.015)",
               }}
             >
               {imagePreview ? (
@@ -392,8 +392,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                     <p className="text-[12px]" style={{ color: "#64748b" }}>Click to change</p>
                   </div>
                   <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-                    style={{ background: "rgba(74,222,128,0.15)", border: "1px solid rgba(74,222,128,0.30)" }}>
-                    <CheckCircle2 className="h-4 w-4" style={{ color: "#4ade80" }} />
+                    style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.20)" }}>
+                    <CheckCircle2 className="h-4 w-4" style={{ color: "#e2e8f0" }} />
                   </div>
                 </div>
               ) : (
@@ -403,7 +403,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                     <UploadCloud className="h-5 w-5" style={{ color: "#64748b" }} />
                   </div>
                   <p className="text-[13px] font-medium" style={{ color: "#94a3b8" }}>
-                    Drop image here or <span style={{ color: "#4ade80" }}>browse</span>
+                    Drop image here or <span style={{ color: "#e2e8f0" }}>browse</span>
                   </p>
                   <p className="text-[11px]" style={{ color: "#94a3b8" }}>Recommended: 500 × 500 px</p>
                 </div>
@@ -417,7 +417,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           <div className="px-5 pt-5 pb-5">
             <div className="flex items-center gap-2 mb-4">
               <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
-                style={{ background: "rgba(34,197,94,0.15)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.30)" }}>3</span>
+                style={{ background: "rgba(255,255,255,0.08)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.18)" }}>3</span>
               <span className="text-[13px] font-semibold text-foreground">Description</span>
               <span className="ml-auto text-[11px] tabular-nums" style={{ color: desc.length >= 270 ? "#f87171" : "#94a3b8" }}>
                 {desc.length}/300
@@ -427,7 +427,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               placeholder="Tell the community what makes this token special — lore, utility, meme origin, anything..."
               value={desc}
               onChange={e => setDesc(e.target.value.slice(0, 300))}
-              className="rounded-lg bg-background/40 border-white/10 focus-visible:ring-green-500/30 min-h-[90px] resize-none text-[14px]"
+              className="rounded-lg bg-background/40 border-white/10 focus-visible:ring-white/20 min-h-[90px] resize-none text-[14px]"
             />
           </div>
 
@@ -442,10 +442,10 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               style={{
                 background: (isUploading || createToken.isPending)
                   ? "rgba(255,255,255,0.06)"
-                  : "linear-gradient(135deg, #16a34a 0%, #22c55e 60%, #4ade80 100%)",
-                color: (isUploading || createToken.isPending) ? "#475569" : "#fff",
+                  : "hsl(var(--primary))",
+                color: (isUploading || createToken.isPending) ? "#475569" : "hsl(var(--primary-foreground))",
                 border: "none",
-                boxShadow: (isUploading || createToken.isPending) ? "none" : "0 0 28px rgba(34,197,94,0.28)",
+                boxShadow: (isUploading || createToken.isPending) ? "none" : "0 0 20px rgba(255,255,255,0.08)",
                 cursor: (isUploading || createToken.isPending) ? "not-allowed" : "pointer",
               }}
             >
@@ -487,12 +487,12 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 <div className="font-bold text-foreground truncate text-[15px] leading-tight">
                   {name || <span style={{ color: "#475569" }}>Token Name</span>}
                 </div>
-                <div className="text-[12px] font-mono mt-0.5 truncate" style={{ color: "#4ade80" }}>
+                <div className="text-[12px] font-mono mt-0.5 truncate" style={{ color: "#94a3b8" }}>
                   ${symbol ? symbol.toUpperCase() : <span style={{ color: "#475569" }}>TICKER</span>}
                 </div>
               </div>
               <div className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold"
-                style={{ background: "rgba(74,222,128,0.10)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.22)" }}>
+                style={{ background: "rgba(255,255,255,0.07)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.16)" }}>
                 NEW
               </div>
             </div>
@@ -2214,9 +2214,9 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
           onClick={() => openWalletModal()}
           className="px-8 py-2.5 rounded-xl text-[14px] font-bold transition-all hover:opacity-90 active:scale-95"
           style={{
-            background: "linear-gradient(135deg, #16a34a 0%, #22c55e 100%)",
-            color: "#fff",
-            boxShadow: "0 0 20px rgba(34,197,94,0.25)",
+            background: "hsl(var(--primary))",
+            color: "hsl(var(--primary-foreground))",
+            boxShadow: "0 0 16px rgba(255,255,255,0.06)",
           }}
         >
           Connect Wallet
