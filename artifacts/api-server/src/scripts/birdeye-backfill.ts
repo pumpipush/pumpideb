@@ -53,17 +53,18 @@ function isStable(mint: string): boolean {
 // ── Token upsert helper ───────────────────────────────────────────────────────
 
 interface TokenRecord {
-  address:      string;
-  name:         string;
-  symbol:       string;
-  imageUrl?:    string | null;
-  platform:     string;
-  poolAddress?: string | null;
-  quoteMint?:   string | null;
-  priceUsd?:    number | null;
+  address:       string;
+  name:          string;
+  symbol:        string;
+  imageUrl?:     string | null;
+  platform:      string;
+  poolAddress?:  string | null;
+  quoteMint?:    string | null;
+  priceUsd?:     number | null;
   marketCapUsd?: number | null;
   liquidityUsd?: number | null;
-  volumeUsd?:   number | null;
+  volumeUsd?:    number | null;
+  pctChange24h?: number | null;
 }
 
 async function upsertToken(token: TokenRecord, solPrice: number): Promise<boolean> {
@@ -93,6 +94,7 @@ async function upsertToken(token: TokenRecord, solPrice: number): Promise<boolea
       liquidityUsd:   token.liquidityUsd ?? null,
       priceUsd:       token.priceUsd    ?? null,
       marketCapUsd:   token.marketCapUsd ?? null,
+      pctChange24h:   token.pctChange24h ?? null,
     }).onConflictDoUpdate({
       target: tokensTable.address,
       set: {
@@ -103,6 +105,7 @@ async function upsertToken(token: TokenRecord, solPrice: number): Promise<boolea
         marketCapUsd: token.marketCapUsd ?? null,
         liquidityUsd: token.liquidityUsd ?? null,
         poolAddress:  token.poolAddress ?? null,
+        pctChange24h: token.pctChange24h ?? null,
       },
     });
     return true;
@@ -313,17 +316,18 @@ async function backfillMeteora(solPrice: number): Promise<number> {
     const tvl       = (tokenUsd + quoteUsd) > 0 ? tokenUsd + quoteUsd : pool.pool_tvl;
 
     const ok = await upsertToken({
-      address:     tokenMint,
-      name:        meta.name,
-      symbol:      meta.symbol,
-      imageUrl:    meta.logoURI,
-      platform:    "meteora",
-      poolAddress: pool.pool_address,
+      address:      tokenMint,
+      name:         meta.name,
+      symbol:       meta.symbol,
+      imageUrl:     meta.logoURI,
+      platform:     "meteora",
+      poolAddress:  pool.pool_address,
       quoteMint,
-      priceUsd:    meta.priceUsd,
+      priceUsd:     meta.priceUsd,
       marketCapUsd: meta.marketCapUsd,
       liquidityUsd: tvl > 0 ? tvl : null,
-      volumeUsd:   null,
+      volumeUsd:    null,
+      pctChange24h: meta.priceChange24h ?? null,
     }, solPrice);
     if (ok) total++;
 

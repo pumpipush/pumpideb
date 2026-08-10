@@ -44,15 +44,16 @@ async function birdeyeGet<T>(path: string): Promise<T | null> {
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface BirdeyeTokenMeta {
-  address:      string;
-  name:         string;
-  symbol:       string;
-  logoURI:      string | null;
-  decimals:     number;
-  priceUsd:     number | null;
-  marketCapUsd: number | null;
-  v24hUSD:      number | null;
-  liquidity:    number | null;
+  address:             string;
+  name:                string;
+  symbol:              string;
+  logoURI:             string | null;
+  decimals:            number;
+  priceUsd:            number | null;
+  marketCapUsd:        number | null;
+  v24hUSD:             number | null;
+  liquidity:           number | null;
+  priceChange24h:      number | null;  // 24h % change from token_overview
 }
 
 export interface BirdeyeTokenListItem {
@@ -76,29 +77,31 @@ export interface BirdeyeTokenListItem {
  */
 export async function fetchBirdeyeTokenMeta(address: string): Promise<BirdeyeTokenMeta | null> {
   const data = await birdeyeGet<{
-    address:   string;
-    name:      string;
-    symbol:    string;
-    logoURI?:  string;
-    decimals:  number;
-    price?:    number;
-    mc?:       number;
-    v24hUSD?:  number;
-    liquidity?: number;
+    address:               string;
+    name:                  string;
+    symbol:                string;
+    logoURI?:              string;
+    decimals:              number;
+    price?:                number;
+    mc?:                   number;
+    v24hUSD?:              number;
+    liquidity?:            number;
+    priceChange24hPercent?: number;
   }>(`/defi/token_overview?address=${address}`);
 
   if (!data) return null;
 
   return {
-    address:      data.address,
-    name:         data.name      || address.slice(0, 8),
-    symbol:       data.symbol    || "???",
-    logoURI:      data.logoURI   ?? null,
-    decimals:     data.decimals  ?? 6,
-    priceUsd:     data.price     ?? null,
-    marketCapUsd: data.mc        ?? null,
-    v24hUSD:      data.v24hUSD   ?? null,
-    liquidity:    data.liquidity ?? null,
+    address:        data.address,
+    name:           data.name      || address.slice(0, 8),
+    symbol:         data.symbol    || "???",
+    logoURI:        data.logoURI   ?? null,
+    decimals:       data.decimals  ?? 6,
+    priceUsd:       data.price     ?? null,
+    marketCapUsd:   data.mc        ?? null,
+    v24hUSD:        data.v24hUSD   ?? null,
+    liquidity:      data.liquidity ?? null,
+    priceChange24h: data.priceChange24hPercent ?? null,
   };
 }
 
@@ -145,6 +148,84 @@ export async function fetchBirdeyeTokenList(opts: {
  * Get current SOL price in USD from Birdeye.
  * Falls back to 150 if unavailable.
  */
+// ── OHLCV & price overview for DEX tokens ────────────────────────────────────
+
+export interface BirdeyeOHLCVBar {
+  time:   number; // unix seconds
+  open:   number; // price in USD
+  high:   number;
+  low:    number;
+  close:  number;
+  volume: number; // volume in USD
+}
+
+/**
+ * Fetch OHLCV bars from Birdeye for a token.
+ * Prices are returned in USD.
+ * tf: "1m" | "5m" | "15m" | "1H" | "4H" | "1D" | "1W"
+ * Consumes ~5–15 CU depending on bar count.
+ */
+export async function fetchBirdeyeOHLCV(
+  address: string,
+  tf: string,
+  timeFrom: number,
+  timeTo: number,
+): Promise<BirdeyeOHLCVBar[] | null> {
+  const params = new URLSearchParams({
+    address,
+    type:      tf,
+    time_from: String(timeFrom),
+    time_to:   String(timeTo),
+    currency:  "usd",
+  });
+  const data = await birdeyeGet<{ items?: { unixTime: number; o: number; h: number; l: number; c: number; v?: number; vUsd?: number }[] }>(
+    `/defi/ohlcv?${params.toString()}`
+  );
+  if (!data?.items) return null;
+  return data.items.map(bar => ({
+    time:   bar.unixTime,
+    open:   bar.o,
+    high:   bar.h,
+    low:    bar.l,
+    close:  bar.c,
+    volume: bar.vUsd ?? (bar.v ?? 0),
+  }));
+}
+
+export interface BirdeyeTokenOverview {
+  price:                   number;
+  mc:                      number | null;
+  v24hUSD:                 number | null;
+  liquidity:               number | null;
+  priceChange30mPercent:   number | null;
+  priceChange1hPercent:    number | null;
+  priceChange6hPercent:    number | null;
+  priceChange24hPercent:   number | null;
+}
+
+/**
+ * Fetch token overview (live price + 24h stats) from Birdeye.
+ * Consumes ~5 CU.
+ */
+export async function fetchBirdeyeTokenOverview(address: string): Promise<BirdeyeTokenOverview | null> {
+  const data = await birdeyeGet<Record<string, unknown>>(`/defi/token_overview?address=${address}`);
+  if (!data || typeof data.price !== "number") return null;
+  const n = (k: string): number | null => {
+    const v = data[k];
+    return typeof v === "number" ? v : null;
+  };
+  return {
+    price:                 data.price as number,
+    mc:                    n("mc"),
+    v24hUSD:               n("v24hUSD"),
+    liquidity:             n("liquidity"),
+    priceChange30mPercent: n("priceChange30mPercent"),
+    priceChange1hPercent:  n("priceChange1hPercent"),
+    priceChange6hPercent:  n("priceChange6hPercent"),
+    priceChange24hPercent: n("priceChange24hPercent"),
+  };
+}
+
 export async function getSolPriceUsd(): Promise<number> {
   const WSOL = "So11111111111111111111111111111111111111112";
   const data = await birdeyeGet<{ value: number }>(`/defi/price?address=${WSOL}`);

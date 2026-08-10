@@ -51,6 +51,8 @@ function _cacheSet(key: string, payload: unknown): void {
 // are absent from the map (caller should treat as null).
 async function fetch24hPctChanges(addresses: string[]): Promise<Map<string, number>> {
   if (addresses.length === 0) return new Map();
+
+  // Step 1: compute pct change from internal trade history (pump.fun / live DEX trades)
   const { rows } = await pool.query<{ token_address: string; pct_change_24h: string }>(
     `SELECT
        o.token_address,
@@ -82,6 +84,22 @@ async function fetch24hPctChanges(addresses: string[]): Promise<Map<string, numb
   for (const row of rows) {
     result.set(row.token_address, parseFloat(row.pct_change_24h));
   }
+
+  // Step 2: for addresses with no internal trades, fall back to pct_change_24h
+  // stored in the tokens table (refreshed from Birdeye for DEX tokens).
+  const missing = addresses.filter(a => !result.has(a));
+  if (missing.length > 0) {
+    const { rows: tokenRows } = await pool.query<{ address: string; pct_change_24h: string | null }>(
+      `SELECT address, pct_change_24h FROM tokens WHERE address = ANY($1) AND pct_change_24h IS NOT NULL`,
+      [missing],
+    );
+    for (const row of tokenRows) {
+      if (row.pct_change_24h !== null) {
+        result.set(row.address, parseFloat(row.pct_change_24h));
+      }
+    }
+  }
+
   return result;
 }
 
@@ -416,11 +434,14 @@ router.patch("/tokens/:address", async (req, res): Promise<void> => {
 });
 
 function formatToken(t: typeof tokensTable.$inferSelect | Record<string, unknown>, pctChange24h?: number) {
+  const row = t as Record<string, unknown>;
   return {
     ...t,
-    tradeCount: Number((t as Record<string, unknown>).tradeCount ?? 0),
-    holderCount: Number((t as Record<string, unknown>).holderCount ?? 0),
-    pctChange24h: pctChange24h ?? null,
+    tradeCount:   Number(row.tradeCount   ?? 0),
+    holderCount:  Number(row.holderCount  ?? 0),
+    // Prefer live-computed pctChange24h (from trade history / Birdeye overview in list route),
+    // then fall back to the stored column value (populated by enrich-dex-pct script).
+    pctChange24h: pctChange24h ?? (typeof row.pctChange24h === "number" ? row.pctChange24h : null),
   };
 }
 

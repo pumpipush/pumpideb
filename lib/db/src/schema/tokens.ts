@@ -29,11 +29,12 @@ export const tokensTable = pgTable("tokens", {
   chain: text("chain").notNull().default("base"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   // ── Multi-DEX columns (nullable — only set for non-pump.fun tokens) ─────────
-  poolAddress:   text("pool_address"),
-  quoteMint:     text("quote_mint"),
-  liquidityUsd:  doublePrecision("liquidity_usd"),
-  priceUsd:      doublePrecision("price_usd"),
-  marketCapUsd:  doublePrecision("market_cap_usd"),
+  poolAddress:    text("pool_address"),
+  quoteMint:      text("quote_mint"),
+  liquidityUsd:   doublePrecision("liquidity_usd"),
+  priceUsd:       doublePrecision("price_usd"),
+  marketCapUsd:   doublePrecision("market_cap_usd"),
+  pctChange24h:   doublePrecision("pct_change_24h"),  // 24h price % change; refreshed from Birdeye for DEX tokens
 });
 
 export const insertTokenSchema = createInsertSchema(tokensTable).omit({

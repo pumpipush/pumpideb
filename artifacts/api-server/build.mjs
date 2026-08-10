@@ -18,6 +18,7 @@ async function buildAll() {
     entryPoints: [
       path.resolve(artifactDir, "src/index.ts"),
       path.resolve(artifactDir, "src/scripts/birdeye-backfill.ts"),
+      path.resolve(artifactDir, "src/scripts/enrich-dex-pct.ts"),
     ],
     platform: "node",
     bundle: true,

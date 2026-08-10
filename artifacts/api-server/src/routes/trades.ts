@@ -11,6 +11,21 @@ import {
 import { emitTrade, emitSnapshot, tradeEmitter, type TradeEvent, type SnapshotEvent } from "../lib/tradeEmitter";
 import type { NewTokenEvent } from "../lib/tradeEmitter"; // imported for type completeness
 import { registerGraduatedMint } from "../lib/adapters/raydium-amm";
+import { fetchBirdeyeOHLCV, fetchBirdeyeTokenOverview, getSolPriceUsd } from "../lib/birdeye.js";
+
+// Platforms that use Birdeye for OHLCV + price-history (no internal trade stream in prod yet)
+const DEX_PLATFORMS = new Set(["raydium", "orca", "meteora", "pumpswap", "raydium_launchlab"]);
+
+// Time ranges (seconds) to request from Birdeye for each timeframe
+const BIRDEYE_HISTORY_SECS: Record<string, number> = {
+  "1m":  4  * 60 * 60,          //  4h history
+  "5m":  24 * 60 * 60,          // 24h history
+  "15m": 3  * 24 * 60 * 60,     //  3d history
+  "1H":  30 * 24 * 60 * 60,     // 30d history
+  "4H":  90 * 24 * 60 * 60,     // 90d history
+  "1D":  365 * 24 * 60 * 60,    //  1y history
+  "1W":  2 * 365 * 24 * 60 * 60, // 2y history
+};
 
 const router: IRouter = Router();
 
@@ -173,7 +188,7 @@ router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
     ORDER BY bucket ASC
   `, [bucketSecs, address]);
 
-  const bars = rows.map(r => ({
+  let bars = rows.map(r => ({
     time:   parseInt(r.bucket, 10),
     open:   parseFloat(r.open),
     high:   parseFloat(r.high),
@@ -183,9 +198,39 @@ router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
   }));
 
   // maxTradeId: the highest trade ID present in this aggregate.
-  // SSE events with id <= maxTradeId are already included; only those
-  // strictly above this value are genuinely new and safe to overlay.
   const maxTradeId = rows.reduce((m, r) => Math.max(m, parseInt(r.max_id ?? "0", 10)), 0);
+
+  // ── Birdeye OHLCV proxy for DEX tokens ──────────────────────────────────────
+  // If internal trade history is empty, check if this is a DEX token and proxy
+  // OHLCV from Birdeye so the chart shows real price history.
+  if (bars.length === 0) {
+    const [tokenRow] = await db
+      .select({ platform: tokensTable.platform })
+      .from(tokensTable)
+      .where(eq(tokensTable.address, address))
+      .limit(1);
+
+    if (tokenRow && DEX_PLATFORMS.has(tokenRow.platform)) {
+      const now       = Math.floor(Date.now() / 1000);
+      const timeFrom  = now - (BIRDEYE_HISTORY_SECS[tf] ?? 86400);
+      const birdeyeBars = await fetchBirdeyeOHLCV(address, tf, timeFrom, now);
+
+      if (birdeyeBars && birdeyeBars.length > 0) {
+        // Birdeye returns USD prices; convert to SOL per token so the frontend
+        // chart multiplies by SOL price and displays correct USD value.
+        // (same convention as pump.fun where priceEth = SOL/token)
+        const solPrice = await getSolPriceUsd();
+        bars = birdeyeBars.map(b => ({
+          time:   b.time,
+          open:   solPrice > 0 ? b.open  / solPrice : b.open,
+          high:   solPrice > 0 ? b.high  / solPrice : b.high,
+          low:    solPrice > 0 ? b.low   / solPrice : b.low,
+          close:  solPrice > 0 ? b.close / solPrice : b.close,
+          volume: b.volume,  // keep as USD volume for volume bars
+        }));
+      }
+    }
+  }
 
   res.json({ bars, maxTradeId });
 });
@@ -374,12 +419,41 @@ router.get("/tokens/:address/stats", async (req, res): Promise<void> => {
   `, [address]);
 
   const r = rows[0];
+  const vol24hSol    = parseFloat(r.vol24h_sol);
+  const txns24hBuy   = parseInt(r.txns_buy, 10);
+  const txns24hSell  = parseInt(r.txns_sell, 10);
+
+  // If no internal trades found, check if this is a DEX token and use Birdeye vol data
+  if (vol24hSol === 0 && txns24hBuy === 0 && txns24hSell === 0) {
+    const [tokenRow] = await db
+      .select({ platform: tokensTable.platform })
+      .from(tokensTable)
+      .where(eq(tokensTable.address, address))
+      .limit(1);
+
+    if (tokenRow && DEX_PLATFORMS.has(tokenRow.platform)) {
+      const overview = await fetchBirdeyeTokenOverview(address);
+      if (overview && overview.v24hUSD) {
+        const solPrice = await getSolPriceUsd();
+        const vol24hSolFromBirdeye = solPrice > 0 ? overview.v24hUSD / solPrice : 0;
+        res.json({
+          vol24hSol:    vol24hSolFromBirdeye,
+          vol24hBuySol: vol24hSolFromBirdeye / 2, // estimate 50/50 since Birdeye doesn't split
+          vol24hSellSol: vol24hSolFromBirdeye / 2,
+          txns24hBuy:   0,
+          txns24hSell:  0,
+        });
+        return;
+      }
+    }
+  }
+
   res.json({
-    vol24hSol:      parseFloat(r.vol24h_sol),
+    vol24hSol,
     vol24hBuySol:   parseFloat(r.vol24h_buy_sol),
     vol24hSellSol:  parseFloat(r.vol24h_sell_sol),
-    txns24hBuy:     parseInt(r.txns_buy, 10),
-    txns24hSell:    parseInt(r.txns_sell, 10),
+    txns24hBuy,
+    txns24hSell,
   });
 });
 
@@ -457,7 +531,38 @@ router.get("/tokens/:address/price-history", async (req, res): Promise<void> => 
 
   const r = rows[0];
   const toNum = (v: string | null) => (v != null ? parseFloat(v) : null);
-  res.json({ p5m: toNum(r.p5m), p1h: toNum(r.p1h), p6h: toNum(r.p6h), p24h: toNum(r.p24h) });
+  const internalResult = { p5m: toNum(r.p5m), p1h: toNum(r.p1h), p6h: toNum(r.p6h), p24h: toNum(r.p24h) };
+
+  // If all values are null (no trade history) check if this is a DEX token and use Birdeye
+  const allNull = Object.values(internalResult).every(v => v === null);
+  if (allNull) {
+    const [tokenRow] = await db
+      .select({ platform: tokensTable.platform })
+      .from(tokensTable)
+      .where(eq(tokensTable.address, address))
+      .limit(1);
+
+    if (tokenRow && DEX_PLATFORMS.has(tokenRow.platform)) {
+      const overview = await fetchBirdeyeTokenOverview(address);
+      if (overview && overview.price > 0) {
+        const solPrice = await getSolPriceUsd();
+        // Convert USD price to SOL per token (priceEth convention)
+        const currentSol = overview.price / solPrice;
+        // Derive historical prices from % change: priceAtT = current / (1 + pct/100)
+        const fromPct = (pct: number | null) =>
+          pct !== null ? currentSol / (1 + pct / 100) : null;
+        res.json({
+          p5m:  fromPct(overview.priceChange30mPercent), // 30m as proxy for 5m
+          p1h:  fromPct(overview.priceChange1hPercent),
+          p6h:  fromPct(overview.priceChange6hPercent),
+          p24h: fromPct(overview.priceChange24hPercent),
+        });
+        return;
+      }
+    }
+  }
+
+  res.json(internalResult);
 });
 
 // GET /tokens/:address/trades
