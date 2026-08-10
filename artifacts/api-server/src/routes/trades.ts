@@ -13,9 +13,13 @@ import type { NewTokenEvent } from "../lib/tradeEmitter"; // imported for type c
 import { registerGraduatedMint } from "../lib/adapters/raydium-amm";
 import { fetchBirdeyeOHLCV, fetchBirdeyeTokenTrades, fetchBirdeyeTokenOverview, getSolPriceUsd, type BirdeyeOHLCVBar } from "../lib/birdeye.js";
 import { fetchDexScreenerTokens, bestSolanaPair, pairToSolPrice, pairToPriceHistory } from "../lib/dexscreener.js";
+import { fetchAndParseTrade } from "../lib/tradeVerifier.js";
 
 // Platforms that use Birdeye for OHLCV + price-history (no internal trade stream in prod yet)
 const DEX_PLATFORMS = new Set(["pumpswap", "raydium_launchlab"]);
+
+/** Solana base58 transaction signature: 64 bytes encoded as 87-88 base58 chars. */
+const SOLANA_SIG_RE = /^[1-9A-HJ-NP-Za-km-z]{87,88}$/;
 
 // Time ranges (seconds) to request from Birdeye for each timeframe
 const BIRDEYE_HISTORY_SECS: Record<string, number> = {
@@ -722,6 +726,22 @@ router.get("/tokens/:address/trades", async (req, res): Promise<void> => {
 });
 
 // POST /tokens/:address/trades
+//
+// Security: full on-chain verification required before any write.
+//
+// fetchAndParseTrade() calls getTransaction on the Solana RPC and:
+//   1. Confirms the tx is finalized (meta.err === null, meta present)
+//   2. Verifies the fee payer (accountKeys[0]) == traderAddress
+//   3. Confirms the expected mint appears in pre/post token balances
+//   4. Derives isBuy, tokenAmountAtoms, solAmountLamports from balance deltas
+//
+// All economic fields (isBuy, ethAmount, tokenAmount, priceEth) stored in the
+// DB are derived entirely from the on-chain transaction — the client-supplied
+// body values for those fields are ignored.
+//
+// Internal adapters (pumpfun.ts, pumpswap.ts, etc.) write directly to the DB
+// and never call this route. This endpoint exists for external callers who
+// want to register a trade they just submitted on-chain.
 router.post("/tokens/:address/trades", async (req, res): Promise<void> => {
   const params = RecordTradeParams.safeParse(req.params);
   if (!params.success) {
@@ -735,64 +755,118 @@ router.post("/tokens/:address/trades", async (req, res): Promise<void> => {
     return;
   }
 
-  // Look up token for denormalization + SSE payload
+  const { txHash, traderAddress } = parsed.data;
+  const tokenAddress = params.data.address;
+
+  // ── txHash format guard ───────────────────────────────────────────────────
+  // Reject obviously invalid signatures before making any RPC call.
+  if (!SOLANA_SIG_RE.test(txHash)) {
+    res.status(400).json({
+      error: "txHash must be a valid Solana transaction signature (87-88 base58 chars)",
+    });
+    return;
+  }
+
+  // ── Duplicate guard ───────────────────────────────────────────────────────
+  // If the indexer already recorded this tx, return 200 immediately rather
+  // than spending an RPC call and then hitting the unique-constraint.
+  const [alreadyIndexed] = await db
+    .select({ id: tradesTable.id })
+    .from(tradesTable)
+    .where(eq(tradesTable.txHash, txHash))
+    .limit(1);
+
+  if (alreadyIndexed) {
+    res.status(200).json({ id: alreadyIndexed.id, alreadyIndexed: true });
+    return;
+  }
+
+  // ── On-chain verification (derives all economic fields) ───────────────────
+  const verification = await fetchAndParseTrade(txHash, tokenAddress, traderAddress);
+
+  if (!verification.ok) {
+    res.status(verification.status).json({ error: verification.error });
+    return;
+  }
+
+  // verification.ok === true: all fields are derived from the transaction.
+  const { isBuy, tokenAmountAtoms, solAmountLamports, priceEth } = verification;
+
+  // ── Look up token for denormalization + SSE payload ───────────────────────
   const [token] = await db
     .select()
     .from(tokensTable)
-    .where(eq(tokensTable.address, params.data.address));
+    .where(eq(tokensTable.address, tokenAddress));
 
+  // ── Insert trade (idempotent via onConflictDoNothing) ─────────────────────
+  // A concurrent indexer write between our duplicate-check and this INSERT is
+  // handled gracefully — onConflictDoNothing returns undefined instead of
+  // throwing a unique-constraint error.
   const [trade] = await db
     .insert(tradesTable)
     .values({
-      tokenAddress: params.data.address,
-      tokenName: token?.name ?? null,
-      tokenSymbol: token?.symbol ?? null,
-      traderAddress: parsed.data.traderAddress,
-      isBuy: parsed.data.isBuy,
-      ethAmount: parsed.data.ethAmount,
-      tokenAmount: parsed.data.tokenAmount,
-      priceEth: parsed.data.priceEth ?? null,
-      txHash: parsed.data.txHash,
-      platform: parsed.data.platform ?? token?.platform ?? "unknown",
-      timestamp: new Date(parsed.data.timestamp),
+      tokenAddress,
+      tokenName:    token?.name   ?? null,
+      tokenSymbol:  token?.symbol ?? null,
+      traderAddress,
+      // ↓ All economic fields are server-derived from on-chain data.
+      //   Client-supplied body values (isBuy, ethAmount, tokenAmount, priceEth)
+      //   are intentionally ignored here.
+      isBuy,
+      ethAmount:    solAmountLamports,
+      tokenAmount:  tokenAmountAtoms,
+      priceEth:     priceEth ?? null,
+      txHash,
+      platform:     token?.platform ?? "unknown",
+      // Use the RPC blockTime as the authoritative timestamp.
+      // If the RPC omitted blockTime (some archive nodes do), fall back to
+      // server time — never trust the client-supplied timestamp.
+      timestamp: verification.blockTime
+        ? new Date(verification.blockTime * 1000)
+        : new Date(),
     })
+    .onConflictDoNothing()
     .returning();
 
-  const response = RecordTradeResponse.parse(trade);
+  if (!trade) {
+    // Concurrent indexer inserted between our duplicate-check and this INSERT
+    res.status(200).json({ alreadyIndexed: true });
+    return;
+  }
 
-  // Broadcast to SSE subscribers (per-token channel + global feed)
+  // ── Broadcast to SSE subscribers ──────────────────────────────────────────
   if (token) {
     emitTrade({
       type: "trade",
       trade: {
-        id: trade.id,
-        tokenAddress: trade.tokenAddress,
+        id:            trade.id,
+        tokenAddress:  trade.tokenAddress,
         traderAddress: trade.traderAddress,
-        isBuy: trade.isBuy,
-        ethAmount: trade.ethAmount,
-        tokenAmount: trade.tokenAmount,
-        priceEth: trade.priceEth,
-        txHash: trade.txHash,
-        platform: trade.platform,
-        timestamp: trade.timestamp.toISOString(),
+        isBuy:         trade.isBuy,
+        ethAmount:     trade.ethAmount,
+        tokenAmount:   trade.tokenAmount,
+        priceEth:      trade.priceEth,
+        txHash:        trade.txHash,
+        platform:      trade.platform,
+        timestamp:     trade.timestamp.toISOString(),
       },
       token: {
-        address: token.address,
-        name: token.name,
-        symbol: token.symbol,
-        priceEth: token.priceEth,
-        marketCapEth: token.marketCapEth,
-        volumeEth: token.volumeEth,
-        virtualEthReserves: token.virtualEthReserves,
+        address:              token.address,
+        name:                 token.name,
+        symbol:               token.symbol,
+        priceEth:             token.priceEth,
+        marketCapEth:         token.marketCapEth,
+        volumeEth:            token.volumeEth,
+        virtualEthReserves:   token.virtualEthReserves,
         virtualTokenReserves: token.virtualTokenReserves,
-        tradeCount: Number(token.tradeCount),
-        platform: token.platform,
-        chain: token.chain,
+        tradeCount:           Number(token.tradeCount),
+        platform:             token.platform,
+        chain:                token.chain,
       },
     });
   }
 
-  res.status(201).json(response);
+  res.status(201).json(RecordTradeResponse.parse(trade));
 });
 
 export default router;
