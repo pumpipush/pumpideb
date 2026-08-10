@@ -29,6 +29,9 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Keypair, PublicKey, Transaction } from "@solana/web3.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { resolve, dirname } from "node:path";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -130,28 +133,44 @@ async function runBuildWithMock(opts: {
 }
 
 // ── 1. SDK_VERIFIED_VERSION matches package.json pin ─────────────────────────
+//
+// WHY readFileSync instead of a dynamic import?
+// The original test used:
+//   import("../../../../../../artifacts/rocketfi/package.json").catch(() => null)
+// That path resolved to /home/runner/artifacts/… (outside the workspace), so
+// `pkg` was always null and the version check silently passed — the exact bug
+// this test is meant to catch. readFileSync with fileURLToPath(import.meta.url)
+// gives a reliable absolute path and throws loudly if the file is missing.
 
 describe("SDK_VERIFIED_VERSION", () => {
-  it("matches the pinned version in package.json", async () => {
-    // Read package.json dynamically so this test catches accidental drift
-    const pkg = await import("../../../../../../artifacts/rocketfi/package.json", {
-      assert: { type: "json" },
-    }).catch(() => null);
+  it("matches the pinned @raydium-io/raydium-sdk-v2 version in package.json (unconditional)", async () => {
+    // Resolve package.json relative to this test file:
+    //   __tests__/ → lib/ → src/ → artifacts/rocketfi/ → package.json
+    const __filename = fileURLToPath(import.meta.url);
+    const pkgPath = resolve(dirname(__filename), "../../../package.json");
+
+    // readFileSync throws if the file is missing — no silent fallback allowed.
+    const pkgJson = JSON.parse(readFileSync(pkgPath, "utf8")) as {
+      dependencies?: Record<string, string>;
+    };
+
+    const pinned = pkgJson.dependencies?.["@raydium-io/raydium-sdk-v2"];
+
+    // Both of these must hold — neither is conditional on the other.
+    expect(
+      pinned,
+      "package.json must declare @raydium-io/raydium-sdk-v2 in dependencies",
+    ).toBeTruthy();
 
     const { SDK_VERIFIED_VERSION } = await import("../raydiumLauncher");
 
-    if (pkg) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pinned = (pkg as any).default?.dependencies?.[
-        "@raydium-io/raydium-sdk-v2"
-      ];
-      if (pinned) {
-        expect(SDK_VERIFIED_VERSION).toBe(pinned);
-      }
-    }
-    // Always verify the constant is a non-empty string
-    expect(SDK_VERIFIED_VERSION).toBeTruthy();
-    expect(typeof SDK_VERIFIED_VERSION).toBe("string");
+    expect(
+      SDK_VERIFIED_VERSION,
+      `SDK_VERIFIED_VERSION ("${SDK_VERIFIED_VERSION}") must equal the pinned ` +
+      `version in package.json ("${pinned}"). ` +
+      "Update SDK_VERIFIED_VERSION in raydiumLauncher.ts after bumping the SDK " +
+      "and running the upgrade checklist.",
+    ).toBe(pinned);
   });
 });
 
