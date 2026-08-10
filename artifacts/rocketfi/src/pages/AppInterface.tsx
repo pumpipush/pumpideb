@@ -38,6 +38,12 @@ import {
   PUMP_FUN_LAUNCH_COST_SOL,
 } from "@/lib/pumpfunLauncher";
 import {
+  uploadToRaydiumIpfs,
+  buildRaydiumLaunchTx,
+  simulateRaydiumLaunch,
+  RAYDIUM_LAUNCH_COST_SOL,
+} from "@/lib/raydiumLauncher";
+import {
   getJupiterQuote, buildJupiterSwapTx, waitForJupiterTxConfirmation,
   WSOL_MINT, getRouteLabel, formatJupiterOutput,
   type JupiterQuoteResponse,
@@ -197,6 +203,8 @@ function StepIcon({ step, active, done }: { step: LaunchStep; active: boolean; d
   return <div className="w-4 h-4 rounded-full border" style={{ borderColor: "#334155" }} />;
 }
 
+type LaunchPlatform = "pumpfun" | "raydium";
+
 function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (addr: string) => void }) {
   const [name,         setName]         = useState("");
   const [symbol,       setSymbol]       = useState("");
@@ -204,6 +212,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile,    setImageFile]    = useState<File | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // Platform selector
+  const [platform, setPlatform] = useState<LaunchPlatform>("pumpfun");
 
   // Social links (optional)
   const [twitter,  setTwitter]  = useState("");
@@ -236,7 +247,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     setImagePreview(URL.createObjectURL(file));
   };
 
-  // ── On-chain pump.fun launch ─────────────────────────────────────────────────
+  // ── Platform-specific launch ──────────────────────────────────────────────────
 
   const handleLaunch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -252,15 +263,26 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       return;
     }
     if (!imageFile) {
-      toast({ title: "Gambar diperlukan", description: "Pump.fun memerlukan gambar untuk token.", variant: "destructive" });
+      toast({ title: "Gambar diperlukan", description: "Token memerlukan gambar untuk tampilan di platform.", variant: "destructive" });
       return;
     }
 
     setLaunchError(null);
     setMintAddress(null);
 
+    if (platform === "pumpfun") {
+      await _launchPumpFun();
+    } else {
+      await _launchRaydium();
+    }
+  };
+
+  // ── pump.fun flow ─────────────────────────────────────────────────────────────
+
+  const _launchPumpFun = async () => {
+    if (!wallet || !imageFile) return;
     try {
-      // ── Step 1: Upload metadata + image ke pump.fun IPFS ──────────────────
+      // Step 1: Upload metadata + image ke pump.fun IPFS
       setLaunchStep("uploading");
       const metadataUri = await uploadToPumpFunIpfs({
         name:        name.trim(),
@@ -272,35 +294,28 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         image:       imageFile,
       });
 
-      // ── Step 2: Build transaction + simulate ─────────────────────────────
+      // Step 2: Build transaction + simulate
       setLaunchStep("building");
       const { transaction, mintKeypair, mintAddress: newMint, blockhash, lastValidBlockHeight } =
         await buildPumpFunCreateTx(wallet, name.trim(), symbol.trim().toUpperCase(), metadataUri);
       await simulatePumpFunCreate(transaction);
 
-      // ── Step 3: User signs in wallet ─────────────────────────────────────
+      // Step 3: User signs in wallet
       setLaunchStep("signing");
-      // partialSign with mint keypair first (adds mint's required signature)
       transaction.partialSign(mintKeypair);
-      // Wallet adds user signature + broadcasts (skipPreflight: false runs preflight)
       const sig = await signAndSendTransaction(transaction);
 
-      // ── Step 4: Wait for on-chain confirmation ───────────────────────────
+      // Step 4: Wait for on-chain confirmation
       setLaunchStep("confirming");
       await waitForTxConfirmation(sig, blockhash, lastValidBlockHeight);
 
-      // ── Done ─────────────────────────────────────────────────────────────
       setLaunchStep("done");
       setMintAddress(newMint);
-
-      // Give indexer ~3 s to pick up the token before navigating
       setTimeout(() => onLaunch(newMint), 3000);
 
     } catch (err: unknown) {
       setLaunchStep("error");
       const raw = err instanceof Error ? err.message : String(err);
-
-      // Map raw error to friendly Indonesian messages
       if (/rejected|cancel|user denied/i.test(raw)) {
         setLaunchError("Transaksi dibatalkan. Klik Launch lagi jika ingin mencoba ulang.");
       } else if (/ipfs|upload|fetch/i.test(raw)) {
@@ -309,6 +324,81 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         setLaunchError(`Simulasi gagal: ${raw}\n\nPastikan balance SOL kamu cukup (minimal ~${PUMP_FUN_LAUNCH_COST_SOL} SOL).`);
       } else if (/timeout|not confirmed|Blockhash/i.test(raw)) {
         setLaunchError("Konfirmasi timeout. Transaksi mungkin sudah berhasil — cek wallet kamu sebelum mencoba lagi.");
+      } else {
+        setLaunchError(raw);
+      }
+    }
+  };
+
+  // ── Raydium LaunchLab flow ────────────────────────────────────────────────────
+
+  const _launchRaydium = async () => {
+    if (!wallet || !imageFile) return;
+    try {
+      // Step 1: Upload metadata via Raydium IPFS (fallback: pump.fun IPFS)
+      setLaunchStep("uploading");
+      const metadataUri = await uploadToRaydiumIpfs({
+        name:        name.trim(),
+        symbol:      symbol.trim().toUpperCase(),
+        description: desc.trim(),
+        twitter:     twitter.trim() || undefined,
+        telegram:    telegram.trim() || undefined,
+        website:     website.trim() || undefined,
+        image:       imageFile,
+      });
+
+      // Step 2: Build transactions (SDK loads lazily; returns MultiTxBuildData)
+      // The SDK may return 1 or more transactions to send in sequence.
+      // Each is already partial-signed by the mint keypair — do not add extra signing.
+      setLaunchStep("building");
+      const { transactions, mintAddress: newMint, blockhash, lastValidBlockHeight } =
+        await buildRaydiumLaunchTx(
+          wallet,
+          name.trim(),
+          symbol.trim().toUpperCase(),
+          metadataUri,
+        );
+
+      // Simulate first transaction (covers the create instruction)
+      await simulateRaydiumLaunch(transactions[0]);
+
+      // Step 3: User wallet signs and broadcasts each transaction in sequence.
+      // Raydium may split the create flow into 2+ txs (e.g. create mint + init pool).
+      setLaunchStep("signing");
+      let lastSig = "";
+
+      for (let i = 0; i < transactions.length; i++) {
+        if (i > 0) {
+          // Wait for prior tx to confirm before the next wallet approval
+          setLaunchStep("confirming");
+          await waitForTxConfirmation(lastSig, blockhash, lastValidBlockHeight);
+          setLaunchStep("signing");
+        }
+        // Wallet adds its signature and broadcasts
+        lastSig = await signAndSendTransaction(transactions[i]);
+      }
+
+      // Step 4: Wait for final transaction confirmation
+      setLaunchStep("confirming");
+      await waitForTxConfirmation(lastSig, blockhash, lastValidBlockHeight);
+
+      setLaunchStep("done");
+      setMintAddress(newMint);
+      setTimeout(() => onLaunch(newMint), 3000);
+
+    } catch (err: unknown) {
+      setLaunchStep("error");
+      const raw = err instanceof Error ? err.message : String(err);
+      if (/rejected|cancel|user denied/i.test(raw)) {
+        setLaunchError("Transaksi dibatalkan. Klik Launch lagi jika ingin mencoba ulang.");
+      } else if (/upload|ipfs|fetch/i.test(raw)) {
+        setLaunchError(`Gagal upload metadata: ${raw}. Cek koneksi internet dan coba lagi.`);
+      } else if (/simulat/i.test(raw)) {
+        setLaunchError(`Simulasi gagal: ${raw}\n\nPastikan balance SOL kamu cukup (minimal ~${RAYDIUM_LAUNCH_COST_SOL} SOL).`);
+      } else if (/timeout|not confirmed|Blockhash/i.test(raw)) {
+        setLaunchError("Konfirmasi timeout. Transaksi mungkin sudah berhasil — cek wallet kamu sebelum mencoba lagi.");
+      } else if (/SDK tidak|config|launchpad/i.test(raw)) {
+        setLaunchError(`Gagal terhubung ke Raydium LaunchLab: ${raw}. Coba lagi dalam beberapa detik.`);
       } else {
         setLaunchError(raw);
       }
@@ -344,20 +434,38 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           <div className="px-4 py-3 flex items-center gap-2">
             <span className="text-[12px] font-medium" style={{ color: "#64748b" }}>Launch on:</span>
             <div className="flex gap-2 ml-1">
-              {/* Pump.fun — active */}
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-default"
-                style={{ background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.35)" }}>
+              {/* Pump.fun */}
+              <button
+                type="button"
+                disabled={isLaunching}
+                onClick={() => setPlatform("pumpfun")}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-150"
+                style={platform === "pumpfun"
+                  ? { background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.35)", cursor: "default" }
+                  : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)", cursor: "pointer" }}
+              >
                 <div className="w-4 h-4 rounded-full" style={{ background: "linear-gradient(135deg,#a855f7,#7c3aed)" }} />
-                <span className="text-[12px] font-semibold" style={{ color: "#c084fc" }}>Pump.fun</span>
-              </div>
-              {/* Raydium — coming soon */}
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg opacity-40 cursor-not-allowed"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)" }}>
-                <div className="w-4 h-4 rounded-full" style={{ background: "#3b82f6" }} />
-                <span className="text-[12px] font-medium text-muted-foreground">Raydium LaunchLab</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded font-bold"
-                  style={{ background: "rgba(255,255,255,0.08)", color: "#64748b" }}>SOON</span>
-              </div>
+                <span className="text-[12px] font-semibold"
+                  style={{ color: platform === "pumpfun" ? "#c084fc" : "#64748b" }}>Pump.fun</span>
+              </button>
+              {/* Raydium LaunchLab */}
+              <button
+                type="button"
+                disabled={isLaunching}
+                onClick={() => setPlatform("raydium")}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-150"
+                style={platform === "raydium"
+                  ? { background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.40)", cursor: "default" }
+                  : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)", cursor: "pointer" }}
+              >
+                <div className="w-4 h-4 rounded-full" style={{ background: "linear-gradient(135deg,#60a5fa,#3b82f6)" }} />
+                <span className="text-[12px] font-semibold"
+                  style={{ color: platform === "raydium" ? "#93c5fd" : "#64748b" }}>Raydium LaunchLab</span>
+                {platform === "raydium" && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded font-bold"
+                    style={{ background: "rgba(59,130,246,0.20)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.30)" }}>NEW</span>
+                )}
+              </button>
             </div>
           </div>
         </div>
@@ -550,12 +658,21 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           <div className="px-5 pt-5 pb-5 space-y-4">
 
             {/* Launch cost info (only when idle) */}
-            {launchStep === "idle" && (
+            {launchStep === "idle" && platform === "pumpfun" && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
                 style={{ background: "rgba(168,85,247,0.08)", border: "1px solid rgba(168,85,247,0.20)" }}>
                 <ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "#a855f7" }} />
                 <span className="text-[12px]" style={{ color: "#c084fc" }}>
                   Biaya launch pump.fun: ~{PUMP_FUN_LAUNCH_COST_SOL} SOL (fee + rent akun mint & metadata)
+                </span>
+              </div>
+            )}
+            {launchStep === "idle" && platform === "raydium" && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                style={{ background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.20)" }}>
+                <ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "#60a5fa" }} />
+                <span className="text-[12px]" style={{ color: "#93c5fd" }}>
+                  Biaya launch Raydium LaunchLab: ~{RAYDIUM_LAUNCH_COST_SOL} SOL · SDK dimuat saat kamu klik launch
                 </span>
               </div>
             )}
@@ -629,15 +746,19 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 style={{
                   background: launchStep === "error"
                     ? "rgba(255,255,255,0.04)"
+                    : platform === "raydium"
+                    ? "linear-gradient(135deg, #3b82f6, #2563eb)"
                     : "hsl(var(--primary))",
                   color: launchStep === "error" ? "#475569" : "hsl(var(--primary-foreground))",
                   border: "none",
-                  boxShadow: launchStep === "error" ? "none" : "0 0 20px rgba(255,255,255,0.08)",
+                  boxShadow: launchStep === "error" ? "none" : platform === "raydium" ? "0 0 20px rgba(59,130,246,0.20)" : "0 0 20px rgba(255,255,255,0.08)",
                   cursor: launchStep === "error" ? "not-allowed" : "pointer",
                 }}
               >
                 {!wallet ? (
                   <><Wallet className="w-4 h-4" /> Connect Wallet to Launch</>
+                ) : platform === "raydium" ? (
+                  <><Rocket className="w-4 h-4" /> Launch on Raydium LaunchLab</>
                 ) : (
                   <><Rocket className="w-4 h-4" /> Launch on Pump.fun</>
                 )}
@@ -682,8 +803,10 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 </div>
               </div>
               <div className="shrink-0 px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wide"
-                style={{ background: "rgba(168,85,247,0.15)", color: "#c084fc", border: "1px solid rgba(168,85,247,0.30)" }}>
-                PUMP
+                style={platform === "raydium"
+                  ? { background: "rgba(59,130,246,0.15)", color: "#93c5fd", border: "1px solid rgba(59,130,246,0.30)" }
+                  : { background: "rgba(168,85,247,0.15)", color: "#c084fc", border: "1px solid rgba(168,85,247,0.30)" }}>
+                {platform === "raydium" ? "RAY" : "PUMP"}
               </div>
             </div>
 
@@ -730,23 +853,46 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
             </div>
           </div>
 
-          {/* Pump.fun info */}
-          <div className="rounded-xl p-3 space-y-2"
-            style={{ background: "rgba(168,85,247,0.06)", border: "1px solid rgba(168,85,247,0.15)" }}>
-            <div className="text-[11px] font-semibold" style={{ color: "#a855f7" }}>Pump.fun Bonding Curve</div>
-            <div className="space-y-1">
-              {[
-                ["Supply", "1B tokens"],
-                ["Target", "$69K market cap"],
-                ["Fee",    "~1% per trade"],
-              ].map(([k, v]) => (
-                <div key={k} className="flex justify-between text-[11px]">
-                  <span style={{ color: "#64748b" }}>{k}</span>
-                  <span style={{ color: "#94a3b8" }}>{v}</span>
-                </div>
-              ))}
+          {/* Platform info card */}
+          {platform === "pumpfun" ? (
+            <div className="rounded-xl p-3 space-y-2"
+              style={{ background: "rgba(168,85,247,0.06)", border: "1px solid rgba(168,85,247,0.15)" }}>
+              <div className="text-[11px] font-semibold" style={{ color: "#a855f7" }}>Pump.fun Bonding Curve</div>
+              <div className="space-y-1">
+                {[
+                  ["Supply", "1B tokens"],
+                  ["Target", "$69K market cap"],
+                  ["Fee",    "~1% per trade"],
+                ].map(([k, v]) => (
+                  <div key={k} className="flex justify-between text-[11px]">
+                    <span style={{ color: "#64748b" }}>{k}</span>
+                    <span style={{ color: "#94a3b8" }}>{v}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="rounded-xl p-3 space-y-2"
+              style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.20)" }}>
+              <div className="text-[11px] font-semibold" style={{ color: "#60a5fa" }}>Raydium LaunchLab</div>
+              <div className="space-y-1">
+                {[
+                  ["Supply",   "1T tokens (6 dec)"],
+                  ["Target",   "~85 SOL raised"],
+                  ["Graduate", "CPMM pool on Raydium"],
+                  ["Fee",      "~0.25% per trade"],
+                ].map(([k, v]) => (
+                  <div key={k} className="flex justify-between text-[11px]">
+                    <span style={{ color: "#64748b" }}>{k}</span>
+                    <span style={{ color: "#94a3b8" }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] leading-relaxed pt-1" style={{ color: "#475569", borderTop: "1px solid rgba(59,130,246,0.12)" }}>
+                SDK dimuat saat launch pertama (~1–2 detik). Token langsung masuk ke LaunchLab bonding curve.
+              </p>
+            </div>
+          )}
 
         </div>
       </div>

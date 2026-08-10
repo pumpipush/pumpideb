@@ -10,8 +10,9 @@
  */
 
 import { logger } from "../logger.js";
-import { startPumpFunAdapter }   from "./pumpfun.js";
-import { startPumpSwapAdapter }  from "./pumpswap.js";
+import { startPumpFunAdapter }          from "./pumpfun.js";
+import { startPumpSwapAdapter }         from "./pumpswap.js";
+import { startRaydiumLaunchLabAdapter } from "./raydium-launchlab.js";
 
 interface AdapterEntry {
   name:  string;
@@ -20,8 +21,9 @@ interface AdapterEntry {
 
 /** Active adapters — all always-on. */
 const ADAPTERS: AdapterEntry[] = [
-  { name: "pump_fun", start: startPumpFunAdapter  },
-  { name: "pumpswap", start: startPumpSwapAdapter },
+  { name: "pump_fun",          start: startPumpFunAdapter          },
+  { name: "pumpswap",          start: startPumpSwapAdapter         },
+  { name: "raydium_launchlab", start: startRaydiumLaunchLabAdapter },
 ];
 
 /** Start all adapters. Each is isolated — a failure in one does not block the others. */

@@ -11,3 +11,4 @@
 - [Birdeye proxy for DEX token pages](birdeye-proxy-for-dex.md) — OHLCV/price-history/stats/trades all proxy to Birdeye; field gotchas (marketCap not mc), trade dedup by txHash, synthetic current candle, priceEth filter skipped for DEX
 - [DEX priceEth convention](dex-price-eth-convention.md) — priceEth=SOL/token (not lamports); marketCapEth=lamports; effectiveMcEth skips virtual-reserves formula for DEX platforms
 - [DexScreener integration](dexscreener-integration.md) — free client in lib/dexscreener.ts; pairToSolPrice derives SOL/USD from pair itself (no external call); enriches pumpswap every 5m
+- [Raydium LaunchLab adapter](raydium-launchlab-adapter.md) — program ID, instruction names, bonding curve constants, instruction-data decode offsets, graduation extraction strategy
