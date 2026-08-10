@@ -415,6 +415,7 @@ router.get("/wallet/:address/holdings", async (req, res): Promise<void> => {
     price_eth: string | null;
     market_cap_eth: string | null;
     volume_eth: string | null;
+    decimals: number | null;
   }>(`
     SELECT
       t.token_address,
@@ -424,7 +425,8 @@ router.get("/wallet/:address/holdings", async (req, res): Promise<void> => {
       tok.image_url,
       tok.price_eth,
       tok.market_cap_eth,
-      tok.volume_eth
+      tok.volume_eth,
+      tok.decimals
     FROM (
       SELECT
         token_address,
@@ -460,6 +462,9 @@ router.get("/wallet/:address/holdings", async (req, res): Promise<void> => {
     priceEth: r.price_eth ?? null,
     marketCapEth: r.market_cap_eth ?? null,
     volumeEth: r.volume_eth ?? null,
+    // Fallback to 6 only when the token has no DB row (ghost trade).
+    // Any token in the DB uses its stored decimals — even 9, 0, or other.
+    decimals: r.decimals ?? 6,
   }));
 
   res.json({ holdings, count: holdings.length });

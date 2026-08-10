@@ -55,7 +55,7 @@ import {
   type ExternalSolanaToken,
 } from "@/lib/external-tokens";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
-import { formatSol, formatTokenAmount } from "@/lib/utils";
+import { formatSol, formatTokenAmount, atomicToDisplayTokens, computeHoldingRow } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { copyToClipboard as fireClipboard } from "@/components/shared/CopyToast";
@@ -2883,6 +2883,7 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
     queryFn: async (): Promise<{
       address: string; balance: string; name: string; symbol: string;
       imageUrl: string | null; priceEth: string | null; marketCapEth: string | null; volumeEth: string | null;
+      decimals: number;
     }[]> => {
       if (!wallet) return [];
       const res = await fetch(`/api/wallet/${wallet}/holdings`);
@@ -2986,12 +2987,12 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
 
       <div className="space-y-2">
         {holdings.map((token, idx) => {
-          const price   = token.priceEth ? parseFloat(token.priceEth) : 0;
-          // holdings endpoint returns balance in raw atomic units (pump.fun = 6 decimals)
-          const balance = parseFloat(token.balance) || 0;
-          const displayTokens = balance / 1e6;         // convert to whole tokens
-          const valueSol = price * displayTokens;       // priceEth is SOL/token
-          const valueUsd = solPrice ? valueSol * solPrice : null;
+          // All display math (atomic→display, SOL value, USD value) is
+          // encapsulated in computeHoldingRow — the sole calculation path for
+          // this component and the target of the regression test in utils.test.ts.
+          // token.decimals comes from the API (tokens.decimals column, default 6).
+          const { formattedTokens, valueSol, valueUsd } =
+            computeHoldingRow(token.balance, token.priceEth, solPrice, token.decimals);
 
           return (
             <div
@@ -3024,7 +3025,7 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
 
               {/* Balance */}
               <div className="text-right shrink-0">
-                <div className="text-[13px] font-mono text-foreground">{formatTokenAmount(String(displayTokens))}</div>
+                <div className="text-[13px] font-mono text-foreground">{formattedTokens}</div>
                 <div className="text-[11px] font-mono mt-0.5" style={{ color: "#64748b" }}>
                   {valueUsd != null && valueUsd > 0 ? formatUSD(valueUsd) : valueSol > 0 ? valueSol.toFixed(4) + " SOL" : "—"}
                 </div>

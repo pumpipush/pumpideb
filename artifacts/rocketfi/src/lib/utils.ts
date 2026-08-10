@@ -134,6 +134,77 @@ export function formatSol(lamportStr: string | null | undefined): string {
   return `${sol.toFixed(decimals)} SOL`;
 }
 
+/**
+ * Convert a raw atomic token amount (as stored in the DB / returned by the
+ * holdings and holders API endpoints) to whole display tokens.
+ *
+ * pump.fun / PumpSwap / Raydium LaunchLab tokens all use 6 on-chain decimal
+ * places, so 1 whole display token = 1,000,000 atomic units.
+ *
+ * IMPORTANT: the holdings endpoint (`GET /api/wallet/:address/holdings`) and
+ * the holders endpoint (`GET /api/tokens/:address/holders`) both return
+ * `balance` in atomic units. Every UI component that displays these values
+ * MUST call this function before rendering, or values will appear 1,000,000×
+ * too large.
+ *
+ * @param atomic  Raw atomic unit amount (numeric or numeric string)
+ * @param decimals On-chain decimal places (default 6 for pump.fun tokens)
+ */
+export function atomicToDisplayTokens(
+  atomic: number | string,
+  decimals = 6,
+): number {
+  const n = typeof atomic === "string" ? parseFloat(atomic) : atomic;
+  if (!Number.isFinite(n)) return 0;
+  return n / 10 ** decimals;
+}
+
+/**
+ * Compute all display values for a single row in the PortfolioTab (My Tokens).
+ *
+ * This is the **sole calculation path** for PortfolioTab balance rendering.
+ * PortfolioTab must call this function and use its return values — never
+ * perform the atomic→display math inline. This design makes the regression
+ * test below the effective guard: if the atomic→display conversion is removed
+ * or altered here, the test fails and the component breaks with it.
+ *
+ * @param rawBalance  Raw atomic balance string from GET /api/wallet/:w/holdings
+ *                    (pump.fun = 6 on-chain decimals, 1 display token = 1,000,000 atomic)
+ * @param priceEth    SOL per display token, or null if unknown
+ * @param solPrice    SOL/USD price, or null if unknown
+ */
+export function computeHoldingRow(
+  rawBalance: string,
+  priceEth:   string | null,
+  solPrice:   number | null,
+  decimals:   number = 6,
+): {
+  displayTokens:  number;   // whole tokens (rawBalance ÷ 1e6)
+  formattedTokens: string;  // human-readable token amount (e.g. "1.50" or "1.23m")
+  valueSol:        number;   // SOL value (priceEth × displayTokens)
+  valueUsd:        number | null; // USD value, or null if solPrice unknown
+} {
+  const displayTokens   = atomicToDisplayTokens(rawBalance, decimals);
+  const price           = priceEth ? parseFloat(priceEth) : 0;
+  const valueSol        = price * displayTokens;
+  const valueUsd        = solPrice ? valueSol * solPrice : null;
+  const formattedTokens = formatTokenAmountInternal(String(displayTokens));
+  return { displayTokens, formattedTokens, valueSol, valueUsd };
+}
+
+/** Internal helper — call formatTokenAmount instead from outside this file. */
+function formatTokenAmountInternal(amt: string | null | undefined): string {
+  const n = parseFloat(amt ?? "0");
+  if (!n || !Number.isFinite(n)) return "0";
+  if (n >= 1e18) return `${(n / 1e18).toFixed(2)}q`;
+  if (n >= 1e15) return `${(n / 1e15).toFixed(2)}q`;
+  if (n >= 1e12) return `${(n / 1e12).toFixed(2)}t`;
+  if (n >= 1e9)  return `${(n / 1e9).toFixed(2)}b`;
+  if (n >= 1e6)  return `${(n / 1e6).toFixed(2)}m`;
+  if (n >= 1e3)  return `${(n / 1e3).toFixed(1)}k`;
+  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
 /** Format raw token amount (Pump.fun tokenAmount is in whole token units) */
 export function formatTokenAmount(amt: string | null | undefined): string {
   const n = parseFloat(amt ?? "0");
