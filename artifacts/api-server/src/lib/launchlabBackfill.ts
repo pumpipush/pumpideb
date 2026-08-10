@@ -13,10 +13,16 @@
  *   5. Insert missing tokens into DB (onConflictDoNothing)
  *   6. Async-fetch URI metadata (image / description / socials) per token
  *
- * Runs once at server startup, then every BACKFILL_INTERVAL_MS to catch any
- * tokens whose creation was missed during an offline window.
+ * Two modes:
+ *   - Regular backfill: runs every BACKFILL_INTERVAL_MS, fetches last 1000 sigs
+ *   - Deep backfill: runs ONCE on first startup, paginates ALL history using the
+ *     `before` cursor until the Solana genesis is reached (or DEEP_CUTOFF_DATE).
+ *     A marker file prevents it from re-running on subsequent restarts.
  */
 
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { eq } from "drizzle-orm";
 import { db, tokensTable } from "@workspace/db";
 import { logger as rootLogger } from "./logger";
@@ -26,10 +32,19 @@ const log = rootLogger.child({ module: "launchlab-backfill" });
 const LAUNCHLAB_PROGRAM     = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj";
 const PLATFORM              = "raydium_launchlab";
 const CHAIN                 = "solana";
-const BACKFILL_SIG_LIMIT    = 1000;  // recent signatures to scan per run
+const BACKFILL_SIG_LIMIT    = 1000;  // signatures per page (max Solana allows)
 const BATCH_SIZE            = 10;    // getTransaction calls per HTTP request
 const BATCH_DELAY_MS        = 250;   // ms between batches (rate-limit protection)
 const BACKFILL_INTERVAL_MS  = 10 * 60_000; // re-run every 10 min
+
+// Deep backfill: stop paging if we go past this timestamp (LaunchLab didn't exist before this).
+// Raydium LaunchLab launched on Solana mainnet in late 2024.
+// Using 2024-10-01 as a conservative lower bound.
+const DEEP_CUTOFF_TIMESTAMP = Math.floor(new Date("2024-10-01T00:00:00Z").getTime() / 1000);
+
+// Marker file: once written, deep backfill is skipped on subsequent restarts.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DEEP_BACKFILL_MARKER = path.resolve(__dirname, "../../.launchlab-deep-backfill-done");
 
 // ── Bonding curve genesis constants (same as raydium-launchlab adapter) ────────
 const LL_TOTAL_SUPPLY     = 1_000_000_000_000_000n;
@@ -55,15 +70,34 @@ function httpRpcUrl(): string {
     : "https://solana-rpc.publicnode.com";
 }
 
-async function rpcPost(body: unknown): Promise<unknown> {
-  const res = await fetch(httpRpcUrl(), {
-    method:  "POST",
-    headers: { "Content-Type": "application/json", "User-Agent": "RocketFi/1.0" },
-    body:    JSON.stringify(body),
-    signal:  AbortSignal.timeout(30_000),
-  });
-  if (!res.ok) throw new Error(`RPC HTTP ${res.status}`);
-  return res.json();
+const FALLBACK_HTTP_RPCS = [
+  "https://solana-rpc.publicnode.com",
+  "https://api.mainnet-beta.solana.com",
+];
+
+async function rpcPost(body: unknown, timeoutMs = 30_000): Promise<unknown> {
+  const urlsToTry = [httpRpcUrl(), ...FALLBACK_HTTP_RPCS.filter(u => u !== httpRpcUrl())];
+  let lastErr: unknown;
+  for (const url of urlsToTry) {
+    try {
+      const res = await fetch(url, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", "User-Agent": "RocketFi/1.0" },
+        body:    JSON.stringify(body),
+        signal:  AbortSignal.timeout(timeoutMs),
+      });
+      if (!res.ok) { lastErr = new Error(`RPC HTTP ${res.status} from ${url}`); continue; }
+      const json = await res.json() as { error?: { code?: number } };
+      // Rate-limited — try next endpoint
+      const errCode = (json.error as { code?: number } | undefined)?.code;
+      if (errCode === -32005 || errCode === 429) { lastErr = new Error(`rate-limited by ${url}`); continue; }
+      return json;
+    } catch (e) {
+      lastErr = e;
+      continue;
+    }
+  }
+  throw lastErr ?? new Error("all RPC endpoints failed");
 }
 
 // ── Borsh / Base58 utilities (inlined — same as adapter) ──────────────────────
@@ -214,11 +248,22 @@ function decodeTx(tx: Record<string, unknown>): DecodedCreate | null {
 
 interface SigEntry { signature: string; blockTime: number | null; err: unknown }
 
-async function getSignaturesForAddress(limit: number): Promise<SigEntry[]> {
+/**
+ * Fetch up to `limit` signatures for the LaunchLab program.
+ * @param before  If provided, only return signatures OLDER than this one (pagination cursor).
+ */
+async function getSignaturesForAddress(
+  limit: number,
+  before?: string,
+): Promise<SigEntry[]> {
+  const params: [string, Record<string, unknown>] = [
+    LAUNCHLAB_PROGRAM,
+    { limit, commitment: "confirmed", ...(before ? { before } : {}) },
+  ];
   const resp = (await rpcPost({
     jsonrpc: "2.0", id: 1,
     method:  "getSignaturesForAddress",
-    params:  [LAUNCHLAB_PROGRAM, { limit, commitment: "confirmed" }],
+    params,
   })) as { result?: SigEntry[] };
   return resp.result ?? [];
 }
@@ -239,7 +284,97 @@ async function batchGetTransactions(
 
 const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
-// ── Main backfill ──────────────────────────────────────────────────────────────
+// ── Shared page processor ──────────────────────────────────────────────────────
+
+/**
+ * Processes one page of signatures: fetches transactions, decodes creates,
+ * inserts missing tokens, and kicks off async URI metadata fetch.
+ * Returns { inserted, skipped }.
+ */
+async function processSignaturePage(sigs: SigEntry[]): Promise<{ inserted: number; skipped: number }> {
+  let inserted = 0;
+  let skipped  = 0;
+
+  for (let i = 0; i < sigs.length; i += BATCH_SIZE) {
+    const batch     = sigs.slice(i, i + BATCH_SIZE);
+    const batchSigs = batch.map(s => s.signature);
+
+    let txs: Array<Record<string, unknown> | null>;
+    try {
+      txs = await batchGetTransactions(batchSigs);
+    } catch (err) {
+      log.warn({ err, offset: i }, "launchlab-backfill: batch fetch failed, skipping");
+      await delay(BATCH_DELAY_MS * 2);
+      continue;
+    }
+
+    for (const tx of txs) {
+      if (!tx) continue;
+
+      // Fast-reject: only process createLaunchpad transactions
+      const logs = ((tx["meta"] as Record<string,unknown>)?.["logMessages"] as string[]) ?? [];
+      const isCreate = logs.some(l => /Instruction:\s*createLaunchpad/i.test(l));
+      if (!isCreate) { skipped++; continue; }
+
+      const decoded = decodeTx(tx);
+      if (!decoded) { skipped++; continue; }
+
+      // Skip if already in DB
+      const [existing] = await db
+        .select({ id: tokensTable.id })
+        .from(tokensTable)
+        .where(eq(tokensTable.address, decoded.mint))
+        .limit(1);
+      if (existing) { skipped++; continue; }
+
+      // Insert the token
+      await db.insert(tokensTable).values({
+        address:              decoded.mint,
+        name:                 decoded.name,
+        symbol:               decoded.symbol,
+        description:          null,
+        imageUrl:             null,
+        creatorAddress:       decoded.creatorAddress,
+        totalSupply:          LL_TOTAL_SUPPLY.toString(),
+        virtualTokenReserves: LL_INIT_VTOK.toString(),
+        virtualEthReserves:   LL_INIT_VSOL_SOL,
+        marketCapEth:         LL_INIT_MC_LAMPORTS,
+        priceEth:             LL_INIT_PRICE_ETH,
+        platform:             PLATFORM,
+        chain:                CHAIN,
+        ...(decoded.blockTime
+          ? { createdAt: new Date(decoded.blockTime * 1000) }
+          : {}),
+      }).onConflictDoNothing();
+
+      inserted++;
+      log.debug({ mint: decoded.mint, name: decoded.name }, "launchlab-backfill: token inserted");
+
+      // Async: fetch metadata from URI — don't block the main loop
+      if (decoded.uri) {
+        void fetchMetaFromUri(decoded.uri).then(async (meta) => {
+          if (!meta) return;
+          const upd: Record<string, string | null> = {};
+          if (meta.imageUrl)    upd["imageUrl"]    = meta.imageUrl;
+          if (meta.description) upd["description"] = meta.description;
+          if (meta.twitterUrl)  upd["twitterUrl"]  = meta.twitterUrl;
+          if (meta.telegramUrl) upd["telegramUrl"] = meta.telegramUrl;
+          if (meta.websiteUrl)  upd["websiteUrl"]  = meta.websiteUrl;
+          if (Object.keys(upd).length > 0) {
+            await db.update(tokensTable).set(upd)
+              .where(eq(tokensTable.address, decoded.mint));
+          }
+        }).catch(() => { /* enrichment loop will retry */ });
+      }
+    }
+
+    if (i + BATCH_SIZE < sigs.length) await delay(BATCH_DELAY_MS);
+  }
+
+  return { inserted, skipped };
+}
+
+// ── Regular backfill (last 1000 sigs) ─────────────────────────────────────────
 
 export async function backfillLaunchLabTokens(): Promise<void> {
   try {
@@ -253,87 +388,7 @@ export async function backfillLaunchLabTokens(): Promise<void> {
       return;
     }
 
-    // Check which mints we already have so we can skip fetching their transactions.
-    // We can't know the mint without fetching the tx, so we just track which
-    // signatures we've processed by their resulting mint after decode.
-    let inserted = 0;
-    let skipped  = 0;
-
-    for (let i = 0; i < sigs.length; i += BATCH_SIZE) {
-      const batch     = sigs.slice(i, i + BATCH_SIZE);
-      const batchSigs = batch.map(s => s.signature);
-
-      let txs: Array<Record<string, unknown> | null>;
-      try {
-        txs = await batchGetTransactions(batchSigs);
-      } catch (err) {
-        log.warn({ err, offset: i }, "launchlab-backfill: batch fetch failed, skipping");
-        await delay(BATCH_DELAY_MS * 2);
-        continue;
-      }
-
-      for (const tx of txs) {
-        if (!tx) continue;
-
-        // Fast-reject: only process createLaunchpad transactions
-        const logs = ((tx["meta"] as Record<string,unknown>)?.["logMessages"] as string[]) ?? [];
-        const isCreate = logs.some(l => /Instruction:\s*createLaunchpad/i.test(l));
-        if (!isCreate) { skipped++; continue; }
-
-        const decoded = decodeTx(tx);
-        if (!decoded) { skipped++; continue; }
-
-        // Skip if already in DB
-        const [existing] = await db
-          .select({ id: tokensTable.id })
-          .from(tokensTable)
-          .where(eq(tokensTable.address, decoded.mint))
-          .limit(1);
-        if (existing) { skipped++; continue; }
-
-        // Insert the token
-        await db.insert(tokensTable).values({
-          address:              decoded.mint,
-          name:                 decoded.name,
-          symbol:               decoded.symbol,
-          description:          null,
-          imageUrl:             null,
-          creatorAddress:       decoded.creatorAddress,
-          totalSupply:          LL_TOTAL_SUPPLY.toString(),
-          virtualTokenReserves: LL_INIT_VTOK.toString(),
-          virtualEthReserves:   LL_INIT_VSOL_SOL,
-          marketCapEth:         LL_INIT_MC_LAMPORTS,
-          priceEth:             LL_INIT_PRICE_ETH,
-          platform:             PLATFORM,
-          chain:                CHAIN,
-          ...(decoded.blockTime
-            ? { createdAt: new Date(decoded.blockTime * 1000) }
-            : {}),
-        }).onConflictDoNothing();
-
-        inserted++;
-        log.debug({ mint: decoded.mint, name: decoded.name }, "launchlab-backfill: token inserted");
-
-        // Async: fetch metadata from URI — don't block the main loop
-        if (decoded.uri) {
-          void fetchMetaFromUri(decoded.uri).then(async (meta) => {
-            if (!meta) return;
-            const upd: Record<string, string | null> = {};
-            if (meta.imageUrl)    upd["imageUrl"]    = meta.imageUrl;
-            if (meta.description) upd["description"] = meta.description;
-            if (meta.twitterUrl)  upd["twitterUrl"]  = meta.twitterUrl;
-            if (meta.telegramUrl) upd["telegramUrl"] = meta.telegramUrl;
-            if (meta.websiteUrl)  upd["websiteUrl"]  = meta.websiteUrl;
-            if (Object.keys(upd).length > 0) {
-              await db.update(tokensTable).set(upd)
-                .where(eq(tokensTable.address, decoded.mint));
-            }
-          }).catch(() => { /* enrichment loop will retry */ });
-        }
-      }
-
-      if (i + BATCH_SIZE < sigs.length) await delay(BATCH_DELAY_MS);
-    }
+    const { inserted, skipped } = await processSignaturePage(sigs);
 
     log.info(
       { inserted, skipped, total: sigs.length },
@@ -344,11 +399,121 @@ export async function backfillLaunchLabTokens(): Promise<void> {
   }
 }
 
+// ── Deep backfill (full history, runs once) ────────────────────────────────────
+
+/**
+ * Paginate ALL LaunchLab signatures from newest to oldest, inserting any tokens
+ * we haven't seen before. Stops when:
+ *   - The RPC returns fewer sigs than requested (history exhausted), OR
+ *   - The oldest sig in the page predates DEEP_CUTOFF_TIMESTAMP.
+ *
+ * A marker file is written on success so this never runs again after the first
+ * complete pass.
+ */
+export async function deepBackfillLaunchLabTokens(): Promise<void> {
+  // Skip if we've already done the deep backfill
+  if (fs.existsSync(DEEP_BACKFILL_MARKER)) {
+    log.info("launchlab-deep-backfill: marker found, skipping");
+    return;
+  }
+
+  log.info(
+    { cutoff: new Date(DEEP_CUTOFF_TIMESTAMP * 1000).toISOString() },
+    "launchlab-deep-backfill: starting full historical scan",
+  );
+
+  let totalInserted = 0;
+  let totalSkipped  = 0;
+  let pageCount     = 0;
+  let cursor: string | undefined = undefined; // oldest sig seen so far
+
+  try {
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      pageCount++;
+      log.info(
+        { page: pageCount, cursor: cursor ?? "(newest)" },
+        "launchlab-deep-backfill: fetching page",
+      );
+
+      let rawSigs: SigEntry[];
+      try {
+        rawSigs = await getSignaturesForAddress(BACKFILL_SIG_LIMIT, cursor);
+      } catch (err) {
+        log.warn({ err, page: pageCount }, "launchlab-deep-backfill: RPC error fetching sigs, retrying in 5s");
+        await delay(5_000);
+        continue;
+      }
+
+      if (rawSigs.length === 0) {
+        log.info({ page: pageCount }, "launchlab-deep-backfill: no more signatures, history exhausted");
+        break;
+      }
+
+      // Advance cursor to the oldest sig in this page (for next iteration)
+      const oldestInPage = rawSigs[rawSigs.length - 1];
+      cursor = oldestInPage!.signature;
+
+      // Check cutoff: if the oldest sig predates our cutoff, trim the page and stop after
+      let reachedCutoff = false;
+      let sigsToProcess = rawSigs.filter(s => !s.err);
+      if (oldestInPage?.blockTime !== null && oldestInPage?.blockTime !== undefined) {
+        if (oldestInPage.blockTime < DEEP_CUTOFF_TIMESTAMP) {
+          // Filter to only sigs at or after the cutoff date
+          sigsToProcess = rawSigs.filter(
+            s => !s.err && (s.blockTime === null || s.blockTime >= DEEP_CUTOFF_TIMESTAMP),
+          );
+          reachedCutoff = true;
+          log.info(
+            { page: pageCount, cutoffDate: new Date(DEEP_CUTOFF_TIMESTAMP * 1000).toISOString() },
+            "launchlab-deep-backfill: reached cutoff date",
+          );
+        }
+      }
+
+      if (sigsToProcess.length > 0) {
+        const { inserted, skipped } = await processSignaturePage(sigsToProcess);
+        totalInserted += inserted;
+        totalSkipped  += skipped;
+        log.info(
+          { page: pageCount, inserted, skipped, totalInserted },
+          "launchlab-deep-backfill: page complete",
+        );
+      }
+
+      // Stop conditions
+      if (reachedCutoff) break;
+      if (rawSigs.length < BACKFILL_SIG_LIMIT) {
+        // RPC returned fewer than requested → we've exhausted all history
+        log.info({ page: pageCount }, "launchlab-deep-backfill: fewer sigs than limit, history exhausted");
+        break;
+      }
+
+      // Pause between pages to be a good RPC citizen
+      await delay(BATCH_DELAY_MS * 2);
+    }
+
+    // Write marker so we don't run again
+    fs.writeFileSync(DEEP_BACKFILL_MARKER, new Date().toISOString(), "utf8");
+    log.info(
+      { totalInserted, totalSkipped, pages: pageCount },
+      "launchlab-deep-backfill: complete — marker written",
+    );
+  } catch (err) {
+    log.error({ err }, "launchlab-deep-backfill: unexpected error (will retry next restart)");
+    // Do NOT write marker — will retry on next server restart
+  }
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 export function startLaunchLabBackfill(): void {
-  // Run immediately on startup (delayed 10 s so adapters connect first)
-  setTimeout(() => void backfillLaunchLabTokens(), 10_000);
-  // Then every 10 minutes to pick up tokens created while offline
+  // Deep backfill: run once, 15 s after startup (let adapters + DB settle first)
+  // This pages through ALL historical LaunchLab transactions, not just the last 1000.
+  setTimeout(() => void deepBackfillLaunchLabTokens(), 15_000);
+
+  // Regular backfill: run immediately (30 s delay) then every 10 min
+  // Catches tokens created since the last startup or missed during an offline window.
+  setTimeout(() => void backfillLaunchLabTokens(), 30_000);
   setInterval(() => void backfillLaunchLabTokens(), BACKFILL_INTERVAL_MS);
 }
