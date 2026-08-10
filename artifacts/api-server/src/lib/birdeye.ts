@@ -277,10 +277,21 @@ export async function fetchBirdeyeTokenTrades(
   return (data?.items as BirdeyeTradeItem[] | undefined) ?? null;
 }
 
+// In-memory cache for SOL/USD price — refreshed at most once per 60 s.
+// Eliminates redundant Birdeye /defi/price calls when multiple endpoints
+// (ohlcv, stats, price-history, trades) are hit in the same page-load cycle.
+let _solPriceCache: { value: number; expiresAt: number } | null = null;
+
 export async function getSolPriceUsd(): Promise<number> {
+  const now = Date.now();
+  if (_solPriceCache && now < _solPriceCache.expiresAt) {
+    return _solPriceCache.value;
+  }
   const WSOL = "So11111111111111111111111111111111111111112";
   const data = await birdeyeGet<{ value: number }>(`/defi/price?address=${WSOL}`);
-  return data?.value ?? 150;
+  const price = data?.value ?? 150;
+  _solPriceCache = { value: price, expiresAt: now + 60_000 }; // 60 s TTL
+  return price;
 }
 
 /**
