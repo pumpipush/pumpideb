@@ -11,7 +11,8 @@ import {
 import { emitTrade, emitSnapshot, tradeEmitter, type TradeEvent, type SnapshotEvent } from "../lib/tradeEmitter";
 import type { NewTokenEvent } from "../lib/tradeEmitter"; // imported for type completeness
 import { registerGraduatedMint } from "../lib/adapters/raydium-amm";
-import { fetchBirdeyeOHLCV, fetchBirdeyeTokenOverview, fetchBirdeyeTokenTrades, getSolPriceUsd } from "../lib/birdeye.js";
+import { fetchBirdeyeOHLCV, fetchBirdeyeTokenTrades, getSolPriceUsd } from "../lib/birdeye.js";
+import { fetchDexScreenerTokens, bestSolanaPair, pairToSolPrice, pairToPriceHistory } from "../lib/dexscreener.js";
 
 // Platforms that use Birdeye for OHLCV + price-history (no internal trade stream in prod yet)
 const DEX_PLATFORMS = new Set(["pumpswap", "raydium_launchlab"]);
@@ -477,20 +478,22 @@ router.get("/tokens/:address/stats", async (req, res): Promise<void> => {
       .limit(1);
 
     if (tokenRow && DEX_PLATFORMS.has(tokenRow.platform)) {
-      const overview = await fetchBirdeyeTokenOverview(address);
-      if (overview && overview.v24hUSD) {
-        const solPrice = await getSolPriceUsd();
-        const toSol = (usd: number | null) => (usd && solPrice > 0 ? usd / solPrice : 0);
-        // Birdeye provides accurate buy/sell split for 24h volume
-        const vol24hSol     = toSol(overview.v24hUSD);
-        const vol24hBuySol  = overview.vBuy24hUSD  ? toSol(overview.vBuy24hUSD)  : vol24hSol / 2;
-        const vol24hSellSol = overview.vSell24hUSD ? toSol(overview.vSell24hUSD) : vol24hSol / 2;
+      const pairs = await fetchDexScreenerTokens([address]);
+      const pair  = bestSolanaPair(pairs);
+      if (pair && pair.volume?.h24) {
+        const solPrice      = pairToSolPrice(pair);
+        const toSol         = (usd: number) => solPrice > 0 ? usd / solPrice : 0;
+        const vol24hSol     = toSol(pair.volume.h24);
+        const buys24h       = pair.txns?.h24?.buys  ?? 0;
+        const sells24h      = pair.txns?.h24?.sells ?? 0;
+        const total24h      = buys24h + sells24h;
+        const buyRatio      = total24h > 0 ? buys24h / total24h : 0.5;
         res.json({
           vol24hSol,
-          vol24hBuySol,
-          vol24hSellSol,
-          txns24hBuy:  overview.buy24h  ?? 0,
-          txns24hSell: overview.sell24h ?? 0,
+          vol24hBuySol:  vol24hSol * buyRatio,
+          vol24hSellSol: vol24hSol * (1 - buyRatio),
+          txns24hBuy:    buys24h,
+          txns24hSell:   sells24h,
         });
         return;
       }
@@ -582,7 +585,7 @@ router.get("/tokens/:address/price-history", async (req, res): Promise<void> => 
   const toNum = (v: string | null) => (v != null ? parseFloat(v) : null);
   const internalResult = { p5m: toNum(r.p5m), p1h: toNum(r.p1h), p6h: toNum(r.p6h), p24h: toNum(r.p24h) };
 
-  // If all values are null (no trade history) check if this is a DEX token and use Birdeye
+  // If all values are null (no trade history) check if this is a DEX token and use DexScreener
   const allNull = Object.values(internalResult).every(v => v === null);
   if (allNull) {
     const [tokenRow] = await db
@@ -592,20 +595,10 @@ router.get("/tokens/:address/price-history", async (req, res): Promise<void> => 
       .limit(1);
 
     if (tokenRow && DEX_PLATFORMS.has(tokenRow.platform)) {
-      const overview = await fetchBirdeyeTokenOverview(address);
-      if (overview && overview.price > 0) {
-        const solPrice = await getSolPriceUsd();
-        // Use Birdeye's pre-computed historical prices directly — far more accurate
-        // than deriving from % change using a potentially stale currentPrice.
-        const toSol = (usdPrice: number | null) =>
-          usdPrice !== null && usdPrice > 0 && solPrice > 0 ? usdPrice / solPrice : null;
-
-        res.json({
-          p5m:  toSol(overview.history5mPrice),
-          p1h:  toSol(overview.history1hPrice),
-          p6h:  toSol(overview.history6hPrice),
-          p24h: toSol(overview.history24hPrice),
-        });
+      const pairs = await fetchDexScreenerTokens([address]);
+      const pair  = bestSolanaPair(pairs);
+      if (pair && pair.priceNative) {
+        res.json(pairToPriceHistory(pair));
         return;
       }
     }

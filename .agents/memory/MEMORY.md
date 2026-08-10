@@ -10,3 +10,4 @@
 - [Multi-DEX backfill sources](multidex-backfill.md) — Birdeye exchange filter broken (all DEXes return same tokens); use native APIs per DEX; Meteora=amm.meteora.ag/pools; Orca=api.orca.so/v1/whirlpool/list; PumpSwap=graduated pump_fun tokens in DB (route handles this)
 - [Birdeye proxy for DEX token pages](birdeye-proxy-for-dex.md) — OHLCV/price-history/stats/trades all proxy to Birdeye; field gotchas (marketCap not mc), trade dedup by txHash, synthetic current candle, priceEth filter skipped for DEX
 - [DEX priceEth convention](dex-price-eth-convention.md) — priceEth=SOL/token (not lamports); marketCapEth=lamports; effectiveMcEth skips virtual-reserves formula for DEX platforms
+- [DexScreener integration](dexscreener-integration.md) — free client in lib/dexscreener.ts; pairToSolPrice derives SOL/USD from pair itself (no external call); enriches pumpswap every 5m

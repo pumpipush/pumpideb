@@ -15,11 +15,7 @@ import { db, tokensTable, tradesTable } from "@workspace/db";
 import { emitTrade, emitNewToken } from "../tradeEmitter.js";
 import { logger as rootLogger } from "../logger.js";
 import { SolanaRpcIndexer, type LogEvent } from "./solanaRpcBase.js";
-import {
-  fetchBirdeyeTokenMeta,
-  getSolPriceUsd,
-  usdToLamports,
-} from "../birdeye.js";
+import { fetchDexScreenerPumpSwapPair, pairToDbFields } from "../dexscreener.js";
 
 const PUMPSWAP_PROGRAM = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
 const PLATFORM         = "pumpswap";
@@ -101,48 +97,41 @@ class PumpSwapIndexer extends SolanaRpcIndexer {
       .limit(1);
     if (existing.length > 0) return;
 
-    this.log.info({ mint }, "pumpswap: new pool detected — fetching metadata");
+    this.log.info({ mint }, "pumpswap: new pool detected — fetching metadata from DexScreener");
 
-    const [meta, solPrice] = await Promise.all([
-      fetchBirdeyeTokenMeta(mint),
-      getSolPriceUsd(),
-    ]);
+    // Use DexScreener (free, no API key) instead of Birdeye for new pool metadata.
+    // DexScreener indexes PumpSwap pools within seconds of creation.
+    const pair = await fetchDexScreenerPumpSwapPair(mint);
 
-    if (!meta) {
-      this.log.warn({ mint }, "pumpswap: Birdeye metadata unavailable — skipping");
-      return;
-    }
+    const name     = pair?.baseToken.name    ?? mint.slice(0, 8);
+    const symbol   = pair?.baseToken.symbol  ?? "???";
+    const imageUrl = pair?.info?.imageUrl    ?? null;
 
-    const priceEth     = meta.priceUsd     ? usdToLamports(meta.priceUsd,     solPrice) : null;
-    const marketCapEth = meta.marketCapUsd ? usdToLamports(meta.marketCapUsd, solPrice) : null;
+    const priceFields = pair ? pairToDbFields(pair) : {};
 
     await db.insert(tokensTable).values({
       address:        mint,
-      name:           meta.name,
-      symbol:         meta.symbol,
-      imageUrl:       meta.logoURI,
+      name,
+      symbol,
+      imageUrl,
       creatorAddress: "unknown",
       platform:       PLATFORM,
       chain:          CHAIN,
-      priceEth,
-      marketCapEth,
       graduated:      true,
-      liquidityUsd:   meta.liquidity    ?? null,
-      priceUsd:       meta.priceUsd     ?? null,
-      marketCapUsd:   meta.marketCapUsd ?? null,
+      ...priceFields,
     }).onConflictDoNothing();
 
-    this.log.info({ mint, name: meta.name, symbol: meta.symbol }, "pumpswap: new token indexed");
+    this.log.info({ mint, name, symbol }, "pumpswap: new token indexed");
 
     emitNewToken({
       type: "newToken",
       token: {
         address:      mint,
-        name:         meta.name,
-        symbol:       meta.symbol,
-        imageUrl:     meta.logoURI,
-        priceEth,
-        marketCapEth,
+        name,
+        symbol,
+        imageUrl,
+        priceEth:     priceFields.priceEth ?? null,
+        marketCapEth: priceFields.marketCapEth ?? null,
         platform:     PLATFORM,
         chain:        CHAIN,
         createdAt:    new Date().toISOString(),

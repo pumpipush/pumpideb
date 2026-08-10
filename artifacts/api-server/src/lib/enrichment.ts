@@ -27,7 +27,12 @@ import { and, desc, gte, isNull, like, or, not, eq, inArray, sql, gt } from "dri
 import { db, tokensTable, tradesTable } from "@workspace/db";
 import { logger } from "./logger";
 import { emitSnapshot } from "./tradeEmitter";
-import { registerGraduatedMint } from "./adapters/raydium-amm";
+import {
+  fetchDexScreenerTokens,
+  pairToDbFields,
+  bestSolanaPair,
+  type DexScreenerPair,
+} from "./dexscreener";
 
 const POLL_INTERVAL_MS       = 30_000;
 const IDENTITY_BATCH_SIZE    = 20;  // max tokens per identity tick
@@ -379,16 +384,13 @@ async function backfillBondingCurves(): Promise<void> {
 // significant trade activity. Uses DexScreener to confirm they have a
 // PumpSwap/Raydium pool (i.e. they graduated but the migration event was missed).
 
-const GRADUATION_DETECT_INTERVAL_MS = 5 * 60_000; // every 5 minutes
-const GRADUATION_DETECT_BATCH       = 20;          // mints per DexScreener call
+const GRADUATION_DETECT_INTERVAL_MS  = 5 * 60_000; // every 5 minutes
+const PUMPSWAP_ENRICH_INTERVAL_MS    = 5 * 60_000; // every 5 minutes
+const GRADUATION_DETECT_BATCH        = 20;          // mints per DexScreener call
 const GRADUATION_DEX_IDS = new Set(["pumpswap", "raydium", "raydium-clmm", "raydium-cp"]);
-
-interface DexScreenerPair { dexId: string; baseToken: { address: string } }
-interface DexScreenerResponse { pairs: DexScreenerPair[] | null }
 
 async function detectGraduations(): Promise<void> {
   // Find pump.fun tokens with significant trade activity still marked ungraduated.
-  // tradeCount > 50 avoids wasting API calls on brand-new tokens.
   const candidates = await db
     .select({ address: tokensTable.address })
     .from(tokensTable)
@@ -406,32 +408,37 @@ async function detectGraduations(): Promise<void> {
 
   const newly: string[] = [];
 
-  // DexScreener supports up to ~30 mints per request, comma-separated.
   for (let i = 0; i < candidates.length; i += GRADUATION_DETECT_BATCH) {
     const batch = candidates.slice(i, i + GRADUATION_DETECT_BATCH).map(c => c.address);
     try {
-      const res = await fetch(
-        `https://api.dexscreener.com/latest/dex/tokens/${batch.join(",")}`,
-        { signal: AbortSignal.timeout(10_000), headers: { "User-Agent": "Mintix/1.0" } },
-      );
-      if (!res.ok) continue;
-      const body = (await res.json()) as DexScreenerResponse;
-      const pairs = body.pairs ?? [];
+      const pairs = await fetchDexScreenerTokens(batch);
 
-      // Collect mints that have a confirmed DEX pair (graduated from bonding curve)
-      const graduatedInBatch = new Set(
-        pairs
-          .filter(p => GRADUATION_DEX_IDS.has(p.dexId))
-          .map(p => p.baseToken.address),
-      );
+      // Group pairs by base token address
+      const pairsByMint = new Map<string, DexScreenerPair[]>();
+      for (const p of pairs) {
+        if (!GRADUATION_DEX_IDS.has(p.dexId)) continue;
+        const list = pairsByMint.get(p.baseToken.address) ?? [];
+        list.push(p);
+        pairsByMint.set(p.baseToken.address, list);
+      }
 
-      for (const mint of graduatedInBatch) {
+      for (const [mint, mintPairs] of pairsByMint) {
+        // Determine destination platform — prefer pumpswap over generic raydium
+        const isPumpSwap = mintPairs.some(p => p.dexId === "pumpswap");
+        const destPlatform = isPumpSwap ? "pumpswap" : "pump_fun";
+        const bestPair = bestSolanaPair(mintPairs);
+        const priceFields = bestPair ? pairToDbFields(bestPair) : {};
+
         await db
           .update(tokensTable)
-          .set({ graduated: true, graduatedAt: sql`COALESCE(${tokensTable.graduatedAt}, NOW())` })
+          .set({
+            graduated:   true,
+            graduatedAt: sql`COALESCE(${tokensTable.graduatedAt}, NOW())`,
+            platform:    destPlatform,
+            ...priceFields,
+          })
           .where(and(eq(tokensTable.address, mint), eq(tokensTable.graduated, false)));
 
-        registerGraduatedMint(mint);
         newly.push(mint);
       }
     } catch (err) {
@@ -444,6 +451,64 @@ async function detectGraduations(): Promise<void> {
   }
 }
 
+/**
+ * Refresh price, market cap, volume, and % change for all PumpSwap tokens
+ * using DexScreener. Runs every 5 minutes.
+ *
+ * Also handles tokens that were newly detected by the PumpSwap adapter
+ * but have no metadata yet (name = "???").
+ */
+async function enrichPumpSwapPrices(): Promise<void> {
+  const tokens = await db
+    .select({ address: tokensTable.address, name: tokensTable.name, symbol: tokensTable.symbol })
+    .from(tokensTable)
+    .where(eq(tokensTable.platform, "pumpswap"))
+    .orderBy(desc(tokensTable.createdAt))
+    .limit(120); // batch across multiple DexScreener calls
+
+  if (tokens.length === 0) return;
+
+  let updated = 0;
+  const BATCH = 30;
+
+  for (let i = 0; i < tokens.length; i += BATCH) {
+    const batch = tokens.slice(i, i + BATCH);
+    const addresses = batch.map(t => t.address);
+    try {
+      const pairs = await fetchDexScreenerTokens(addresses);
+
+      for (const token of batch) {
+        const tokenPairs = pairs.filter(p => p.baseToken.address === token.address && p.chainId === "solana");
+        const best = bestSolanaPair(tokenPairs);
+        if (!best) continue;
+
+        const fields = pairToDbFields(best);
+
+        // Also fill in metadata if still placeholder
+        const metaFields: Record<string, string | null> = {};
+        if (token.name === "???" || token.name === token.address.slice(0, 8)) {
+          if (best.baseToken.name)  metaFields["name"]   = best.baseToken.name;
+          if (best.baseToken.symbol) metaFields["symbol"] = best.baseToken.symbol;
+          if (best.info?.imageUrl)  metaFields["imageUrl"] = best.info.imageUrl;
+        }
+
+        await db
+          .update(tokensTable)
+          .set({ ...fields, ...metaFields })
+          .where(eq(tokensTable.address, token.address));
+
+        updated++;
+      }
+    } catch (err) {
+      log.warn({ err }, "enrichment: pumpswap price refresh batch failed");
+    }
+  }
+
+  if (updated > 0) {
+    log.info({ updated }, "enrichment: pumpswap prices refreshed from DexScreener");
+  }
+}
+
 // ── Entry point ────────────────────────────────────────────────────────────────
 
 export function startEnrichmentLoop(): void {
@@ -453,6 +518,9 @@ export function startEnrichmentLoop(): void {
   // Detect tokens that graduated while the indexer was offline (missed migration events)
   void detectGraduations();
   setInterval(() => void detectGraduations(), GRADUATION_DETECT_INTERVAL_MS);
+  // Refresh PumpSwap token prices from DexScreener
+  void enrichPumpSwapPrices();
+  setInterval(() => void enrichPumpSwapPrices(), PUMPSWAP_ENRICH_INTERVAL_MS);
   // First tick slightly delayed so adapters can connect and insert initial records
   setTimeout(() => {
     void enrichTick();
