@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# .githooks/pre-push — Raydium SDK bump guard
+#
+# Runs automatically before every `git push`. If the Raydium SDK version in
+# artifacts/rocketfi/package.json changed relative to the remote branch, the
+# smoke test suite is triggered. The push is blocked if any assertion fails.
+#
+# WHY pre-push and not pre-commit?
+#   The smoke test takes 60-120 s (real mainnet RPC + Raydium API calls).
+#   Running it on every local commit would be too disruptive. Pre-push is the
+#   right boundary: fast local iteration is preserved, but breakage is caught
+#   before it reaches the remote and other team members.
+#
+# HOW IT WORKS
+#   1. Read the list of commits being pushed from stdin (standard pre-push input).
+#   2. Diff artifacts/rocketfi/package.json between HEAD and the remote tip.
+#   3. If @raydium-io/raydium-sdk-v2 appears in the diff, run check:sdk-bump.
+#   4. Exit 1 (blocking the push) if the smoke test fails.
+#
+# SKIP (escape hatch for emergencies — use sparingly)
+#   SKIP_SDK_CHECK=1 git push
+#
+# INSTALL
+#   Installed automatically by `pnpm install` (via the prepare script in the
+#   root package.json which runs `git config core.hooksPath .githooks`).
+#   If you cloned without installing, run once:
+#     git config core.hooksPath .githooks
+
+set -euo pipefail
+
+# ── Escape hatch ──────────────────────────────────────────────────────────────
+if [ "${SKIP_SDK_CHECK:-0}" = "1" ]; then
+  echo "⚠️  SKIP_SDK_CHECK=1 — Raydium SDK bump check skipped."
+  exit 0
+fi
+
+# ── Read remote/local refs from stdin (standard pre-push protocol) ────────────
+REMOTE_NAME="$1"
+REMOTE_URL="$2"
+
+LOCAL_REF=""
+LOCAL_SHA=""
+REMOTE_REF=""
+REMOTE_SHA=""
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  LOCAL_REF="$local_ref"
+  LOCAL_SHA="$local_sha"
+  REMOTE_REF="$remote_ref"
+  REMOTE_SHA="$remote_sha"
+done
+
+# ── Locate repo root ─────────────────────────────────────────────────────────
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+PKG_PATH="artifacts/rocketfi/package.json"
+
+# ── Check if the Raydium SDK version changed ──────────────────────────────────
+SDK_CHANGED=0
+
+if [ -z "$REMOTE_SHA" ] || [ "$REMOTE_SHA" = "0000000000000000000000000000000000000000" ]; then
+  # New branch being pushed for the first time — check against HEAD~1 if available
+  BASE=$(git rev-parse HEAD~1 2>/dev/null || echo "")
+  if [ -n "$BASE" ]; then
+    if git diff "$BASE" HEAD -- "$PKG_PATH" 2>/dev/null | grep -q '"@raydium-io/raydium-sdk-v2"'; then
+      SDK_CHANGED=1
+    fi
+  fi
+else
+  # Existing branch — diff local tip against what the remote currently has
+  if git diff "$REMOTE_SHA" "$LOCAL_SHA" -- "$PKG_PATH" 2>/dev/null | grep -q '"@raydium-io/raydium-sdk-v2"'; then
+    SDK_CHANGED=1
+  fi
+fi
+
+if [ "$SDK_CHANGED" = "0" ]; then
+  # SDK version unchanged — nothing to check
+  exit 0
+fi
+
+# ── SDK version changed — run the smoke test ─────────────────────────────────
+echo ""
+echo "🔍  @raydium-io/raydium-sdk-v2 version changed in this push."
+echo "    Running Raydium LaunchLab smoke test before allowing push…"
+echo "    (This takes 60-120 s — skip with SKIP_SDK_CHECK=1 in an emergency)"
+echo ""
+
+cd "$REPO_ROOT"
+
+if pnpm --filter @workspace/rocketfi check:sdk-bump; then
+  echo ""
+  echo "✅  Smoke test passed — push allowed."
+  exit 0
+else
+  echo ""
+  echo "❌  Smoke test FAILED for the new SDK version."
+  echo "    Push blocked. Fix the issues in raydiumLauncher.ts and push again."
+  echo "    To bypass in an emergency: SKIP_SDK_CHECK=1 git push"
+  exit 1
+fi
