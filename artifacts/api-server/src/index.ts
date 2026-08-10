@@ -5,6 +5,7 @@ import { logger } from "./lib/logger";
 import { startAdapters } from "./lib/adapters/index";
 import { startEnrichmentLoop } from "./lib/enrichment";
 import { startJupiterTokenSync } from "./lib/jupiter-tokens";
+import { startLaunchLabBackfill } from "./lib/launchlabBackfill";
 import { runMigrations } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
@@ -56,6 +57,10 @@ async function start(): Promise<void> {
 
       // Download and cache Jupiter strict token list (enables "All Solana Tokens" search)
       startJupiterTokenSync();
+
+      // Backfill historical LaunchLab tokens from on-chain creation transactions.
+      // Runs 10 s after startup (to let adapters connect first), then every 10 min.
+      startLaunchLabBackfill();
 
       resolve();
     });
