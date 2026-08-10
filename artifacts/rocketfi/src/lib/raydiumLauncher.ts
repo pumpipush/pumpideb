@@ -207,7 +207,6 @@ export async function buildRaydiumLaunchTx(
       buyAmount:    new BN(0),
       migrateType:  "cpmm",
       txVersion:    TxVersion.LEGACY,
-      createOnly:   true,
       feePayer:     owner,
       computeBudgetConfig: {
         units:         400_000,
