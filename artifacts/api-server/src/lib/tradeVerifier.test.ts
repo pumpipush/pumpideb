@@ -1,568 +1,539 @@
 /**
  * tradeVerifier.test.ts
  *
- * Unit tests for fetchAndParseTrade() — all RPC calls are mocked via
- * vi.stubGlobal so no real network requests are made.
+ * Tests for the pump.fun Anchor TradeEvent-based trade verifier.
  *
- * Coverage:
- *   ✓ Valid buy / sell — native SOL consideration + pump.fun instruction
- *   ✓ Valid buy — WSOL consideration (Jupiter-style)
- *   ✓ Valid sell — WSOL consideration
- *   ✓ Fresh ATA (no pre-balance entry)
- *   ✓ Multiple ATAs for same mint+owner — aggregated correctly
- *   ✓ blockTime propagated; null when absent
- *   ✓ Wrong mint → 409
- *   ✓ Zero token delta → 409
- *   ✓ Missing owner field → 409 (NOT fallback to arbitrary account)
- *   ✓ Mint owned by different wallet → 409
- *   ✓ No swap program in instructions (SPL+System only) → 409 [bypass prevention]
- *   ✓ Transfer + unrelated SOL movement, no swap program → 409 [bypass prevention]
- *   ✓ WSOL movement outside swap instruction accounts → 409 [bypass prevention]
- *   ✓ Swap instruction found in inner instructions
- *   ✓ Wrong fee payer → 403
- *   ✓ Null RPC result → 404
- *   ✓ Reverted tx → 422
- *   ✓ Null meta → 503
- *   ✓ Empty accountKeys → 503
- *   ✓ All RPCs unreachable → 503
- *   ✓ Primary HTTP 500 then secondary throws → 503
- *   ✓ Primary RPC-level error skipped, secondary succeeds
+ * Strategy: all economic fields come from the pump.fun program's own TradeEvent
+ * log entry ("Program data: <base64>"), not from balance deltas.
+ *
+ * Every test constructs a deterministic RPC response that includes a correctly
+ * formatted (or intentionally malformed) TradeEvent blob, and checks that
+ * fetchAndParseTrade() rejects / accepts it accordingly.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fetchAndParseTrade } from "./tradeVerifier.js";
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Base58 helper (inline copy — matches tradeVerifier.ts) ────────────────────
 
-const TRADER         = "Gxyz1111111111111111111111111111111111111111";
-const MINT           = "MintAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-const OTHER_MINT     = "MintBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
-const WSOL_MINT      = "So11111111111111111111111111111111111111112";
-const OTHER_WALLET   = "Other111111111111111111111111111111111111111";
-const SIG            = "5J2kbXY6UHX1rWN3VFuZaX4G1kYuBP9Q7jmU1RJRWtZGRMwBUCW1k6nA7HKpfnPEJdFKxyxCUW2eG6";
+const BS58_ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
-// Well-known program IDs
-const PUMP_FUN       = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
-const SPL_TOKEN      = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-const SYSTEM_PROG    = "11111111111111111111111111111111";
-const JUPITER_V6     = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
-
-// ── Fixture builder ───────────────────────────────────────────────────────────
-
-interface TokenBalance {
-  accountIndex: number;
-  mint: string;
-  owner?: string;
-  uiTokenAmount: { amount: string };
+function bs58Encode(bytes: Buffer | Uint8Array): string {
+  let n = 0n;
+  for (const b of bytes) n = n * 256n + BigInt(b);
+  const chars: string[] = [];
+  while (n > 0n) { chars.unshift(BS58_ALPHA[Number(n % 58n)]); n /= 58n; }
+  let leading = 0;
+  for (const b of bytes) { if (b !== 0) break; leading++; }
+  return "1".repeat(leading) + chars.join("");
 }
 
-interface RpcIx {
-  programIdIndex: number;
-  accounts: number[];
-  data?: string;
-}
+// ── Deterministic test pubkeys ─────────────────────────────────────────────────
+// Buffer.alloc(32, N) gives a 32-byte array of repeated byte N.
+// bs58Encode produces a deterministic base58 address for each.
 
-interface InnerIxSet {
-  index: number;
-  instructions: RpcIx[];
-}
+const TRADER_BYTES       = Buffer.alloc(32, 0x01);
+const MINT_BYTES         = Buffer.alloc(32, 0x02);
+const OTHER_MINT_BYTES   = Buffer.alloc(32, 0x03);
+const OTHER_TRADER_BYTES = Buffer.alloc(32, 0x04);
 
-interface RpcOverrides {
-  err?: unknown;
-  meta?: Record<string, unknown> | null;
-  feePayer?: string;
-  /** Full accountKeys override — index 0 is always fee payer */
-  accountKeys?: string[];
-  /** Top-level instructions */
-  instructions?: RpcIx[];
-  /** Inner instructions */
-  innerInstructions?: InnerIxSet[];
-  preTokenBalances?: TokenBalance[];
-  postTokenBalances?: TokenBalance[];
-  preBalances?: number[];
-  postBalances?: number[];
-  fee?: number;
-  blockTime?: number | null;
-}
+const TRADER       = bs58Encode(TRADER_BYTES);
+const MINT         = bs58Encode(MINT_BYTES);
+const OTHER_MINT   = bs58Encode(OTHER_MINT_BYTES);
+const OTHER_TRADER = bs58Encode(OTHER_TRADER_BYTES);
+
+// ── pump.fun TradeEvent binary builder ────────────────────────────────────────
+
+const TRADE_EVENT_DISC = Buffer.from("bddb7fd34ee661ee", "hex");
 
 /**
- * Build a minimal valid RPC JSON-RPC response.
+ * Build a pump.fun TradeEvent binary (113 bytes) and return it as a
+ * "Program data: <base64>" log line, ready to be placed in meta.logMessages.
  *
- * Defaults:
- *   accountKeys : [TRADER, SPL_TOKEN, PUMP_FUN]
- *   instructions: pump.fun ix at programIdIndex=2 including accounts [0..6]
- *   preBalances : [200_000_000, 1_000_000]
- *   postBalances: [ 90_000_000, 1_000_000]
- *   fee         : 5000
- *   postTokenBalances: trader received 1_000_000 atoms of MINT (accountIndex 3)
- *
- * accountIndex 3 is in instruction.accounts [0,1,2,3,4,5,6] by default, so
- * the token delta is scoped to the swap instruction.
+ * Layout (borsh):
+ *   discriminator(8) + mint(32) + sol_amount(8) + token_amount(8) +
+ *   is_buy(1) + user(32) + timestamp(8) + virtual_sol_reserves(8) +
+ *   virtual_token_reserves(8) = 113 bytes
  */
-function buildRpcResponse(overrides: RpcOverrides = {}): unknown {
-  const feePayer   = overrides.feePayer ?? TRADER;
-  // index 0=feePayer, 1=SPL_TOKEN, 2=PUMP_FUN, then spare slots 3-6
-  const accountKeys = overrides.accountKeys ?? [feePayer, SPL_TOKEN, PUMP_FUN, "addr3", "addr4", "addr5", "addr6"];
-  // Default swap instruction: pump.fun (index 2) over accounts 0..6
-  const instructions = overrides.instructions ?? [
-    { programIdIndex: 2, accounts: [0, 1, 2, 3, 4, 5, 6], data: "3Bxs4h1Fz3a3b4he" },
-  ];
-  const innerInstructions = overrides.innerInstructions ?? [];
+function makeTradeEventLog(opts: {
+  mintBytes?:    Buffer;
+  traderBytes?:  Buffer;
+  solLamports?:  bigint;
+  tokenAmount?:  bigint;
+  isBuy?:        boolean;
+  truncateTo?:   number;   // if set, slice the buffer to this many bytes
+}): string {
+  const {
+    mintBytes   = MINT_BYTES,
+    traderBytes = TRADER_BYTES,
+    solLamports = 500_000_000n,   // 0.5 SOL
+    tokenAmount = 1_000_000n,     // 1M tokens
+    isBuy       = true,
+    truncateTo,
+  } = opts;
 
-  const defaultMeta = {
-    err:               overrides.err ?? null,
-    fee:               overrides.fee ?? 5000,
-    preBalances:       overrides.preBalances  ?? [200_000_000, 1_000_000],
-    postBalances:      overrides.postBalances ?? [ 90_000_000, 1_000_000],
-    preTokenBalances:  overrides.preTokenBalances  ?? [],
-    postTokenBalances: overrides.postTokenBalances ?? [
-      // accountIndex 3 is in instruction accounts [0..6]
-      { accountIndex: 3, mint: MINT, owner: feePayer, uiTokenAmount: { amount: "1000000" } },
-    ],
-    innerInstructions,
+  const buf = Buffer.alloc(113);
+  let off = 0;
+
+  // discriminator (8)
+  TRADE_EVENT_DISC.copy(buf, off); off += 8;
+  // mint (32)
+  mintBytes.copy(buf, off); off += 32;
+  // sol_amount (8, u64 LE)
+  buf.writeBigUInt64LE(solLamports, off); off += 8;
+  // token_amount (8, u64 LE)
+  buf.writeBigUInt64LE(tokenAmount, off); off += 8;
+  // is_buy (1)
+  buf[off] = isBuy ? 1 : 0; off += 1;
+  // user (32)
+  traderBytes.copy(buf, off); off += 32;
+  // timestamp (8, i64 LE)
+  buf.writeBigInt64LE(1_700_000_000n, off); off += 8;
+  // virtual_sol_reserves (8, u64 LE)
+  buf.writeBigUInt64LE(30_000_000_000n, off); off += 8;
+  // virtual_token_reserves (8, u64 LE)
+  buf.writeBigUInt64LE(1_073_000_000_000n, off);
+
+  const finalBuf = typeof truncateTo === "number" ? buf.subarray(0, truncateTo) : buf;
+  return `Program data: ${finalBuf.toString("base64")}`;
+}
+
+// ── RPC response factory ──────────────────────────────────────────────────────
+
+type MetaOverride = {
+  err?: unknown;
+  logMessages?: string[] | null | "ABSENT";
+};
+
+function makeRpcResponse(opts: {
+  result?: null;                       // null = "not found"
+  blockTime?: number | null;
+  meta?: MetaOverride;
+  feePayer?: string;
+  logMessages?: string[];              // shorthand for meta.logMessages
+}): object {
+  if (opts.result === null) {
+    return { result: null };
+  }
+
+  const logMessages =
+    opts.logMessages != null
+      ? opts.logMessages
+      : (opts.meta?.logMessages === "ABSENT" ? undefined : opts.meta?.logMessages ?? []);
+
+  const meta: Record<string, unknown> = {
+    err: opts.meta?.err ?? null,
   };
+  if (opts.meta?.logMessages !== "ABSENT") {
+    meta["logMessages"] = logMessages;
+  }
 
   return {
     result: {
-      blockTime:   overrides.blockTime !== undefined ? overrides.blockTime : 1_700_000_000,
-      meta:        overrides.meta !== undefined ? overrides.meta : defaultMeta,
+      blockTime: opts.blockTime !== undefined ? opts.blockTime : 1_700_000_000,
+      meta,
       transaction: {
         message: {
-          accountKeys,
-          instructions,
+          accountKeys: [opts.feePayer ?? TRADER],
         },
       },
     },
   };
 }
 
-/** Standard buy: 200M→90M SOL, 5k fee, 1M tokens received at accountIndex 3 */
-function buyResponse(overrides: RpcOverrides = {}): unknown {
-  return buildRpcResponse({
-    preBalances:      [200_000_000, 1_000_000],
-    postBalances:     [ 90_000_000, 1_000_000],
-    fee: 5000,
-    preTokenBalances:  [],
-    postTokenBalances: [{ accountIndex: 3, mint: MINT, owner: TRADER, uiTokenAmount: { amount: "1000000" } }],
-    ...overrides,
-  });
-}
-
-/** Standard sell: 90M→200M SOL, 5k fee, 2M tokens sent at accountIndex 3 */
-function sellResponse(overrides: RpcOverrides = {}): unknown {
-  return buildRpcResponse({
-    preBalances:      [ 90_000_000, 1_000_000],
-    postBalances:     [199_995_000, 1_000_000],
-    fee: 5000,
-    preTokenBalances:  [{ accountIndex: 3, mint: MINT, owner: TRADER, uiTokenAmount: { amount: "2000000" } }],
-    postTokenBalances: [{ accountIndex: 3, mint: MINT, owner: TRADER, uiTokenAmount: { amount: "0" } }],
-    ...overrides,
-  });
-}
-
-function mockFetch(body: unknown, ok = true): void {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-    ok,
+function okFetch(body: object, status = 200): Response {
+  return {
+    ok: status < 400,
     json: () => Promise.resolve(body),
-  }));
+  } as unknown as Response;
 }
 
-// ── Setup / teardown ──────────────────────────────────────────────────────────
+// ── Test setup ────────────────────────────────────────────────────────────────
 
-beforeEach(() => { vi.restoreAllMocks(); });
-afterEach(()  => { vi.unstubAllGlobals(); });
+beforeEach(() => {
+  vi.restoreAllMocks();
+});
 
-// ── Happy-path ────────────────────────────────────────────────────────────────
+// ── Happy path ────────────────────────────────────────────────────────────────
 
-describe("fetchAndParseTrade — happy path", () => {
-  it("returns server-derived fields for a valid buy (native SOL)", async () => {
-    mockFetch(buyResponse({ blockTime: 1_700_000_000 }));
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
+describe("happy path — pump.fun TradeEvent parsing", () => {
+  it("returns correct amounts for a valid buy", async () => {
+    const log = makeTradeEventLog({ isBuy: true, solLamports: 500_000_000n, tokenAmount: 1_000_000n });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({ logMessages: [log] })),
+    ));
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.isBuy).toBe(true);
-    expect(result.tokenAmountAtoms).toBe("1000000");
-    // SOL spent = (200_000_000 - 90_000_000) - 5000 = 109_995_000
-    expect(result.solAmountLamports).toBe("109995000");
-    expect(result.priceEth).toBeTruthy();
-    expect(result.blockTime).toBe(1_700_000_000);
+    const result = await fetchAndParseTrade("sig1", MINT, TRADER);
+    expect(result).toMatchObject({
+      ok:                true,
+      isBuy:             true,
+      solAmountLamports: "500000000",
+      tokenAmountAtoms:  "1000000",
+    });
   });
 
-  it("returns server-derived fields for a valid sell (native SOL)", async () => {
-    mockFetch(sellResponse({ blockTime: 1_700_001_000 }));
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
+  it("returns correct amounts for a valid sell", async () => {
+    const log = makeTradeEventLog({ isBuy: false, solLamports: 200_000_000n, tokenAmount: 500_000n });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({ logMessages: [log] })),
+    ));
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.isBuy).toBe(false);
-    expect(result.tokenAmountAtoms).toBe("2000000");
-    // SOL received = (199_995_000 - 90_000_000) + 5000 = 110_000_000
-    expect(result.solAmountLamports).toBe("110000000");
-    expect(result.blockTime).toBe(1_700_001_000);
+    const result = await fetchAndParseTrade("sig2", MINT, TRADER);
+    expect(result).toMatchObject({ ok: true, isBuy: false });
+    if (result.ok) {
+      expect(result.solAmountLamports).toBe("200000000");
+      expect(result.tokenAmountAtoms).toBe("500000");
+    }
   });
 
-  it("handles a fresh ATA (no pre-balance entry) as zero pre-balance", async () => {
-    mockFetch(buyResponse());
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.isBuy).toBe(true);
-    expect(result.tokenAmountAtoms).toBe("1000000");
+  it("computes priceEth as solLamports / tokenAmount / 1000", async () => {
+    // 500_000_000 lamports / 1_000_000 atoms / 1000 = 0.5
+    const log = makeTradeEventLog({ solLamports: 500_000_000n, tokenAmount: 1_000_000n });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({ logMessages: [log] })),
+    ));
+
+    const result = await fetchAndParseTrade("sig3", MINT, TRADER);
+    if (!result.ok) throw new Error("expected ok");
+    expect(parseFloat(result.priceEth!)).toBeCloseTo(0.5, 5);
   });
 
-  it("aggregates balance deltas across multiple ATAs for same mint+owner", async () => {
-    // Trader holds MINT in two ATAs (accountIndex 3 and accountIndex 5)
-    // Both must be within the swap instruction's account set [0..6]
-    mockFetch(buildRpcResponse({
-      preTokenBalances: [
-        { accountIndex: 3, mint: MINT, owner: TRADER, uiTokenAmount: { amount: "1000000" } },
-        { accountIndex: 5, mint: MINT, owner: TRADER, uiTokenAmount: { amount: "500000"  } },
-      ],
-      postTokenBalances: [
-        { accountIndex: 3, mint: MINT, owner: TRADER, uiTokenAmount: { amount: "2000000" } },
-        { accountIndex: 5, mint: MINT, owner: TRADER, uiTokenAmount: { amount: "500000"  } }, // unchanged
-      ],
-      // pump.fun ix covers accounts [0..6], so both ATAs are in scope
-    }));
+  it("returns null priceEth when tokenAmount is 0", async () => {
+    const log = makeTradeEventLog({ solLamports: 500_000_000n, tokenAmount: 0n });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({ logMessages: [log] })),
+    ));
 
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.isBuy).toBe(true);
-    // Total token delta: (2000000-1000000) + (500000-500000) = 1000000
-    expect(result.tokenAmountAtoms).toBe("1000000");
+    const result = await fetchAndParseTrade("sig4", MINT, TRADER);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.priceEth).toBeNull();
   });
 
-  it("accepts a WSOL buy when native SOL delta is too small (Jupiter-style)", async () => {
-    // Native SOL only drops by the tx fee — actual payment was via WSOL
-    // WSOL ATA is at accountIndex 4, within the swap ix accounts [0..6]
-    mockFetch(buildRpcResponse({
-      accountKeys: [TRADER, SPL_TOKEN, JUPITER_V6, "addr3", "addr4", "addr5", "addr6"],
-      preBalances:  [100_005_000, 1_000_000],
-      postBalances: [100_000_000, 1_000_000],
-      fee: 5000,
-      preTokenBalances: [
-        { accountIndex: 4, mint: WSOL_MINT, owner: TRADER, uiTokenAmount: { amount: "50000000" } },
-      ],
-      postTokenBalances: [
-        { accountIndex: 3, mint: MINT,      owner: TRADER, uiTokenAmount: { amount: "1000000"  } },
-        { accountIndex: 4, mint: WSOL_MINT, owner: TRADER, uiTokenAmount: { amount: "0"        } },
-      ],
-    }));
+  it("returns null priceEth when solLamports is 0", async () => {
+    const log = makeTradeEventLog({ solLamports: 0n, tokenAmount: 1_000_000n });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({ logMessages: [log] })),
+    ));
 
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.isBuy).toBe(true);
-    expect(result.solAmountLamports).toBe("50000000"); // WSOL delta
+    const result = await fetchAndParseTrade("sigX", MINT, TRADER);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.priceEth).toBeNull();
   });
 
-  it("accepts a WSOL sell when native SOL barely changes", async () => {
-    mockFetch(buildRpcResponse({
-      accountKeys: [TRADER, SPL_TOKEN, JUPITER_V6, "addr3", "addr4", "addr5", "addr6"],
-      preBalances:  [100_000_000, 1_000_000],
-      postBalances: [ 99_995_000, 1_000_000],
-      fee: 5000,
-      preTokenBalances: [
-        { accountIndex: 3, mint: MINT,      owner: TRADER, uiTokenAmount: { amount: "2000000" } },
-        { accountIndex: 4, mint: WSOL_MINT, owner: TRADER, uiTokenAmount: { amount: "0"       } },
-      ],
-      postTokenBalances: [
-        { accountIndex: 3, mint: MINT,      owner: TRADER, uiTokenAmount: { amount: "0"        } },
-        { accountIndex: 4, mint: WSOL_MINT, owner: TRADER, uiTokenAmount: { amount: "80000000" } },
-      ],
-    }));
+  it("returns blockTime from RPC", async () => {
+    const log = makeTradeEventLog({});
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({ logMessages: [log], blockTime: 1_700_000_001 })),
+    ));
 
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.isBuy).toBe(false);
-    expect(result.solAmountLamports).toBe("80000000");
+    const result = await fetchAndParseTrade("sig5", MINT, TRADER);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.blockTime).toBe(1_700_000_001);
   });
 
-  it("finds a swap program in inner instructions", async () => {
-    // Top-level instruction is Jupiter aggregator (not in SWAP_PROGRAMS here),
-    // inner instruction invokes pump.fun
-    const ROUTER = "routerXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"; // not in allowlist
-    mockFetch(buildRpcResponse({
-      accountKeys: [TRADER, SPL_TOKEN, ROUTER, PUMP_FUN, "addr4", "addr5", "addr6"],
-      instructions: [
-        { programIdIndex: 2, accounts: [0, 1, 2, 3, 4, 5, 6], data: "" }, // ROUTER — not swap
-      ],
-      innerInstructions: [
-        {
-          index: 0,
-          instructions: [
-            // pump.fun at index 3, accounts include 0..6
-            { programIdIndex: 3, accounts: [0, 1, 2, 3, 4, 5, 6], data: "" },
-          ],
-        },
-      ],
-    }));
+  it("returns null blockTime when RPC omits it", async () => {
+    const log = makeTradeEventLog({});
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({ logMessages: [log], blockTime: null })),
+    ));
 
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
-    expect(result.ok).toBe(true);
-  });
-
-  it("blockTime is null when the field is absent from the RPC response", async () => {
-    const response = buyResponse() as { result: { blockTime?: number } };
-    delete response.result.blockTime;
-    mockFetch(response);
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
+    const result = await fetchAndParseTrade("sig6", MINT, TRADER);
+    if (!result.ok) throw new Error("expected ok");
     expect(result.blockTime).toBeNull();
+  });
+
+  it("accepts the event when it appears after unrelated log lines", async () => {
+    const log = makeTradeEventLog({});
+    const logs = [
+      "Program 11111111111111111111111111111111 invoke [1]",
+      "Program 11111111111111111111111111111111 success",
+      log,
+    ];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({ logMessages: logs })),
+    ));
+
+    const result = await fetchAndParseTrade("sig7", MINT, TRADER);
+    expect(result.ok).toBe(true);
+  });
+
+  it("uses finalized commitment in the RPC request", async () => {
+    const log = makeTradeEventLog({});
+    const mockFetch = vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({ logMessages: [log] })),
+    );
+    vi.stubGlobal("fetch", mockFetch);
+
+    await fetchAndParseTrade("sigC", MINT, TRADER);
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+    expect(body.params[1].commitment).toBe("finalized");
   });
 });
 
-// ── Bypass prevention (adversarial) ───────────────────────────────────────────
+// ── Authentication / signer checks ───────────────────────────────────────────
 
-describe("fetchAndParseTrade — bypass prevention", () => {
-  it("rejects a tx with token change + SOL movement but NO swap program in instructions", async () => {
-    // Attacker crafts: SPL transfer of MINT into their account (accountIndex 3)
-    //   + System Program transfer of SOL out of their wallet
-    // accountKeys: [TRADER, SYSTEM_PROG, SPL_TOKEN]  — no swap program
-    mockFetch(buildRpcResponse({
-      accountKeys:  [TRADER, SYSTEM_PROG, SPL_TOKEN],
-      instructions: [
-        { programIdIndex: 1, accounts: [0, 2], data: "" }, // System Program
-        { programIdIndex: 2, accounts: [3, 0], data: "" }, // SPL Token
-      ],
-      preBalances:  [200_000_000, 1_000_000],
-      postBalances: [ 90_000_000, 1_000_000],
-      preTokenBalances:  [],
-      postTokenBalances: [
-        { accountIndex: 3, mint: MINT, owner: TRADER, uiTokenAmount: { amount: "1000000" } },
-      ],
-    }));
+describe("authentication checks", () => {
+  it("rejects (403) when fee payer ≠ claimedTrader", async () => {
+    const log = makeTradeEventLog({});
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({ feePayer: OTHER_TRADER, logMessages: [log] })),
+    ));
 
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
+    const result = await fetchAndParseTrade("sigA1", MINT, TRADER);
     expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.status).toBe(409);
-    expect(result.error).toMatch(/swap program/i);
+    if (!result.ok) expect(result.status).toBe(403);
   });
 
-  it("rejects a tx with WSOL movement from an account NOT in the swap instruction", async () => {
-    // WSOL ATA is at accountIndex 9, but the pump.fun instruction only covers [0..6]
-    // An attacker moves WSOL out separately and tries to claim it as the SOL consideration
-    mockFetch(buildRpcResponse({
-      // pump.fun ix covers only [0..6] — accountIndex 9 is OUT of scope
-      preBalances:  [100_005_000, 1_000_000],
-      postBalances: [100_000_000, 1_000_000],
-      fee: 5000,
-      preTokenBalances: [
-        { accountIndex: 9, mint: WSOL_MINT, owner: TRADER, uiTokenAmount: { amount: "50000000" } },
-      ],
-      postTokenBalances: [
-        { accountIndex: 3, mint: MINT,      owner: TRADER, uiTokenAmount: { amount: "1000000"  } },
-        { accountIndex: 9, mint: WSOL_MINT, owner: TRADER, uiTokenAmount: { amount: "0"        } },
-      ],
-      // default instructions: pump.fun ix with accounts [0,1,2,3,4,5,6]
-      // accountIndex 9 is NOT in that set
-    }));
+  it("rejects (403) when TradeEvent user ≠ claimedTrader", async () => {
+    // Fee payer matches, but TradeEvent user is a different address
+    const log = makeTradeEventLog({ traderBytes: OTHER_TRADER_BYTES });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({ feePayer: TRADER, logMessages: [log] })),
+    ));
 
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
+    const result = await fetchAndParseTrade("sigA2", MINT, TRADER);
     expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.status).toBe(409);
-    expect(result.error).toMatch(/SOL or WSOL consideration/i);
+    if (!result.ok) expect(result.status).toBe(403);
   });
 });
 
 // ── Wrong mint ────────────────────────────────────────────────────────────────
 
-describe("fetchAndParseTrade — wrong mint", () => {
-  it("returns 409 when transaction only involves a different mint", async () => {
-    mockFetch(buildRpcResponse({
-      preTokenBalances:  [],
-      postTokenBalances: [
-        { accountIndex: 3, mint: OTHER_MINT, owner: TRADER, uiTokenAmount: { amount: "1000000" } },
-      ],
-    }));
+describe("wrong mint", () => {
+  it("rejects (409) when TradeEvent mint ≠ expectedMint", async () => {
+    const log = makeTradeEventLog({ mintBytes: OTHER_MINT_BYTES });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({ logMessages: [log] })),
+    ));
 
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
+    const result = await fetchAndParseTrade("sigM1", MINT, TRADER);
     expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.status).toBe(409);
-    expect(result.error).toMatch(MINT);
-  });
-
-  it("returns 409 when token delta is zero", async () => {
-    mockFetch(buildRpcResponse({
-      preTokenBalances:  [{ accountIndex: 3, mint: MINT, owner: TRADER, uiTokenAmount: { amount: "1000000" } }],
-      postTokenBalances: [{ accountIndex: 3, mint: MINT, owner: TRADER, uiTokenAmount: { amount: "1000000" } }],
-    }));
-
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.status).toBe(409);
-  });
-
-  it("returns 409 when owner field is absent — never falls back to arbitrary account", async () => {
-    // Owner intentionally omitted — must be treated as unprovable ownership
-    mockFetch(buildRpcResponse({
-      preTokenBalances:  [],
-      postTokenBalances: [
-        { accountIndex: 3, mint: MINT, uiTokenAmount: { amount: "1000000" } }, // no owner
-      ],
-    }));
-
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.status).toBe(409);
-    expect(result.error).toMatch(/explicitly owned/i);
-  });
-
-  it("returns 409 when the mint is owned by a different wallet", async () => {
-    mockFetch(buildRpcResponse({
-      preTokenBalances:  [{ accountIndex: 3, mint: MINT, owner: OTHER_WALLET, uiTokenAmount: { amount: "0"       } }],
-      postTokenBalances: [{ accountIndex: 3, mint: MINT, owner: OTHER_WALLET, uiTokenAmount: { amount: "1000000" } }],
-    }));
-
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.status).toBe(409);
+    if (!result.ok) expect(result.status).toBe(409);
   });
 });
 
-// ── Plain transfer rejection ──────────────────────────────────────────────────
+// ── No valid TradeEvent ───────────────────────────────────────────────────────
 
-describe("fetchAndParseTrade — plain token transfer rejection", () => {
-  it("returns 409 for a buy-shaped tx where only the fee was deducted from SOL", async () => {
-    // Token received, but SOL only dropped by the tx fee — no real SOL payment
-    mockFetch(buildRpcResponse({
-      preBalances:  [100_005_000, 1_000_000],
-      postBalances: [100_000_000, 1_000_000], // only fee removed
-      fee: 5000,
-      preTokenBalances:  [],
-      postTokenBalances: [{ accountIndex: 3, mint: MINT, owner: TRADER, uiTokenAmount: { amount: "1000000" } }],
-    }));
+describe("no valid TradeEvent in logs", () => {
+  it("rejects (409) when logMessages is empty", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({ logMessages: [] })),
+    ));
 
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
+    const result = await fetchAndParseTrade("sigE1", MINT, TRADER);
     expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.status).toBe(409);
-    expect(result.error).toMatch(/plain token transfer/i);
+    if (!result.ok) expect(result.status).toBe(409);
   });
 
-  it("returns 409 for a sell-shaped tx where the trader's SOL does not increase", async () => {
-    // Token sent, but SOL went down (only fee) — no real SOL received
-    mockFetch(buildRpcResponse({
-      preBalances:  [100_005_000, 1_000_000],
-      postBalances: [100_000_000, 1_000_000],
-      fee: 5000,
-      preTokenBalances:  [{ accountIndex: 3, mint: MINT, owner: TRADER, uiTokenAmount: { amount: "2000000" } }],
-      postTokenBalances: [{ accountIndex: 3, mint: MINT, owner: TRADER, uiTokenAmount: { amount: "0"       } }],
-    }));
+  it("rejects (409) when logMessages contains only non-event lines", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({
+        logMessages: [
+          "Program 11111111111111111111111111111111 invoke [1]",
+          "Program 11111111111111111111111111111111 success",
+        ],
+      })),
+    ));
 
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
+    const result = await fetchAndParseTrade("sigE2", MINT, TRADER);
     expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.status).toBe(409);
-    expect(result.error).toMatch(/plain token transfer/i);
+    if (!result.ok) expect(result.status).toBe(409);
+  });
+
+  it("rejects (409) when TradeEvent blob is too short (< 113 bytes)", async () => {
+    const log = makeTradeEventLog({ truncateTo: 80 });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({ logMessages: [log] })),
+    ));
+
+    const result = await fetchAndParseTrade("sigE3", MINT, TRADER);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(409);
+  });
+
+  it("rejects (409) when 'Program data:' line has a non-TradeEvent discriminator", async () => {
+    // Build a blob that looks like a CreateEvent (different discriminator)
+    const buf = Buffer.alloc(113);
+    Buffer.from("1b72a94ddeeb6376", "hex").copy(buf, 0); // CreateEvent discriminator
+    const log = `Program data: ${buf.toString("base64")}`;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({ logMessages: [log] })),
+    ));
+
+    const result = await fetchAndParseTrade("sigE4", MINT, TRADER);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(409);
+  });
+
+  it("rejects (409) for a plain SPL transfer (no pump.fun program invoked)", async () => {
+    // logMessages contains only SPL Token program logs, no "Program data:" line
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({
+        logMessages: [
+          "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [1]",
+          "Program log: Instruction: Transfer",
+          "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success",
+        ],
+      })),
+    ));
+
+    const result = await fetchAndParseTrade("sigE5", MINT, TRADER);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(409);
+  });
+
+  it("rejects (409) for a transaction with a real swap for a different program (no pump.fun TradeEvent)", async () => {
+    // Raydium or Jupiter invoked — their logs don't emit a pump.fun TradeEvent
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({
+        logMessages: [
+          "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK invoke [1]",
+          "Program log: Instruction: Swap",
+          "Program data: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+          "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK success",
+        ],
+      })),
+    ));
+
+    const result = await fetchAndParseTrade("sigE6", MINT, TRADER);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(409);
   });
 });
 
-// ── Wrong signer ──────────────────────────────────────────────────────────────
+// ── Transaction-level errors ──────────────────────────────────────────────────
 
-describe("fetchAndParseTrade — wrong signer", () => {
-  it("returns 403 when fee payer does not match claimedTrader", async () => {
-    mockFetch(buildRpcResponse({ feePayer: OTHER_WALLET }));
+describe("transaction-level errors", () => {
+  it("returns 404 when transaction is not found (result: null)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch({ result: null }),
+    ));
 
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
+    const result = await fetchAndParseTrade("sigNF", MINT, TRADER);
     expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.status).toBe(403);
+    if (!result.ok) expect(result.status).toBe(404);
+  });
+
+  it("returns 422 when transaction was reverted (meta.err ≠ null)", async () => {
+    const log = makeTradeEventLog({});
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch(makeRpcResponse({ meta: { err: { InstructionError: [0, "Custom"] }, logMessages: [log] } })),
+    ));
+
+    const result = await fetchAndParseTrade("sigRev", MINT, TRADER);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(422);
   });
 });
 
-// ── Transaction failure states ────────────────────────────────────────────────
+// ── RPC / malformed-response errors ──────────────────────────────────────────
 
-describe("fetchAndParseTrade — transaction failures", () => {
-  it("returns 404 when RPC result is null", async () => {
-    mockFetch({ result: null });
-
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.status).toBe(404);
-  });
-
-  it("returns 422 when transaction reverted (meta.err != null)", async () => {
-    mockFetch(buildRpcResponse({ err: { InstructionError: [0, "Custom"] } }));
-
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.status).toBe(422);
-  });
-});
-
-// ── Fail-closed on malformed RPC data ─────────────────────────────────────────
-
-describe("fetchAndParseTrade — malformed RPC responses (fail closed)", () => {
+describe("RPC and malformed response errors", () => {
   it("returns 503 when meta is null", async () => {
-    mockFetch(buildRpcResponse({ meta: null }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch({
+        result: {
+          blockTime: 1_700_000_000,
+          meta: null,
+          transaction: { message: { accountKeys: [TRADER] } },
+        },
+      }),
+    ));
 
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
+    const result = await fetchAndParseTrade("sigNull", MINT, TRADER);
     expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.status).toBe(503);
-    expect(result.error).toMatch(/metadata/i);
+    if (!result.ok) expect(result.status).toBe(503);
   });
 
   it("returns 503 when accountKeys is empty", async () => {
-    const response = buildRpcResponse() as { result: { transaction: { message: { accountKeys: string[] } } } };
-    response.result.transaction.message.accountKeys = [];
-    mockFetch(response);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch({
+        result: {
+          blockTime: 1_700_000_000,
+          meta: { err: null, logMessages: [] },
+          transaction: { message: { accountKeys: [] } },
+        },
+      }),
+    ));
 
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
+    const result = await fetchAndParseTrade("sigNoKeys", MINT, TRADER);
     expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.status).toBe(503);
+    if (!result.ok) expect(result.status).toBe(503);
   });
 
-  it("returns 503 when all RPC endpoints throw", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Network error")));
+  it("returns 503 when meta.logMessages is absent from the RPC response", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch({
+        result: {
+          blockTime: 1_700_000_000,
+          meta: { err: null },  // no logMessages field
+          transaction: { message: { accountKeys: [TRADER] } },
+        },
+      }),
+    ));
 
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
+    const result = await fetchAndParseTrade("sigNoLogs", MINT, TRADER);
     expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.status).toBe(503);
-    expect(result.error).toMatch(/RPC endpoints/i);
+    if (!result.ok) expect(result.status).toBe(503);
   });
 
-  it("returns 503 when primary HTTP 500 and secondary throws", async () => {
-    let call = 0;
+  it("returns 503 when all RPC endpoints throw (network failure)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+
+    const result = await fetchAndParseTrade("sigNet", MINT, TRADER);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(503);
+  });
+
+  it("returns 503 when all RPC endpoints return HTTP 500", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      okFetch({}, 500),
+    ));
+
+    const result = await fetchAndParseTrade("sigHTTP", MINT, TRADER);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(503);
+  });
+
+  it("falls back to secondary RPC when primary returns HTTP 500", async () => {
+    const log = makeTradeEventLog({});
+    let calls = 0;
     vi.stubGlobal("fetch", vi.fn().mockImplementation(() => {
-      call++;
-      if (call === 1) return Promise.resolve({ ok: false, json: () => Promise.resolve({}) });
-      return Promise.reject(new Error("down"));
+      calls++;
+      if (calls === 1) return Promise.resolve(okFetch({}, 500));
+      return Promise.resolve(okFetch(makeRpcResponse({ logMessages: [log] })));
     }));
 
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.status).toBe(503);
-  });
-
-  it("skips RPC-level errors and succeeds on the next endpoint", async () => {
-    let call = 0;
-    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => {
-      call++;
-      if (call === 1) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ error: { code: -32000 } }) });
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(buyResponse()) });
-    }));
-
-    const result = await fetchAndParseTrade(SIG, MINT, TRADER);
+    const result = await fetchAndParseTrade("sigFallback", MINT, TRADER);
     expect(result.ok).toBe(true);
-    expect(call).toBe(2);
+    expect(calls).toBeGreaterThan(1);
+  });
+
+  it("falls back to secondary RPC when primary throws", async () => {
+    const log = makeTradeEventLog({});
+    let calls = 0;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => {
+      calls++;
+      if (calls === 1) return Promise.reject(new Error("timeout"));
+      return Promise.resolve(okFetch(makeRpcResponse({ logMessages: [log] })));
+    }));
+
+    const result = await fetchAndParseTrade("sigFallback2", MINT, TRADER);
+    expect(result.ok).toBe(true);
+    expect(calls).toBeGreaterThan(1);
+  });
+
+  it("returns 503 when primary returns RPC-level error and secondary throws", async () => {
+    let calls = 0;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => {
+      calls++;
+      if (calls === 1) return Promise.resolve(okFetch({ error: { code: -32005, message: "Rate limit" } }));
+      return Promise.reject(new Error("timeout"));
+    }));
+
+    const result = await fetchAndParseTrade("sigRpcErr", MINT, TRADER);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(503);
   });
 });
