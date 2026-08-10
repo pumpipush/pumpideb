@@ -363,7 +363,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       setLaunchStep("building");
       // Show SDK-loading sub-label only when the module hasn't been cached yet.
       if (!isRaydiumSdkCached()) {
-        setBuildingSubLabel("Memuat Raydium SDK (satu kali)...");
+        setBuildingSubLabel("Preparing launch environment…");
       }
       const { transactions, mintAddress: newMint, blockhash, lastValidBlockHeight } =
         await buildRaydiumLaunchTx(
@@ -2332,9 +2332,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-lg"
                       style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
                       <Activity className="h-7 w-7" style={{ color: "#334155" }} />
-                      <p className="text-[14px] font-medium text-center" style={{ color: "#64748b" }}>
-                        Position tracking is not yet available for this platform
-                      </p>
+                      <div className="text-center space-y-1">
+                        <p className="text-[14px] font-semibold text-center" style={{ color: "#64748b" }}>
+                          P&L tracking coming for this platform
+                        </p>
+                        <p className="text-[12px]" style={{ color: "#475569" }}>Currently live for Pump.fun and PumpSwap tokens</p>
+                      </div>
                     </div>
                   );
                 }
@@ -2400,7 +2403,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-lg"
                       style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
                       <TrendingUp className="h-8 w-8" style={{ color: "#334155" }} />
-                      <p className="text-[14px] font-medium" style={{ color: "#64748b" }}>No position in this token</p>
+                      <div className="text-center space-y-1">
+                        <p className="text-[14px] font-semibold" style={{ color: "#cbd5e1" }}>No position yet</p>
+                        <p className="text-[12px]" style={{ color: "#475569" }}>Buy this token to start tracking your P&L</p>
+                      </div>
                     </div>
                   );
                 }
@@ -2488,7 +2494,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       ))
                     ) : holders.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground/60 text-[11px]">No holders yet.</td>
+                        <td colSpan={5} className="px-3 py-10 text-center">
+                          <p className="text-[13px] font-medium" style={{ color: "#475569" }}>No holders yet</p>
+                          <p className="text-[11px] mt-1" style={{ color: "#334155" }}>Holder data appears once the first buy is made</p>
+                        </td>
                       </tr>
                     ) : holders.map(({ address: addr, balance }, idx) => {
                       const bal = Math.max(0, parseFloat(balance) || 0);
@@ -2948,9 +2957,21 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
   // ── Error ──
   if (isError) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-3 animate-slideDown">
-        <p className="text-[14px]" style={{ color: "#f87171" }}>Failed to load holdings.</p>
-        <button onClick={() => refetch()} className="text-[13px] text-primary underline hover:opacity-80 transition-opacity">Retry</button>
+      <div className="flex flex-col items-center justify-center py-20 gap-4 animate-slideDown">
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center"
+          style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)" }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="1.6" strokeLinecap="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="0.5" fill="#f87171"/>
+          </svg>
+        </div>
+        <div className="text-center space-y-1">
+          <p className="text-[14px] font-semibold" style={{ color: "#f87171" }}>Couldn't load your portfolio</p>
+          <p className="text-[12px]" style={{ color: "#64748b" }}>Check your connection and try again</p>
+        </div>
+        <button onClick={() => refetch()} className="px-5 py-1.5 rounded-lg text-[13px] font-semibold transition-all hover:opacity-90 active:scale-95"
+          style={{ background: "rgba(248,113,113,0.10)", border: "1px solid rgba(248,113,113,0.20)", color: "#f87171" }}>
+          Try again
+        </button>
       </div>
     );
   }
@@ -2960,15 +2981,19 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
   // ── Empty ──
   if (holdings.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4 animate-slideDown">
+      <div className="flex flex-col items-center justify-center py-24 gap-5 animate-slideDown">
         <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
           style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
           <TrendingUp className="h-7 w-7" style={{ color: "#334155" }} />
         </div>
-        <div className="text-center space-y-1">
-          <p className="text-[15px] font-semibold text-foreground">No tokens found</p>
-          <p className="text-[13px]" style={{ color: "#64748b" }}>Buy some tokens and they'll appear here</p>
+        <div className="text-center space-y-1.5">
+          <p className="text-[15px] font-semibold text-foreground">No tokens yet</p>
+          <p className="text-[13px]" style={{ color: "#64748b" }}>Your portfolio is empty — find your next trade on Explore</p>
         </div>
+        <a href="/" className="px-6 py-2 rounded-lg text-[13px] font-semibold transition-all hover:opacity-90 active:scale-95"
+          style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "#e2e8f0" }}>
+          Explore tokens
+        </a>
       </div>
     );
   }

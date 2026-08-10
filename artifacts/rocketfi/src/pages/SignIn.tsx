@@ -1,107 +1,12 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Eye, EyeOff, Wallet, Rocket, ArrowRight, Loader2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
+import { Wallet, Rocket } from "lucide-react";
 import { WalletSelectModal } from "@/components/shared/WalletSelectModal";
-
-/* ─── helpers ────────────────────────────────────────────────────────────────── */
-function isValidEmail(s: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
-}
-
-/* ─── Social button ─────────────────────────────────────────────────────────── */
-function SocialBtn({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex-1 flex items-center justify-center gap-2 h-10 rounded-lg border border-white/10 bg-white/[0.04] text-sm text-white/70 font-medium hover:bg-white/[0.08] hover:text-white hover:border-white/20 transition-all duration-150 active:scale-[0.98]"
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-/* ─── Input ──────────────────────────────────────────────────────────────────── */
-function Field({
-  label, id, type = "text", value, onChange, error, placeholder,
-  suffix,
-}: {
-  label: string; id: string; type?: string; value: string;
-  onChange: (v: string) => void; error?: string; placeholder?: string;
-  suffix?: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <label htmlFor={id} className="block text-xs font-semibold text-white/50 uppercase tracking-widest">
-        {label}
-      </label>
-      <div className="relative">
-        <input
-          id={id}
-          type={type}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          autoComplete={id}
-          className={cn(
-            "w-full h-11 rounded-lg bg-white/[0.04] border px-3.5 text-sm text-white placeholder:text-white/20 outline-none transition-all duration-150",
-            "focus:bg-white/[0.07] focus:shadow-[0_0_0_2px_rgba(59,130,246,0.35)]",
-            error ? "border-red-500/60" : "border-white/10 focus:border-primary/50",
-            suffix && "pr-11"
-          )}
-        />
-        {suffix && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors">
-            {suffix}
-          </div>
-        )}
-      </div>
-      {error && <p className="text-[11px] text-red-400">{error}</p>}
-    </div>
-  );
-}
 
 /* ─── Page ───────────────────────────────────────────────────────────────────── */
 export default function SignIn() {
   const [, navigate] = useLocation();
-  const { toast } = useToast();
-
-  const [email, setEmail]         = useState("");
-  const [password, setPassword]   = useState("");
-  const [showPw, setShowPw]       = useState(false);
-  const [loading, setLoading]     = useState(false);
   const [walletModal, setWalletModal] = useState(false);
-  const [errors, setErrors]       = useState<{ email?: string; password?: string }>({});
-
-  function validate() {
-    const e: typeof errors = {};
-    if (!email)                 e.email    = "Email is required";
-    else if (!isValidEmail(email)) e.email = "Enter a valid email address";
-    if (!password)              e.password = "Password is required";
-    else if (password.length < 6) e.password = "Password must be at least 6 characters";
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!validate()) return;
-    setLoading(true);
-    // Email auth is coming soon — no fake addresses generated
-    await new Promise((r) => setTimeout(r, 900));
-    setLoading(false);
-    toast({
-      title: "Email sign-in coming soon",
-      description: "Use the Connect Wallet option below to sign in now.",
-    });
-  }
-
-  function handleGoogle() {
-    toast({ title: "Google Sign-In", description: "OAuth integration coming soon." });
-  }
 
   return (
     <div className="min-h-[100dvh] w-full max-w-full overflow-x-hidden flex bg-[#060d1a]">
@@ -155,108 +60,55 @@ export default function SignIn() {
         </div>
       </div>
 
-      {/* ── Right form panel ── */}
+      {/* ── Right panel ── */}
       <div className="flex-1 flex flex-col items-center justify-center p-5 sm:p-8 relative">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[400px] h-[1px] bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
 
+        {/* Ambient glow */}
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/[0.04] rounded-full blur-[120px]" />
+        </div>
+
         {/* Mobile logo */}
-        <div className="lg:hidden flex items-center gap-2.5 mb-8">
+        <div className="lg:hidden flex items-center gap-2.5 mb-10">
           <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center shadow-[0_0_16px_rgba(59,130,246,0.5)]">
             <Rocket className="w-4 h-4 text-white" />
           </div>
           <span className="text-lg font-bold text-white tracking-tight">Mintix <span className="text-primary">fun</span></span>
         </div>
 
-        <div className="w-full max-w-[400px]">
+        <div className="w-full max-w-[380px] relative">
           {/* Header */}
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-white mb-1.5">Welcome back</h2>
-            <p className="text-sm text-white/40">Sign in to your account to continue</p>
+          <div className="mb-10 text-center">
+            <h2 className="text-3xl font-bold text-white mb-3 tracking-tight">Sign in to Mintix.fun</h2>
+            <p className="text-sm text-white/40 leading-relaxed">
+              Connect your Solana wallet to start trading<br className="hidden sm:block" /> and launching tokens.
+            </p>
           </div>
 
-          {/* ── Wallet button (primary CTA) ── */}
+          {/* Connect Wallet button */}
           <button
             type="button"
             onClick={() => setWalletModal(true)}
-            className="w-full h-12 rounded-xl bg-primary text-white text-sm font-semibold flex items-center justify-center gap-2.5 hover:bg-primary/90 active:scale-[0.98] transition-all duration-150 shadow-[0_0_24px_rgba(59,130,246,0.3)] mb-4"
+            className="w-full h-14 rounded-2xl bg-primary text-white text-base font-semibold flex items-center justify-center gap-3 hover:bg-primary/90 active:scale-[0.98] transition-all duration-150 shadow-[0_0_32px_rgba(59,130,246,0.35)] mb-4"
           >
-            <Wallet className="w-4.5 h-4.5" />
+            <Wallet className="w-5 h-5" />
             Connect Wallet
           </button>
 
-          {/* Social buttons */}
-          <div className="flex gap-3 mb-5">
-            <SocialBtn
-              label="Google"
-              onClick={handleGoogle}
-              icon={
-                <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                </svg>
-              }
-            />
-            <SocialBtn
-              label="GitHub"
-              onClick={handleGoogle}
-              icon={
-                <svg viewBox="0 0 24 24" className="w-4 h-4 fill-white/80">
-                  <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/>
-                </svg>
-              }
-            />
-          </div>
+          {/* Supported wallets note */}
+          <p className="text-center text-xs text-white/30">
+            Supports Phantom, Solflare, and Backpack
+          </p>
 
           {/* Divider */}
-          <div className="relative flex items-center gap-3 mb-5">
-            <div className="flex-1 h-px bg-white/[0.08]" />
-            <span className="text-[11px] text-white/30 font-medium uppercase tracking-widest shrink-0">or sign in with email</span>
-            <div className="flex-1 h-px bg-white/[0.08]" />
-          </div>
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-            <Field
-              id="email" label="Email address" type="email"
-              value={email} onChange={setEmail}
-              placeholder="you@example.com" error={errors.email}
-            />
-            <Field
-              id="current-password" label="Password" type={showPw ? "text" : "password"}
-              value={password} onChange={setPassword}
-              placeholder="••••••••" error={errors.password}
-              suffix={
-                <button type="button" onClick={() => setShowPw(!showPw)} className="p-0.5">
-                  {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              }
-            />
-
-            <div className="flex justify-end">
-              <button type="button" className="text-xs text-primary/80 hover:text-primary transition-colors">
-                Forgot password?
-              </button>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full h-11 rounded-lg border border-white/10 bg-white/[0.04] text-white/80 text-sm font-medium flex items-center justify-center gap-2 hover:bg-white/[0.07] hover:text-white hover:border-white/20 active:scale-[0.98] transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
-            >
-              {loading
-                ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing in…</>
-                : <><span>Sign in with Email</span><ArrowRight className="w-4 h-4" /></>
-              }
-            </button>
-          </form>
+          <div className="my-8 h-px bg-white/[0.06]" />
 
           {/* Footer */}
-          <p className="text-center text-sm text-white/30 mt-8">
-            Don&apos;t have an account?{" "}
+          <p className="text-center text-sm text-white/30">
+            New to Mintix?{" "}
             <a href="/signup" className="text-primary hover:text-primary/80 font-semibold transition-colors">
-              Create one
+              Get started
             </a>
           </p>
         </div>

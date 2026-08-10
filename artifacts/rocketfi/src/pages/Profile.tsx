@@ -336,11 +336,17 @@ export default function ProfilePage() {
   // Non-owner visiting a wallet with no profile — dead end
   if (!profile && !isOwner) {
     return (
-      <div className="max-w-3xl mx-auto px-4 pt-20 text-center">
-        <Coins className="w-10 h-10 text-muted-foreground/30 mx-auto mb-4" />
-        <p className="text-muted-foreground text-sm">Profile not found.</p>
-        <p className="text-xs text-muted-foreground/60 mt-1 font-mono">{formatAddress(address)}</p>
-        <Button variant="outline" size="sm" className="mt-6 rounded-sm" onClick={() => setLocation("/")}>
+      <div className="max-w-3xl mx-auto px-4 pt-24 flex flex-col items-center gap-4">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center"
+          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <Coins className="w-7 h-7" style={{ color: "#334155" }} />
+        </div>
+        <div className="text-center space-y-1.5">
+          <p className="text-[16px] font-semibold text-foreground">Wallet not found</p>
+          <p className="text-[13px]" style={{ color: "#64748b" }}>This address hasn't set up a profile yet</p>
+          <p className="text-[11px] font-mono mt-1" style={{ color: "#334155" }}>{formatAddress(address)}</p>
+        </div>
+        <Button variant="outline" size="sm" className="mt-2 rounded-sm" onClick={() => setLocation("/")}>
           Back to Explore
         </Button>
       </div>

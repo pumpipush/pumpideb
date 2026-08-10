@@ -107,6 +107,13 @@
   --chart-5: 0 84% 60%;
 
   --radius: 0.375rem;
+
+  /* ── Brand accent: rocket orange ──────────────────────────────────────
+     Used for primary CTAs (Launch Token button) and key highlights.
+     Does NOT override --primary (near-white) so existing UI is unaffected. */
+  --brand: 28 95% 56%;
+  --brand-foreground: 28 100% 8%;
+  --brand-glow: rgba(251, 121, 22, 0.25);
 }
 
 @layer base {

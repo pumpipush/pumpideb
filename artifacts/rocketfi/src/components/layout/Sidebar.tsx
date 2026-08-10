@@ -1,11 +1,31 @@
 import { Link, useLocation } from "wouter";
-import { Flame, LayoutGrid, ArrowRightLeft, Plus, UserCircle2 } from "lucide-react";
+import { Rocket, LayoutGrid, ArrowRightLeft, Plus, UserCircle2 } from "lucide-react";
 import { cn, diceBearUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useWallet } from "@/contexts/WalletContext";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { useGetProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
 import { formatAddress } from "@/lib/utils";
+import { useState } from "react";
+
+function LaunchTokenButton() {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Button
+      className="w-full bg-primary text-primary-foreground rounded-[8px] font-bold text-sm h-9 transition-all duration-200 active:scale-[0.98] flex items-center gap-2"
+      style={{
+        background: "hsl(28, 95%, 56%)",
+        color: "#1a0a00",
+        boxShadow: hovered ? "0 0 18px rgba(251,121,22,0.30)" : undefined,
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <Rocket className="h-4 w-4" />
+      Launch Token
+    </Button>
+  );
+}
 
 export function Sidebar() {
   const [location] = useLocation();
@@ -19,8 +39,8 @@ export function Sidebar() {
     <div className="hidden md:flex fixed left-0 top-0 h-full w-[220px] border-r border-border bg-background flex-col z-50">
       <div className="p-4 flex flex-col gap-4">
         <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight text-primary transition-all duration-150 cursor-pointer">
-          <Flame className="h-5 w-5" />
-          <span>Mintix <span className="text-white/50 font-normal">fun</span></span>
+          <Rocket className="h-5 w-5" />
+          <span>Mintix <span style={{ color: "hsl(28, 95%, 56%)" }} className="font-normal">fun</span></span>
         </Link>
         <div className="h-px w-full bg-border/50" />
       </div>
@@ -77,11 +97,8 @@ export function Sidebar() {
 
       <div className="p-4 border-t border-border/50 flex flex-col gap-4">
         <Link href="/app" className="block w-full">
-          <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 rounded-[8px] font-bold text-sm h-9 transition-all duration-200 hover:shadow-[0_0_20px_rgba(255,255,255,0.15)] active:scale-[0.98]">
-            Create
-          </Button>
+          <LaunchTokenButton />
         </Link>
-        <div className="text-center text-[10px] text-muted-foreground/70 font-mono">v1.0 beta</div>
       </div>
     </div>
   );
