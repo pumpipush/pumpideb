@@ -114,9 +114,10 @@ async function pollOnce(): Promise<void> {
     const volumeUsd    = pool.day?.volume ?? 0;
     const liquidityUsd = pool.tvl         ?? 0;
 
-    // Convert to lamports-equivalent for existing schema columns
-    const priceEth     = priceUsd  ? usdToLamports(priceUsd,  solPrice) : null;
-    const volumeEth    = volumeUsd ? usdToLamports(volumeUsd, solPrice) : "0";
+    // priceEth stored as SOL/token (NOT lamports) — consistent with pump.fun convention.
+    // Frontend multiplies priceEth × solPrice to get USD.
+    const priceEth  = priceUsd && solPrice > 0 ? String(priceUsd / solPrice) : null;
+    const volumeEth = volumeUsd ? usdToLamports(volumeUsd, solPrice) : "0";
 
     try {
       await db.insert(tokensTable).values({

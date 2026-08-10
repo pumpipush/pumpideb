@@ -72,8 +72,11 @@ async function upsertToken(token: TokenRecord, solPrice: number): Promise<boolea
   if (isStable(token.address)) return false;
   if (token.name.trim() === "" || token.symbol.trim() === "") return false;
 
-  const priceEth     = token.priceUsd     ? usdToLamports(token.priceUsd,     solPrice) : null;
-  const marketCapEth = token.marketCapUsd ? usdToLamports(token.marketCapUsd, solPrice) : null;
+  // priceEth stored as SOL/token (NOT lamports) — consistent with pump.fun convention.
+  // Frontend multiplies priceEth × solPrice to get USD. marketCapEth stays in lamports
+  // because formatMCUsd() divides by 1e9 before multiplying by solPrice.
+  const priceEth     = token.priceUsd && solPrice > 0 ? String(token.priceUsd / solPrice) : null;
+  const marketCapEth = token.marketCapUsd && solPrice > 0 ? usdToLamports(token.marketCapUsd, solPrice) : null;
   const volumeEth    = token.volumeUsd    ? usdToLamports(token.volumeUsd,    solPrice) : "0";
 
   try {

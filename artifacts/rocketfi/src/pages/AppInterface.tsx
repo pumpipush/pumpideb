@@ -959,12 +959,27 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverOhlcv, liveTrades, chartTf, token?.address]);
 
-  // Effective market cap: stored value first, then derive from virtual reserves as fallback
-  // (pump.fun stores MC as null until the first trade updates it via on-chain data;
-  //  the bonding curve formula: MC_lamports = totalSupply × vSol_lamports / vTok_atomic)
+  // Effective market cap: stored value first, then derive from virtual reserves as fallback.
+  // DEX tokens (raydium/orca/meteora/pumpswap) use pump.fun default virtual reserves which
+  // produce a meaningless ~$229B number — skip the formula for those platforms.
+  const DEX_PLATFORMS_SET = new Set(["raydium", "orca", "meteora", "pumpswap", "raydium_launchlab"]);
+  const isDexToken = DEX_PLATFORMS_SET.has(token?.platform ?? "");
   const effectiveMcEth = useMemo(() => {
     const raw = liveToken?.marketCapEth ?? token?.marketCapEth;
     if (raw && raw !== "0") return raw;
+
+    // For DEX tokens: fallback to marketCapUsd converted to lamports (formatMCUsd ÷1e9 × solPrice)
+    if (isDexToken) {
+      const mcUsd = (token as { marketCapUsd?: number | null } | null)?.marketCapUsd;
+      if (mcUsd && mcUsd > 0 && solPrice && solPrice > 0) {
+        return String(Math.round((mcUsd / solPrice) * 1e9));
+      }
+      return null; // No market cap data → show "—", don't use virtual reserves
+    }
+
+    // pump.fun: derive from virtual reserves
+    // (pump.fun stores MC as null until the first trade updates it via on-chain data;
+    //  the bonding curve formula: MC_lamports = totalSupply × vSol_lamports / vTok_atomic)
     try {
       const vSolSol  = parseFloat(liveToken?.virtualEthReserves   ?? token?.virtualEthReserves   ?? "0");
       const vTokAtom = parseFloat(liveToken?.virtualTokenReserves ?? token?.virtualTokenReserves ?? "1");
@@ -975,7 +990,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     } catch { return null; }
   }, [liveToken?.marketCapEth, token?.marketCapEth,
       liveToken?.virtualEthReserves, token?.virtualEthReserves,
-      liveToken?.virtualTokenReserves, token?.virtualTokenReserves]);
+      liveToken?.virtualTokenReserves, token?.virtualTokenReserves,
+      isDexToken, solPrice]);
 
   // Memoized chart JSX — only re-renders when chart config state changes, not on crosshair moves
   const ChartSection = useMemo(() => {
