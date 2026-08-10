@@ -221,6 +221,8 @@ export const GetTokenResponse = zod.object({
   "poolAddress": zod.string().nullish(),
   "quoteMint": zod.string().nullish(),
   "pctChange24h": zod.number().nullish(),
+  /** SPL token decimal places (6 for pump.fun / PumpSwap / LaunchLab; may differ for future platforms) */
+  "decimals": zod.number().default(6),
 })
 
 

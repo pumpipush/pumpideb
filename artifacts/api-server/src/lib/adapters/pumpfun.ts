@@ -235,6 +235,29 @@ async function fetchImageFromUri(uri: string): Promise<string | null> {
 class PumpFunChainIndexer extends SolanaRpcIndexer {
   private readonly _pumpApiAdapter = new PumpApiAdapter();
 
+  /**
+   * Per-mint write queue — serializes reserve updates for the same mint when
+   * using the constant-product fallback path (i.e. when TradeEvent log was
+   * unavailable). Without this, two concurrent handlers for the same mint can
+   * both READ the same stale reserves, compute two slightly different NEW
+   * reserve values, and overwrite each other — leaving the DB with a reserve
+   * state that matches neither trade.
+   *
+   * Each enqueueReserveWrite() chains a new promise onto the tail of the mint's
+   * queue so writes for the same mint are always sequential.
+   */
+  private readonly _mintQueue = new Map<string, Promise<void>>();
+
+  private enqueueReserveWrite(mint: string, fn: () => Promise<void>): void {
+    const prev = this._mintQueue.get(mint) ?? Promise.resolve();
+    const next = prev.then(fn, fn); // run fn whether prev resolved or rejected
+    this._mintQueue.set(mint, next);
+    // Cleanup: remove entry once settled to prevent unbounded map growth.
+    next.finally(() => {
+      if (this._mintQueue.get(mint) === next) this._mintQueue.delete(mint);
+    });
+  }
+
   constructor() {
     super({ programId: PUMP_PROGRAM, adapterName: "pump_fun" });
   }
@@ -493,32 +516,41 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
         updMCStr = (PUMP_TOTAL_SUPPLY * onChainVSolLam / onChainVTok).toString();
     } else {
       // Fallback: constant-product estimation from current DB reserves.
-      try {
-        const [current] = await db
-          .select({ virtualEthReserves: tokensTable.virtualEthReserves,
-                    virtualTokenReserves: tokensTable.virtualTokenReserves })
-          .from(tokensTable)
-          .where(eq(tokensTable.address, mint))
-          .limit(1);
+      // This path is taken only when the Anchor TradeEvent log was absent.
+      // Wrapped in enqueueReserveWrite() to serialize concurrent fallback
+      // writes for the same mint — prevents two handlers from reading the
+      // same stale reserves and overwriting each other with conflicting estimates.
+      await new Promise<void>((resolve) => {
+        this.enqueueReserveWrite(mint, async () => {
+          try {
+            const [current] = await db
+              .select({ virtualEthReserves: tokensTable.virtualEthReserves,
+                        virtualTokenReserves: tokensTable.virtualTokenReserves })
+              .from(tokensTable)
+              .where(eq(tokensTable.address, mint))
+              .limit(1);
 
-        const vSolSol    = parseFloat(current?.virtualEthReserves ?? PUMP_INIT_VSOL_SOL);
-        const vTokAtom   = BigInt(current?.virtualTokenReserves ?? PUMP_INIT_VTOK.toString());
-        const oldVSolLam = BigInt(Math.round(vSolSol * 1e9));
-        const tradeLam   = BigInt(solLamports);
-        const k          = oldVSolLam * vTokAtom;
+            const vSolSol    = parseFloat(current?.virtualEthReserves ?? PUMP_INIT_VSOL_SOL);
+            const vTokAtom   = BigInt(current?.virtualTokenReserves ?? PUMP_INIT_VTOK.toString());
+            const oldVSolLam = BigInt(Math.round(vSolSol * 1e9));
+            const tradeLam   = BigInt(solLamports);
+            const k          = oldVSolLam * vTokAtom;
 
-        const newVSolLam = isBuy
-          ? oldVSolLam + tradeLam
-          : oldVSolLam > tradeLam ? oldVSolLam - tradeLam : oldVSolLam;
+            const newVSolLam = isBuy
+              ? oldVSolLam + tradeLam
+              : oldVSolLam > tradeLam ? oldVSolLam - tradeLam : oldVSolLam;
 
-        if (newVSolLam > 0n) {
-          const newVTok = k / newVSolLam;
-          updVSolStr = (Number(newVSolLam) / 1e9).toFixed(6).replace(/\.?0+$/, "");
-          updVTokStr = newVTok.toString();
-          if (newVTok > 0n)
-            updMCStr = (PUMP_TOTAL_SUPPLY * newVSolLam / newVTok).toString();
-        }
-      } catch { /* keep existing reserves on parse error */ }
+            if (newVSolLam > 0n) {
+              const newVTok = k / newVSolLam;
+              updVSolStr = (Number(newVSolLam) / 1e9).toFixed(6).replace(/\.?0+$/, "");
+              updVTokStr = newVTok.toString();
+              if (newVTok > 0n)
+                updMCStr = (PUMP_TOTAL_SUPPLY * newVSolLam / newVTok).toString();
+            }
+          } catch { /* keep existing reserves on parse error */ }
+          resolve();
+        });
+      });
     }
 
     // Update token aggregate stats + bonding curve — never erase last good price.

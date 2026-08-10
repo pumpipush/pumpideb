@@ -50,6 +50,22 @@ export interface Token {
   /** Chain: solana | base */
   chain?: string;
   createdAt: string;
+  /** @nullable */
+  priceUsd?: number | null;
+  /** @nullable */
+  marketCapUsd?: number | null;
+  /** @nullable */
+  liquidityUsd?: number | null;
+  /** @nullable */
+  poolAddress?: string | null;
+  /** @nullable */
+  quoteMint?: string | null;
+  /** @nullable */
+  pctChange24h?: number | null;
+  /** SPL token decimal places (6 for pump.fun / PumpSwap / LaunchLab; may differ for future platforms) */
+  decimals?: number;
+  /** Trade count in the last 1 hour — populated by trending sort, null otherwise */
+  trades1h?: number | null;
 }
 
 export interface TokenInput {
@@ -168,6 +184,16 @@ export interface OHLCVBar {
   close: number;
   /** Sum of eth_amount (lamports) in this bucket */
   volume: number;
+}
+
+/**
+ * OHLCV endpoint response envelope.
+ * bars: candles; maxTradeId: highest trade ID already included in the aggregate
+ * (client should only overlay SSE trades with id > maxTradeId to avoid double-counting).
+ */
+export interface OHLCVResponse {
+  bars: OHLCVBar[];
+  maxTradeId: number;
 }
 
 export interface ActivityItem {

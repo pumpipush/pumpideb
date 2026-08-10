@@ -27,6 +27,7 @@ import type {
   HealthStatus,
   ListTokensParams,
   OHLCVBar,
+  OHLCVResponse,
   PlatformStats,
   Profile,
   ProfileInput,
@@ -552,9 +553,9 @@ export const getGetTokenOhlcvUrl = (address: string,
  * @summary Get OHLCV candles for a token aggregated server-side over full history
  */
 export const getTokenOhlcv = async (address: string,
-    params?: GetTokenOhlcvParams, options?: Parameters<typeof customFetch>[1]): Promise<OHLCVBar[]> => {
+    params?: GetTokenOhlcvParams, options?: Parameters<typeof customFetch>[1]): Promise<OHLCVResponse> => {
 
-  return customFetch<OHLCVBar[]>(getGetTokenOhlcvUrl(address,params),
+  return customFetch<OHLCVResponse>(getGetTokenOhlcvUrl(address,params),
   {
     ...options,
     method: 'GET'

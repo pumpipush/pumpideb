@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean, numeric, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, numeric, doublePrecision, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -35,6 +35,8 @@ export const tokensTable = pgTable("tokens", {
   priceUsd:       doublePrecision("price_usd"),
   marketCapUsd:   doublePrecision("market_cap_usd"),
   pctChange24h:   doublePrecision("pct_change_24h"),  // 24h price % change; refreshed from Birdeye for DEX tokens
+  /** SPL token decimal places. pump.fun / PumpSwap / LaunchLab all use 6. Stored so future platforms with different decimals work correctly. */
+  decimals: integer("decimals").notNull().default(6),
 });
 
 export const insertTokenSchema = createInsertSchema(tokensTable).omit({

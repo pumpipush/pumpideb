@@ -108,7 +108,12 @@ class PumpSwapIndexer extends SolanaRpcIndexer {
       const imageUrl = pair?.info?.imageUrl   ?? null;
       const fields   = pair ? pairToDbFields(pair) : null;
 
-      await db.insert(tokensTable).values({
+      // Only emit newToken when the INSERT actually inserted a new row.
+      // Two concurrent handlers for the same unknown mint can both pass the
+      // `existing.length === 0` check (async SELECT races). onConflictDoNothing
+      // ensures only one row is written; checking the RETURNING result ensures
+      // only the winning handler broadcasts the SSE event.
+      const [inserted] = await db.insert(tokensTable).values({
         address:        mint,
         name,
         symbol,
@@ -120,22 +125,24 @@ class PumpSwapIndexer extends SolanaRpcIndexer {
         ...(fields ?? {}),
         // Use on-chain price from this trade if DexScreener has nothing yet
         ...(priceEth && !fields?.priceEth ? { priceEth } : {}),
-      }).onConflictDoNothing();
+      }).onConflictDoNothing().returning({ id: tokensTable.id });
 
-      emitNewToken({
-        type: "newToken",
-        token: {
-          address:      mint,
-          name,
-          symbol,
-          imageUrl,
-          priceEth:     fields?.priceEth ?? priceEth,
-          marketCapEth: fields?.marketCapEth ?? null,
-          platform:     PLATFORM,
-          chain:        CHAIN,
-          createdAt:    new Date().toISOString(),
-        },
-      });
+      if (inserted) {
+        emitNewToken({
+          type: "newToken",
+          token: {
+            address:      mint,
+            name,
+            symbol,
+            imageUrl,
+            priceEth:     fields?.priceEth ?? priceEth,
+            marketCapEth: fields?.marketCapEth ?? null,
+            platform:     PLATFORM,
+            chain:        CHAIN,
+            createdAt:    new Date().toISOString(),
+          },
+        });
+      }
     }
 
     // ── Insert trade ──────────────────────────────────────────────────────────

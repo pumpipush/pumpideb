@@ -12,3 +12,5 @@
 - [DEX priceEth convention](dex-price-eth-convention.md) — priceEth=SOL/token (not lamports); marketCapEth=lamports; effectiveMcEth skips virtual-reserves formula for DEX platforms
 - [DexScreener integration](dexscreener-integration.md) — free client in lib/dexscreener.ts; pairToSolPrice derives SOL/USD from pair itself (no external call); enriches pumpswap every 5m
 - [Raydium LaunchLab adapter](raydium-launchlab-adapter.md) — program ID, instruction names, bonding curve constants, instruction-data decode offsets, graduation extraction strategy
+- [Drizzle migration pitfalls](drizzle-migration-pitfalls.md) — add new columns via executeSql() before restart; meta/journal.json is NOT runtime state; dist gets overwritten by tsc --build
+- [Generated API client types](generated-api-client-types.md) — composite tsconfig uses dist/; run npx tsc --build in lib/api-client-react after editing src; add fields to src not dist

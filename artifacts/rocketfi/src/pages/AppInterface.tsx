@@ -1098,9 +1098,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         // isFinite guard: parseFloat("Infinity") passes isNaN but BigInt(Infinity) throws RangeError
         if (!isFinite(numAmount) || isNaN(numAmount) || numAmount <= 0) return;
 
+        // Use the token's actual decimal count (default 6 — pump.fun / PumpSwap / LaunchLab all use 6)
+        const tokenAtoms = Math.pow(10, token?.decimals ?? 6);
         const amountBaseUnits = tradeMode === "buy"
-          ? BigInt(Math.round(numAmount * 1e9))   // SOL → lamports
-          : BigInt(Math.round(numAmount * 1e6));   // tokens → atoms (pump.fun = 6 dec)
+          ? BigInt(Math.round(numAmount * 1e9))      // SOL → lamports
+          : BigInt(Math.round(numAmount * tokenAtoms)); // tokens → atomic units
 
         const inputMint  = tradeMode === "buy" ? WSOL_MINT : token.address;
         const outputMint = tradeMode === "buy" ? token.address : WSOL_MINT;
@@ -1592,9 +1594,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         const numAmt = parseFloat(amount);
         if (!isFinite(numAmt) || isNaN(numAmt) || numAmt <= 0) throw new Error("Invalid amount");
 
+        // Use the token's actual decimal count (default 6 — pump.fun / PumpSwap / LaunchLab all use 6)
+        const tokenAtoms = Math.pow(10, token?.decimals ?? 6);
         const amtBaseUnits = tradeMode === "buy"
-          ? BigInt(Math.round(numAmt * 1e9))   // SOL → lamports
-          : BigInt(Math.round(numAmt * 1e6));   // tokens → atoms (pump.fun = 6 dec)
+          ? BigInt(Math.round(numAmt * 1e9))         // SOL → lamports
+          : BigInt(Math.round(numAmt * tokenAtoms));  // tokens → atomic units
 
         const inputMint  = tradeMode === "buy" ? WSOL_MINT : token.address;
         const outputMint = tradeMode === "buy" ? token.address : WSOL_MINT;
