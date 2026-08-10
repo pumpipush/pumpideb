@@ -26,12 +26,9 @@ export const FALLBACK_WSS_RPCS = [
 ] as const;
 
 /** Free public Solana RPC endpoints used as fallbacks when the primary is rate-limited.
- *  Tried in order on -32005 / 429 responses. No auth needed on any of these. */
+ *  Only truly keyless endpoints — Ankr/Triton/Omnia all require API keys. */
 export const FALLBACK_HTTP_RPCS = [
-  "https://rpc.ankr.com/solana",                           // Ankr free tier
-  "https://api.mainnet-beta.solana.com",                   // Solana Foundation
-  "https://solana-api.tt-prod.net",                        // Triton
-  "https://endpoints.omniatech.io/v1/sol/mainnet/public",  // Omnia public
+  "https://api.mainnet-beta.solana.com",  // Solana Foundation — keyless
 ] as const;
 
 export interface LogEvent {

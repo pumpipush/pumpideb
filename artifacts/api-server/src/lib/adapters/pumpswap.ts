@@ -33,19 +33,44 @@ const SKIP_MINTS = new Set([
 ]);
 
 class PumpSwapIndexer extends SolanaRpcIndexer {
+  /**
+   * Global rate limiter for trade events on free RPC.
+   * PumpSwap generates 100-200 events/second; free RPC can sustain ~4 concurrent
+   * getTransaction calls (~4-8/s). Throttle to 1 trade event per interval so the
+   * RPC queue never fills. New pool creation is always allowed through.
+   *
+   * At 1 trade/500ms = 2 trades/second we get ~120 real on-chain trade samples
+   * per minute — enough to keep prices and charts accurate without paid RPC.
+   */
+  private _lastTradePassMs = 0;
+  private readonly _tradeIntervalMs = 3000; // max 1 trade event per 3 s — sustainable on free RPC
+
   constructor() {
     super({ programId: PUMPSWAP_PROGRAM, adapterName: PLATFORM });
   }
 
   /**
-   * Filter by instruction type in log lines BEFORE making any getTransaction call.
-   * Only process buy/sell swaps and pool creation — skip fee, liquidity, and other events.
-   * This prevents flooding the RPC queue on high-volume programs.
+   * Filter by instruction type BEFORE making any getTransaction call.
+   * - New pool creation: always allowed through (rare, critical for token indexing).
+   * - Trades (buy/sell): throttled to _tradeIntervalMs to stay within free RPC limits.
    */
   protected override shouldProcess(logs: string[]): boolean {
-    return logs.some((l) =>
-      /Instruction:\s*(Buy|Sell|Swap|CreatePool|Create|Initialize)/i.test(l)
-    );
+    // "Create" and "Initialize" are too generic — they match thousands of unrelated
+    // Solana instructions (token account creation, liquidity provision, etc.) and
+    // flood the queue on free RPC. Only match "CreatePool" for pool creation.
+    const isNewPool = logs.some((l) => /Instruction:\s*CreatePool\b/i.test(l));
+    if (isNewPool) return true;
+
+    // Trade: buy or sell only
+    const isTrade = logs.some((l) => /Instruction:\s*(Buy|Sell)\b/i.test(l));
+    if (!isTrade) return false;
+
+    // Throttle trades to at most 1 per interval — keeps getTransaction load
+    // within free-RPC capacity (~1-2 req/s sustained).
+    const now = Date.now();
+    if (now - this._lastTradePassMs < this._tradeIntervalMs) return false;
+    this._lastTradePassMs = now;
+    return true;
   }
 
   protected override async onEvent(event: LogEvent): Promise<void> {

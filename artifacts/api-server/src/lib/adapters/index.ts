@@ -18,44 +18,20 @@ interface AdapterEntry {
   start: () => Promise<void>;
 }
 
-/** Always-on adapters — safe on free RPCs. */
+/** Active adapters — all always-on. */
 const ADAPTERS: AdapterEntry[] = [
-  { name: "pump_fun", start: startPumpFunAdapter },
-];
-
-/**
- * PumpSwap streaming adapter requires a paid/fast RPC.
- * Set ENABLE_STREAMING_ADAPTERS=1 in production env to activate.
- */
-const STREAMING_ENABLED =
-  process.env.ENABLE_STREAMING_ADAPTERS === "1" ||
-  process.env.NODE_ENV === "production";
-
-const STREAMING_ADAPTERS: AdapterEntry[] = [
+  { name: "pump_fun", start: startPumpFunAdapter  },
   { name: "pumpswap", start: startPumpSwapAdapter },
 ];
 
 /** Start all adapters. Each is isolated — a failure in one does not block the others. */
 export async function startAdapters(): Promise<void> {
-  const active = [
-    ...ADAPTERS,
-    ...(STREAMING_ENABLED ? STREAMING_ADAPTERS : []),
-  ];
+  const active = ADAPTERS;
 
   logger.info(
-    {
-      adapters: active.map((a) => a.name),
-      streamingEnabled: STREAMING_ENABLED,
-    },
+    { adapters: active.map((a) => a.name) },
     "adapters: starting all platform adapters"
   );
-
-  if (!STREAMING_ENABLED) {
-    logger.info(
-      "adapters: streaming adapter (pumpswap) disabled — " +
-      "set ENABLE_STREAMING_ADAPTERS=1 to activate (requires paid RPC)"
-    );
-  }
 
   for (const adapter of active) {
     try {
