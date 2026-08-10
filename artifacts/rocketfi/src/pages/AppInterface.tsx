@@ -41,6 +41,7 @@ import {
   uploadToRaydiumIpfs,
   buildRaydiumLaunchTx,
   simulateRaydiumLaunch,
+  isRaydiumSdkCached,
   RAYDIUM_LAUNCH_COST_SOL,
 } from "@/lib/raydiumLauncher";
 import {
@@ -223,9 +224,11 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const [showLinks, setShowLinks] = useState(false);
 
   // Launch flow state
-  const [launchStep,  setLaunchStep]  = useState<LaunchStep>("idle");
-  const [launchError, setLaunchError] = useState<string | null>(null);
-  const [mintAddress, setMintAddress] = useState<string | null>(null);
+  const [launchStep,      setLaunchStep]      = useState<LaunchStep>("idle");
+  const [launchError,     setLaunchError]     = useState<string | null>(null);
+  const [mintAddress,     setMintAddress]     = useState<string | null>(null);
+  // Sub-label shown under the "building" step while the Raydium SDK is downloading
+  const [buildingSubLabel, setBuildingSubLabel] = useState<string | null>(null);
 
   const { toast } = useToast();
   const { openWalletModal, signAndSendTransaction } = useWallet();
@@ -351,12 +354,17 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       // The SDK may return 1 or more transactions to send in sequence.
       // Each is already partial-signed by the mint keypair — do not add extra signing.
       setLaunchStep("building");
+      // Show SDK-loading sub-label only when the module hasn't been cached yet.
+      if (!isRaydiumSdkCached()) {
+        setBuildingSubLabel("Memuat Raydium SDK (satu kali)...");
+      }
       const { transactions, mintAddress: newMint, blockhash, lastValidBlockHeight } =
         await buildRaydiumLaunchTx(
           wallet,
           name.trim(),
           symbol.trim().toUpperCase(),
           metadataUri,
+          () => setBuildingSubLabel(null), // clear once SDK import resolves
         );
 
       // Simulate first transaction (covers the create instruction)
@@ -408,6 +416,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const resetToIdle = () => {
     setLaunchStep("idle");
     setLaunchError(null);
+    setBuildingSubLabel(null);
   };
 
   const isLaunching = launchStep !== "idle" && launchStep !== "done" && launchStep !== "error";
@@ -683,15 +692,23 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 {LAUNCH_STEPS.map((step, idx) => {
                   const isDone   = idx < currentStepIdx;
                   const isActive = idx === currentStepIdx;
+                  const subLabel = isActive && step.key === "building" ? buildingSubLabel : null;
                   return (
-                    <div key={step.key} className="flex items-center gap-3">
+                    <div key={step.key} className="flex items-start gap-3">
                       <StepIcon step={step.key} active={isActive} done={isDone} />
-                      <span className="text-[13px]" style={{
-                        color: isActive ? "#e2e8f0" : isDone ? "#4ade80" : "#475569",
-                        fontWeight: isActive ? 600 : 400,
-                      }}>
-                        {step.label}
-                      </span>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-[13px]" style={{
+                          color: isActive ? "#e2e8f0" : isDone ? "#4ade80" : "#475569",
+                          fontWeight: isActive ? 600 : 400,
+                        }}>
+                          {step.label}
+                        </span>
+                        {subLabel && (
+                          <span className="text-[11px] mt-0.5" style={{ color: "#64748b" }}>
+                            {subLabel}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

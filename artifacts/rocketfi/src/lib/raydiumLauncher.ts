@@ -134,6 +134,25 @@ async function _tryRaydiumUpload(params: RaydiumUploadParams): Promise<string> {
   return uri;
 }
 
+// ── SDK module cache ──────────────────────────────────────────────────────────
+
+/**
+ * Module-level cache for the dynamically imported Raydium SDK.
+ * Set to the resolved module after the first successful import so subsequent
+ * calls skip the ~10 MB download.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _cachedSdk: any | null = null;
+
+/**
+ * Returns true if the Raydium SDK has already been downloaded and cached in
+ * this browser session. Callers can use this to decide whether to show a
+ * "loading SDK…" indicator before calling buildRaydiumLaunchTx.
+ */
+export function isRaydiumSdkCached(): boolean {
+  return _cachedSdk !== null;
+}
+
 // ── Transaction Builder ───────────────────────────────────────────────────────
 
 // hint: Logic changed on both sides. Requires understanding intent of each change.
@@ -148,12 +167,17 @@ async function _tryRaydiumUpload(params: RaydiumUploadParams): Promise<string> {
  *  1. Fetches recentBlockhash from RPC and stamps each transaction (SDK does not set it)
  *  2. Partial-signs each transaction with its per-tx SDK signers + mintKeypair
  *  3. Returns all transactions for the caller to sign sequentially with user wallet
+ *
+ * @param onSdkLoaded - Optional callback fired immediately after the SDK
+ *   dynamic-import resolves (i.e. once the ~10 MB download completes).
+ *   Useful for updating UI ("SDK loaded, building tx…").
  */
 export async function buildRaydiumLaunchTx(
   walletPublicKey: string,
   name:            string,
   symbol:          string,
   metadataUri:     string,
+  onSdkLoaded?:   () => void,
 ): Promise<RaydiumLaunchTxResult> {
   if (symbol.length > 10) throw new Error("Ticker maksimal 10 karakter");
 
@@ -161,8 +185,15 @@ export async function buildRaydiumLaunchTx(
   const owner = new PublicKey(walletPublicKey);
 
   // ── Dynamic import — only downloads when first Raydium launch is attempted ──
+  // Use module-level cache so the ~10 MB chunk is only fetched once per session.
+  if (!_cachedSdk) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    _cachedSdk = await import("@raydium-io/raydium-sdk-v2") as any;
+  }
+  // Notify the caller that the (potentially slow) download is complete.
+  onSdkLoaded?.();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sdk = await import("@raydium-io/raydium-sdk-v2") as any;
+  const sdk = _cachedSdk as any;
   const { Raydium, TxVersion } = sdk;
 
   // ── Init Raydium SDK ──────────────────────────────────────────────────────
