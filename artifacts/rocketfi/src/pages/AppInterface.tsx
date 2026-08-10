@@ -2986,10 +2986,11 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
 
       <div className="space-y-2">
         {holdings.map((token, idx) => {
-          const price = token.priceEth ? parseFloat(token.priceEth) : 0;
+          const price   = token.priceEth ? parseFloat(token.priceEth) : 0;
+          // holdings endpoint returns balance in raw atomic units (pump.fun = 6 decimals)
           const balance = parseFloat(token.balance) || 0;
-          const valueEth = price * balance;           // in lamports
-          const valueSol = valueEth / 1e9;
+          const displayTokens = balance / 1e6;         // convert to whole tokens
+          const valueSol = price * displayTokens;       // priceEth is SOL/token
           const valueUsd = solPrice ? valueSol * solPrice : null;
 
           return (
@@ -3023,7 +3024,7 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
 
               {/* Balance */}
               <div className="text-right shrink-0">
-                <div className="text-[13px] font-mono text-foreground">{formatTokenAmount(token.balance)}</div>
+                <div className="text-[13px] font-mono text-foreground">{formatTokenAmount(String(displayTokens))}</div>
                 <div className="text-[11px] font-mono mt-0.5" style={{ color: "#64748b" }}>
                   {valueUsd != null && valueUsd > 0 ? formatUSD(valueUsd) : valueSol > 0 ? valueSol.toFixed(4) + " SOL" : "—"}
                 </div>
