@@ -15,6 +15,30 @@ import {
   UpdateTokenResponse,
 } from "@workspace/api-zod";
 import { searchJupiterTokens } from "../lib/jupiter-tokens";
+import { verifyWalletSignature, isValidIndexerSecret } from "../lib/wallet-auth";
+
+// ── Wallet auth fields present in POST /tokens and PATCH /tokens/:address ──
+interface WalletAuthFields {
+  walletAddress: string;
+  signature: string;
+  message: string;
+}
+
+function parseWalletAuthFields(body: unknown): WalletAuthFields | null {
+  if (!body || typeof body !== "object") return null;
+  const b = body as Record<string, unknown>;
+  const walletAddress = b["walletAddress"];
+  const signature     = b["signature"];
+  const message       = b["message"];
+  if (
+    typeof walletAddress === "string" && walletAddress.length >= 32 &&
+    typeof signature     === "string" && signature.length     >= 1  &&
+    typeof message       === "string" && message.length       >= 1
+  ) {
+    return { walletAddress, signature, message };
+  }
+  return null;
+}
 
 const router: IRouter = Router();
 
@@ -317,13 +341,40 @@ router.get("/tokens", async (req, res): Promise<void> => {
 });
 
 // POST /tokens
+// Requires a wallet signature to prove the caller owns the creator wallet.
+// The client must sign the message "RocketFi:create:{tokenAddress}:{unixSeconds}"
+// and send { walletAddress, signature, message } alongside the token fields.
+// creatorAddress is derived server-side from the verified walletAddress — the
+// creatorAddress field in the body is ignored and overwritten.
 router.post("/tokens", async (req, res): Promise<void> => {
-  const parsed = CreateTokenBody.safeParse(req.body);
+  // 1. Parse and verify wallet auth fields
+  const authFields = parseWalletAuthFields(req.body);
+  if (!authFields) {
+    res.status(401).json({ error: "Missing wallet authentication fields (walletAddress, signature, message)" });
+    return;
+  }
+
+  const { walletAddress, signature, message } = authFields;
+
+  // 2. Parse the token body so we know the address before verifying the message.
+  //    Inject walletAddress as creatorAddress so the schema validation passes even
+  //    when the client omits creatorAddress (it is derived from the signer anyway).
+  const bodyWithCreator = { creatorAddress: walletAddress, ...req.body };
+  const parsed = CreateTokenBody.safeParse(bodyWithCreator);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
 
+  // 3. Verify the signature covers this exact token address
+  try {
+    verifyWalletSignature({ walletAddress, signature, message }, "create", parsed.data.address);
+  } catch (err) {
+    res.status(401).json({ error: `Wallet signature invalid: ${(err as Error).message}` });
+    return;
+  }
+
+  // 4. Insert — creatorAddress comes from the verified wallet, not the request body
   const [token] = await db
     .insert(tokensTable)
     .values({
@@ -332,7 +383,7 @@ router.post("/tokens", async (req, res): Promise<void> => {
       symbol: parsed.data.symbol,
       description: parsed.data.description ?? null,
       imageUrl: parsed.data.imageUrl ?? null,
-      creatorAddress: parsed.data.creatorAddress,
+      creatorAddress: walletAddress,          // server-derived from verified signer
       totalSupply: parsed.data.totalSupply,
       virtualTokenReserves: parsed.data.virtualTokenReserves,
       virtualEthReserves: parsed.data.virtualEthReserves,
@@ -485,6 +536,12 @@ router.get("/tokens/:address", async (req, res): Promise<void> => {
 });
 
 // PATCH /tokens/:address
+// Two authentication paths are accepted:
+//   A) Indexer service: send `X-Indexer-Secret` header matching SESSION_SECRET
+//      (used by internal adapters / backfill scripts that write via HTTP).
+//   B) Token creator: send { walletAddress, signature, message } where the
+//      signature covers "RocketFi:update:{tokenAddress}:{unixSeconds}" and
+//      walletAddress matches the token's stored creatorAddress.
 router.patch("/tokens/:address", async (req, res): Promise<void> => {
   const params = UpdateTokenParams.safeParse(req.params);
   if (!params.success) {
@@ -492,6 +549,50 @@ router.patch("/tokens/:address", async (req, res): Promise<void> => {
     return;
   }
 
+  const tokenAddress = params.data.address;
+
+  // ── Auth path A: indexer shared secret ─────────────────────────────────
+  const indexerHeader = req.headers["x-indexer-secret"] as string | undefined;
+  const isIndexer = isValidIndexerSecret(indexerHeader);
+
+  // ── Auth path B: wallet signature from the token creator ───────────────
+  if (!isIndexer) {
+    const authFields = parseWalletAuthFields(req.body);
+    if (!authFields) {
+      res.status(401).json({
+        error: "Unauthorized: provide X-Indexer-Secret header or wallet auth fields (walletAddress, signature, message)",
+      });
+      return;
+    }
+
+    const { walletAddress, signature, message } = authFields;
+
+    // Verify the signature before hitting the DB
+    try {
+      verifyWalletSignature({ walletAddress, signature, message }, "update", tokenAddress);
+    } catch (err) {
+      res.status(401).json({ error: `Wallet signature invalid: ${(err as Error).message}` });
+      return;
+    }
+
+    // Fetch the token to check ownership
+    const [existing] = await db
+      .select({ creatorAddress: tokensTable.creatorAddress })
+      .from(tokensTable)
+      .where(eq(tokensTable.address, tokenAddress));
+
+    if (!existing) {
+      res.status(404).json({ error: "Token not found" });
+      return;
+    }
+
+    if (existing.creatorAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+      res.status(403).json({ error: "Forbidden: only the token creator can update this token" });
+      return;
+    }
+  }
+
+  // ── Parse and apply updates ─────────────────────────────────────────────
   const parsed = UpdateTokenBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -511,10 +612,15 @@ router.patch("/tokens/:address", async (req, res): Promise<void> => {
   if (d.tradeCount !== undefined) updates.tradeCount = String(d.tradeCount);
   if (d.holderCount !== undefined) updates.holderCount = String(d.holderCount);
 
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No updatable fields provided" });
+    return;
+  }
+
   const [token] = await db
     .update(tokensTable)
     .set(updates)
-    .where(eq(tokensTable.address, params.data.address))
+    .where(eq(tokensTable.address, tokenAddress))
     .returning();
 
   if (!token) {
