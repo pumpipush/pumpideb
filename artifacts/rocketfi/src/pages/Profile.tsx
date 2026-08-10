@@ -286,7 +286,12 @@ export default function ProfilePage() {
       const messageBytes = new TextEncoder().encode(message);
       const sigBytes = await signMessage(messageBytes);
 
-      // 3. Base58-encode the 64-byte signature for JSON transport
+      // 3. Validate signature length before encoding (64 bytes for Ed25519)
+      if (!(sigBytes instanceof Uint8Array) || sigBytes.length !== 64) {
+        throw new Error("Wallet returned an invalid signature — please try again");
+      }
+
+      // 4. Base58-encode the 64-byte signature for JSON transport
       const signature = bs58Encode(sigBytes);
 
       // 4. Send the authenticated PATCH — server derives address from verified signer
@@ -301,7 +306,7 @@ export default function ProfilePage() {
           // Profile fields
           username: editForm.username || undefined,
           bio: editForm.bio || undefined,
-          twitterHandle: editForm.twitterHandle.replace("@", "") || undefined,
+          twitterHandle: editForm.twitterHandle.replace(/^@+/, "").trim() || undefined,
           websiteUrl: sanitizeUrl(editForm.websiteUrl),
           avatarUrl: editForm.avatarUrl || undefined,
         }),
@@ -740,7 +745,15 @@ export default function ProfilePage() {
                           {token.valueSol !== null ? token.valueSol.toFixed(4) : <span className="text-muted-foreground">—</span>}
                         </span>
                         <span className="text-sm font-mono text-right w-24 tabular-nums">
-                          {token.marketCapEth ? formatSol((BigInt(token.marketCapEth) / BigInt(1e9)).toString()) : <span className="text-muted-foreground">—</span>}
+                          {(() => {
+                            try {
+                              if (!token.marketCapEth) return <span className="text-muted-foreground">—</span>;
+                              const mc = BigInt(Math.round(parseFloat(token.marketCapEth)));
+                              return formatSol((mc / BigInt(1e9)).toString());
+                            } catch {
+                              return <span className="text-muted-foreground">—</span>;
+                            }
+                          })()}
                         </span>
                       </div>
                     ))}

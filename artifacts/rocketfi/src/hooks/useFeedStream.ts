@@ -79,28 +79,29 @@ export interface UseFeedStreamResult {
   connected:      boolean;
 }
 
+const RECONNECT_DELAY_MS = 3_000;
+
 export function useFeedStream(): UseFeedStreamResult {
   const [liveTokens,     setLiveTokens]     = useState<FeedToken[]>([]);
   const [liveTradeStats, setLiveTradeStats] = useState<Map<string, FeedTradeStats>>(new Map());
   const [connected,      setConnected]      = useState(false);
-  const esRef      = useRef<EventSource | null>(null);
-  const timerRefs  = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const esRef           = useRef<EventSource | null>(null);
+  const reconnectTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timerRefs       = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const mountedRef      = useRef(true);
 
-  const cleanup = useCallback(() => {
-    esRef.current?.close();
-    esRef.current = null;
-    timerRefs.current.forEach((t) => clearTimeout(t));
-    timerRefs.current.clear();
-    setConnected(false);
-  }, []);
+  const openStream = useCallback(() => {
+    // Tear down any existing connection + pending reconnect
+    if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
+    if (esRef.current) { esRef.current.close(); esRef.current = null; }
 
-  useEffect(() => {
     const es = new EventSource("/api/feed/stream");
     esRef.current = es;
 
-    es.onopen = () => setConnected(true);
+    es.onopen = () => { if (mountedRef.current) setConnected(true); };
 
     es.onmessage = (e: MessageEvent) => {
+      if (!mountedRef.current) return;
       try {
         const event = JSON.parse(e.data as string) as FeedEvent;
 
@@ -145,10 +146,32 @@ export function useFeedStream(): UseFeedStreamResult {
       }
     };
 
-    es.onerror = () => setConnected(false);
+    es.onerror = () => {
+      if (!mountedRef.current) return;
+      setConnected(false);
+      // Close — don't rely on native auto-reconnect through the reverse proxy.
+      es.close();
+      esRef.current = null;
+      // Guard against stacked timers from repeated onerror calls.
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      reconnectTimer.current = setTimeout(() => {
+        if (mountedRef.current) openStream();
+      }, RECONNECT_DELAY_MS);
+    };
+  }, []); // stable — no external deps
 
-    return cleanup;
-  }, [cleanup]);
+  useEffect(() => {
+    mountedRef.current = true;
+    openStream();
+
+    return () => {
+      mountedRef.current = false;
+      if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
+      if (esRef.current) { esRef.current.close(); esRef.current = null; }
+      timerRefs.current.forEach((t) => clearTimeout(t));
+      timerRefs.current.clear();
+    };
+  }, [openStream]);
 
   return { liveTokens, liveTradeStats, connected };
 }

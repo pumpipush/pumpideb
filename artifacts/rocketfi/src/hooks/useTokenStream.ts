@@ -115,6 +115,12 @@ export function useTokenStream(tokenAddress: string | null): UseTokenStreamResul
         esRef.current.close();
         esRef.current = null;
       }
+      // Clear any existing pending reconnect before scheduling a new one —
+      // multiple rapid onerror calls must not stack timers.
+      if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
+      }
       // Reconnect after a short delay (only if address hasn't changed).
       reconnectTimer.current = setTimeout(() => {
         if (tokenAddressRef.current === address) {

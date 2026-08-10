@@ -498,12 +498,15 @@ async function enrichPumpSwapPrices(): Promise<void> {
 
         const fields = pairToDbFields(best);
 
-        // Also fill in metadata if still placeholder
+        // Fill in metadata when name OR symbol is still a placeholder.
+        // Placeholder patterns: "???", first 8 chars of address, or empty string.
+        const isPlaceholderName = !token.name || token.name === "???" || token.name === token.address.slice(0, 8);
+        const isPlaceholderSymbol = !token.symbol || token.symbol === "???";
         const metaFields: Record<string, string | null> = {};
-        if (token.name === "???" || token.name === token.address.slice(0, 8)) {
-          if (best.baseToken.name)  metaFields["name"]   = best.baseToken.name;
-          if (best.baseToken.symbol) metaFields["symbol"] = best.baseToken.symbol;
-          if (best.info?.imageUrl)  metaFields["imageUrl"] = best.info.imageUrl;
+        if (isPlaceholderName || isPlaceholderSymbol) {
+          if (best.baseToken.name)   metaFields["name"]     = best.baseToken.name;
+          if (best.baseToken.symbol) metaFields["symbol"]   = best.baseToken.symbol;
+          if (best.info?.imageUrl)   metaFields["imageUrl"] = best.info.imageUrl;
         }
 
         await db

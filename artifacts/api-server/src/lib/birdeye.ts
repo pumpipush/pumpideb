@@ -290,9 +290,23 @@ export async function getSolPriceUsd(): Promise<number> {
   }
   const WSOL = "So11111111111111111111111111111111111111112";
   const data = await birdeyeGet<{ value: number }>(`/defi/price?address=${WSOL}`);
-  const price = data?.value ?? 150;
-  _solPriceCache = { value: price, expiresAt: now + 60_000 }; // 60 s TTL
-  return price;
+  const freshPrice = data?.value;
+
+  if (freshPrice && freshPrice > 0) {
+    // Fresh price from Birdeye — cache it
+    _solPriceCache = { value: freshPrice, expiresAt: now + 60_000 };
+    return freshPrice;
+  }
+
+  // Birdeye unavailable — return stale cached value if present (even if expired),
+  // rather than silently corrupting all SOL-denominated values with a hardcoded guess.
+  if (_solPriceCache) {
+    return _solPriceCache.value; // stale but real
+  }
+
+  // No cached value at all — return 0 so callers can detect unavailability.
+  // Callers must guard against 0 (e.g. skip conversion rather than divide-by-zero).
+  return 0;
 }
 
 /**

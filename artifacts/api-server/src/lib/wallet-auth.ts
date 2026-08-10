@@ -197,23 +197,24 @@ export function verifyWalletSignatureWithNonce(
     throw new Error("Wallet address does not match the expected profile owner");
   }
 
-  // 1. Validate message structure and extract the trailing nonce segment
+  // 1. Validate message structure — exactly 4 colon-separated segments
   const parts = message.split(":");
-  if (parts.length < 4) throw new Error("Malformed signed message");
-  const nonce = parts[parts.length - 1];
-
-  // 2. Validate message content matches expected action + address prefix
-  const expectedPrefix = `RocketFi:${expectedAction}:${expectedAddress}:`;
-  if (!message.startsWith(expectedPrefix)) {
+  if (parts.length !== 4) throw new Error("Malformed signed message");
+  const [prefix, action, addr, nonce] = parts;
+  if (prefix !== "RocketFi" || action !== expectedAction || addr !== expectedAddress || !nonce) {
     throw new Error("Signed message does not match expected action or address");
   }
 
-  // 3. Atomically consume nonce — replay protection
-  if (!consumeNonce(nonce, expectedAction, expectedAddress)) {
+  // 2. Verify nonce EXISTS and is valid without consuming it yet.
+  //    Consuming before sig verify allows an attacker with a valid nonce but
+  //    wrong signature to permanently burn the victim's challenge (DoS).
+  const nonceEntry = nonceStore.get(nonce);
+  if (!nonceEntry || Date.now() > nonceEntry.expiresAt ||
+      nonceEntry.address !== expectedAddress || nonceEntry.action !== expectedAction) {
     throw new Error("Invalid, expired, or already-used challenge nonce");
   }
 
-  // 4. Decode public key and signature from base58
+  // 3. Decode public key and signature from base58
   let pubKeyBytes: Uint8Array;
   let sigBytes: Uint8Array;
   try {
@@ -230,11 +231,15 @@ export function verifyWalletSignatureWithNonce(
     throw new Error(`Invalid signature length (expected 64 bytes, got ${sigBytes.length})`);
   }
 
-  // 5. Verify Ed25519 signature over raw UTF-8 message bytes
+  // 4. Verify Ed25519 signature over raw UTF-8 message bytes
   const messageBytes = new TextEncoder().encode(message);
   if (!nacl.sign.detached.verify(messageBytes, sigBytes, pubKeyBytes)) {
     throw new Error("Wallet signature verification failed");
   }
+
+  // 5. Atomically consume nonce only after successful verification.
+  //    Single-threaded Node.js guarantees no TOCTOU race here.
+  nonceStore.delete(nonce);
 }
 
 // ── Wallet auth field parser (shared by POST/PATCH routes) ────────────────

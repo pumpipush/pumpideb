@@ -39,14 +39,18 @@ export const BUCKET_SECONDS: Record<ChartTimeframe, number> = {
   "1W":  7 * 24 * 60 * 60,
 };
 
-function tsToSeconds(ts: string | number | Date): number {
+function tsToSeconds(ts: string | number | Date): number | null {
   if (typeof ts === "number") {
-    return ts > 1e12 ? Math.floor(ts / 1000) : ts;
+    if (!isFinite(ts) || ts <= 0) return null;
+    return ts > 1e12 ? Math.floor(ts / 1000) : Math.floor(ts);
   }
-  if (ts instanceof Date) return Math.floor(ts.getTime() / 1000);
+  if (ts instanceof Date) {
+    const ms = ts.getTime();
+    return isFinite(ms) && ms > 0 ? Math.floor(ms / 1000) : null;
+  }
   const parsed = Date.parse(String(ts));
-  if (!isNaN(parsed)) return Math.floor(parsed / 1000);
-  return Math.floor(Date.now() / 1000);
+  if (!isNaN(parsed) && parsed > 0) return Math.floor(parsed / 1000);
+  return null; // invalid — caller must filter out
 }
 
 interface RawTick {
@@ -117,15 +121,14 @@ function tradePrice(t: Trade): number {
 /** Convert our local EVM trades → OHLCVBar[] (new ChartTimeframe) */
 export function tradesFromLocalBars(trades: Trade[], tf: ChartTimeframe): OHLCVBar[] {
   const ticks: RawTick[] = trades
-    .map(t => {
+    .flatMap(t => {
+      const ts = tsToSeconds(t.timestamp);
+      if (ts === null) return []; // drop trades with unparseable timestamps
       const ethAmt = parseFloat(t.ethAmount);
-      return {
-        time:   tsToSeconds(t.timestamp),
-        price:  tradePrice(t),
-        volume: Number.isFinite(ethAmt) ? ethAmt : 0,
-      };
-    })
-    .filter(t => t.price > 0 && Number.isFinite(t.price) && t.time > 0);
+      const price  = tradePrice(t);
+      if (price <= 0 || !Number.isFinite(price)) return [];
+      return [{ time: ts, price, volume: Number.isFinite(ethAmt) ? ethAmt : 0 }];
+    });
 
   return bucketTicks(ticks, BUCKET_SECONDS[tf]);
 }
@@ -133,15 +136,14 @@ export function tradesFromLocalBars(trades: Trade[], tf: ChartTimeframe): OHLCVB
 /** Convert our local EVM trades → OHLCV candles (legacy Timeframe, backward-compat) */
 export function tradesFromLocal(trades: Trade[], tf: Timeframe): CandlestickData[] {
   const ticks: RawTick[] = trades
-    .map(t => {
+    .flatMap(t => {
+      const ts = tsToSeconds(t.timestamp);
+      if (ts === null) return [];
       const ethAmt = parseFloat(t.ethAmount);
-      return {
-        time:   tsToSeconds(t.timestamp),
-        price:  tradePrice(t),
-        volume: Number.isFinite(ethAmt) ? ethAmt : 0,
-      };
-    })
-    .filter(t => t.price > 0 && Number.isFinite(t.price) && t.time > 0);
+      const price  = tradePrice(t);
+      if (price <= 0 || !Number.isFinite(price)) return [];
+      return [{ time: ts, price, volume: Number.isFinite(ethAmt) ? ethAmt : 0 }];
+    });
 
   return toBarsLC(bucketTicks(ticks, BUCKET_SECONDS_LEGACY[tf]));
 }
@@ -153,11 +155,11 @@ export function tradesFromPumpBars(trades: PumpTrade[], tf: ChartTimeframe): OHL
       Number.isFinite(t.sol_amount) && t.sol_amount > 0 &&
       Number.isFinite(t.token_amount) && t.token_amount > 0
     )
-    .map(t => ({
-      time: tsToSeconds(t.timestamp),
-      price: t.sol_amount / t.token_amount,
-      volume: t.sol_amount,
-    }));
+    .flatMap(t => {
+      const ts = tsToSeconds(t.timestamp);
+      if (ts === null) return [];
+      return [{ time: ts, price: t.sol_amount / t.token_amount, volume: t.sol_amount }];
+    });
 
   return bucketTicks(ticks, BUCKET_SECONDS[tf]);
 }
@@ -169,11 +171,11 @@ export function tradesFromPump(trades: PumpTrade[], tf: Timeframe): CandlestickD
       Number.isFinite(t.sol_amount) && t.sol_amount > 0 &&
       Number.isFinite(t.token_amount) && t.token_amount > 0
     )
-    .map(t => ({
-      time: tsToSeconds(t.timestamp),
-      price: t.sol_amount / t.token_amount,
-      volume: t.sol_amount,
-    }));
+    .flatMap(t => {
+      const ts = tsToSeconds(t.timestamp);
+      if (ts === null) return [];
+      return [{ time: ts, price: t.sol_amount / t.token_amount, volume: t.sol_amount }];
+    });
 
   return toBarsLC(bucketTicks(ticks, BUCKET_SECONDS_LEGACY[tf]));
 }

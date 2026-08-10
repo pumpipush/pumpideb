@@ -1590,7 +1590,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         // Token has left the bonding curve and is now tradeable on Raydium/PumpSwap.
         // Jupiter aggregator auto-routes to the best available pool.
         const numAmt = parseFloat(amount);
-        if (isNaN(numAmt) || numAmt <= 0) throw new Error("Invalid amount");
+        if (!isFinite(numAmt) || isNaN(numAmt) || numAmt <= 0) throw new Error("Invalid amount");
 
         const amtBaseUnits = tradeMode === "buy"
           ? BigInt(Math.round(numAmt * 1e9))   // SOL → lamports
