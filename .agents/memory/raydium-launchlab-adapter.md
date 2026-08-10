@@ -29,6 +29,14 @@ All of these are caught by the existing `detectInstructionType` regexes (`/Creat
 ## createLaunchpad instruction data decode
 Multi-offset probe: tries byte offsets 40, 8, 72 (in that order) to find Borsh-encoded `name/symbol/uri` strings after the 8-byte Anchor discriminator. Offset 40 = disc(8) + mintA pubkey(32) is most likely. Falls back gracefully if none succeed (uses mint prefix as name placeholder).
 
+## Critical SDK behavior (verified by smoke test against 0.2.60-alpha)
+- `createLaunchpad()` with `TxVersion.LEGACY` returns transactions **without** `recentBlockhash` set.
+- Caller MUST fetch blockhash from RPC and set `tx.recentBlockhash = blockhash` before calling `partialSign()` — otherwise partialSign throws "Transaction recentBlockhash required".
+- Fix is in `raydiumLauncher.ts`: `const { blockhash } = await conn.getLatestBlockhash("confirmed")` then `if (!tx.recentBlockhash) tx.recentBlockhash = blockhash` per tx.
+- If a future SDK version starts setting the blockhash itself, the `?? blockhash` fallback pattern means we won't overwrite it.
+
+**Why:** Smoke test (Task #135) proved this empirically on mainnet (read-only, no tx submitted). The SDK leaves blockhash unset in this alpha version.
+
 ## Watchdog
 - `watchdogMs = 300_000` (5 minutes) — LaunchLab volume is ~10× lower than pump.fun so the longer window prevents spurious reconnects.
 
