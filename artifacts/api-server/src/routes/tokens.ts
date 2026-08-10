@@ -15,30 +15,7 @@ import {
   UpdateTokenResponse,
 } from "@workspace/api-zod";
 import { searchJupiterTokens } from "../lib/jupiter-tokens";
-import { verifyWalletSignature, isValidIndexerSecret } from "../lib/wallet-auth";
-
-// ── Wallet auth fields present in POST /tokens and PATCH /tokens/:address ──
-interface WalletAuthFields {
-  walletAddress: string;
-  signature: string;
-  message: string;
-}
-
-function parseWalletAuthFields(body: unknown): WalletAuthFields | null {
-  if (!body || typeof body !== "object") return null;
-  const b = body as Record<string, unknown>;
-  const walletAddress = b["walletAddress"];
-  const signature     = b["signature"];
-  const message       = b["message"];
-  if (
-    typeof walletAddress === "string" && walletAddress.length >= 32 &&
-    typeof signature     === "string" && signature.length     >= 1  &&
-    typeof message       === "string" && message.length       >= 1
-  ) {
-    return { walletAddress, signature, message };
-  }
-  return null;
-}
+import { verifyWalletSignature, isValidIndexerSecret, parseWalletAuthFields } from "../lib/wallet-auth";
 
 const router: IRouter = Router();
 

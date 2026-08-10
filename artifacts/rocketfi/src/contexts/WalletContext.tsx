@@ -22,7 +22,6 @@ import type { Transaction, VersionedTransaction } from "@solana/web3.js";
 
 /** Union of legacy and versioned transactions — accepted by all three wallet methods. */
 type AnyTransaction = Transaction | VersionedTransaction;
-import { useCreateProfile } from "@workspace/api-client-react";
 import type { SolanaProvider, WalletName } from "@/lib/solana";
 import { WALLET_DESCRIPTORS } from "@/lib/solana";
 import { WalletSelectModal } from "@/components/shared/WalletSelectModal";
@@ -67,6 +66,12 @@ interface WalletContextValue {
    * Returns the base58 transaction signature on success.
    */
   signAndSendTransaction: (transaction: AnyTransaction) => Promise<string>;
+  /**
+   * Sign an arbitrary message with the connected wallet's private key (Ed25519).
+   * Returns the raw 64-byte signature as a Uint8Array.
+   * Throws if no wallet is connected or the wallet doesn't support signMessage.
+   */
+  signMessage: (messageBytes: Uint8Array) => Promise<Uint8Array>;
 }
 
 const WalletContext = createContext<WalletContextValue>({
@@ -78,6 +83,7 @@ const WalletContext = createContext<WalletContextValue>({
   openWalletModal: () => {},
   signTransaction: async () => { throw new Error("WalletContext not mounted"); },
   signAndSendTransaction: async () => { throw new Error("WalletContext not mounted"); },
+  signMessage: async () => { throw new Error("WalletContext not mounted"); },
 });
 
 export function WalletProvider({ children }: { children: ReactNode }) {
@@ -85,18 +91,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [walletName, setWalletName] = useState<WalletName | null>(null);
   const [modalOpen, setModalOpen]   = useState(false);
   const providerRef = useRef<SolanaProvider | null>(null);
-  const createProfile = useCreateProfile();
-
-  // ── Auto-create profile when wallet connects ──────────────────────────────
-
-  useEffect(() => {
-    if (!wallet) return;
-    createProfile.mutate(
-      { data: { address: wallet } },
-      { onError: (err) => console.warn("[WalletContext] profile upsert failed (non-fatal):", err) }
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wallet]);
 
   // ── Listen for wallet events (disconnect, account change) ─────────────────
 
@@ -251,6 +245,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return result.signature;
   }, []);
 
+  /**
+   * Sign an arbitrary message with the connected wallet's Ed25519 private key.
+   * Returns the raw 64-byte signature as a Uint8Array.
+   */
+  const signMessage = useCallback(async (messageBytes: Uint8Array): Promise<Uint8Array> => {
+    const provider = providerRef.current;
+    if (!provider) throw new Error("No wallet connected. Please connect your wallet first.");
+    if (typeof provider.signMessage !== "function") {
+      throw new Error("Your wallet does not support signMessage. Please update your wallet extension.");
+    }
+    const result = await provider.signMessage(messageBytes);
+    // Normalize across wallet adapters:
+    //   Phantom / Backpack → { signature: Uint8Array }
+    //   Solflare           → Uint8Array directly
+    if (result instanceof Uint8Array) return result;
+    return (result as { signature: Uint8Array }).signature;
+  }, []);
+
   return (
     <WalletContext.Provider value={{
       wallet,
@@ -261,6 +273,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       openWalletModal,
       signTransaction,
       signAndSendTransaction,
+      signMessage,
     }}>
       {children}
       {/* Global wallet modal — accessible from any component via openWalletModal() */}

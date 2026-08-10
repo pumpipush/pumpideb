@@ -2,7 +2,6 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   useGetProfile,
-  useUpdateProfile,
   useGetRecentActivity,
   getGetProfileQueryKey,
   getGetRecentActivityQueryKey,
@@ -37,6 +36,18 @@ import {
   Wallet,
   AlertCircle,
 } from "lucide-react";
+
+// ─── Base58 encoder — used to encode wallet signatures for server auth ────────
+const BS58_ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function bs58Encode(bytes: Uint8Array): string {
+  let n = 0n;
+  for (const b of bytes) n = n * 256n + BigInt(b);
+  const chars: string[] = [];
+  while (n > 0n) { chars.unshift(BS58_ALPHA[Number(n % 58n)]); n /= 58n; }
+  let leading = 0;
+  for (const b of bytes) { if (b !== 0) break; leading++; }
+  return "1".repeat(leading) + chars.join("");
+}
 
 // ─── Auto-username generator (deterministic from address) ─────────────────────
 const ADJECTIVES = [
@@ -135,7 +146,7 @@ export default function ProfilePage() {
   const params = useParams<{ address: string }>();
   const address = params.address ?? "";
   const [, setLocation] = useLocation();
-  const { wallet } = useWallet();
+  const { wallet, signMessage } = useWallet();
   const isOwner = wallet?.toLowerCase() === address.toLowerCase();
 
   const [activeTab, setActiveTab] = useState<Tab>("activity");
@@ -153,6 +164,7 @@ export default function ProfilePage() {
     retry: 1,
   });
   const [editOpen, setEditOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [editForm, setEditForm] = useState<{
     username: string;
     bio: string;
@@ -168,8 +180,6 @@ export default function ProfilePage() {
   const { data: profile, isLoading, refetch } = useGetProfile(address, {
     query: { enabled: !!address, retry: false, queryKey: getGetProfileQueryKey(address) },
   });
-
-  const updateProfile = useUpdateProfile();
 
   const activityParams = { limit: 200 };
   const { data: allActivity } = useGetRecentActivity(activityParams, {
@@ -188,18 +198,16 @@ export default function ProfilePage() {
 
   // ── Edit helpers ──────────────────────────────────────────────────────────
   const openEdit = () => {
-    if (!profile) return;
-    const uname = profile.username ?? "";
-    const autoName = uname.startsWith("user_")
-      ? generateUsername(address)
-      : uname;
+    // Works with or without an existing profile row — owners can create via first edit.
+    const uname = profile?.username ?? "";
+    const autoName = uname.startsWith("user_") ? generateUsername(address) : (uname || generateUsername(address));
     setEditForm({
       username: autoName,
-      bio: profile.bio ?? "",
-      twitterHandle: profile.twitterHandle ?? "",
-      websiteUrl: profile.websiteUrl ?? "",
-      avatarUrl: profile.avatarUrl ?? "",
-      avatarPreview: profile.avatarUrl ?? "",
+      bio: profile?.bio ?? "",
+      twitterHandle: profile?.twitterHandle ?? "",
+      websiteUrl: profile?.websiteUrl ?? "",
+      avatarUrl: profile?.avatarUrl ?? "",
+      avatarPreview: profile?.avatarUrl ?? "",
     });
     setEditOpen(true);
   };
@@ -259,18 +267,51 @@ export default function ProfilePage() {
   };
 
   const saveProfile = async () => {
-    if (!editForm) return;
+    if (!editForm || !wallet) return;
+    setSaving(true);
     try {
-      await updateProfile.mutateAsync({
-        address,
-        data: {
+      // 1. Obtain a server-issued single-use nonce (prevents replay)
+      const challengeRes = await fetch(`/api/profiles/challenge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update", address }),
+      });
+      if (!challengeRes.ok) throw new Error("Failed to obtain signing challenge");
+      const { nonce } = await challengeRes.json() as { nonce: string };
+
+      // 2. Build the canonical message the server will verify
+      const message = `RocketFi:update:${address}:${nonce}`;
+
+      // 2. Sign with the connected wallet (Ed25519 over raw UTF-8 bytes)
+      const messageBytes = new TextEncoder().encode(message);
+      const sigBytes = await signMessage(messageBytes);
+
+      // 3. Base58-encode the 64-byte signature for JSON transport
+      const signature = bs58Encode(sigBytes);
+
+      // 4. Send the authenticated PATCH — server derives address from verified signer
+      const res = await fetch(`/api/profiles/${address}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          // Wallet auth fields (required by the server)
+          walletAddress: wallet,
+          signature,
+          message,
+          // Profile fields
           username: editForm.username || undefined,
           bio: editForm.bio || undefined,
           twitterHandle: editForm.twitterHandle.replace("@", "") || undefined,
           websiteUrl: sanitizeUrl(editForm.websiteUrl),
           avatarUrl: editForm.avatarUrl || undefined,
-        },
+        }),
       });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `Server error ${res.status}`);
+      }
+
       setEditOpen(false);
       setEditForm(null);
       refetch();
@@ -279,13 +320,16 @@ export default function ProfilePage() {
       // Profile save failed — keep modal open, show error
       const msg = e instanceof Error ? e.message : "Failed to save profile";
       toast({ title: "Save failed", description: msg, variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
   if (isLoading) return <ProfileSkeleton />;
 
-  if (!profile) {
+  // Non-owner visiting a wallet with no profile — dead end
+  if (!profile && !isOwner) {
     return (
       <div className="max-w-3xl mx-auto px-4 pt-20 text-center">
         <Coins className="w-10 h-10 text-muted-foreground/30 mx-auto mb-4" />
@@ -299,12 +343,44 @@ export default function ProfilePage() {
   }
 
   // Display username: if it looks auto-generated from old system, show a nicer one
-  const displayUsername = (profile.username ?? "").startsWith("user_")
-    ? generateUsername(address)
-    : (profile.username ?? generateUsername(address));
+  const displayUsername = profile
+    ? ((profile.username ?? "").startsWith("user_") ? generateUsername(address) : (profile.username ?? generateUsername(address)))
+    : generateUsername(address);
 
   return (
     <div className="w-full max-w-3xl pb-16 md:pb-20">
+
+      {/* ── Owner empty-state (no profile row yet) ── */}
+      {!profile && isOwner && (
+        <div className="max-w-xl mx-auto px-4 pt-20 text-center">
+          <div
+            className="w-24 h-24 rounded-full overflow-hidden mx-auto mb-5 border-4 border-background"
+            style={{ boxShadow: `0 0 0 2px hsl(${accentHue(address)},65%,52%)` }}
+          >
+            <img
+              src={diceBearUrl(address)}
+              alt={address}
+              className="w-full h-full object-cover"
+              style={{ imageRendering: "pixelated" }}
+            />
+          </div>
+          <p className="text-xs font-mono text-muted-foreground mb-1">{formatAddress(address)}</p>
+          <h2 className="text-lg font-bold text-foreground mb-2">{displayUsername}</h2>
+          <p className="text-sm text-muted-foreground mb-6 max-w-xs mx-auto">
+            Your profile isn't set up yet. Add a username, bio, and social links so the community knows who you are.
+          </p>
+          <Button
+            size="sm"
+            className="rounded-sm h-9 px-5"
+            onClick={openEdit}
+          >
+            <Edit2 className="w-3.5 h-3.5 mr-1.5" /> Set up your profile
+          </Button>
+        </div>
+      )}
+
+      {/* ── Full profile content (profile exists) ── */}
+      {profile && <>
 
       {/* ── Back ── */}
       {/* ── Banner ── */}
@@ -689,7 +765,9 @@ export default function ProfilePage() {
         })()}
       </div>
 
-      {/* ══ Edit Profile Modal ══════════════════════════════════════════════════ */}
+      </>} {/* end {profile && <>} */}
+
+      {/* ══ Edit Profile Modal — rendered for owners regardless of whether profile exists ══ */}
       {editOpen && editForm && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
@@ -819,9 +897,9 @@ export default function ProfilePage() {
               <Button
                 className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-sm font-bold h-9 px-6 flex-1 sm:flex-none"
                 onClick={saveProfile}
-                disabled={updateProfile.isPending || avatarUploading}
+                disabled={saving || avatarUploading}
               >
-                {updateProfile.isPending ? (
+                {saving ? (
                   <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Saving…</>
                 ) : (
                   <><Check className="w-3.5 h-3.5 mr-1.5" /> Save changes</>

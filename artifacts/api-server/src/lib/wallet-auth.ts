@@ -14,7 +14,7 @@
  */
 
 import nacl from "tweetnacl";
-import { timingSafeEqual } from "crypto";
+import { timingSafeEqual, randomUUID } from "crypto";
 
 // ── Tolerance window for timestamp-based replay protection ─────────────────
 const MAX_AGE_SECONDS = 300; // 5 minutes
@@ -130,6 +130,139 @@ export function verifyWalletSignature(
   if (!valid) {
     throw new Error("Wallet signature verification failed");
   }
+}
+
+// ── Single-use nonce store (profile challenge/response auth) ──────────────
+//
+// Nonces are server-issued, action/address-bound, and atomically consumed on
+// first use to prevent replay attacks within the validity window.
+// Node.js is single-threaded so Map operations are atomic.
+
+interface NonceEntry {
+  address:   string;
+  action:    "create" | "update";
+  expiresAt: number; // ms epoch
+}
+
+const nonceStore = new Map<string, NonceEntry>();
+
+/** Issue a fresh single-use nonce tied to one action + wallet address. */
+export function issueNonce(action: "create" | "update", address: string): string {
+  const nonce = randomUUID();
+  nonceStore.set(nonce, { address, action, expiresAt: Date.now() + MAX_AGE_SECONDS * 1_000 });
+  return nonce;
+}
+
+/**
+ * Atomically consume a nonce.
+ * Returns true only if the nonce exists, has not expired, and matches action + address.
+ * The nonce is deleted on the first call regardless of outcome — subsequent calls return false.
+ */
+export function consumeNonce(
+  nonce: string,
+  action: "create" | "update",
+  address: string,
+): boolean {
+  const entry = nonceStore.get(nonce);
+  nonceStore.delete(nonce); // always remove — single-use guarantee
+  if (!entry) return false;
+  if (Date.now() > entry.expiresAt) return false;
+  return entry.address === address && entry.action === action;
+}
+
+/** Build the canonical message string for profile nonce-based auth. */
+export function buildProfileSignMessage(
+  action: "create" | "update",
+  address: string,
+  nonce: string,
+): string {
+  return `RocketFi:${action}:${address}:${nonce}`;
+}
+
+/**
+ * Verify a wallet signature over a profile nonce message.
+ * Atomically consumes the nonce (prevents replay even within the validity window).
+ * Throws a descriptive Error on any failure.
+ */
+export function verifyWalletSignatureWithNonce(
+  payload: WalletAuthPayload,
+  expectedAction: "create" | "update",
+  expectedAddress: string,
+): void {
+  const { walletAddress, signature, message } = payload;
+
+  // 0. The signer must be the expected address owner — checked before nonce
+  //    consumption so a cross-wallet attempt doesn't burn the victim's nonce.
+  if (walletAddress !== expectedAddress) {
+    throw new Error("Wallet address does not match the expected profile owner");
+  }
+
+  // 1. Validate message structure and extract the trailing nonce segment
+  const parts = message.split(":");
+  if (parts.length < 4) throw new Error("Malformed signed message");
+  const nonce = parts[parts.length - 1];
+
+  // 2. Validate message content matches expected action + address prefix
+  const expectedPrefix = `RocketFi:${expectedAction}:${expectedAddress}:`;
+  if (!message.startsWith(expectedPrefix)) {
+    throw new Error("Signed message does not match expected action or address");
+  }
+
+  // 3. Atomically consume nonce — replay protection
+  if (!consumeNonce(nonce, expectedAction, expectedAddress)) {
+    throw new Error("Invalid, expired, or already-used challenge nonce");
+  }
+
+  // 4. Decode public key and signature from base58
+  let pubKeyBytes: Uint8Array;
+  let sigBytes: Uint8Array;
+  try {
+    pubKeyBytes = bs58Decode(walletAddress);
+    sigBytes    = bs58Decode(signature);
+  } catch (e) {
+    throw new Error(`Invalid base58 encoding: ${(e as Error).message}`);
+  }
+
+  if (pubKeyBytes.length !== 32) {
+    throw new Error(`Invalid wallet address length (expected 32 bytes, got ${pubKeyBytes.length})`);
+  }
+  if (sigBytes.length !== 64) {
+    throw new Error(`Invalid signature length (expected 64 bytes, got ${sigBytes.length})`);
+  }
+
+  // 5. Verify Ed25519 signature over raw UTF-8 message bytes
+  const messageBytes = new TextEncoder().encode(message);
+  if (!nacl.sign.detached.verify(messageBytes, sigBytes, pubKeyBytes)) {
+    throw new Error("Wallet signature verification failed");
+  }
+}
+
+// ── Wallet auth field parser (shared by POST/PATCH routes) ────────────────
+
+export interface WalletAuthFields {
+  walletAddress: string;
+  signature:     string;
+  message:       string;
+}
+
+/**
+ * Extract wallet auth fields from a request body.
+ * Returns null if any required field is missing or has the wrong type.
+ */
+export function parseWalletAuthFields(body: unknown): WalletAuthFields | null {
+  if (!body || typeof body !== "object") return null;
+  const b = body as Record<string, unknown>;
+  const walletAddress = b["walletAddress"];
+  const signature     = b["signature"];
+  const message       = b["message"];
+  if (
+    typeof walletAddress === "string" && walletAddress.length >= 32 &&
+    typeof signature     === "string" && signature.length     >= 1  &&
+    typeof message       === "string" && message.length       >= 1
+  ) {
+    return { walletAddress, signature, message };
+  }
+  return null;
 }
 
 // ── Indexer shared secret check ────────────────────────────────────────────

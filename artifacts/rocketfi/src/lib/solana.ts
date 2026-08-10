@@ -54,6 +54,14 @@ export interface SolanaProvider {
    * Returns the signed transaction (same type as input, but with wallet signature added).
    */
   signTransaction?(transaction: unknown): Promise<unknown>;
+  /**
+   * Sign an arbitrary message (raw UTF-8 bytes) with the wallet's private key.
+   * Used for off-chain authentication challenges (Ed25519 sign, not a transaction).
+   * Supported by Phantom, Backpack, and Solflare.
+   * Returns an object whose `signature` property is the 64-byte Ed25519 signature.
+   */
+  /** Phantom/Backpack return { signature: Uint8Array }; Solflare returns Uint8Array directly. */
+  signMessage?(message: Uint8Array): Promise<Uint8Array | { signature: Uint8Array }>;
 }
 
 export type WalletName = "Phantom" | "Backpack" | "Solflare";
