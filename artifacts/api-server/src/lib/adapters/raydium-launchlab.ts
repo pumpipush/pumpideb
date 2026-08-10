@@ -99,7 +99,15 @@ function resolveIpfs(url: string): string {
     .replace(/https?:\/\/cf-ipfs\.com\/ipfs\//, "https://ipfs.io/ipfs/");
 }
 
-async function fetchImageFromUri(uri: string): Promise<string | null> {
+interface UriMeta {
+  imageUrl:    string | null;
+  description: string | null;
+  twitterUrl:  string | null;
+  telegramUrl: string | null;
+  websiteUrl:  string | null;
+}
+
+async function fetchMetaFromUri(uri: string): Promise<UriMeta | null> {
   if (!uri) return null;
   try {
     const res = await fetch(resolveIpfs(uri), {
@@ -107,9 +115,21 @@ async function fetchImageFromUri(uri: string): Promise<string | null> {
       headers: { "User-Agent": "RocketFi/1.0" },
     });
     if (!res.ok) return null;
-    const json = (await res.json()) as { image?: string };
-    const raw = json.image?.trim() || null;
-    return raw ? resolveIpfs(raw) : null;
+    const json = (await res.json()) as {
+      image?:       string;
+      description?: string;
+      twitter?:     string;
+      telegram?:    string;
+      website?:     string;
+    };
+    const rawImage = json.image?.trim() || null;
+    return {
+      imageUrl:    rawImage ? resolveIpfs(rawImage) : null,
+      description: json.description?.trim() || null,
+      twitterUrl:  json.twitter?.trim()     || null,
+      telegramUrl: json.telegram?.trim()    || null,
+      websiteUrl:  json.website?.trim()     || null,
+    };
   } catch {
     return null;
   }
@@ -226,16 +246,24 @@ class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
         if (!done) { done = true; broadcast(null); }
       }, 3_000);
 
-      fetchImageFromUri(uri)
-        .then(async (imageUrl) => {
+      fetchMetaFromUri(uri)
+        .then(async (meta) => {
           clearTimeout(fallback);
-          if (imageUrl) {
-            await db.update(tokensTable).set({ imageUrl })
-              .where(eq(tokensTable.address, mint));
-            this.log.debug({ mint }, "raydium_launchlab: image fetched from URI");
+          if (meta) {
+            const dbUpdate: Record<string, string | null> = {};
+            if (meta.imageUrl)    dbUpdate["imageUrl"]    = meta.imageUrl;
+            if (meta.description) dbUpdate["description"] = meta.description;
+            if (meta.twitterUrl)  dbUpdate["twitterUrl"]  = meta.twitterUrl;
+            if (meta.telegramUrl) dbUpdate["telegramUrl"] = meta.telegramUrl;
+            if (meta.websiteUrl)  dbUpdate["websiteUrl"]  = meta.websiteUrl;
+            if (Object.keys(dbUpdate).length > 0) {
+              await db.update(tokensTable).set(dbUpdate).where(eq(tokensTable.address, mint));
+              this.log.debug({ mint, fields: Object.keys(dbUpdate) }, "raydium_launchlab: metadata fetched from URI");
+            }
           }
+          const imageUrl = meta?.imageUrl ?? null;
           if (!done) { done = true; broadcast(imageUrl); }
-          else if (imageUrl) { broadcast(imageUrl); } // update card that already appeared
+          else if (imageUrl) { broadcast(imageUrl); }
         })
         .catch(() => {
           clearTimeout(fallback);

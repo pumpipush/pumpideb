@@ -22,7 +22,7 @@ import { db, tokensTable, tradesTable } from "@workspace/db";
 import { emitTrade, emitNewToken } from "../tradeEmitter.js";
 import { logger as rootLogger } from "../logger.js";
 import { SolanaRpcIndexer, type LogEvent } from "./solanaRpcBase.js";
-import { fetchDexScreenerPumpSwapPair, pairToDbFields } from "../dexscreener.js";
+import { fetchDexScreenerPumpSwapPair, pairToDbFields, pairToSocialFields } from "../dexscreener.js";
 
 const PUMPSWAP_PROGRAM = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
 const PLATFORM         = "pumpswap";
@@ -91,22 +91,30 @@ class PumpSwapIndexer extends SolanaRpcIndexer {
       : null;
 
     // ── Auto-create token on first encounter ─────────────────────────────────
-    // If this mint is unknown, fetch DexScreener once to get name/symbol/image/price.
+    // If this mint is unknown, fetch DexScreener once to get name/symbol/image/price/socials.
     // This is safer than CreatePool detection (which returns the LP mint, not base token).
     const existing = await db
-      .select({ id: tokensTable.id })
+      .select({ id: tokensTable.id, name: tokensTable.name, symbol: tokensTable.symbol })
       .from(tokensTable)
       .where(eq(tokensTable.address, mint))
       .limit(1);
 
+    // Track name/symbol for the trade SSE payload below
+    let tokenName:   string | null = existing[0]?.name   ?? null;
+    let tokenSymbol: string | null = existing[0]?.symbol ?? null;
+
     if (existing.length === 0) {
       this.log.info({ mint }, "pumpswap: new token via first trade — fetching DexScreener metadata");
 
-      const pair     = await fetchDexScreenerPumpSwapPair(mint);
-      const name     = pair?.baseToken.name   ?? mint.slice(0, 8);
-      const symbol   = pair?.baseToken.symbol ?? "???";
-      const imageUrl = pair?.info?.imageUrl   ?? null;
-      const fields   = pair ? pairToDbFields(pair) : null;
+      const pair         = await fetchDexScreenerPumpSwapPair(mint);
+      const name         = pair?.baseToken.name   ?? mint.slice(0, 8);
+      const symbol       = pair?.baseToken.symbol ?? "???";
+      const imageUrl     = pair?.info?.imageUrl   ?? null;
+      const fields       = pair ? pairToDbFields(pair)    : null;
+      const socialFields = pair ? pairToSocialFields(pair) : {};
+
+      tokenName   = name;
+      tokenSymbol = symbol;
 
       // Only emit newToken when the INSERT actually inserted a new row.
       // Two concurrent handlers for the same unknown mint can both pass the
@@ -122,6 +130,7 @@ class PumpSwapIndexer extends SolanaRpcIndexer {
         platform:       PLATFORM,
         chain:          CHAIN,
         graduated:      true,
+        ...socialFields,
         ...(fields ?? {}),
         // Use on-chain price from this trade if DexScreener has nothing yet
         ...(priceEth && !fields?.priceEth ? { priceEth } : {}),
@@ -184,8 +193,8 @@ class PumpSwapIndexer extends SolanaRpcIndexer {
       },
       token: {
         address:              mint,
-        name:                 null,
-        symbol:               null,
+        name:                 tokenName,
+        symbol:               tokenSymbol,
         priceEth,
         marketCapEth:         null,
         volumeEth:            solLamports,

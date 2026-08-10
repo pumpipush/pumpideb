@@ -30,6 +30,7 @@ import { emitSnapshot } from "./tradeEmitter";
 import {
   fetchDexScreenerTokens,
   pairToDbFields,
+  pairToSocialFields,
   bestSolanaPair,
   type DexScreenerPair,
 } from "./dexscreener";
@@ -49,9 +50,13 @@ const ENRICHABLE_PLATFORMS = ["pump_fun", "raydium_launchlab", "letsbonk", "daos
 // ── Pump.fun metadata ──────────────────────────────────────────────────────────
 
 interface PumpCoin {
-  name?:      string;
-  symbol?:    string;
-  image_uri?: string;
+  name?:        string;
+  symbol?:      string;
+  image_uri?:   string;
+  description?: string;
+  twitter?:     string;
+  telegram?:    string;
+  website?:     string;
 }
 
 async function fetchPumpMeta(mint: string): Promise<PumpCoin | null> {
@@ -111,16 +116,28 @@ export const ENRICHABLE_PLATFORMS_EXPORT = ENRICHABLE_PLATFORMS;
 // ── Per-platform metadata fetch ────────────────────────────────────────────────
 
 interface EnrichResult {
-  name?:     string;
-  symbol?:   string;
-  imageUrl?: string | null;
+  name?:        string;
+  symbol?:      string;
+  imageUrl?:    string | null;
+  description?: string | null;
+  twitterUrl?:  string | null;
+  telegramUrl?: string | null;
+  websiteUrl?:  string | null;
 }
 
 async function fetchMeta(mint: string, platform: string): Promise<EnrichResult | null> {
   if (platform === "pump_fun") {
     // Primary: pump.fun API (may be blocked/rate-limited from hosted environments)
     const pump = await fetchPumpMeta(mint);
-    if (pump) return { name: pump.name, symbol: pump.symbol, imageUrl: pump.image_uri ?? null };
+    if (pump) return {
+      name:        pump.name,
+      symbol:      pump.symbol,
+      imageUrl:    pump.image_uri  ?? null,
+      description: pump.description ? pump.description.trim() || null : null,
+      twitterUrl:  pump.twitter    ? pump.twitter.trim()    || null : null,
+      telegramUrl: pump.telegram   ? pump.telegram.trim()   || null : null,
+      websiteUrl:  pump.website    ? pump.website.trim()    || null : null,
+    };
 
     // Fallback: Raydium's /mint/ids works for any SPL token, including pump.fun tokens
     // that have been indexed after launch. Brand-new tokens won't appear here yet
@@ -150,11 +167,15 @@ async function fetchMeta(mint: string, platform: string): Promise<EnrichResult |
 // ── Update computation (pure — exported for testing) ──────────────────────────
 
 interface TokenRow {
-  address:  string;
-  name:     string;
-  symbol:   string;
-  imageUrl: string | null;
-  platform: string;
+  address:     string;
+  name:        string;
+  symbol:      string;
+  imageUrl:    string | null;
+  description: string | null;
+  twitterUrl:  string | null;
+  telegramUrl: string | null;
+  websiteUrl:  string | null;
+  platform:    string;
 }
 
 /**
@@ -171,7 +192,7 @@ interface TokenRow {
  * Exported for unit testing.
  */
 export function computeEnrichmentUpdate(
-  token: Pick<TokenRow, "name" | "symbol" | "imageUrl">,
+  token: Pick<TokenRow, "name" | "symbol" | "imageUrl"> & Partial<Pick<TokenRow, "description" | "twitterUrl" | "telegramUrl" | "websiteUrl">>,
   meta:  EnrichResult,
 ): Record<string, string> | null {
   const newName   = meta.name   && !isPlaceholderName(meta.name)    ? meta.name   : null;
@@ -182,6 +203,12 @@ export function computeEnrichmentUpdate(
   if (newName   && isPlaceholderName(token.name))     update["name"]     = newName;
   if (newSymbol && isPlaceholderSymbol(token.symbol)) update["symbol"]   = newSymbol;
   if (newImage  && token.imageUrl == null)             update["imageUrl"] = newImage;
+
+  // Only fill social/description fields when currently empty — never overwrite user-set data
+  if (meta.description && !token.description)   update["description"] = meta.description;
+  if (meta.twitterUrl  && !token.twitterUrl)    update["twitterUrl"]  = meta.twitterUrl;
+  if (meta.telegramUrl && !token.telegramUrl)   update["telegramUrl"] = meta.telegramUrl;
+  if (meta.websiteUrl  && !token.websiteUrl)    update["websiteUrl"]  = meta.websiteUrl;
 
   return Object.keys(update).length > 0 ? update : null;
 }
@@ -240,11 +267,15 @@ async function enrichTick(): Promise<void> {
     // are enriched promptly regardless of backlog size.
     const identityTokens = await db
       .select({
-        address:  tokensTable.address,
-        name:     tokensTable.name,
-        symbol:   tokensTable.symbol,
-        imageUrl: tokensTable.imageUrl,
-        platform: tokensTable.platform,
+        address:     tokensTable.address,
+        name:        tokensTable.name,
+        symbol:      tokensTable.symbol,
+        imageUrl:    tokensTable.imageUrl,
+        description: tokensTable.description,
+        twitterUrl:  tokensTable.twitterUrl,
+        telegramUrl: tokensTable.telegramUrl,
+        websiteUrl:  tokensTable.websiteUrl,
+        platform:    tokensTable.platform,
       })
       .from(tokensTable)
       .where(
@@ -268,11 +299,15 @@ async function enrichTick(): Promise<void> {
     const imageWindowStart = new Date(Date.now() - IMAGE_RETRY_WINDOW_MS);
     const imageTokens = await db
       .select({
-        address:  tokensTable.address,
-        name:     tokensTable.name,
-        symbol:   tokensTable.symbol,
-        imageUrl: tokensTable.imageUrl,
-        platform: tokensTable.platform,
+        address:     tokensTable.address,
+        name:        tokensTable.name,
+        symbol:      tokensTable.symbol,
+        imageUrl:    tokensTable.imageUrl,
+        description: tokensTable.description,
+        twitterUrl:  tokensTable.twitterUrl,
+        telegramUrl: tokensTable.telegramUrl,
+        websiteUrl:  tokensTable.websiteUrl,
+        platform:    tokensTable.platform,
       })
       .from(tokensTable)
       .where(
@@ -500,18 +535,22 @@ async function enrichPumpSwapPrices(): Promise<void> {
 
         // Fill in metadata when name OR symbol is still a placeholder.
         // Placeholder patterns: "???", first 8 chars of address, or empty string.
-        const isPlaceholderName = !token.name || token.name === "???" || token.name === token.address.slice(0, 8);
-        const isPlaceholderSymbol = !token.symbol || token.symbol === "???";
+        const isPlaceholderN = !token.name || token.name === "???" || token.name === token.address.slice(0, 8);
+        const isPlaceholderS = !token.symbol || token.symbol === "???";
         const metaFields: Record<string, string | null> = {};
-        if (isPlaceholderName || isPlaceholderSymbol) {
+        if (isPlaceholderN || isPlaceholderS) {
           if (best.baseToken.name)   metaFields["name"]     = best.baseToken.name;
           if (best.baseToken.symbol) metaFields["symbol"]   = best.baseToken.symbol;
           if (best.info?.imageUrl)   metaFields["imageUrl"] = best.info.imageUrl;
         }
 
+        // Always apply social fields from DexScreener for pumpswap tokens —
+        // DexScreener is the authoritative metadata source for this platform.
+        const socialFields = pairToSocialFields(best);
+
         await db
           .update(tokensTable)
-          .set({ ...fields, ...metaFields })
+          .set({ ...fields, ...metaFields, ...socialFields })
           .where(eq(tokensTable.address, token.address));
 
         updated++;

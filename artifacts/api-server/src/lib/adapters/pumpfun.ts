@@ -205,7 +205,6 @@ function decodePumpCreate(tx: RpcTx): { name: string; symbol: string; uri: strin
   }
 }
 
-/** Fetch token image by downloading the metadata JSON at a URI (IPFS / CDN). */
 /** Swap slow public IPFS gateway to Cloudflare's CDN-backed gateway. */
 function resolveIpfs(url: string): string {
   return url
@@ -213,7 +212,19 @@ function resolveIpfs(url: string): string {
     .replace(/https?:\/\/cf-ipfs\.com\/ipfs\//, "https://ipfs.io/ipfs/");
 }
 
-async function fetchImageFromUri(uri: string): Promise<string | null> {
+interface UriMeta {
+  imageUrl:    string | null;
+  description: string | null;
+  twitterUrl:  string | null;
+  telegramUrl: string | null;
+  websiteUrl:  string | null;
+}
+
+/**
+ * Download the metadata JSON at a URI (IPFS / CDN) and extract all useful
+ * fields: image, description, twitter, telegram, website.
+ */
+async function fetchMetaFromUri(uri: string): Promise<UriMeta | null> {
   if (!uri) return null;
   try {
     const res = await fetch(resolveIpfs(uri), {
@@ -221,10 +232,21 @@ async function fetchImageFromUri(uri: string): Promise<string | null> {
       headers: { "User-Agent": "RocketFi/1.0" },
     });
     if (!res.ok) return null;
-    const json = (await res.json()) as { image?: string };
-    const raw = json.image?.trim() || null;
-    // Also resolve the returned image URL (it may also be an IPFS URL)
-    return raw ? resolveIpfs(raw) : null;
+    const json = (await res.json()) as {
+      image?:       string;
+      description?: string;
+      twitter?:     string;
+      telegram?:    string;
+      website?:     string;
+    };
+    const rawImage = json.image?.trim() || null;
+    return {
+      imageUrl:    rawImage ? resolveIpfs(rawImage) : null,
+      description: json.description?.trim() || null,
+      twitterUrl:  json.twitter?.trim()     || null,
+      telegramUrl: json.telegram?.trim()    || null,
+      websiteUrl:  json.website?.trim()     || null,
+    };
   } catch {
     return null;
   }
@@ -376,12 +398,12 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
     };
 
     if (uri) {
-      // Delay the SSE broadcast until the image is resolved so the card never
+      // Delay the SSE broadcast until the metadata is resolved so the card never
       // shows a gradient placeholder that immediately flips to a real image.
       //
       // Race plan:
-      //  • ipfs.io resolves the image → broadcast WITH image, done.
-      //  • If it takes >3 s → broadcast now with null so the card at least appears,
+      //  • URI resolves within 3 s → broadcast WITH metadata, done.
+      //  • Takes >3 s → broadcast now with null so card at least appears,
       //    then broadcast again with the image when it eventually resolves.
       let broadcasted = false;
 
@@ -389,15 +411,25 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
         if (!broadcasted) { broadcasted = true; broadcastToken(null); }
       }, 3_000);
 
-      fetchImageFromUri(uri)
-        .then(async (imageUrl) => {
+      fetchMetaFromUri(uri)
+        .then(async (meta) => {
           clearTimeout(fallback);
-          if (imageUrl) {
-            await db.update(tokensTable).set({ imageUrl }).where(eq(tokensTable.address, mint));
-            this.log.debug({ mint }, "pump_fun: image fetched from URI");
+          if (meta) {
+            // Build update: only include fields that have values
+            const dbUpdate: Record<string, string | null> = {};
+            if (meta.imageUrl)    dbUpdate["imageUrl"]    = meta.imageUrl;
+            if (meta.description) dbUpdate["description"] = meta.description;
+            if (meta.twitterUrl)  dbUpdate["twitterUrl"]  = meta.twitterUrl;
+            if (meta.telegramUrl) dbUpdate["telegramUrl"] = meta.telegramUrl;
+            if (meta.websiteUrl)  dbUpdate["websiteUrl"]  = meta.websiteUrl;
+            if (Object.keys(dbUpdate).length > 0) {
+              await db.update(tokensTable).set(dbUpdate).where(eq(tokensTable.address, mint));
+              this.log.debug({ mint, fields: Object.keys(dbUpdate) }, "pump_fun: metadata fetched from URI");
+            }
           }
+          const imageUrl = meta?.imageUrl ?? null;
           if (!broadcasted) {
-            // Fast path — image ready before the 3 s fallback fired
+            // Fast path — metadata ready before the 3 s fallback fired
             broadcasted = true;
             broadcastToken(imageUrl);
           } else if (imageUrl) {
@@ -1156,12 +1188,21 @@ class PumpApiAdapter {
         if (!broadcasted) { broadcasted = true; broadcastToken(null); }
       }, 3_000);
 
-      fetchImageFromUri(uri)
-        .then(async (imageUrl) => {
+      fetchMetaFromUri(uri)
+        .then(async (meta) => {
           clearTimeout(fallback);
-          if (imageUrl) {
-            await db.update(tokensTable).set({ imageUrl }).where(eq(tokensTable.address, mint));
+          if (meta) {
+            const dbUpdate: Record<string, string | null> = {};
+            if (meta.imageUrl)    dbUpdate["imageUrl"]    = meta.imageUrl;
+            if (meta.description) dbUpdate["description"] = meta.description;
+            if (meta.twitterUrl)  dbUpdate["twitterUrl"]  = meta.twitterUrl;
+            if (meta.telegramUrl) dbUpdate["telegramUrl"] = meta.telegramUrl;
+            if (meta.websiteUrl)  dbUpdate["websiteUrl"]  = meta.websiteUrl;
+            if (Object.keys(dbUpdate).length > 0) {
+              await db.update(tokensTable).set(dbUpdate).where(eq(tokensTable.address, mint));
+            }
           }
+          const imageUrl = meta?.imageUrl ?? null;
           if (!broadcasted) {
             broadcasted = true;
             broadcastToken(imageUrl);

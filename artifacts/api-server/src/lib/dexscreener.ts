@@ -170,6 +170,30 @@ export function pairToDbFields(pair: DexScreenerPair) {
 }
 
 /**
+ * Extract social links and website URL from a DexScreener pair's info block.
+ * Returns only fields that are present so callers can spread safely without
+ * overwriting existing data with undefined.
+ */
+export function pairToSocialFields(pair: DexScreenerPair): {
+  twitterUrl?:  string;
+  telegramUrl?: string;
+  websiteUrl?:  string;
+} {
+  const socials  = pair.info?.socials  ?? [];
+  const websites = pair.info?.websites ?? [];
+
+  const twitter  = socials.find(s => s.type === "twitter")?.url;
+  const telegram = socials.find(s => s.type === "telegram")?.url;
+  const website  = websites[0]?.url;
+
+  return {
+    ...(twitter  ? { twitterUrl:  twitter  } : {}),
+    ...(telegram ? { telegramUrl: telegram } : {}),
+    ...(website  ? { websiteUrl:  website  } : {}),
+  };
+}
+
+/**
  * Reconstruct historical SOL prices from current price + DexScreener % changes.
  * Used for the price-history endpoint when no internal trades exist.
  *
