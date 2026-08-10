@@ -182,8 +182,8 @@ function SortTh({
   return (
     <th
       className={cn(
-        "px-4 py-3 text-[10px] font-bold uppercase tracking-[0.1em] cursor-pointer select-none transition-colors whitespace-nowrap",
-        active ? "text-primary" : "text-muted-foreground/60 hover:text-muted-foreground",
+        "px-4 py-3 text-[11px] font-semibold tracking-[0.04em] cursor-pointer select-none transition-colors whitespace-nowrap",
+        active ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground/70",
         align === "right" ? "text-right" : "text-left",
         className
       )}
@@ -280,26 +280,26 @@ function TableView({ tokens, solPrice, activeTab, startRank }: {
       <table className="w-full border-collapse min-w-[640px]">
         <thead>
           <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.025)" }}>
-            <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/50 w-12">#</th>
+            <th className="px-4 py-3 text-left text-[11px] font-semibold tracking-[0.04em] text-muted-foreground/35 w-12">#</th>
             {th("name", "Token", "min-w-[200px]")}
             {th("price", "Price", "hidden md:table-cell", "right")}
             {th("marketCap", "Market Cap", "hidden sm:table-cell", "right")}
             <th className={cn(
-              "px-4 py-3 text-[10px] font-bold uppercase tracking-[0.1em] whitespace-nowrap text-right hidden md:table-cell",
-              "text-muted-foreground/60"
+              "px-4 py-3 text-[11px] font-semibold tracking-[0.04em] whitespace-nowrap text-right hidden md:table-cell",
+              "text-muted-foreground/40"
             )}>24h %</th>
             {(isTrending) && (
-              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/60 whitespace-nowrap text-right hidden lg:table-cell">
+              <th className="px-4 py-3 text-[11px] font-semibold tracking-[0.04em] text-muted-foreground/40 whitespace-nowrap text-right hidden lg:table-cell">
                 Trades/hr
               </th>
             )}
             {isVolume && (
-              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-[0.1em] text-primary/80 whitespace-nowrap text-right hidden lg:table-cell">
+              <th className="px-4 py-3 text-[11px] font-semibold tracking-[0.04em] text-primary/70 whitespace-nowrap text-right hidden lg:table-cell">
                 Volume
               </th>
             )}
-            <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/60 whitespace-nowrap text-right hidden xl:table-cell">Age</th>
-            <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/50 w-20">Trade</th>
+            <th className="px-4 py-3 text-[11px] font-semibold tracking-[0.04em] text-muted-foreground/40 whitespace-nowrap text-right hidden xl:table-cell">Age</th>
+            <th className="px-4 py-3 text-right text-[11px] font-semibold tracking-[0.04em] text-muted-foreground/35 w-20">Trade</th>
           </tr>
         </thead>
         <tbody>
