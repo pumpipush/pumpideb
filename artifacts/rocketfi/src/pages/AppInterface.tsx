@@ -797,7 +797,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     // For DEX tokens: token.priceEth in DB may be stale (set during backfill, not refreshed live).
     // The OHLCV route fetches current Birdeye price and appends a synthetic latest candle; use that
     // candle's close as currentPrice so the price panel stays in sync with the chart.
-    const _isDexToken = ["raydium","orca","meteora","pumpswap","raydium_launchlab"].includes(token?.platform ?? "");
+    const _isDexToken = ["pumpswap","raydium_launchlab"].includes(token?.platform ?? "");
     const dexOhlcvPrice = _isDexToken ? (serverOhlcv?.bars?.slice(-1)[0]?.close ?? null) : null;
     const currentPrice = livePrice ?? dexOhlcvPrice ?? (token?.priceEth ? parseFloat(token.priceEth) : 0);
     const allTradesForVol = [...liveTrades, ...(history ?? [])];
@@ -967,7 +967,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // Effective market cap: stored value first, then derive from virtual reserves as fallback.
   // DEX tokens (raydium/orca/meteora/pumpswap) use pump.fun default virtual reserves which
   // produce a meaningless ~$229B number — skip the formula for those platforms.
-  const DEX_PLATFORMS_SET = new Set(["raydium", "orca", "meteora", "pumpswap", "raydium_launchlab"]);
+  const DEX_PLATFORMS_SET = new Set(["pumpswap", "raydium_launchlab"]);
   const isDexToken = DEX_PLATFORMS_SET.has(token?.platform ?? "");
   const effectiveMcEth = useMemo(() => {
     const raw = liveToken?.marketCapEth ?? token?.marketCapEth;

@@ -20,7 +20,7 @@ async function main(): Promise<void> {
   const { rows } = await pool.query<{ address: string; symbol: string; platform: string }>(`
     SELECT address, symbol, platform
     FROM   tokens
-    WHERE  platform IN ('raydium', 'orca', 'meteora', 'pumpswap', 'raydium_launchlab')
+    WHERE  platform IN ('pumpswap', 'raydium_launchlab')
       AND  pct_change_24h IS NULL
     ORDER  BY liquidity_usd DESC NULLS LAST
     LIMIT  $1

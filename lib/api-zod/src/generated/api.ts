@@ -28,7 +28,7 @@ export const ListTokensQueryParams = zod.object({
   "offset": zod.coerce.number().default(listTokensQueryOffsetDefault),
   "search": zod.coerce.string().optional(),
   "graduated": zod.coerce.boolean().optional(),
-  "platform": zod.enum(['pump_fun', 'moonshot', 'letsbonk', 'raydium_launchlab', 'daos_fun', 'raydium', 'pumpswap', 'meteora', 'orca']).optional()
+  "platform": zod.enum(['pump_fun', 'moonshot', 'letsbonk', 'raydium_launchlab', 'daos_fun', 'pumpswap']).optional()
 })
 
 export const listTokensResponsePlatformDefault = `unknown`;
@@ -67,6 +67,8 @@ export const ListTokensResponseItem = zod.object({
   "poolAddress": zod.string().nullish(),
   "quoteMint": zod.string().nullish(),
   "pctChange24h": zod.number().nullish(),
+  /** Trade count in the last 1 hour — populated by trending sort, null otherwise */
+  "trades1h": zod.number().nullish(),
 })
 export const ListTokensResponse = zod.array(ListTokensResponseItem)
 

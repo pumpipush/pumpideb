@@ -10,11 +10,8 @@
  */
 
 import { logger } from "../logger.js";
-import { startPumpFunAdapter }        from "./pumpfun.js";
-import { startRaydiumAmmAdapter }     from "./raydium-amm.js";
-import { startPumpSwapAdapter }       from "./pumpswap.js";
-import { startMeteoraAdapter }        from "./meteora.js";
-import { startOrcaAdapter }           from "./orca.js";
+import { startPumpFunAdapter }   from "./pumpfun.js";
+import { startPumpSwapAdapter }  from "./pumpswap.js";
 
 interface AdapterEntry {
   name:  string;
@@ -23,15 +20,12 @@ interface AdapterEntry {
 
 /** Always-on adapters — safe on free RPCs. */
 const ADAPTERS: AdapterEntry[] = [
-  // Raydium must start before pump_fun (graduation cache dependency)
-  { name: "raydium",  start: startRaydiumAmmAdapter },
-  { name: "pump_fun", start: startPumpFunAdapter    },
+  { name: "pump_fun", start: startPumpFunAdapter },
 ];
 
 /**
- * High-volume streaming adapters (PumpSwap, Meteora, Orca) require a paid/fast RPC.
- * On free RPCs they saturate the event queue immediately.
- * Set ENABLE_STREAMING_ADAPTERS=1 in production env to activate them.
+ * PumpSwap streaming adapter requires a paid/fast RPC.
+ * Set ENABLE_STREAMING_ADAPTERS=1 in production env to activate.
  */
 const STREAMING_ENABLED =
   process.env.ENABLE_STREAMING_ADAPTERS === "1" ||
@@ -39,8 +33,6 @@ const STREAMING_ENABLED =
 
 const STREAMING_ADAPTERS: AdapterEntry[] = [
   { name: "pumpswap", start: startPumpSwapAdapter },
-  { name: "meteora",  start: startMeteoraAdapter  },
-  { name: "orca",     start: startOrcaAdapter     },
 ];
 
 /** Start all adapters. Each is isolated — a failure in one does not block the others. */
@@ -60,7 +52,7 @@ export async function startAdapters(): Promise<void> {
 
   if (!STREAMING_ENABLED) {
     logger.info(
-      "adapters: streaming adapters (pumpswap/meteora/orca) disabled — " +
+      "adapters: streaming adapter (pumpswap) disabled — " +
       "set ENABLE_STREAMING_ADAPTERS=1 to activate (requires paid RPC)"
     );
   }

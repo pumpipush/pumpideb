@@ -63,6 +63,10 @@ interface DisplayToken {
   lastTradeAt?: number;
   /** All-time trade count from API */
   tradeCount?: number;
+  /** Trades in the last 1 hour — only populated on Trending sort */
+  trades1h?: number | null;
+  /** 24-hour price change % — positive = green, negative = red */
+  pctChange24h?: number | null;
 }
 
 // ─── Platform filter config ───────────────────────────────────────────────────
@@ -75,10 +79,8 @@ interface PlatformOption {
 const PLATFORM_OPTIONS: PlatformOption[] = [
   { id: "all",      label: "All",      emoji: "⚡" },
   { id: "pump_fun", label: "Pump.fun", emoji: "🐸", logoUrl: "/pumpfun.png" },
-  { id: "raydium",  label: "Raydium",  emoji: "⚡", logoUrl: "/raydium.jpg" },
   { id: "pumpswap", label: "PumpSwap", emoji: "🚀", logoUrl: "/pumpswap.png" },
-  { id: "meteora",  label: "Meteora",  emoji: "🌠", logoUrl: "/meteora.png" },
-  { id: "orca",     label: "Orca",     emoji: "🐳", logoUrl: "/orca.png" },
+  { id: "raydium_launchlab", label: "LaunchLab", emoji: "⚡", logoUrl: "/raydium.jpg" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -149,51 +151,90 @@ function TokenCardSkeleton() {
 
 function TableRowSkeleton() {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-border/20">
-      <Skeleton className="h-3 w-5 shrink-0" />
-      <Skeleton className="h-8 w-8 rounded-sm shrink-0" />
-      <div className="flex-1 flex flex-col gap-1">
-        <Skeleton className="h-3.5 w-32" />
-        <Skeleton className="h-2.5 w-16" />
-      </div>
-      <Skeleton className="h-3.5 w-20 hidden sm:block" />
-      <Skeleton className="h-3.5 w-16 hidden md:block" />
-      <Skeleton className="h-3.5 w-14 hidden lg:block" />
-      <Skeleton className="h-3.5 w-16 hidden xl:block" />
-      <Skeleton className="h-6 w-12 rounded-sm" />
-    </div>
+    <tr className="border-b border-border/[0.08]">
+      <td className="px-4 py-3"><Skeleton className="h-3 w-5" /></td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
+          <div className="flex flex-col gap-1.5">
+            <Skeleton className="h-3.5 w-28" />
+            <Skeleton className="h-2.5 w-14" />
+          </div>
+        </div>
+      </td>
+      <td className="px-4 py-3 hidden md:table-cell"><Skeleton className="h-3.5 w-20 ml-auto" /></td>
+      <td className="px-4 py-3 hidden sm:table-cell"><Skeleton className="h-3.5 w-16 ml-auto" /></td>
+      <td className="px-4 py-3 hidden md:table-cell"><Skeleton className="h-5 w-14 rounded ml-auto" /></td>
+      <td className="px-4 py-3 hidden lg:table-cell"><Skeleton className="h-3.5 w-16 ml-auto" /></td>
+      <td className="px-4 py-3 hidden xl:table-cell"><Skeleton className="h-3.5 w-12 ml-auto" /></td>
+      <td className="px-4 py-3 text-right"><Skeleton className="h-7 w-14 rounded inline-block" /></td>
+    </tr>
   );
 }
 
 // ─── Table sort header ────────────────────────────────────────────────────────
 function SortTh({
-  col, label, active, dir, onSort, className,
+  col, label, active, dir, onSort, className, align = "left",
 }: {
   col: TableSortKey; label: string; active: boolean; dir: TableSortDir;
-  onSort: (k: TableSortKey) => void; className?: string;
+  onSort: (k: TableSortKey) => void; className?: string; align?: "left" | "right";
 }) {
   return (
     <th
       className={cn(
-        "px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap",
+        "px-4 py-3 text-[10px] font-bold uppercase tracking-[0.1em] cursor-pointer select-none transition-colors whitespace-nowrap",
+        active ? "text-primary" : "text-muted-foreground/60 hover:text-muted-foreground",
+        align === "right" ? "text-right" : "text-left",
         className
       )}
       onClick={() => onSort(col)}
     >
-      <span className="inline-flex items-center gap-1">
+      <span className={cn("inline-flex items-center gap-1", align === "right" && "flex-row-reverse")}>
         {label}
         {active ? (
-          dir === "desc" ? <ChevronDown className="w-3 h-3 text-primary" /> : <ChevronUp className="w-3 h-3 text-primary" />
+          dir === "desc" ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />
         ) : (
-          <ChevronsUpDown className="w-3 h-3 opacity-30" />
+          <ChevronsUpDown className="w-3 h-3 opacity-25" />
         )}
       </span>
     </th>
   );
 }
 
+// ─── Activity mini-bar ────────────────────────────────────────────────────────
+function ActivityBar({ value, max }: { value: number; max: number }) {
+  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
+  if (pct === 0) return <span className="text-muted-foreground/30 font-mono text-xs">—</span>;
+  const fmtTrades = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${n}`;
+  return (
+    <div className="flex items-center gap-2 justify-end">
+      <span className="font-mono text-[12px] tabular-nums" style={{ color: pct > 60 ? "#f59e0b" : "#64748b" }}>
+        {fmtTrades(value)}
+      </span>
+      <div className="w-14 h-1.5 rounded-full bg-border/30 overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-300"
+          style={{
+            width: `${pct}%`,
+            background: pct > 60
+              ? "linear-gradient(90deg,#f59e0b,#ef4444)"
+              : pct > 25
+                ? "linear-gradient(90deg,#3b82f6,#06b6d4)"
+                : "#334155",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ─── Table view ───────────────────────────────────────────────────────────────
-function TableView({ tokens, solPrice, activeTab, startRank }: { tokens: DisplayToken[]; solPrice: number | null; activeTab: SortTab; startRank: number }) {
+function TableView({ tokens, solPrice, activeTab, startRank }: {
+  tokens: DisplayToken[];
+  solPrice: number | null;
+  activeTab: SortTab;
+  startRank: number;
+}) {
   const [sortKey, setSortKey] = useState<TableSortKey>("rank");
   const [sortDir, setSortDir] = useState<TableSortDir>("asc");
 
@@ -203,6 +244,7 @@ function TableView({ tokens, solPrice, activeTab, startRank }: { tokens: Display
   };
 
   const sorted = useMemo(() => {
+    if (sortKey === "rank") return tokens; // preserve server order
     const copy = [...tokens];
     const dir = sortDir === "asc" ? 1 : -1;
     copy.sort((a, b) => {
@@ -217,106 +259,203 @@ function TableView({ tokens, solPrice, activeTab, startRank }: { tokens: Display
     return copy;
   }, [tokens, sortKey, sortDir]);
 
-  const th = (col: TableSortKey, label: string, cls?: string) => (
-    <SortTh col={col} label={label} active={sortKey === col} dir={sortDir} onSort={handleSort} className={cls} />
+  const th = (col: TableSortKey, label: string, cls?: string, align?: "left" | "right") => (
+    <SortTh col={col} label={label} active={sortKey === col} dir={sortDir} onSort={handleSort} className={cls} align={align} />
   );
 
-  const showVolumeCol = activeTab === "Volume";
+  const isTrending = activeTab === "Trending";
+  const isVolume   = activeTab === "Volume";
+
+  // Max trades1h for activity bar scale
+  const maxTrades1h = useMemo(() =>
+    Math.max(...tokens.map(t => t.trades1h ?? 0), 1),
+    [tokens]
+  );
 
   return (
-    <div className="overflow-x-auto rounded-sm border border-border/40 bg-card">
+    <div
+      className="overflow-x-auto rounded-xl border border-white/[0.06]"
+      style={{ background: "rgba(10,12,18,0.85)", backdropFilter: "blur(8px)" }}
+    >
       <table className="w-full border-collapse min-w-[640px]">
         <thead>
-          <tr className="border-b border-border/40 bg-muted/30">
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground w-10">#</th>
-            {th("name",      "Token",      "min-w-[160px]")}
-            {showVolumeCol && (
-              <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-primary hidden sm:table-cell whitespace-nowrap">
+          <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.025)" }}>
+            <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/50 w-12">#</th>
+            {th("name", "Token", "min-w-[200px]")}
+            {th("price", "Price", "hidden md:table-cell", "right")}
+            {th("marketCap", "Market Cap", "hidden sm:table-cell", "right")}
+            <th className={cn(
+              "px-4 py-3 text-[10px] font-bold uppercase tracking-[0.1em] whitespace-nowrap text-right hidden md:table-cell",
+              "text-muted-foreground/60"
+            )}>24h %</th>
+            {(isTrending) && (
+              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/60 whitespace-nowrap text-right hidden lg:table-cell">
+                Trades/hr
+              </th>
+            )}
+            {isVolume && (
+              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-[0.1em] text-primary/80 whitespace-nowrap text-right hidden lg:table-cell">
                 Volume
               </th>
             )}
-            {th("marketCap", "Mkt Cap",    "hidden sm:table-cell")}
-            {th("price",     "Price",      "hidden md:table-cell")}
-            <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground hidden lg:table-cell">Platform</th>
-            {th("age", "Age", "hidden xl:table-cell")}
-            <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Action</th>
+            <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/60 whitespace-nowrap text-right hidden xl:table-cell">Age</th>
+            <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/50 w-20">Trade</th>
           </tr>
         </thead>
         <tbody>
           {sorted.map((token, idx) => {
-            const mc    = parseFloat(token.marketCapEth ?? "0") || 0;
-            const price = parseFloat(token.priceEth    ?? "0") || 0;
-            const vol   = parseFloat(token.volumeEth   ?? "0") || 0;
+            const rank  = startRank + idx;
+            const price = parseFloat(token.priceEth ?? "0") || 0;
+            const vol   = parseFloat(token.volumeEth ?? "0") || 0;
+            const pct   = token.pctChange24h;
+            const pctUp = (pct ?? 0) >= 0;
+            const isHot = isTrending && rank <= 3;
+            const isNew = token.isLive;
+
             return (
               <tr
                 key={token.id}
-                className={cn(
-                  "border-b border-border/20 last:border-0 hover:bg-primary/[0.04] transition-all duration-150 group border-l-2",
-                  token.graduated
-                    ? "border-l-primary/40"
-                    : token.isLive
-                      ? "border-l-emerald-400/60 bg-emerald-500/[0.03]"
-                      : "border-l-transparent hover:border-l-primary/40"
-                )}
+                className="group transition-colors duration-100"
+                style={{
+                  borderBottom: "1px solid rgba(255,255,255,0.04)",
+                  background: isHot
+                    ? "rgba(245,158,11,0.025)"
+                    : isNew
+                      ? "rgba(52,211,153,0.02)"
+                      : "transparent",
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
+                onMouseLeave={e => (e.currentTarget.style.background = isHot ? "rgba(245,158,11,0.025)" : isNew ? "rgba(52,211,153,0.02)" : "transparent")}
               >
-                <td className="px-3 py-3 text-xs text-muted-foreground/50 font-mono tabular-nums">{startRank + idx}</td>
-                <td className="px-3 py-3">
-                  <Link href={`/app?token=${token.address}`} className="flex items-center gap-2.5 min-w-0">
+                {/* # */}
+                <td className="px-4 py-3">
+                  {isTrending && rank <= 3 ? (
+                    <span
+                      className="inline-flex items-center justify-center w-6 h-6 rounded-md text-[11px] font-black"
+                      style={{
+                        background: rank === 1 ? "linear-gradient(135deg,#f59e0b,#d97706)" : rank === 2 ? "linear-gradient(135deg,#94a3b8,#64748b)" : "linear-gradient(135deg,#b45309,#92400e)",
+                        color: rank === 1 ? "#000" : rank === 2 ? "#fff" : "#fde68a",
+                      }}
+                    >
+                      {rank}
+                    </span>
+                  ) : (
+                    <span className="text-[12px] text-muted-foreground/30 font-mono tabular-nums">{rank}</span>
+                  )}
+                </td>
+
+                {/* Token */}
+                <td className="px-4 py-3">
+                  <Link href={`/app?token=${token.address}`} className="flex items-center gap-3 min-w-0 group/row">
+                    {/* Avatar */}
                     <div className="relative shrink-0">
-                      <div className="w-9 h-9 rounded-sm overflow-hidden">
+                      <div className="w-9 h-9 rounded-lg overflow-hidden ring-1 ring-white/[0.08]">
                         {isPlaceholder(token.symbol) ? (
                           <div className="w-full h-full flex items-center justify-center" style={{ background: tokenCardBackground(token.symbol) }}>
-                            <span className="flex gap-0.5 items-center">
-                              <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce [animation-delay:0ms]" />
-                              <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce [animation-delay:150ms]" />
-                              <span className="w-1.5 h-1.5 rounded-full bg-white/40 animate-bounce [animation-delay:300ms]" />
+                            <span className="flex gap-0.5">
+                              {[0,150,300].map(d => <span key={d} className="w-1 h-1 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: `${d}ms` }} />)}
                             </span>
                           </div>
                         ) : (
                           <TokenImage imageUrl={token.imageUrl} symbol={token.symbol} textSize="text-base" />
                         )}
                       </div>
-                      {token.graduated && (
-                        <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-primary rounded-full flex items-center justify-center">
-                          <GraduationCap className="w-2 h-2 text-black" />
-                        </div>
-                      )}
+                      {/* Platform dot */}
+                      <PlatformDot platform={token.platform as PlatformId} className="absolute -bottom-0.5 -right-0.5 w-3 h-3 ring-1 ring-black" />
                     </div>
-                    <div className="min-w-0">
-                      <div className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors truncate max-w-[120px] flex items-center gap-1.5">
-                        {token.name}
+
+                    {/* Name + symbol */}
+                    <div className="min-w-0 flex flex-col gap-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-[14px] text-foreground group-hover/row:text-primary transition-colors truncate max-w-[140px] leading-none">
+                          {token.name}
+                        </span>
+                        {isHot && (
+                          <span className="shrink-0 text-[9px] font-black text-amber-400 bg-amber-400/10 border border-amber-400/25 px-1 py-0.5 rounded leading-none">HOT</span>
+                        )}
+                        {isNew && !isHot && (
+                          <span className="shrink-0 text-[9px] font-black text-emerald-400 bg-emerald-400/10 border border-emerald-400/25 px-1 py-0.5 rounded leading-none">NEW</span>
+                        )}
+                        {token.graduated && (
+                          <span className="shrink-0 text-[9px] font-black text-primary bg-primary/10 border border-primary/25 px-1 py-0.5 rounded leading-none">GRAD</span>
+                        )}
                       </div>
-                      <div className="text-[11px] font-mono text-primary">{displaySymbol(token.symbol)}</div>
+                      <span className="text-[12px] font-mono text-muted-foreground/50 leading-none">{displaySymbol(token.symbol)}</span>
                     </div>
                   </Link>
                 </td>
-                {showVolumeCol && (
-                  <td className="px-3 py-3 hidden sm:table-cell">
-                    <span className="text-sm font-bold text-primary font-mono tabular-nums">
-                      {vol > 0 ? formatMCUsd(token.volumeEth, solPrice) : <span className="text-muted-foreground/40 font-normal">—</span>}
-                    </span>
-                  </td>
-                )}
-                <td className="px-3 py-3 hidden sm:table-cell">
-                  <span className="text-sm font-bold text-foreground font-mono tabular-nums inline-flex items-center gap-1.5">
+
+                {/* Price */}
+                <td className="px-4 py-3 text-right hidden md:table-cell">
+                  <span className="font-mono text-[13px] text-foreground/80 tabular-nums">
+                    {solPrice && price > 0 ? formatTokenPrice(price * solPrice) : <span className="text-muted-foreground/30">—</span>}
+                  </span>
+                </td>
+
+                {/* Market Cap */}
+                <td className="px-4 py-3 text-right hidden sm:table-cell">
+                  <span className="font-mono text-[13px] font-semibold text-foreground tabular-nums">
                     {formatMCUsd(token.marketCapEth, solPrice)}
                   </span>
                 </td>
-                <td className="px-3 py-3 hidden md:table-cell">
-                  <span className="text-xs font-mono text-muted-foreground tabular-nums">
-                    {solPrice ? formatTokenPrice(price * solPrice) : "—"}
-                  </span>
+
+                {/* 24h % */}
+                <td className="px-4 py-3 text-right hidden md:table-cell">
+                  {pct != null ? (
+                    <span
+                      className="inline-block font-mono text-[12px] font-bold px-2 py-0.5 rounded"
+                      style={{
+                        color: pctUp ? "#4ade80" : "#f87171",
+                        background: pctUp ? "rgba(74,222,128,0.08)" : "rgba(248,113,113,0.08)",
+                        border: `1px solid ${pctUp ? "rgba(74,222,128,0.2)" : "rgba(248,113,113,0.2)"}`,
+                      }}
+                    >
+                      {fmtPct(pct)}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground/25 text-xs">—</span>
+                  )}
                 </td>
-                <td className="px-3 py-3 hidden lg:table-cell">
-                  <PlatformBadge platform={token.platform as PlatformId} size="sm" />
+
+                {/* Trades/hr (Trending) */}
+                {isTrending && (
+                  <td className="px-4 py-3 hidden lg:table-cell">
+                    <ActivityBar value={token.trades1h ?? 0} max={maxTrades1h} />
+                  </td>
+                )}
+
+                {/* Volume (Volume tab) */}
+                {isVolume && (
+                  <td className="px-4 py-3 text-right hidden lg:table-cell">
+                    <span className="font-mono text-[13px] font-semibold text-primary tabular-nums">
+                      {vol > 0 ? formatMCUsd(token.volumeEth, solPrice) : <span className="text-muted-foreground/30">—</span>}
+                    </span>
+                  </td>
+                )}
+
+                {/* Age */}
+                <td className="px-4 py-3 text-right hidden xl:table-cell">
+                  <span className="font-mono text-[12px] text-muted-foreground/50">{timeAgo(token.createdAt)}</span>
                 </td>
-                <td className="px-3 py-3 hidden xl:table-cell">
-                  <span className="text-xs text-muted-foreground font-mono">{timeAgo(token.createdAt)}</span>
-                </td>
-                <td className="px-3 py-3 text-right">
+
+                {/* Trade button */}
+                <td className="px-4 py-3 text-right">
                   <Link
                     href={`/app?token=${token.address}`}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-sm bg-primary/10 text-primary text-xs font-bold hover:bg-primary hover:text-black transition-all duration-150"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all duration-150"
+                    style={{
+                      background: "rgba(59,130,246,0.10)",
+                      color: "#60a5fa",
+                      border: "1px solid rgba(59,130,246,0.20)",
+                    }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLElement).style.background = "rgba(59,130,246,0.85)";
+                      (e.currentTarget as HTMLElement).style.color = "#fff";
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLElement).style.background = "rgba(59,130,246,0.10)";
+                      (e.currentTarget as HTMLElement).style.color = "#60a5fa";
+                    }}
                   >
                     Trade <ArrowRight className="w-3 h-3" />
                   </Link>
@@ -338,6 +477,14 @@ const RANK_STYLES: Record<number, { bg: string; text: string; border: string }> 
 };
 
 // ─── Grid card ────────────────────────────────────────────────────────────────
+/** Format a pct change number as "+1.23%" or "-0.45%" */
+function fmtPct(pct: number | null | undefined): string | null {
+  if (pct == null || !isFinite(pct)) return null;
+  const abs = Math.abs(pct);
+  const str = abs >= 100 ? abs.toFixed(0) : abs >= 10 ? abs.toFixed(1) : abs.toFixed(2);
+  return `${pct >= 0 ? "+" : "−"}${str}%`;
+}
+
 function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; rank: number; solPrice: number | null; activeTab: SortTab }) {
   const rankStyle = RANK_STYLES[rank];
   const isTrending = activeTab === "Trending";
@@ -346,6 +493,12 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
   const isHot = isTrending && rank <= 3;
   const fmtTrades = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${n}`;
   const vol = parseFloat(token.volumeEth ?? "0") || 0;
+
+  // pctChange pill — show on Trending and Volume tabs
+  const pctStr  = (isTrending || isVolume) ? fmtPct(token.pctChange24h) : null;
+  const pctUp   = (token.pctChange24h ?? 0) >= 0;
+  const pctColor = pctUp ? "#4ade80" : "#f87171";
+  const pctBg   = pctUp ? "rgba(74,222,128,0.10)" : "rgba(248,113,113,0.10)";
 
   return (
     <Link
@@ -408,24 +561,30 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
 
       <div className="p-3 flex flex-col gap-1.5">
         <span className="font-semibold text-foreground text-[16px] truncate leading-tight group-hover:text-primary transition-colors duration-200">{token.name}</span>
-        <div className="flex justify-between items-center">
-          <span className="text-muted-foreground font-mono text-[14px]">{displaySymbol(token.symbol)}</span>
-          <span className="text-foreground font-mono text-[16px] font-semibold">
-            {formatMCUsd(token.marketCapEth, solPrice)} <span className="text-muted-foreground/60 font-normal text-[14px]">MC</span>
-          </span>
+        <div className="flex justify-between items-center gap-1">
+          <span className="text-muted-foreground font-mono text-[14px] truncate">{displaySymbol(token.symbol)}</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* pct change pill — Trending & Volume tabs */}
+            {pctStr && (
+              <span
+                className="font-mono text-[12px] font-bold px-1.5 py-0.5 rounded-sm"
+                style={{ color: pctColor, background: pctBg, border: `1px solid ${pctColor}30` }}
+              >
+                {pctStr}
+              </span>
+            )}
+            <span className="text-foreground font-mono text-[16px] font-semibold">
+              {formatMCUsd(token.marketCapEth, solPrice)} <span className="text-muted-foreground/60 font-normal text-[14px]">MC</span>
+            </span>
+          </div>
         </div>
         <div className="flex items-center justify-between mt-0.5">
-          {/* Bottom-left: volume for Volume tab, grad date for Graduated tab, age otherwise */}
+          {/* Bottom-left: volume for Volume tab, age otherwise */}
           {isVolume ? (
             <span className="flex items-center gap-1 text-[13px] text-primary font-mono font-semibold">
               <BarChart2 className="w-3 h-3" />
               {vol > 0 ? formatMCUsd(token.volumeEth, solPrice) : "—"}
               <span className="text-muted-foreground/50 font-normal text-[11px]">vol</span>
-            </span>
-          ) : isGraduated ? (
-            <span className="flex items-center gap-1 text-[14px] text-emerald-400 font-mono">
-              <Clock className="w-3 h-3 text-emerald-400" />
-              {timeAgo(token.createdAt)}
             </span>
           ) : (
             <span className="flex items-center gap-1 text-[14px] text-emerald-400 font-mono">
@@ -433,12 +592,24 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
               {timeAgo(token.createdAt)}
             </span>
           )}
-          {isTrending && (token.tradeCount ?? 0) > 0 && (
-            <span className="flex items-center gap-1 text-[12px] font-mono" style={{ color: "#94a3b8" }}>
-              <BarChart2 className="w-3 h-3" />
-              {fmtTrades(token.tradeCount!)}
-            </span>
-          )}
+          {/* Bottom-right on Trending: trades/hr (amber) if hot, else all-time count */}
+          {isTrending && (() => {
+            const t1h = token.trades1h ?? 0;
+            const fallback = token.tradeCount ?? 0;
+            if (t1h > 0) return (
+              <span className="flex items-center gap-1 text-[12px] font-mono" style={{ color: "#f59e0b" }}>
+                <Flame className="w-3 h-3" />
+                {fmtTrades(t1h)}<span className="text-muted-foreground/50 text-[10px]">/hr</span>
+              </span>
+            );
+            if (fallback > 0) return (
+              <span className="flex items-center gap-1 text-[12px] font-mono" style={{ color: "#94a3b8" }}>
+                <BarChart2 className="w-3 h-3" />
+                {fmtTrades(fallback)}
+              </span>
+            );
+            return null;
+          })()}
         </div>
       </div>
     </Link>
@@ -520,7 +691,7 @@ export default function Dashboard() {
 
   // ── Sort / filter state ───────────────────────────────────────────────────
   const [activeTab, setActiveTab]   = useState<SortTab>("Trending");
-  const [viewMode, setViewMode]     = useState<ViewMode>("grid");
+  const [viewMode, setViewMode]     = useState<ViewMode>("table");
   const [search, setSearch]         = useState("");
   const [minMcap, setMinMcap]       = useState("");
   const [onlyGraduated, setOnlyGraduated] = useState(false);
@@ -649,6 +820,8 @@ export default function Dashboard() {
         isLive:       live?.isNew ?? false,
         lastTradeAt:  tradeSnap?.lastTradeAt,
         tradeCount:   t.tradeCount,
+        trades1h:     t.trades1h ?? null,
+        pctChange24h: t.pctChange24h ?? null,
       };
     });
 
@@ -929,8 +1102,10 @@ export default function Dashboard() {
                   {[...Array(10)].map((_, i) => <TokenCardSkeleton key={i} />)}
                 </div>
               ) : (
-                <div className="rounded-sm border border-border/40 bg-card overflow-hidden mt-1">
-                  {[...Array(8)].map((_, i) => <TableRowSkeleton key={i} />)}
+                <div className="overflow-x-auto rounded-xl border border-white/[0.06] mt-1" style={{ background: "rgba(10,12,18,0.85)" }}>
+                  <table className="w-full border-collapse min-w-[640px]">
+                    <tbody>{[...Array(8)].map((_, i) => <TableRowSkeleton key={i} />)}</tbody>
+                  </table>
                 </div>
               )
             ) : !tokens || tokens.length === 0 ? (

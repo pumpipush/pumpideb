@@ -14,7 +14,7 @@ import { registerGraduatedMint } from "../lib/adapters/raydium-amm";
 import { fetchBirdeyeOHLCV, fetchBirdeyeTokenOverview, fetchBirdeyeTokenTrades, getSolPriceUsd } from "../lib/birdeye.js";
 
 // Platforms that use Birdeye for OHLCV + price-history (no internal trade stream in prod yet)
-const DEX_PLATFORMS = new Set(["raydium", "orca", "meteora", "pumpswap", "raydium_launchlab"]);
+const DEX_PLATFORMS = new Set(["pumpswap", "raydium_launchlab"]);
 
 // Time ranges (seconds) to request from Birdeye for each timeframe
 const BIRDEYE_HISTORY_SECS: Record<string, number> = {

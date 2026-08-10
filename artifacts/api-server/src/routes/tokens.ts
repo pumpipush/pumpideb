@@ -126,11 +126,20 @@ router.get("/tokens", async (req, res): Promise<void> => {
     return;
   }
 
-  // ── Trending: pre-aggregated JOIN to avoid correlated subquery per-row ──────
+  // ── Trending: smart score ranking ────────────────────────────────────────────
+  // Score = weighted sum of multiple signals:
+  //   • trades_5m × 20  — very recent activity (HOT signal)
+  //   • trades_1h × 5   — sustained 1-hour momentum
+  //   • buys_1h   × 8   — buy pressure (bullish)
+  //   • sells_1h  × 2   — sell activity (bearish but still shows interest)
+  //   • unique_traders_1h × 3  — organic interest (not just bots)
+  //   • vol_sol_1h (capped)    — SOL volume, capped so whales don't dominate
+  //   • age bonus: +50 if < 1h old, +20 if < 6h old
+  //   • graduation bonus: +10
   if (sort === "trending") {
     const fetchLimit = Number(limit) * 4;
     const params: unknown[] = [];
-    const where: string[] = [`t.symbol != '???'`];
+    const where: string[] = [`t.symbol != '???'`, `t.platform NOT IN ('raydium', 'orca', 'meteora')`];
     if (search) {
       params.push(`%${search}%`);
       where.push(`(t.name ILIKE $${params.length} OR t.symbol ILIKE $${params.length})`);
@@ -141,15 +150,9 @@ router.get("/tokens", async (req, res): Promise<void> => {
     }
     if (platform) {
       if (platform === "raydium_launchlab") {
-        // "Raydium LaunchLab" tab: native tokens + graduated pump.fun that migrated
         where.push(`(t.platform = 'raydium_launchlab' OR (t.platform = 'pump_fun' AND t.graduated = TRUE))`);
       } else if (platform === "pumpswap") {
-        // "PumpSwap" tab: tokens indexed as pumpswap + graduated pump.fun tokens
-        // (pump.fun tokens graduate to PumpSwap when bonding curve fills)
         where.push(`(t.platform = 'pumpswap' OR (t.platform = 'pump_fun' AND t.graduated = TRUE))`);
-      } else if (platform === "raydium") {
-        // "Raydium" tab: tokens indexed via Raydium polling adapter
-        where.push(`(t.platform = 'raydium')`);
       } else {
         params.push(platform);
         where.push(`t.platform = $${params.length}`);
@@ -162,16 +165,45 @@ router.get("/tokens", async (req, res): Promise<void> => {
     const offsetParamIdx = params.length;
     const { rows } = await pool.query<Record<string, unknown>>(`
       SELECT t.*,
-             COALESCE(r.cnt, 0) AS recent_trade_count
+             COALESCE(r1h.trades,         0) AS recent_trade_count,
+             COALESCE(r1h.trades,         0) AS trades_1h,
+             COALESCE(r1h.buy_count,      0) AS buys_1h,
+             COALESCE(r1h.sell_count,     0) AS sells_1h,
+             COALESCE(r1h.unique_traders, 0) AS traders_1h,
+             COALESCE(r1h.vol_sol,        0) AS vol_sol_1h,
+             COALESCE(r5m.trades,         0) AS trades_5m,
+             -- Smart score: multi-signal trending rank
+             (
+               COALESCE(r5m.trades, 0) * 20
+               + COALESCE(r1h.trades, 0) * 5
+               + COALESCE(r1h.buy_count, 0) * 8
+               - COALESCE(r1h.sell_count, 0) * 2
+               + COALESCE(r1h.unique_traders, 0) * 3
+               + LEAST(COALESCE(r1h.vol_sol, 0) / 1e9, 500) * 2
+               + CASE WHEN t.created_at > NOW() - INTERVAL '1 hour'  THEN 50 ELSE 0 END
+               + CASE WHEN t.created_at > NOW() - INTERVAL '6 hours' THEN 20 ELSE 0 END
+               + CASE WHEN t.graduated THEN 10 ELSE 0 END
+             ) AS smart_score
       FROM   tokens t
       LEFT JOIN (
-        SELECT token_address, COUNT(*) AS cnt
+        SELECT token_address,
+               COUNT(*)                                                AS trades,
+               COUNT(CASE WHEN is_buy  THEN 1 END)                    AS buy_count,
+               COUNT(CASE WHEN NOT is_buy THEN 1 END)                 AS sell_count,
+               COUNT(DISTINCT trader_address)                          AS unique_traders,
+               SUM(CAST(NULLIF(eth_amount, '') AS NUMERIC))           AS vol_sol
         FROM   trades
         WHERE  timestamp > NOW() - INTERVAL '1 hour'
         GROUP  BY token_address
-      ) r ON r.token_address = t.address
+      ) r1h ON r1h.token_address = t.address
+      LEFT JOIN (
+        SELECT token_address, COUNT(*) AS trades
+        FROM   trades
+        WHERE  timestamp > NOW() - INTERVAL '5 minutes'
+        GROUP  BY token_address
+      ) r5m ON r5m.token_address = t.address
       ${whereSql}
-      ORDER  BY recent_trade_count DESC, t.trade_count DESC
+      ORDER  BY smart_score DESC, t.trade_count DESC
       LIMIT  $${limitParamIdx}
       OFFSET $${offsetParamIdx}
     `, params);
@@ -210,9 +242,10 @@ router.get("/tokens", async (req, res): Promise<void> => {
       holderCount:          Number(r["holder_count"] ?? 0),
       createdAt:            r["created_at"] as string,
       updatedAt:            r["updated_at"] as string,
+      trades1h:             Number(r["trades_1h"] ?? 0),
     }));
     const pctChanges = await fetch24hPctChanges(mapped.map(r => r.address));
-    const payload = ListTokensResponse.parse(mapped.map(r => formatToken(r, pctChanges.get(r.address))));
+    const payload = ListTokensResponse.parse(mapped.map(r => formatToken(r, pctChanges.get(r.address), Number(r.trades1h ?? 0))));
     _cacheSet(cacheKey, payload);
     res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
     res.setHeader("X-Cache", "MISS");
@@ -223,8 +256,9 @@ router.get("/tokens", async (req, res): Promise<void> => {
   let query = db.select().from(tokensTable).$dynamic();
 
   const conditions = [];
-  // Filter out placeholder tokens that haven't been enriched yet
+  // Filter out placeholder tokens and removed platforms
   conditions.push(sql`${tokensTable.symbol} != '???'`);
+  conditions.push(sql`${tokensTable.platform} NOT IN ('raydium', 'orca', 'meteora')`);
   if (search) {
     conditions.push(
       sql`(${ilike(tokensTable.name, `%${search}%`)} OR ${ilike(tokensTable.symbol, `%${search}%`)})`
@@ -356,19 +390,76 @@ router.get("/tokens/trending", async (req, res): Promise<void> => {
   const parsed = GetTrendingTokensQueryParams.safeParse(req.query);
   const limit = parsed.success ? Number(parsed.data.limit ?? 10) : 10;
 
-  const tokens = await db
-    .select()
-    .from(tokensTable)
-    .where(
-      and(
-        eq(tokensTable.graduated, false),
-        not(eq(tokensTable.symbol, "???"))
-      )
-    )
-    .orderBy(desc(tokensTable.tradeCount))
-    .limit(limit);
+  // Use the same smart score formula as the explore trending tab
+  const { rows } = await pool.query<Record<string, unknown>>(`
+    SELECT t.*,
+           COALESCE(r1h.trades, 0)         AS trades_1h,
+           COALESCE(r5m.trades, 0)         AS trades_5m,
+           (
+             COALESCE(r5m.trades, 0) * 20
+             + COALESCE(r1h.trades, 0) * 5
+             + COALESCE(r1h.buy_count, 0) * 8
+             - COALESCE(r1h.sell_count, 0) * 2
+             + COALESCE(r1h.unique_traders, 0) * 3
+             + LEAST(COALESCE(r1h.vol_sol, 0) / 1e9, 500) * 2
+             + CASE WHEN t.created_at > NOW() - INTERVAL '1 hour'  THEN 50 ELSE 0 END
+             + CASE WHEN t.created_at > NOW() - INTERVAL '6 hours' THEN 20 ELSE 0 END
+           ) AS smart_score
+    FROM   tokens t
+    LEFT JOIN (
+      SELECT token_address,
+             COUNT(*)                                           AS trades,
+             COUNT(CASE WHEN is_buy THEN 1 END)                AS buy_count,
+             COUNT(CASE WHEN NOT is_buy THEN 1 END)            AS sell_count,
+             COUNT(DISTINCT trader_address)                     AS unique_traders,
+             SUM(CAST(NULLIF(eth_amount, '') AS NUMERIC))      AS vol_sol
+      FROM   trades
+      WHERE  timestamp > NOW() - INTERVAL '1 hour'
+      GROUP  BY token_address
+    ) r1h ON r1h.token_address = t.address
+    LEFT JOIN (
+      SELECT token_address, COUNT(*) AS trades
+      FROM   trades
+      WHERE  timestamp > NOW() - INTERVAL '5 minutes'
+      GROUP  BY token_address
+    ) r5m ON r5m.token_address = t.address
+    WHERE  t.graduated = FALSE AND t.symbol != '???'
+    ORDER  BY smart_score DESC, t.trade_count DESC
+    LIMIT  $1
+  `, [limit]);
 
-  res.json(GetTrendingTokensResponse.parse(tokens.map(formatToken)));
+  const tokens = rows.map(r => ({
+    id:                   Number(r["id"]),
+    address:              r["address"] as string,
+    name:                 r["name"] as string,
+    symbol:               r["symbol"] as string,
+    description:          r["description"] as string | null,
+    imageUrl:             r["image_url"] as string | null,
+    creatorAddress:       r["creator_address"] as string,
+    totalSupply:          r["total_supply"] as string,
+    virtualTokenReserves: r["virtual_token_reserves"] as string,
+    virtualEthReserves:   r["virtual_eth_reserves"] as string,
+    realTokenReserves:    r["real_token_reserves"] as string,
+    realEthReserves:      r["real_eth_reserves"] as string,
+    marketCapEth:         r["market_cap_eth"] as string | null,
+    priceEth:             r["price_eth"] as string | null,
+    volumeEth:            r["volume_eth"] as string | null,
+    twitterUrl:           r["twitter_url"] as string | null,
+    telegramUrl:          r["telegram_url"] as string | null,
+    websiteUrl:           r["website_url"] as string | null,
+    platform:             r["platform"] as string,
+    chain:                r["chain"] as string,
+    graduated:            r["graduated"] as boolean,
+    graduatedAt:          r["graduated_at"] as string | null,
+    tradeCount:           Number(r["trade_count"] ?? 0),
+    holderCount:          Number(r["holder_count"] ?? 0),
+    createdAt:            r["created_at"] as string,
+    updatedAt:            r["updated_at"] as string,
+    pctChange24h:         null as null,
+    trades1h:             Number(r["trades_1h"] ?? 0),
+  }));
+
+  res.json(GetTrendingTokensResponse.parse(tokens.map(t => formatToken(t, undefined, t.trades1h))));
 });
 
 // GET /tokens/:address
@@ -433,7 +524,7 @@ router.patch("/tokens/:address", async (req, res): Promise<void> => {
   res.json(UpdateTokenResponse.parse(formatToken(token)));
 });
 
-function formatToken(t: typeof tokensTable.$inferSelect | Record<string, unknown>, pctChange24h?: number) {
+function formatToken(t: typeof tokensTable.$inferSelect | Record<string, unknown>, pctChange24h?: number, trades1h?: number) {
   const row = t as Record<string, unknown>;
   return {
     ...t,
@@ -442,6 +533,8 @@ function formatToken(t: typeof tokensTable.$inferSelect | Record<string, unknown
     // Prefer live-computed pctChange24h (from trade history / Birdeye overview in list route),
     // then fall back to the stored column value (populated by enrich-dex-pct script).
     pctChange24h: pctChange24h ?? (typeof row.pctChange24h === "number" ? row.pctChange24h : null),
+    // trades1h: only populated for trending sort (smart score query); null otherwise.
+    trades1h: trades1h ?? null,
   };
 }
 
