@@ -44,6 +44,16 @@ export interface SolanaProvider {
     transaction: unknown,
     options?: { skipPreflight?: boolean; preflightCommitment?: string; maxRetries?: number }
   ): Promise<{ signature: string }>;
+  /**
+   * Sign a transaction WITHOUT sending it.
+   * Use this when additional local signers (e.g. a mint Keypair) must also sign
+   * before broadcasting — sign with the wallet, then partialSign with local keys,
+   * then send via connection.sendRawTransaction(tx.serialize()).
+   *
+   * Supported by Phantom, Backpack, and Solflare.
+   * Returns the signed transaction (same type as input, but with wallet signature added).
+   */
+  signTransaction?(transaction: unknown): Promise<unknown>;
 }
 
 export type WalletName = "Phantom" | "Backpack" | "Solflare";

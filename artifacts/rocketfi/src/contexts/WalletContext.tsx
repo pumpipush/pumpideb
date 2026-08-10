@@ -18,6 +18,10 @@ import {
   useRef,
   type ReactNode,
 } from "react";
+import type { Transaction, VersionedTransaction } from "@solana/web3.js";
+
+/** Union of legacy and versioned transactions — accepted by all three wallet methods. */
+type AnyTransaction = Transaction | VersionedTransaction;
 import { useCreateProfile } from "@workspace/api-client-react";
 import type { SolanaProvider, WalletName } from "@/lib/solana";
 import { WALLET_DESCRIPTORS } from "@/lib/solana";
@@ -42,13 +46,27 @@ interface WalletContextValue {
   /** Open the Connect Wallet modal from anywhere in the app */
   openWalletModal: () => void;
   /**
-   * Sign a pre-built @solana/web3.js Transaction (with blockhash + feePayer already set)
-   * using the connected wallet extension, then broadcast it via the wallet's RPC node.
+   * Sign a legacy Transaction WITHOUT sending it.
    *
-   * Throws if no wallet is connected or the wallet does not support signAndSendTransaction.
+   * Use when the transaction also needs additional local signers (e.g. a mint
+   * Keypair for token creation): sign with the wallet first, then call
+   * tx.partialSign(...localSigners), then send via
+   * connection.sendRawTransaction(tx.serialize()).
+   *
+   * Throws if no wallet is connected or the wallet does not support signTransaction.
+   * Note: VersionedTransaction uses a different signing model — use signAndSendTransaction
+   * for those (e.g. Jupiter swaps that return VersionedTransaction).
+   */
+  signTransaction: (transaction: Transaction) => Promise<Transaction>;
+  /**
+   * Sign a Transaction or VersionedTransaction and send it via the wallet's RPC
+   * node in one step. The transaction must have blockhash + feePayer set.
+   *
+   * Accepts both legacy Transaction (pump.fun launches) and VersionedTransaction
+   * (Jupiter swaps, v0 messages). Throws if no wallet is connected.
    * Returns the base58 transaction signature on success.
    */
-  signAndSendTransaction: (transaction: unknown) => Promise<string>;
+  signAndSendTransaction: (transaction: AnyTransaction) => Promise<string>;
 }
 
 const WalletContext = createContext<WalletContextValue>({
@@ -58,6 +76,7 @@ const WalletContext = createContext<WalletContextValue>({
   connectWallet: async () => { throw new Error("WalletContext not mounted"); },
   disconnect: async () => {},
   openWalletModal: () => {},
+  signTransaction: async () => { throw new Error("WalletContext not mounted"); },
   signAndSendTransaction: async () => { throw new Error("WalletContext not mounted"); },
 });
 
@@ -199,12 +218,27 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const openWalletModal = useCallback(() => setModalOpen(true), []);
 
   /**
-   * Sign and send a pre-built transaction via the connected wallet.
-   * Delegates to provider.signAndSendTransaction — supported by Phantom,
-   * Backpack, and Solflare. The transaction must already have blockhash +
-   * feePayer set before calling this.
+   * Sign a transaction WITHOUT broadcasting it.
+   * Use this when the tx also needs local signers (e.g. a mint Keypair):
+   *   const signed = await signTransaction(tx);
+   *   signed.partialSign(mintKeypair);
+   *   await connection.sendRawTransaction(signed.serialize());
    */
-  const signAndSendTransaction = useCallback(async (transaction: unknown): Promise<string> => {
+  const signTransaction = useCallback(async (transaction: Transaction): Promise<Transaction> => {
+    const provider = providerRef.current;
+    if (!provider) throw new Error("No wallet connected. Please connect your wallet first.");
+    if (typeof provider.signTransaction !== "function") {
+      throw new Error("Your wallet does not support signTransaction. Please update your wallet extension.");
+    }
+    return provider.signTransaction(transaction) as Promise<Transaction>;
+  }, []);
+
+  /**
+   * Sign and broadcast a transaction in one step via the wallet's RPC node.
+   * Delegates to provider.signAndSendTransaction — supported by Phantom,
+   * Backpack, and Solflare. The transaction must have blockhash + feePayer set.
+   */
+  const signAndSendTransaction = useCallback(async (transaction: AnyTransaction): Promise<string> => {
     const provider = providerRef.current;
     if (!provider) throw new Error("No wallet connected. Please connect your wallet first.");
     if (typeof provider.signAndSendTransaction !== "function") {
@@ -225,6 +259,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       connectWallet,
       disconnect,
       openWalletModal,
+      signTransaction,
       signAndSendTransaction,
     }}>
       {children}
