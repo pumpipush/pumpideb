@@ -5,9 +5,16 @@
  *
  * Strategy:
  *   - Subscribe via logsSubscribe to the pump-amm program
- *   - For each event: fetch the full transaction
- *   - Detect new pool (new mint in postTokenBalances) → fetch metadata from Birdeye
- *   - Detect swap (token + SOL balance changes) → insert trade, update volume
+ *   - Only process Buy/Sell trade events (CreatePool is intentionally skipped —
+ *     extractNewMint returns the LP mint, not the tradeable base token)
+ *   - On first trade for an unknown token: auto-create it using DexScreener metadata
+ *   - Throttle to 1 event per 3 s to stay within free-RPC capacity
+ *
+ * Token discovery:
+ *   Tokens are NOT created at pool creation time. Instead they are auto-inserted
+ *   when their first trade is detected. DexScreener is called once per new token
+ *   to fetch name, symbol, image, and current price. Subsequent price updates
+ *   come from the enrichment loop (every 5 min) via enrichPumpSwapPrices().
  */
 
 import { eq, sql } from "drizzle-orm";
@@ -30,39 +37,28 @@ const SKIP_MINTS = new Set([
 
 class PumpSwapIndexer extends SolanaRpcIndexer {
   /**
-   * Global rate limiter for trade events on free RPC.
-   * PumpSwap generates 100-200 events/second; free RPC can sustain ~4 concurrent
-   * getTransaction calls (~4-8/s). Throttle to 1 trade event per interval so the
-   * RPC queue never fills. New pool creation is always allowed through.
-   *
-   * At 1 trade/500ms = 2 trades/second we get ~120 real on-chain trade samples
-   * per minute — enough to keep prices and charts accurate without paid RPC.
+   * Rate limiter for free RPC. PumpSwap generates 100-200 events/second;
+   * free RPC can sustain ~1-2 getTransaction calls/second reliably.
+   * At 1 event/3 s we capture ~20 real on-chain trades per minute — enough
+   * to keep prices accurate without a paid RPC.
    */
   private _lastTradePassMs = 0;
-  private readonly _tradeIntervalMs = 3000; // max 1 trade event per 3 s — sustainable on free RPC
+  private readonly _tradeIntervalMs = 3000;
 
   constructor() {
     super({ programId: PUMPSWAP_PROGRAM, adapterName: PLATFORM });
   }
 
   /**
-   * Filter by instruction type BEFORE making any getTransaction call.
-   * - New pool creation: always allowed through (rare, critical for token indexing).
-   * - Trades (buy/sell): throttled to _tradeIntervalMs to stay within free RPC limits.
+   * Only process Buy/Sell trade events. CreatePool is intentionally excluded:
+   * - extractNewMint returns the LP token mint, not the tradeable base token
+   * - Tokens are auto-created on first trade instead (correct base mint from parseSwap)
+   * - "Create"/"Initialize" are too generic and flood the RPC queue
    */
   protected override shouldProcess(logs: string[]): boolean {
-    // "Create" and "Initialize" are too generic — they match thousands of unrelated
-    // Solana instructions (token account creation, liquidity provision, etc.) and
-    // flood the queue on free RPC. Only match "CreatePool" for pool creation.
-    const isNewPool = logs.some((l) => /Instruction:\s*CreatePool\b/i.test(l));
-    if (isNewPool) return true;
-
-    // Trade: buy or sell only
     const isTrade = logs.some((l) => /Instruction:\s*(Buy|Sell)\b/i.test(l));
     if (!isTrade) return false;
 
-    // Throttle trades to at most 1 per interval — keeps getTransaction load
-    // within free-RPC capacity (~1-2 req/s sustained).
     const now = Date.now();
     if (now - this._lastTradePassMs < this._tradeIntervalMs) return false;
     this._lastTradePassMs = now;
@@ -73,70 +69,13 @@ class PumpSwapIndexer extends SolanaRpcIndexer {
     const tx = await this.getTransaction(event.signature);
     if (!tx || tx.meta?.err) return;
 
-    // ── New pool detection ────────────────────────────────────────────────────
-    const newMint = this.extractNewMint(tx);
-    if (newMint && !SKIP_MINTS.has(newMint)) {
-      await this.handleNewPool(newMint, event.signature);
-      return;
-    }
-
-    // ── Swap detection ────────────────────────────────────────────────────────
     const swap = this.parseSwap(tx);
     if (!swap || SKIP_MINTS.has(swap.mint)) return;
 
-    await this.handleTrade(swap.mint, swap.isBuy, swap.solLamports, swap.tokenAmount,
-      swap.traderAddress, event.signature);
-  }
-
-  private async handleNewPool(mint: string, _sig: string): Promise<void> {
-    // Check if already indexed
-    const existing = await db
-      .select({ id: tokensTable.id })
-      .from(tokensTable)
-      .where(eq(tokensTable.address, mint))
-      .limit(1);
-    if (existing.length > 0) return;
-
-    this.log.info({ mint }, "pumpswap: new pool detected — fetching metadata from DexScreener");
-
-    // Use DexScreener (free, no API key) instead of Birdeye for new pool metadata.
-    // DexScreener indexes PumpSwap pools within seconds of creation.
-    const pair = await fetchDexScreenerPumpSwapPair(mint);
-
-    const name     = pair?.baseToken.name    ?? mint.slice(0, 8);
-    const symbol   = pair?.baseToken.symbol  ?? "???";
-    const imageUrl = pair?.info?.imageUrl    ?? null;
-
-    const priceFields = pair ? pairToDbFields(pair) : {};
-
-    await db.insert(tokensTable).values({
-      address:        mint,
-      name,
-      symbol,
-      imageUrl,
-      creatorAddress: "unknown",
-      platform:       PLATFORM,
-      chain:          CHAIN,
-      graduated:      true,
-      ...priceFields,
-    }).onConflictDoNothing();
-
-    this.log.info({ mint, name, symbol }, "pumpswap: new token indexed");
-
-    emitNewToken({
-      type: "newToken",
-      token: {
-        address:      mint,
-        name,
-        symbol,
-        imageUrl,
-        priceEth:     priceFields.priceEth ?? null,
-        marketCapEth: priceFields.marketCapEth ?? null,
-        platform:     PLATFORM,
-        chain:        CHAIN,
-        createdAt:    new Date().toISOString(),
-      },
-    });
+    await this.handleTrade(
+      swap.mint, swap.isBuy, swap.solLamports,
+      swap.tokenAmount, swap.traderAddress, event.signature,
+    );
   }
 
   private async handleTrade(
@@ -147,6 +86,55 @@ class PumpSwapIndexer extends SolanaRpcIndexer {
       ? (Number(solLamports) / Number(tokenAmount) / 1000).toFixed(15)
       : null;
 
+    // ── Auto-create token on first encounter ─────────────────────────────────
+    // If this mint is unknown, fetch DexScreener once to get name/symbol/image/price.
+    // This is safer than CreatePool detection (which returns the LP mint, not base token).
+    const existing = await db
+      .select({ id: tokensTable.id })
+      .from(tokensTable)
+      .where(eq(tokensTable.address, mint))
+      .limit(1);
+
+    if (existing.length === 0) {
+      this.log.info({ mint }, "pumpswap: new token via first trade — fetching DexScreener metadata");
+
+      const pair     = await fetchDexScreenerPumpSwapPair(mint);
+      const name     = pair?.baseToken.name   ?? mint.slice(0, 8);
+      const symbol   = pair?.baseToken.symbol ?? "???";
+      const imageUrl = pair?.info?.imageUrl   ?? null;
+      const fields   = pair ? pairToDbFields(pair) : {};
+
+      await db.insert(tokensTable).values({
+        address:        mint,
+        name,
+        symbol,
+        imageUrl,
+        creatorAddress: traderAddress,
+        platform:       PLATFORM,
+        chain:          CHAIN,
+        graduated:      true,
+        ...fields,
+        // Use on-chain price from this trade if DexScreener has nothing yet
+        ...(priceEth && !fields.priceEth ? { priceEth } : {}),
+      }).onConflictDoNothing();
+
+      emitNewToken({
+        type: "newToken",
+        token: {
+          address:      mint,
+          name,
+          symbol,
+          imageUrl,
+          priceEth:     fields.priceEth ?? priceEth,
+          marketCapEth: fields.marketCapEth ?? null,
+          platform:     PLATFORM,
+          chain:        CHAIN,
+          createdAt:    new Date().toISOString(),
+        },
+      });
+    }
+
+    // ── Insert trade ──────────────────────────────────────────────────────────
     const [trade] = await db.insert(tradesTable).values({
       tokenAddress:  mint,
       traderAddress,

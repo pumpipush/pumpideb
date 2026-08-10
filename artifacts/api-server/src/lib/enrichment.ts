@@ -390,19 +390,22 @@ const GRADUATION_DETECT_BATCH        = 20;          // mints per DexScreener cal
 const GRADUATION_DEX_IDS = new Set(["pumpswap", "raydium", "raydium-clmm", "raydium-cp"]);
 
 async function detectGraduations(): Promise<void> {
-  // Find pump.fun tokens with significant trade activity still marked ungraduated.
+  // Find pump.fun tokens that may have graduated to a DEX:
+  //   a) graduated=false, tradeCount>50 — missed the migration event
+  //   b) graduated=true  — already marked graduated but platform still 'pump_fun'
+  //      (happened before graduation handler was updated to set platform='pumpswap')
   const candidates = await db
     .select({ address: tokensTable.address })
     .from(tokensTable)
     .where(
       and(
         eq(tokensTable.platform, "pump_fun"),
-        eq(tokensTable.graduated, false),
-        sql`${tokensTable.tradeCount}::int > 50`,
+        sql`(${tokensTable.graduated} = false AND ${tokensTable.tradeCount}::int > 50
+          OR ${tokensTable.graduated} = true)`,
       ),
     )
     .orderBy(desc(tokensTable.tradeCount))
-    .limit(60);
+    .limit(120);
 
   if (candidates.length === 0) return;
 
@@ -437,7 +440,7 @@ async function detectGraduations(): Promise<void> {
             platform:    destPlatform,
             ...priceFields,
           })
-          .where(and(eq(tokensTable.address, mint), eq(tokensTable.graduated, false)));
+          .where(eq(tokensTable.address, mint));
 
         newly.push(mint);
       }
