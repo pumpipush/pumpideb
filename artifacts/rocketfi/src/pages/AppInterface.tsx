@@ -213,7 +213,13 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const [desc,         setDesc]         = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile,    setImageFile]    = useState<File | null>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef  = useRef<HTMLInputElement>(null);
+  // Tracks the post-launch redirect timer so it can be cancelled on unmount.
+  const launchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (launchTimerRef.current) clearTimeout(launchTimerRef.current);
+  }, []);
 
   // Platform selector
   const [platform, setPlatform] = useState<LaunchPlatform>("pumpfun");
@@ -315,7 +321,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
       setLaunchStep("done");
       setMintAddress(newMint);
-      setTimeout(() => onLaunch(newMint), 3000);
+      launchTimerRef.current = setTimeout(() => onLaunch(newMint), 3000);
 
     } catch (err: unknown) {
       setLaunchStep("error");
@@ -393,7 +399,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
       setLaunchStep("done");
       setMintAddress(newMint);
-      setTimeout(() => onLaunch(newMint), 3000);
+      launchTimerRef.current = setTimeout(() => onLaunch(newMint), 3000);
 
     } catch (err: unknown) {
       setLaunchStep("error");
@@ -1089,7 +1095,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       setJupiterQuoteError(null);
       try {
         const numAmount = parseFloat(amount);
-        if (isNaN(numAmount) || numAmount <= 0) return;
+        // isFinite guard: parseFloat("Infinity") passes isNaN but BigInt(Infinity) throws RangeError
+        if (!isFinite(numAmount) || isNaN(numAmount) || numAmount <= 0) return;
 
         const amountBaseUnits = tradeMode === "buy"
           ? BigInt(Math.round(numAmount * 1e9))   // SOL → lamports
@@ -1562,7 +1569,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     // Core trade logic — builds, signs, and sends a real pump.fun bonding curve tx.
     const doTrade = async (): Promise<string> => {
       const numAmount = parseFloat(amount);
-      if (isNaN(numAmount) || numAmount <= 0) throw new Error("Invalid amount");
+      // isFinite guard: BigInt(Math.round(Infinity * 1e9)) throws RangeError
+      if (!isFinite(numAmount) || isNaN(numAmount) || numAmount <= 0) throw new Error("Invalid amount");
 
       // ── Platform guard ────────────────────────────────────────────────────────
       // Real on-chain swaps are only available for pump.fun bonding curve tokens.
@@ -3128,6 +3136,8 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
       setJupiterQuoteLoading(true); setJupiterQuoteError(null);
       try {
         const numAmount    = parseFloat(amount);
+        // isFinite guard: BigInt(Math.round(Infinity * 1e9)) throws RangeError
+        if (!isFinite(numAmount) || numAmount <= 0) return;
         const amtBaseUnits = tradeMode === "buy"
           ? BigInt(Math.round(numAmount * 1e9))
           : BigInt(Math.round(numAmount * Math.pow(10, token.decimals)));
@@ -3155,6 +3165,8 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
 
     const doTrade = async (): Promise<string> => {
       const numAmount    = parseFloat(amount);
+      // isFinite guard: BigInt(Math.round(Infinity * 1e9)) throws RangeError
+      if (!isFinite(numAmount) || numAmount <= 0) throw new Error("Invalid amount");
       const { slippageBps } = getSwapSettings();
       const amtBaseUnits = tradeMode === "buy"
         ? BigInt(Math.round(numAmount * 1e9))

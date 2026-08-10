@@ -11,7 +11,7 @@ import {
 import { emitTrade, emitSnapshot, tradeEmitter, type TradeEvent, type SnapshotEvent } from "../lib/tradeEmitter";
 import type { NewTokenEvent } from "../lib/tradeEmitter"; // imported for type completeness
 import { registerGraduatedMint } from "../lib/adapters/raydium-amm";
-import { fetchBirdeyeOHLCV, fetchBirdeyeTokenTrades, getSolPriceUsd } from "../lib/birdeye.js";
+import { fetchBirdeyeOHLCV, fetchBirdeyeTokenTrades, fetchBirdeyeTokenOverview, getSolPriceUsd, type BirdeyeOHLCVBar } from "../lib/birdeye.js";
 import { fetchDexScreenerTokens, bestSolanaPair, pairToSolPrice, pairToPriceHistory } from "../lib/dexscreener.js";
 
 // Platforms that use Birdeye for OHLCV + price-history (no internal trade stream in prod yet)
@@ -229,7 +229,7 @@ router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
 
       if (birdeyeBars && birdeyeBars.length > 0) {
         const solPrice = await getSolPriceUsd();
-        bars = birdeyeBars.map(b => ({
+        bars = birdeyeBars.map((b: BirdeyeOHLCVBar) => ({
           time:   b.time,
           open:   solPrice > 0 ? b.open  / solPrice : b.open,
           high:   solPrice > 0 ? b.high  / solPrice : b.high,
@@ -267,8 +267,8 @@ router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
           // always reflects the current Birdeye price, not the stale backfill value.
           db.update(tokensTable)
             .set({
-              priceEth:     String(currentSol),
-              priceUsd:     String(overview.price),
+              priceEth:     currentSol.toFixed(15),
+              priceUsd:     overview.price,            // doublePrecision column — store as number
               marketCapEth: overview.mc ? String(Math.round(overview.mc / solPrice * 1e9)) : undefined,
             })
             .where(eq(tokensTable.address, address))

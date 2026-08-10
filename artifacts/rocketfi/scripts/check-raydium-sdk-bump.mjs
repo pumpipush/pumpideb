@@ -31,7 +31,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 
 // ── Read current SDK version from package.json ────────────────────────────────
-const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
+const pkgPath = resolve(root, "package.json");
+let pkg;
+try {
+  pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+} catch (err) {
+  console.error(`❌  Failed to read/parse ${pkgPath}:`, err.message);
+  console.error("    Ensure package.json is valid JSON and readable, then re-run.");
+  process.exit(1);
+}
 const currentVersion =
   pkg.dependencies?.["@raydium-io/raydium-sdk-v2"] ??
   pkg.devDependencies?.["@raydium-io/raydium-sdk-v2"];

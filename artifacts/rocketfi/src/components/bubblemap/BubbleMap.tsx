@@ -546,8 +546,11 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
         if (t.pctChange24h != null && t.pctChange24h !== 0) {
           // Back-calculate the 24h open price from the known pct change:
           //   currentPrice = openPrice * (1 + pctChange24h/100)
-          const openPrice = currentPrice / (1 + t.pctChange24h / 100);
-          if (openPrice > 0) initPricesRef.current.set(t.address, openPrice);
+          // Guard: pctChange24h = -100 makes denominator = 0 → openPrice = Infinity.
+          // isFinite check prevents Infinity from being stored as a reference price.
+          const denom    = 1 + t.pctChange24h / 100;
+          const openPrice = Math.abs(denom) > 1e-9 ? currentPrice / denom : currentPrice;
+          if (isFinite(openPrice) && openPrice > 0) initPricesRef.current.set(t.address, openPrice);
           else initPricesRef.current.set(t.address, currentPrice);
         } else {
           initPricesRef.current.set(t.address, currentPrice);

@@ -138,22 +138,28 @@ export function pairToDbFields(pair: DexScreenerPair) {
   const mcapUsd     = pair.marketCap ?? null;
   const volUsd24h   = pair.volume?.h24 ?? null;
 
-  const priceEth    = priceNative > 0 ? priceNative.toFixed(15) : null;
-  const priceUsdStr = priceUsd    != null ? String(priceUsd)    : null;
-  const mcapUsdStr  = mcapUsd     != null ? String(mcapUsd)     : null;
+  const priceEth = priceNative > 0 ? priceNative.toFixed(15) : undefined;
 
   // lamports = USD ÷ SOL_PRICE × 1e9
-  const mcapEth     = mcapUsd  && solPrice > 0 ? Math.round(mcapUsd  / solPrice * 1e9).toString() : null;
-  const volumeEth   = volUsd24h && solPrice > 0 ? Math.round(volUsd24h / solPrice * 1e9).toString() : null;
+  const mcapEth = mcapUsd && solPrice > 0
+    ? Math.round(mcapUsd  / solPrice * 1e9).toString()
+    : undefined;
+  // volumeEth: text NOT NULL column — omit (undefined) rather than set null when unavailable
+  const volumeEth = volUsd24h && solPrice > 0
+    ? Math.round(volUsd24h / solPrice * 1e9).toString()
+    : undefined;
 
-  const liquidityUsd = pair.liquidity?.usd ?? null;
-  const pctChange24h = pair.priceChange?.h24 ?? null;
+  const liquidityUsd = pair.liquidity?.usd ?? undefined;
+  const pctChange24h = pair.priceChange?.h24 ?? undefined;
+  // priceUsd / marketCapUsd are doublePrecision columns — store as number, not string
+  const priceUsdNum  = priceUsd  != null ? priceUsd  : undefined;
+  const mcapUsdNum   = mcapUsd   != null ? mcapUsd   : undefined;
 
   return {
     priceEth,
-    priceUsd:     priceUsdStr,
+    priceUsd:     priceUsdNum,
     marketCapEth: mcapEth,
-    marketCapUsd: mcapUsdStr,
+    marketCapUsd: mcapUsdNum,
     liquidityUsd,
     pctChange24h,
     volumeEth,

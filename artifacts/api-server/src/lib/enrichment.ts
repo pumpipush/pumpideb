@@ -358,7 +358,11 @@ async function backfillBondingCurves(): Promise<void> {
         .from(tradesTable)
         .where(eq(tradesTable.tokenAddress, token.address));
 
-      const netLam = BigInt(Math.round(Number(agg?.netLamports ?? "0")));
+      // Parse SQL NUMERIC result as BigInt directly — avoids Number() precision loss
+      // for large lamport sums (>2^53 ≈ 9 PETAlamports = ~9 billion SOL, safe margin
+      // but worth being precise). SQL SUM returns integer arithmetic on whole numbers.
+      const netLamStr = (agg?.netLamports ?? "0").split(".")[0] || "0";
+      const netLam = BigInt(netLamStr);
       const newVSolLam = PUMP_INIT_VSOL_LAM + netLam;
       if (newVSolLam <= 0n) continue;
 
@@ -428,7 +432,14 @@ async function detectGraduations(): Promise<void> {
       for (const [mint, mintPairs] of pairsByMint) {
         // Determine destination platform — prefer pumpswap over generic raydium
         const isPumpSwap = mintPairs.some(p => p.dexId === "pumpswap");
-        const destPlatform = isPumpSwap ? "pumpswap" : "pump_fun";
+        // Raydium LaunchLab graduates go to Raydium pools — map to our adapter name.
+        // Without this, any non-PumpSwap graduation was incorrectly tagged "pump_fun".
+        const isRaydium  = mintPairs.some(p =>
+          p.dexId === "raydium" || p.dexId === "raydium-clmm" || p.dexId === "raydium-cp"
+        );
+        const destPlatform = isPumpSwap ? "pumpswap"
+          : isRaydium ? "raydium_launchlab"
+          : "pump_fun";
         const bestPair = bestSolanaPair(mintPairs);
         const priceFields = bestPair ? pairToDbFields(bestPair) : {};
 

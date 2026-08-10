@@ -84,6 +84,7 @@ export async function fetchBirdeyeTokenMeta(address: string): Promise<BirdeyeTok
     decimals:              number;
     price?:                number;
     mc?:                   number;
+    marketCap?:            number;  // Birdeye sometimes uses "marketCap" instead of "mc"
     v24hUSD?:              number;
     liquidity?:            number;
     priceChange24hPercent?: number;

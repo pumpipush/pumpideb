@@ -102,7 +102,7 @@ class PumpSwapIndexer extends SolanaRpcIndexer {
       const name     = pair?.baseToken.name   ?? mint.slice(0, 8);
       const symbol   = pair?.baseToken.symbol ?? "???";
       const imageUrl = pair?.info?.imageUrl   ?? null;
-      const fields   = pair ? pairToDbFields(pair) : {};
+      const fields   = pair ? pairToDbFields(pair) : null;
 
       await db.insert(tokensTable).values({
         address:        mint,
@@ -113,9 +113,9 @@ class PumpSwapIndexer extends SolanaRpcIndexer {
         platform:       PLATFORM,
         chain:          CHAIN,
         graduated:      true,
-        ...fields,
+        ...(fields ?? {}),
         // Use on-chain price from this trade if DexScreener has nothing yet
-        ...(priceEth && !fields.priceEth ? { priceEth } : {}),
+        ...(priceEth && !fields?.priceEth ? { priceEth } : {}),
       }).onConflictDoNothing();
 
       emitNewToken({
@@ -125,8 +125,8 @@ class PumpSwapIndexer extends SolanaRpcIndexer {
           name,
           symbol,
           imageUrl,
-          priceEth:     fields.priceEth ?? priceEth,
-          marketCapEth: fields.marketCapEth ?? null,
+          priceEth:     fields?.priceEth ?? priceEth,
+          marketCapEth: fields?.marketCapEth ?? null,
           platform:     PLATFORM,
           chain:        CHAIN,
           createdAt:    new Date().toISOString(),
