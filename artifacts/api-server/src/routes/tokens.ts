@@ -150,9 +150,12 @@ router.get("/tokens", async (req, res): Promise<void> => {
     }
     if (platform) {
       if (platform === "raydium_launchlab") {
-        where.push(`(t.platform = 'raydium_launchlab' OR (t.platform = 'pump_fun' AND t.graduated = TRUE))`);
+        where.push(`t.platform = 'raydium_launchlab'`);
       } else if (platform === "pumpswap") {
-        where.push(`(t.platform = 'pumpswap' OR (t.platform = 'pump_fun' AND t.graduated = TRUE))`);
+        // Only show tokens natively indexed on PumpSwap.
+        // Graduated pump.fun tokens are re-platformed to 'pumpswap' at migration time
+        // (in the pumpfun adapter handleGraduation), so they appear here automatically.
+        where.push(`t.platform = 'pumpswap'`);
       } else {
         params.push(platform);
         where.push(`t.platform = $${params.length}`);
@@ -273,10 +276,9 @@ router.get("/tokens", async (req, res): Promise<void> => {
         sql`(${tokensTable.platform} = 'raydium_launchlab' OR (${tokensTable.platform} = 'pump_fun' AND ${tokensTable.graduated} = TRUE))`
       );
     } else if (platform === "pumpswap") {
-      // PumpSwap tab: pumpswap-indexed tokens + graduated pump.fun tokens
-      conditions.push(
-        sql`(${tokensTable.platform} = 'pumpswap' OR (${tokensTable.platform} = 'pump_fun' AND ${tokensTable.graduated} = TRUE))`
-      );
+      // Only natively-indexed PumpSwap tokens. Graduated pump.fun tokens are
+      // re-platformed to 'pumpswap' at migration time in the pumpfun adapter.
+      conditions.push(eq(tokensTable.platform, "pumpswap"));
     } else {
       conditions.push(eq(tokensTable.platform, platform));
     }

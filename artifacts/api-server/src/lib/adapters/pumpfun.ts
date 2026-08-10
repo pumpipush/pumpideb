@@ -28,7 +28,8 @@ import {
   type LogEvent,
   type RpcTx,
 } from "./solanaRpcBase";
-import { registerGraduatedMint } from "./raydium-amm";
+/** PumpSwap (pump-amm) program — graduation destination for pump.fun tokens since ~Mar 2025. */
+const PUMPSWAP_PROGRAM = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
 
 const PUMP_PROGRAM = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
 const PLATFORM     = "pump_fun";
@@ -580,14 +581,15 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
   // ── Graduation (Migrate) ───────────────────────────────────────────────────
 
   /**
-   * Handle a pump.fun Migrate instruction — the event that fires when the bonding
-   * curve fills and the token's liquidity is moved to a Raydium AMM v4 pool.
+   * Handle a pump.fun Migrate instruction — fires when the bonding curve fills
+   * and liquidity moves to a DEX pool (PumpSwap since ~Mar 2025, Raydium AMM before).
    *
    * This method:
    *   1. Extracts the token mint from the transaction.
-   *   2. Sets `graduated = true` in the DB so the chart can show the boundary.
-   *   3. Calls registerGraduatedMint() so the Raydium adapter immediately starts
-   *      indexing swaps for this mint without waiting for the next DB refresh.
+   *   2. Detects the destination DEX by checking whether the PumpSwap program
+   *      appears in the transaction's account keys.
+   *   3. Sets `graduated = true` and updates `platform` to 'pumpswap' when
+   *      appropriate so the token immediately appears in the PumpSwap tab.
    */
   private async handleGraduation(event: LogEvent): Promise<void> {
     const { signature } = event;
@@ -610,11 +612,18 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
       ? new Date(tx.blockTime * 1000)
       : new Date();
 
-    // Extract fee payer from the migration tx — used as a creatorAddress fallback
-    // when the token was never indexed (creation event missed during a reconnect gap).
+    // Extract fee payer and all account keys from the migration tx.
     const migKeys = tx.transaction?.message?.accountKeys ?? [];
     const migK0   = migKeys[0];
     const migFeePayer = migK0 ? (typeof migK0 === "string" ? migK0 : (migK0 as { pubkey?: string }).pubkey ?? "") : "";
+
+    // Detect graduation destination: if PumpSwap program appears in the tx's
+    // account keys, the token migrated to PumpSwap. Otherwise it went to old
+    // Raydium AMM (pre-Mar 2025 path, no longer indexed).
+    const allKeyStrings = migKeys.map(k =>
+      typeof k === "string" ? k : (k as { pubkey?: string }).pubkey ?? ""
+    );
+    const destPlatform = allKeyStrings.includes(PUMPSWAP_PROGRAM) ? "pumpswap" : PLATFORM;
 
     // Guard: WSOL and system programs can appear as the "mint" in malformed
     // migration transactions and must never be treated as a graduated token.
@@ -629,9 +638,8 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
     }
 
     // Upsert: create a minimal stub if this token was never indexed, then mark as
-    // graduated. This handles tokens that launched and graduated while the WebSocket
-    // had a reconnect gap — without this they'd be invisible to the PumpSwap indexer
-    // and their post-graduation trades would never update the token stats.
+    // graduated and update platform. This handles tokens that launched and graduated
+    // during a reconnect gap — without this they'd be invisible to the PumpSwap indexer.
     // The enrichment job fills in name, symbol, and image from on-chain metadata.
     await db
       .insert(tokensTable)
@@ -647,7 +655,7 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
         virtualEthReserves:   "0",
         marketCapEth:         "0",
         priceEth:             null,
-        platform:             PLATFORM,
+        platform:             destPlatform,
         chain:                CHAIN,
         graduated:            true,
         graduatedAt,
@@ -655,18 +663,15 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
       .onConflictDoUpdate({
         target: tokensTable.address,
         set: {
-          // Only update graduation fields — never overwrite real data written during
-          // the bonding-curve phase (name, symbol, price, etc. stay intact).
+          // Update graduation fields + platform so the token moves to the right tab.
+          // Never overwrite name, symbol, price, or other bonding-curve-phase data.
           graduated:   true,
           graduatedAt: sql`COALESCE(${tokensTable.graduatedAt}, EXCLUDED.graduated_at)`,
+          platform:    sql`EXCLUDED.platform`,
         },
       });
 
-    // Immediately register with the Raydium adapter — no need to wait for its
-    // next periodic DB refresh.
-    registerGraduatedMint(mint);
-
-    this.log.info({ mint, signature }, "pump_fun: token graduated — handed off to raydium_amm adapter");
+    this.log.info({ mint, signature, destPlatform }, "pump_fun: token graduated");
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
