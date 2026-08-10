@@ -135,6 +135,10 @@ const OHLCV_BUCKET_SECONDS: Record<string, number> = {
 // Returns server-side OHLCV candles aggregated from the full trade history
 // (no 100-row limit). Uses a window-function query so every historical trade
 // contributes regardless of the REST trade-history limit.
+//
+// DEX tokens (pumpswap, raydium_launchlab) always proxy to Birdeye — our
+// indexer intentionally captures only a sample of trades (30s throttle on
+// PumpSwap) so the internal DB does not represent full price history.
 router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
   const address = req.params.address as string;
   if (!address) { res.status(400).json({ error: "address required" }); return; }
@@ -144,6 +148,76 @@ router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
   if (!bucketSecs) {
     res.status(400).json({ error: `Unknown timeframe '${tf}'. Valid: ${Object.keys(OHLCV_BUCKET_SECONDS).join(", ")}` });
     return;
+  }
+
+  // ── Early DEX path: skip internal aggregation, go straight to Birdeye ───────
+  // Our indexer samples PumpSwap/Raydium at low frequency; internal DB has at
+  // most a handful of trades and would produce a misleading chart.
+  {
+    const [tokenRow] = await db
+      .select({ platform: tokensTable.platform })
+      .from(tokensTable)
+      .where(eq(tokensTable.address, address))
+      .limit(1);
+
+    if (tokenRow && DEX_PLATFORMS.has(tokenRow.platform)) {
+      const now      = Math.floor(Date.now() / 1000);
+      const timeFrom = now - (BIRDEYE_HISTORY_SECS[tf] ?? 86400);
+
+      const [birdeyeBars, overview] = await Promise.all([
+        fetchBirdeyeOHLCV(address, tf, timeFrom, now),
+        fetchBirdeyeTokenOverview(address),
+      ]);
+
+      let bars: { time: number; open: number; high: number; low: number; close: number; volume: number }[] = [];
+
+      if (birdeyeBars && birdeyeBars.length > 0) {
+        const solPrice = await getSolPriceUsd();
+        bars = birdeyeBars.map((b: BirdeyeOHLCVBar) => ({
+          time:   b.time,
+          open:   solPrice > 0 ? b.open  / solPrice : b.open,
+          high:   solPrice > 0 ? b.high  / solPrice : b.high,
+          low:    solPrice > 0 ? b.low   / solPrice : b.low,
+          close:  solPrice > 0 ? b.close / solPrice : b.close,
+          volume: b.volume,
+        }));
+
+        if (overview && overview.price > 0 && solPrice > 0) {
+          const currentSol    = overview.price / solPrice;
+          const candleSecs    = BIRDEYE_TF_SECS[tf] ?? 60;
+          const currentBucket = Math.floor(now / candleSecs) * candleSecs;
+          const lastBar       = bars[bars.length - 1];
+
+          if (lastBar && lastBar.time === currentBucket) {
+            lastBar.high  = Math.max(lastBar.high,  currentSol);
+            lastBar.low   = Math.min(lastBar.low,   currentSol);
+            lastBar.close = currentSol;
+          } else if (!lastBar || currentBucket > lastBar.time) {
+            bars.push({
+              time:   currentBucket,
+              open:   lastBar?.close ?? currentSol,
+              high:   currentSol,
+              low:    currentSol,
+              close:  currentSol,
+              volume: 0,
+            });
+          }
+
+          // Keep DB price fresh without blocking the response
+          db.update(tokensTable)
+            .set({
+              priceEth:     currentSol.toFixed(15),
+              priceUsd:     overview.price,
+              marketCapEth: overview.mc ? String(Math.round(overview.mc / solPrice * 1e9)) : undefined,
+            })
+            .where(eq(tokensTable.address, address))
+            .catch(() => { /* non-fatal */ });
+        }
+      }
+
+      res.json({ bars, maxTradeId: 0 });
+      return;
+    }
   }
 
   // Window-function query: one pass over all trades for this token.
@@ -649,13 +723,16 @@ router.get("/tokens/:address/trades", async (req, res): Promise<void> => {
     .orderBy(desc(tradesTable.timestamp))
     .limit(100);
 
-  // Internal trades exist — return them directly
-  if (trades.length > 0) {
+  // Internal trades exist — return them directly for pump.fun tokens.
+  // For DEX tokens we always prefer Birdeye: our indexer samples PumpSwap
+  // at 30-second intervals so DB may have only a handful of trades even for
+  // very active tokens, producing a misleadingly sparse trade history.
+  if (trades.length > 0 && !isDex) {
     res.json(TradeHistoryResponse.parse(trades));
     return;
   }
 
-  // No internal trades → proxy from Birdeye for DEX tokens
+  // DEX tokens → always proxy from Birdeye (fall back to sparse DB if Birdeye fails)
   if (isDex) {
     const [birdeyeTrades, solPrice] = await Promise.all([
       fetchBirdeyeTokenTrades(address, 50),

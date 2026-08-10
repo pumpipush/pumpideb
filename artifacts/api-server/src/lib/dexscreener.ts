@@ -163,6 +163,9 @@ export function pairToDbFields(pair: DexScreenerPair) {
     liquidityUsd,
     pctChange24h,
     volumeEth,
+    // Pool address: stored so Birdeye OHLCV/trades proxies can route correctly
+    // and the token-detail page links to the right pair on external explorers.
+    poolAddress: pair.pairAddress ?? undefined,
   };
 }
 
