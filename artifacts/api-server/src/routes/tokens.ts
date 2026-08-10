@@ -272,9 +272,8 @@ router.get("/tokens", async (req, res): Promise<void> => {
   }
   if (platform) {
     if (platform === "raydium_launchlab") {
-      conditions.push(
-        sql`(${tokensTable.platform} = 'raydium_launchlab' OR (${tokensTable.platform} = 'pump_fun' AND ${tokensTable.graduated} = TRUE))`
-      );
+      // Only natively-indexed LaunchLab tokens — same logic as pumpswap.
+      conditions.push(eq(tokensTable.platform, "raydium_launchlab"));
     } else if (platform === "pumpswap") {
       // Only natively-indexed PumpSwap tokens. Graduated pump.fun tokens are
       // re-platformed to 'pumpswap' at migration time in the pumpfun adapter.
