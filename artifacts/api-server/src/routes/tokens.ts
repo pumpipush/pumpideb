@@ -140,7 +140,12 @@ router.get("/tokens", async (req, res): Promise<void> => {
   if (sort === "trending") {
     const fetchLimit = Number(limit) * 4;
     const params: unknown[] = [];
-    const where: string[] = [`t.symbol != '???'`, `t.platform NOT IN ('raydium', 'orca', 'meteora')`];
+    // When filtering specifically by raydium_launchlab, allow ??? tokens so
+    // newly-indexed tokens appear in the tab before enrichment resolves the symbol.
+    const where: string[] = [`t.platform NOT IN ('raydium', 'orca', 'meteora')`];
+    if (platform !== "raydium_launchlab") {
+      where.push(`t.symbol != '???'`);
+    }
     if (search) {
       params.push(`%${search}%`);
       where.push(`(t.name ILIKE $${params.length} OR t.symbol ILIKE $${params.length})`);
@@ -213,7 +218,10 @@ router.get("/tokens", async (req, res): Promise<void> => {
     `, params);
     const seen = new Set<string>();
     const tokens = rows.filter(t => {
-      const key = String(t["symbol"] ?? "").toLowerCase();
+      const sym = String(t["symbol"] ?? "");
+      // Placeholder tokens each have a unique address — deduplicate by address
+      // so multiple ??? tokens are not collapsed into one.
+      const key = sym === "???" ? String(t["address"]) : sym.toLowerCase();
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -260,8 +268,12 @@ router.get("/tokens", async (req, res): Promise<void> => {
   let query = db.select().from(tokensTable).$dynamic();
 
   const conditions = [];
-  // Filter out placeholder tokens and removed platforms
-  conditions.push(sql`${tokensTable.symbol} != '???'`);
+  // Filter out placeholder tokens and removed platforms.
+  // Exception: when the caller explicitly requests raydium_launchlab, allow ???
+  // tokens so freshly-indexed tokens are visible before enrichment resolves the symbol.
+  if (platform !== "raydium_launchlab") {
+    conditions.push(sql`${tokensTable.symbol} != '???'`);
+  }
   conditions.push(sql`${tokensTable.platform} NOT IN ('raydium', 'orca', 'meteora')`);
   if (search) {
     conditions.push(
@@ -303,7 +315,9 @@ router.get("/tokens", async (req, res): Promise<void> => {
   const raw = await query.limit(Number(limit) * 4).offset(Number(offset));
   const seen = new Set<string>();
   const tokens = raw.filter(t => {
-    const key = t.symbol.toLowerCase();
+    // Placeholder tokens each have a unique address — deduplicate by address
+    // so multiple ??? tokens are not collapsed into one.
+    const key = t.symbol === "???" ? t.address : t.symbol.toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
