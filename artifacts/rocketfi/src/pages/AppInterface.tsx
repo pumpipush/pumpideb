@@ -2232,9 +2232,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                             <td className="px-3 py-2.5 text-right font-mono text-[14px]" style={{ color: "#e2e8f0" }}>
                               {formatSol(trade.ethAmount)}
                             </td>
-                            {/* Token amount */}
+                            {/* Token amount — tokenAmount in DB is raw atomic units (pump.fun = 6 decimals) */}
                             <td className="px-3 py-2.5 text-right font-mono text-[14px]" style={{ color: "#94a3b8" }}>
-                              {formatTokenAmount(trade.tokenAmount)}
+                              {formatTokenAmount(String(parseFloat(trade.tokenAmount || "0") / 1e6))}
                             </td>
                             {/* Time */}
                             <td className="px-3 py-2.5 text-right text-[14px]" style={{ color: "#94a3b8" }}>
@@ -2481,7 +2481,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               )}
                             </div>
                           </td>
-                          <td className="px-3 py-2.5 text-right text-[14px] text-foreground">{formatTokenAmount(balance)}</td>
+                          <td className="px-3 py-2.5 text-right text-[14px] text-foreground">{formatTokenAmount(String(bal / 1e6))}</td>
                           <td className="px-3 py-2.5 text-right text-[14px] text-primary font-bold">{pct.toFixed(1)}%</td>
                           <td className="px-3 py-2.5">
                             <div className="h-1.5 w-20 bg-muted/50 rounded-full overflow-hidden">
