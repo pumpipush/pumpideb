@@ -295,6 +295,35 @@ class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
       ? (Number(solLamports) / Number(tokenAmount) / 1000).toFixed(15)
       : null;
 
+    // ── Auto-create token if creation event was missed ────────────────────
+    // If this mint is unknown (missed the createLaunchpad event due to a network
+    // glitch or reconnect), insert a placeholder so the trade has a parent token.
+    // The enrichment loop will fill in name / symbol / image within 30 s.
+    const existing = await db
+      .select({ id: tokensTable.id })
+      .from(tokensTable)
+      .where(eq(tokensTable.address, mint))
+      .limit(1);
+
+    if (existing.length === 0) {
+      this.log.warn({ mint }, "raydium_launchlab: trade arrived before creation event — auto-creating placeholder token");
+      await db.insert(tokensTable).values({
+        address:              mint,
+        name:                 mint.slice(0, 8) + "…",
+        symbol:               "???",
+        description:          null,
+        imageUrl:             null,
+        creatorAddress:       traderAddress,
+        totalSupply:          LL_TOTAL_SUPPLY.toString(),
+        virtualTokenReserves: LL_INIT_VTOK.toString(),
+        virtualEthReserves:   LL_INIT_VSOL_SOL,
+        marketCapEth:         LL_INIT_MC_LAMPORTS,
+        priceEth:             LL_INIT_PRICE_ETH,
+        platform:             PLATFORM,
+        chain:                CHAIN,
+      }).onConflictDoNothing();
+    }
+
     // ── Insert trade ───────────────────────────────────────────────────────
     const [trade] = await db.insert(tradesTable).values({
       tokenAddress:  mint,
@@ -474,12 +503,17 @@ class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
           const [symbol, off2] = readBorshStr(raw, off);  off = off2;
           const [uri]          = readBorshStr(raw, off);
 
-          // Sanity-check: name and symbol must be non-empty ASCII-printable text
+          // Sanity-check: name and symbol must be non-empty and not binary garbage.
+          // We allow full Unicode (emoji, CJK, etc.) — LaunchLab token names frequently
+          // use non-ASCII characters. Only reject control characters, null bytes, and the
+          // Unicode replacement character U+FFFD (produced when TextDecoder encounters
+          // invalid UTF-8 sequences, indicating a bad Borsh offset decode).
           const n = name.trim();
           const s = symbol.trim();
           if (!n || !s) continue;
           if (n.length > 64 || s.length > 16) continue;
-          if (!/^[\x20-\x7E]+$/.test(n) || !/^[\x20-\x7E]+$/.test(s)) continue;
+          if (/[\x00-\x08\x0B\x0E-\x1F\x7F\uFFFD]/.test(n) ||
+              /[\x00-\x08\x0B\x0E-\x1F\x7F\uFFFD]/.test(s)) continue;
 
           return { name: n, symbol: s, uri: uri.trim() };
         } catch { continue; }
