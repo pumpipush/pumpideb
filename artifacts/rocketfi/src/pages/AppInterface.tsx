@@ -42,6 +42,7 @@ import {
   buildRaydiumLaunchTx,
   simulateRaydiumLaunch,
   isRaydiumSdkCached,
+  preloadRaydiumSdk,
   RAYDIUM_LAUNCH_COST_SOL,
 } from "@/lib/raydiumLauncher";
 import {
@@ -461,7 +462,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               <button
                 type="button"
                 disabled={isLaunching}
-                onClick={() => setPlatform("raydium")}
+                onClick={() => { setPlatform("raydium"); preloadRaydiumSdk(); }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all duration-150"
                 style={platform === "raydium"
                   ? { background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.40)", cursor: "default" }

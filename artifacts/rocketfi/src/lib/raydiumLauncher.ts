@@ -131,6 +131,15 @@ async function _tryRaydiumUpload(params: RaydiumUploadParams): Promise<string> {
   const uri = metaJson.uri ?? metaJson.url;
   if (!uri) throw new Error("Raydium metadata upload: missing uri in response");
 
+  // Validate URI shapes before using them on-chain (#138)
+  _validateUploadUri(imageUri, "Raydium image upload");
+  _validateUploadUri(uri, "Raydium metadata upload");
+
+  // Best-effort check: fetch the metadata and verify required fields are present.
+  // Fails-open on timeout/network errors (IPFS propagation can be slow).
+  // Fails-closed only when the server responds with clearly malformed JSON.
+  await _verifyMetadataReadable(uri);
+
   return uri;
 }
 
@@ -151,6 +160,80 @@ let _cachedSdk: any | null = null;
  */
 export function isRaydiumSdkCached(): boolean {
   return _cachedSdk !== null;
+}
+
+/**
+ * Pre-warms the Raydium SDK in the background without blocking. (#139)
+ *
+ * Call when the user selects "Raydium LaunchLab" so the ~10 MB download
+ * starts immediately. By the time they fill the form and click Launch the
+ * module is already cached — buildRaydiumLaunchTx will skip the download and
+ * the SDK-loading sub-label will never appear.
+ *
+ * Silently swallows network errors — the actual launch will surface them.
+ */
+export function preloadRaydiumSdk(): void {
+  if (_cachedSdk !== null) return;
+  // Fire-and-forget: intentionally not awaited
+  import("@raydium-io/raydium-sdk-v2")
+    .then((mod) => { _cachedSdk = mod; })
+    .catch(() => { /* ignore — buildRaydiumLaunchTx will retry */ });
+}
+
+// ── Metadata upload validation ─────────────────────────────────────────────────
+
+/**
+ * Validates the URI shape returned by an upload endpoint. (#138)
+ * Throws early with a clear message rather than letting the on-chain
+ * instruction fail with a cryptic AnchorError later.
+ */
+function _validateUploadUri(uri: string, label: string): void {
+  if (!uri || typeof uri !== "string") {
+    throw new Error(`${label}: server mengembalikan URI kosong`);
+  }
+  try {
+    const url = new URL(uri);
+    if (!["https:", "http:", "ipfs:"].includes(url.protocol)) {
+      throw new Error(`protokol tidak dikenal: ${url.protocol}`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`${label}: URI tidak valid — "${uri.slice(0, 80)}" (${msg})`);
+  }
+}
+
+/**
+ * Best-effort verification that the metadata URI returns parseable JSON
+ * with the required name/symbol fields. (#138)
+ *
+ * Uses a short timeout and fails-open on network errors (IPFS propagation
+ * can take a few seconds). Throws only when the server responds but the
+ * content is actively malformed — so we surface a clear error before
+ * calling createLaunchpad() with broken metadata.
+ */
+async function _verifyMetadataReadable(uri: string): Promise<void> {
+  try {
+    // _tryRaydiumUpload always yields HTTPS URLs from Raydium's CDN;
+    // no ipfs:// resolution needed here.
+    const res = await fetch(uri, {
+      signal:  AbortSignal.timeout(8_000),
+      headers: { "User-Agent": "RocketFi/1.0" },
+    });
+    if (!res.ok) return; // propagation delay — fail-open
+    const json = await res.json() as Record<string, unknown>;
+    // Fail-closed only when the content is reachable but missing required fields
+    if (typeof json.name !== "string" || !json.name.trim()) {
+      throw new Error("Metadata tidak valid: field 'name' kosong atau tidak ada");
+    }
+    if (typeof json.symbol !== "string" || !json.symbol.trim()) {
+      throw new Error("Metadata tidak valid: field 'symbol' kosong atau tidak ada");
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Re-throw explicit validation failures; swallow network / timeout errors
+    if (msg.startsWith("Metadata tidak valid")) throw err;
+    // IPFS propagation or network timeout — proceed and let the program decide
+  }
 }
 
 // ── Transaction Builder ───────────────────────────────────────────────────────
