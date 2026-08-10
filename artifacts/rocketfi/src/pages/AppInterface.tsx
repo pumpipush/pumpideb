@@ -26,11 +26,17 @@ import { ethers } from "ethers";
 import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, formatTokenPrice, cn, timeAgo } from "@/lib/utils";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { ShareModal } from "@/components/shared/ShareModal";
-import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare, Rocket, ShieldCheck, Zap, CheckCircle2, UploadCloud, Wallet, Eye } from "lucide-react";
+import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare, Rocket, ShieldCheck, Zap, CheckCircle2, UploadCloud, Wallet, Eye, AlertCircle, Send, ChevronDown, ChevronUp } from "lucide-react";
 import { SwapSettingsPopover } from "@/components/shared/SwapSettingsPopover";
 import { useSwapSettings, formatSlippage, formatPriorityFee, getSwapSettings } from "@/stores/swapSettings";
 import { useTxToast } from "@/hooks/useTxToast";
 import { buildPumpFunBuyTx, buildPumpFunSellTx, waitForTxConfirmation } from "@/lib/pumpfun-swap";
+import {
+  uploadToPumpFunIpfs,
+  buildPumpFunCreateTx,
+  simulatePumpFunCreate,
+  PUMP_FUN_LAUNCH_COST_SOL,
+} from "@/lib/pumpfunLauncher";
 import {
   getJupiterQuote, buildJupiterSwapTx, waitForJupiterTxConfirmation,
   WSOL_MINT, getRouteLabel, formatJupiterOutput,
@@ -174,135 +180,148 @@ export default function AppInterface() {
 
 // --- TAB COMPONENTS ---
 
+type LaunchStep = "idle" | "uploading" | "building" | "signing" | "confirming" | "done" | "error";
+
+const LAUNCH_STEPS: { key: LaunchStep; label: string }[] = [
+  { key: "uploading",  label: "Uploading metadata ke IPFS" },
+  { key: "building",   label: "Membangun transaksi & simulasi" },
+  { key: "signing",    label: "Menunggu tanda tangan wallet" },
+  { key: "confirming", label: "Konfirmasi on-chain" },
+];
+
+function StepIcon({ step, active, done }: { step: LaunchStep; active: boolean; done: boolean }) {
+  if (done) return <CheckCircle2 className="w-4 h-4" style={{ color: "#4ade80" }} />;
+  if (active) return <Loader2 className="w-4 h-4 animate-spin" style={{ color: "#94a3b8" }} />;
+  if (step === "signing")    return <Wallet className="w-4 h-4" style={{ color: "#475569" }} />;
+  if (step === "confirming") return <Send   className="w-4 h-4" style={{ color: "#475569" }} />;
+  return <div className="w-4 h-4 rounded-full border" style={{ borderColor: "#334155" }} />;
+}
+
 function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (addr: string) => void }) {
-  const [name, setName] = useState("");
-  const [symbol, setSymbol] = useState("");
-  const [desc, setDesc] = useState("");
+  const [name,         setName]         = useState("");
+  const [symbol,       setSymbol]       = useState("");
+  const [desc,         setDesc]         = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const [imageFile,    setImageFile]    = useState<File | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const createToken = useCreateToken();
+
+  // Social links (optional)
+  const [twitter,  setTwitter]  = useState("");
+  const [telegram, setTelegram] = useState("");
+  const [website,  setWebsite]  = useState("");
+  const [showLinks, setShowLinks] = useState(false);
+
+  // Launch flow state
+  const [launchStep,  setLaunchStep]  = useState<LaunchStep>("idle");
+  const [launchError, setLaunchError] = useState<string | null>(null);
+  const [mintAddress, setMintAddress] = useState<string | null>(null);
+
   const { toast } = useToast();
-  const { openWalletModal } = useWallet();
+  const { openWalletModal, signAndSendTransaction } = useWallet();
+
+  // ── Image handler ────────────────────────────────────────────────────────────
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      toast({ title: "Invalid file", description: "Please upload an image file.", variant: "destructive" });
+      toast({ title: "File tidak valid", description: "Harap upload file gambar.", variant: "destructive" });
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Image must be 5 MB or smaller.", variant: "destructive" });
+      toast({ title: "File terlalu besar", description: "Gambar maksimal 5 MB.", variant: "destructive" });
       return;
     }
     setImageFile(file);
-    const url = URL.createObjectURL(file);
-    setImagePreview(url);
+    setImagePreview(URL.createObjectURL(file));
   };
 
-  const uploadImage = async (file: File): Promise<string | null> => {
-    const contentType = file.type || "image/jpeg";
-
-    // Step 1: Request a presigned upload URL from the server
-    const urlRes = await fetch("/api/storage/uploads/request-url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: file.name, size: file.size, contentType }),
-    });
-    if (!urlRes.ok) {
-      const body = await urlRes.json().catch(() => ({})) as { error?: string };
-      throw new Error(body.error ?? "Failed to get upload URL");
-    }
-    const { uploadURL, objectPath } = await urlRes.json() as { uploadURL: string; objectPath: string };
-
-    // Step 2: PUT file bytes directly to GCS via the presigned URL
-    const putRes = await fetch(uploadURL, {
-      method: "PUT",
-      body: file,
-      headers: { "Content-Type": contentType },
-    });
-    if (!putRes.ok) {
-      throw new Error("Failed to upload image to storage");
-    }
-
-    // Step 3: Confirm the upload — server verifies GCS object exists,
-    // checks actual size, and sets a public ACL so the serving URL works.
-    const confirmRes = await fetch("/api/storage/uploads/confirm", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ objectPath, contentType }),
-    });
-    if (!confirmRes.ok) {
-      const body = await confirmRes.json().catch(() => ({})) as { error?: string };
-      throw new Error(body.error ?? "Failed to confirm image upload");
-    }
-    const { servingUrl } = await confirmRes.json() as { servingUrl: string };
-    return servingUrl;
-  };
+  // ── On-chain pump.fun launch ─────────────────────────────────────────────────
 
   const handleLaunch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!wallet) {
-      openWalletModal();
-      return;
-    }
-    
+
+    if (!wallet) { openWalletModal(); return; }
+
     if (!name.trim() || !symbol.trim()) {
-      toast({ title: "Missing fields", description: "Token name and ticker cannot be blank.", variant: "destructive" });
+      toast({ title: "Field wajib diisi", description: "Nama dan ticker token tidak boleh kosong.", variant: "destructive" });
       return;
     }
     if (symbol.trim().length > 10) {
-      toast({ title: "Ticker too long", description: "Ticker symbol must be 10 characters or fewer.", variant: "destructive" });
+      toast({ title: "Ticker terlalu panjang", description: "Ticker maksimal 10 karakter.", variant: "destructive" });
+      return;
+    }
+    if (!imageFile) {
+      toast({ title: "Gambar diperlukan", description: "Pump.fun memerlukan gambar untuk token.", variant: "destructive" });
       return;
     }
 
+    setLaunchError(null);
+    setMintAddress(null);
+
     try {
-      let imageUrl: string | undefined;
-
-      if (imageFile) {
-        setIsUploading(true);
-        try {
-          imageUrl = await uploadImage(imageFile) ?? undefined;
-        } catch (uploadErr) {
-          toast({ title: "Image upload failed", description: "Could not upload the image. Launching without it.", variant: "destructive" });
-        } finally {
-          setIsUploading(false);
-        }
-      }
-
-      const mockAddr = ethers.Wallet.createRandom().address;
-      const initialSupply = parseEth("1000000000"); // 1B tokens
-      
-      const vEth = parseEth("3");
-      const vToken = parseEth("1073000000");
-
-      const res = await createToken.mutateAsync({
-        data: {
-          name,
-          symbol: symbol.toUpperCase(),
-          description: desc,
-          address: mockAddr,
-          creatorAddress: wallet,
-          totalSupply: initialSupply,
-          virtualEthReserves: vEth,
-          virtualTokenReserves: vToken,
-          imageUrl,
-        }
+      // ── Step 1: Upload metadata + image ke pump.fun IPFS ──────────────────
+      setLaunchStep("uploading");
+      const metadataUri = await uploadToPumpFunIpfs({
+        name:        name.trim(),
+        symbol:      symbol.trim().toUpperCase(),
+        description: desc.trim(),
+        twitter:     twitter.trim() || undefined,
+        telegram:    telegram.trim() || undefined,
+        website:     website.trim() || undefined,
+        image:       imageFile,
       });
 
-      toast({
-        title: "Token launched! 🚀",
-        description: `$${symbol.toUpperCase()} is live on the bonding curve.`,
-      });
-      
-      onLaunch(res.address);
+      // ── Step 2: Build transaction + simulate ─────────────────────────────
+      setLaunchStep("building");
+      const { transaction, mintKeypair, mintAddress: newMint, blockhash, lastValidBlockHeight } =
+        await buildPumpFunCreateTx(wallet, name.trim(), symbol.trim().toUpperCase(), metadataUri);
+      await simulatePumpFunCreate(transaction);
+
+      // ── Step 3: User signs in wallet ─────────────────────────────────────
+      setLaunchStep("signing");
+      // partialSign with mint keypair first (adds mint's required signature)
+      transaction.partialSign(mintKeypair);
+      // Wallet adds user signature + broadcasts (skipPreflight: false runs preflight)
+      const sig = await signAndSendTransaction(transaction);
+
+      // ── Step 4: Wait for on-chain confirmation ───────────────────────────
+      setLaunchStep("confirming");
+      await waitForTxConfirmation(sig, blockhash, lastValidBlockHeight);
+
+      // ── Done ─────────────────────────────────────────────────────────────
+      setLaunchStep("done");
+      setMintAddress(newMint);
+
+      // Give indexer ~3 s to pick up the token before navigating
+      setTimeout(() => onLaunch(newMint), 3000);
+
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
-      toast({ title: "Launch failed", description: msg, variant: "destructive" });
+      setLaunchStep("error");
+      const raw = err instanceof Error ? err.message : String(err);
+
+      // Map raw error to friendly Indonesian messages
+      if (/rejected|cancel|user denied/i.test(raw)) {
+        setLaunchError("Transaksi dibatalkan. Klik Launch lagi jika ingin mencoba ulang.");
+      } else if (/ipfs|upload|fetch/i.test(raw)) {
+        setLaunchError(`Gagal upload metadata: ${raw}. Cek koneksi internet dan coba lagi.`);
+      } else if (/simulat/i.test(raw)) {
+        setLaunchError(`Simulasi gagal: ${raw}\n\nPastikan balance SOL kamu cukup (minimal ~${PUMP_FUN_LAUNCH_COST_SOL} SOL).`);
+      } else if (/timeout|not confirmed|Blockhash/i.test(raw)) {
+        setLaunchError("Konfirmasi timeout. Transaksi mungkin sudah berhasil — cek wallet kamu sebelum mencoba lagi.");
+      } else {
+        setLaunchError(raw);
+      }
     }
   };
+
+  const resetToIdle = () => {
+    setLaunchStep("idle");
+    setLaunchError(null);
+  };
+
+  const isLaunching = launchStep !== "idle" && launchStep !== "done" && launchStep !== "error";
+  const currentStepIdx = LAUNCH_STEPS.findIndex(s => s.key === launchStep);
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 lg:gap-10 max-w-[960px] mx-auto">
@@ -311,13 +330,35 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       <div className="flex-1 min-w-0 space-y-5">
 
         {/* Hero header */}
-        <div>
-          <div className="flex items-center gap-2.5 mb-1.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-              style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.14)" }}>
-              <Rocket className="h-4 w-4" style={{ color: "#e2e8f0" }} />
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+            style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.14)" }}>
+            <Rocket className="h-4 w-4" style={{ color: "#e2e8f0" }} />
+          </div>
+          <h2 className="text-[20px] font-bold text-foreground tracking-tight">Launch a Token</h2>
+        </div>
+
+        {/* ── Platform selector ── */}
+        <div className="rounded-xl overflow-hidden"
+          style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.015)" }}>
+          <div className="px-4 py-3 flex items-center gap-2">
+            <span className="text-[12px] font-medium" style={{ color: "#64748b" }}>Launch on:</span>
+            <div className="flex gap-2 ml-1">
+              {/* Pump.fun — active */}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg cursor-default"
+                style={{ background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.35)" }}>
+                <div className="w-4 h-4 rounded-full" style={{ background: "linear-gradient(135deg,#a855f7,#7c3aed)" }} />
+                <span className="text-[12px] font-semibold" style={{ color: "#c084fc" }}>Pump.fun</span>
+              </div>
+              {/* Raydium — coming soon */}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg opacity-40 cursor-not-allowed"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)" }}>
+                <div className="w-4 h-4 rounded-full" style={{ background: "#3b82f6" }} />
+                <span className="text-[12px] font-medium text-muted-foreground">Raydium LaunchLab</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded font-bold"
+                  style={{ background: "rgba(255,255,255,0.08)", color: "#64748b" }}>SOON</span>
+              </div>
             </div>
-            <h2 className="text-[20px] font-bold text-foreground tracking-tight">Launch a Token</h2>
           </div>
         </div>
 
@@ -341,6 +382,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                   placeholder="e.g. Doge on Solana"
                   value={name}
                   onChange={e => setName(e.target.value)}
+                  disabled={isLaunching}
                   className="h-10 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 text-[14px]"
                   required
                 />
@@ -356,6 +398,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                     placeholder="DOGE"
                     value={symbol}
                     onChange={e => setSymbol(e.target.value.toUpperCase())}
+                    disabled={isLaunching}
                     className="h-10 pl-7 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 font-mono uppercase tracking-widest text-[14px]"
                     maxLength={10}
                     required
@@ -382,8 +425,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
             </div>
             <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
             <div
-              onClick={() => imageInputRef.current?.click()}
-              className="cursor-pointer rounded-xl transition-all duration-200 group"
+              onClick={() => !isLaunching && imageInputRef.current?.click()}
+              className={cn("rounded-xl transition-all duration-200 group", isLaunching ? "cursor-not-allowed opacity-60" : "cursor-pointer")}
               style={{
                 border: imagePreview
                   ? "1px solid rgba(255,255,255,0.28)"
@@ -413,7 +456,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                   <p className="text-[13px] font-medium" style={{ color: "#94a3b8" }}>
                     Drop image here or <span style={{ color: "#e2e8f0" }}>browse</span>
                   </p>
-                  <p className="text-[11px]" style={{ color: "#94a3b8" }}>Recommended: 500 × 500 px</p>
+                  <p className="text-[11px]" style={{ color: "#94a3b8" }}>Recommended: 500 × 500 px · Required for pump.fun</p>
                 </div>
               )}
             </div>
@@ -435,39 +478,171 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               placeholder="Tell the community what makes this token special — lore, utility, meme origin, anything..."
               value={desc}
               onChange={e => setDesc(e.target.value.slice(0, 300))}
+              disabled={isLaunching}
               className="rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 min-h-[90px] resize-none text-[14px]"
             />
           </div>
 
           <div style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
 
-          {/* ── Submit ── */}
-          <div className="px-5 pt-5 pb-5 space-y-3">
+          {/* ── Step 4: Social links (optional, collapsible) ── */}
+          <div className="px-5 pt-4 pb-4">
             <button
-              type="submit"
-              disabled={isUploading || createToken.isPending}
-              className="w-full h-12 rounded-xl text-[15px] font-bold flex items-center justify-center gap-2 transition-all duration-150 active:scale-[0.98]"
-              style={{
-                background: (isUploading || createToken.isPending)
-                  ? "rgba(255,255,255,0.06)"
-                  : "hsl(var(--primary))",
-                color: (isUploading || createToken.isPending) ? "#475569" : "hsl(var(--primary-foreground))",
-                border: "none",
-                boxShadow: (isUploading || createToken.isPending) ? "none" : "0 0 20px rgba(255,255,255,0.08)",
-                cursor: (isUploading || createToken.isPending) ? "not-allowed" : "pointer",
-              }}
+              type="button"
+              onClick={() => setShowLinks(v => !v)}
+              className="flex items-center gap-2 w-full text-left"
             >
-              {isUploading ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Uploading image...</>
-              ) : createToken.isPending ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Deploying on-chain...</>
-              ) : !wallet ? (
-                <><Wallet className="w-4 h-4" /> Connect Wallet to Launch</>
-              ) : (
-                <><Rocket className="w-4 h-4" /> Launch Token</>
-              )}
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
+                style={{ background: "rgba(255,255,255,0.08)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.18)" }}>4</span>
+              <span className="text-[13px] font-semibold text-foreground">Social Links</span>
+              <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.06)", color: "#64748b" }}>
+                Optional
+              </span>
+              <span className="ml-auto" style={{ color: "#64748b" }}>
+                {showLinks ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </span>
             </button>
+            {showLinks && (
+              <div className="mt-4 space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-medium text-muted-foreground flex items-center gap-1.5">
+                    <Twitter className="h-3 w-3" /> Twitter / X
+                  </label>
+                  <Input
+                    placeholder="https://twitter.com/yourtoken"
+                    value={twitter}
+                    onChange={e => setTwitter(e.target.value)}
+                    disabled={isLaunching}
+                    className="h-9 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 text-[13px]"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-medium text-muted-foreground flex items-center gap-1.5">
+                    <Send className="h-3 w-3" /> Telegram
+                  </label>
+                  <Input
+                    placeholder="https://t.me/yourtoken"
+                    value={telegram}
+                    onChange={e => setTelegram(e.target.value)}
+                    disabled={isLaunching}
+                    className="h-9 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 text-[13px]"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[12px] font-medium text-muted-foreground flex items-center gap-1.5">
+                    <Globe className="h-3 w-3" /> Website
+                  </label>
+                  <Input
+                    placeholder="https://yourtoken.xyz"
+                    value={website}
+                    onChange={e => setWebsite(e.target.value)}
+                    disabled={isLaunching}
+                    className="h-9 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 text-[13px]"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
 
+          <div style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
+
+          {/* ── Submit / Progress / Done ── */}
+          <div className="px-5 pt-5 pb-5 space-y-4">
+
+            {/* Launch cost info (only when idle) */}
+            {launchStep === "idle" && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                style={{ background: "rgba(168,85,247,0.08)", border: "1px solid rgba(168,85,247,0.20)" }}>
+                <ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "#a855f7" }} />
+                <span className="text-[12px]" style={{ color: "#c084fc" }}>
+                  Biaya launch pump.fun: ~{PUMP_FUN_LAUNCH_COST_SOL} SOL (fee + rent akun mint & metadata)
+                </span>
+              </div>
+            )}
+
+            {/* Progress stepper (during launch) */}
+            {isLaunching && (
+              <div className="space-y-2 py-1">
+                {LAUNCH_STEPS.map((step, idx) => {
+                  const isDone   = idx < currentStepIdx;
+                  const isActive = idx === currentStepIdx;
+                  return (
+                    <div key={step.key} className="flex items-center gap-3">
+                      <StepIcon step={step.key} active={isActive} done={isDone} />
+                      <span className="text-[13px]" style={{
+                        color: isActive ? "#e2e8f0" : isDone ? "#4ade80" : "#475569",
+                        fontWeight: isActive ? 600 : 400,
+                      }}>
+                        {step.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Success state */}
+            {launchStep === "done" && mintAddress && (
+              <div className="rounded-xl p-4 space-y-3"
+                style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.25)" }}>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5" style={{ color: "#4ade80" }} />
+                  <span className="text-[14px] font-bold" style={{ color: "#4ade80" }}>Token berhasil dilaunched! 🚀</span>
+                </div>
+                <div className="font-mono text-[11px] px-2 py-1.5 rounded-lg break-all"
+                  style={{ background: "rgba(0,0,0,0.3)", color: "#94a3b8" }}>
+                  {mintAddress}
+                </div>
+                <p className="text-[12px]" style={{ color: "#64748b" }}>
+                  Mengarahkan ke halaman token dalam 3 detik…
+                </p>
+              </div>
+            )}
+
+            {/* Error state */}
+            {launchStep === "error" && launchError && (
+              <div className="rounded-xl p-4 space-y-3"
+                style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" style={{ color: "#f87171" }} />
+                  <p className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: "#fca5a5" }}>
+                    {launchError}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={resetToIdle}
+                  className="text-[12px] font-semibold px-4 py-2 rounded-lg transition-colors"
+                  style={{ background: "rgba(239,68,68,0.15)", color: "#f87171", border: "1px solid rgba(239,68,68,0.30)" }}
+                >
+                  Coba Lagi
+                </button>
+              </div>
+            )}
+
+            {/* Launch button (only when idle or error) */}
+            {(launchStep === "idle" || launchStep === "error") && (
+              <button
+                type="submit"
+                disabled={launchStep === "error"}
+                className="w-full h-12 rounded-xl text-[15px] font-bold flex items-center justify-center gap-2 transition-all duration-150 active:scale-[0.98]"
+                style={{
+                  background: launchStep === "error"
+                    ? "rgba(255,255,255,0.04)"
+                    : "hsl(var(--primary))",
+                  color: launchStep === "error" ? "#475569" : "hsl(var(--primary-foreground))",
+                  border: "none",
+                  boxShadow: launchStep === "error" ? "none" : "0 0 20px rgba(255,255,255,0.08)",
+                  cursor: launchStep === "error" ? "not-allowed" : "pointer",
+                }}
+              >
+                {!wallet ? (
+                  <><Wallet className="w-4 h-4" /> Connect Wallet to Launch</>
+                ) : (
+                  <><Rocket className="w-4 h-4" /> Launch on Pump.fun</>
+                )}
+              </button>
+            )}
           </div>
         </form>
       </div>
@@ -507,8 +682,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 </div>
               </div>
               <div className="shrink-0 px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wide"
-                style={{ background: "rgba(255,255,255,0.08)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.18)" }}>
-                NEW
+                style={{ background: "rgba(168,85,247,0.15)", color: "#c084fc", border: "1px solid rgba(168,85,247,0.30)" }}>
+                PUMP
               </div>
             </div>
 
@@ -537,12 +712,39 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 ))}
               </div>
 
+              {/* Social links preview */}
+              {(twitter || telegram || website) && (
+                <div className="flex items-center gap-3 pt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                  {twitter  && <Twitter className="h-3 w-3"  style={{ color: "#64748b" }} />}
+                  {telegram && <Send    className="h-3 w-3"  style={{ color: "#64748b" }} />}
+                  {website  && <Globe   className="h-3 w-3"  style={{ color: "#64748b" }} />}
+                </div>
+              )}
+
               {wallet && (
                 <div className="text-[10px] font-mono flex items-center gap-1" style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 10 }}>
                   <span style={{ color: "#64748b" }}>by</span>
                   <span style={{ color: "#94a3b8" }}>{formatAddress(wallet)}</span>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Pump.fun info */}
+          <div className="rounded-xl p-3 space-y-2"
+            style={{ background: "rgba(168,85,247,0.06)", border: "1px solid rgba(168,85,247,0.15)" }}>
+            <div className="text-[11px] font-semibold" style={{ color: "#a855f7" }}>Pump.fun Bonding Curve</div>
+            <div className="space-y-1">
+              {[
+                ["Supply", "1B tokens"],
+                ["Target", "$69K market cap"],
+                ["Fee",    "~1% per trade"],
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between text-[11px]">
+                  <span style={{ color: "#64748b" }}>{k}</span>
+                  <span style={{ color: "#94a3b8" }}>{v}</span>
+                </div>
+              ))}
             </div>
           </div>
 
