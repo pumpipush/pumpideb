@@ -27,6 +27,12 @@ const BIRDEYE_HISTORY_SECS: Record<string, number> = {
   "1W":  2 * 365 * 24 * 60 * 60, // 2y history
 };
 
+// Candle bucket size in seconds — used to compute the current-candle timestamp
+const BIRDEYE_TF_SECS: Record<string, number> = {
+  "1m": 60, "5m": 300, "15m": 900,
+  "1H": 3600, "4H": 14400, "1D": 86400, "1W": 604800,
+};
+
 const router: IRouter = Router();
 
 // GET /tokens/:address/stream  — Server-Sent Events for live trade feed
@@ -211,14 +217,16 @@ router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
       .limit(1);
 
     if (tokenRow && DEX_PLATFORMS.has(tokenRow.platform)) {
-      const now       = Math.floor(Date.now() / 1000);
-      const timeFrom  = now - (BIRDEYE_HISTORY_SECS[tf] ?? 86400);
-      const birdeyeBars = await fetchBirdeyeOHLCV(address, tf, timeFrom, now);
+      const now      = Math.floor(Date.now() / 1000);
+      const timeFrom = now - (BIRDEYE_HISTORY_SECS[tf] ?? 86400);
+
+      // Fetch OHLCV bars and current overview in parallel
+      const [birdeyeBars, overview] = await Promise.all([
+        fetchBirdeyeOHLCV(address, tf, timeFrom, now),
+        fetchBirdeyeTokenOverview(address),
+      ]);
 
       if (birdeyeBars && birdeyeBars.length > 0) {
-        // Birdeye returns USD prices; convert to SOL per token so the frontend
-        // chart multiplies by SOL price and displays correct USD value.
-        // (same convention as pump.fun where priceEth = SOL/token)
         const solPrice = await getSolPriceUsd();
         bars = birdeyeBars.map(b => ({
           time:   b.time,
@@ -226,8 +234,45 @@ router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
           high:   solPrice > 0 ? b.high  / solPrice : b.high,
           low:    solPrice > 0 ? b.low   / solPrice : b.low,
           close:  solPrice > 0 ? b.close / solPrice : b.close,
-          volume: b.volume,  // keep as USD volume for volume bars
+          volume: b.volume,
         }));
+
+        // Append / update a synthetic "current" candle so the chart's last point
+        // matches the live Birdeye price — prevents stale-price vs chart mismatch.
+        if (overview && overview.price > 0 && solPrice > 0) {
+          const currentSol    = overview.price / solPrice;
+          const candleSecs    = BIRDEYE_TF_SECS[tf] ?? 60;
+          const currentBucket = Math.floor(now / candleSecs) * candleSecs;
+          const lastBar       = bars[bars.length - 1];
+
+          if (lastBar && lastBar.time === currentBucket) {
+            // Update existing open candle
+            lastBar.high  = Math.max(lastBar.high,  currentSol);
+            lastBar.low   = Math.min(lastBar.low,   currentSol);
+            lastBar.close = currentSol;
+          } else if (!lastBar || currentBucket > lastBar.time) {
+            // New candle bucket — open at previous close
+            bars.push({
+              time:   currentBucket,
+              open:   lastBar?.close ?? currentSol,
+              high:   currentSol,
+              low:    currentSol,
+              close:  currentSol,
+              volume: 0,
+            });
+          }
+
+          // Background: keep token.price_eth fresh in the DB so the info panel
+          // always reflects the current Birdeye price, not the stale backfill value.
+          db.update(tokensTable)
+            .set({
+              priceEth:     String(currentSol),
+              priceUsd:     String(overview.price),
+              marketCapEth: overview.mc ? String(Math.round(overview.mc / solPrice * 1e9)) : undefined,
+            })
+            .where(eq(tokensTable.address, address))
+            .catch(() => { /* non-fatal */ });
+        }
       }
     }
   }
@@ -435,13 +480,17 @@ router.get("/tokens/:address/stats", async (req, res): Promise<void> => {
       const overview = await fetchBirdeyeTokenOverview(address);
       if (overview && overview.v24hUSD) {
         const solPrice = await getSolPriceUsd();
-        const vol24hSolFromBirdeye = solPrice > 0 ? overview.v24hUSD / solPrice : 0;
+        const toSol = (usd: number | null) => (usd && solPrice > 0 ? usd / solPrice : 0);
+        // Birdeye provides accurate buy/sell split for 24h volume
+        const vol24hSol     = toSol(overview.v24hUSD);
+        const vol24hBuySol  = overview.vBuy24hUSD  ? toSol(overview.vBuy24hUSD)  : vol24hSol / 2;
+        const vol24hSellSol = overview.vSell24hUSD ? toSol(overview.vSell24hUSD) : vol24hSol / 2;
         res.json({
-          vol24hSol:    vol24hSolFromBirdeye,
-          vol24hBuySol: vol24hSolFromBirdeye / 2, // estimate 50/50 since Birdeye doesn't split
-          vol24hSellSol: vol24hSolFromBirdeye / 2,
-          txns24hBuy:   0,
-          txns24hSell:  0,
+          vol24hSol,
+          vol24hBuySol,
+          vol24hSellSol,
+          txns24hBuy:  overview.buy24h  ?? 0,
+          txns24hSell: overview.sell24h ?? 0,
         });
         return;
       }
@@ -546,16 +595,16 @@ router.get("/tokens/:address/price-history", async (req, res): Promise<void> => 
       const overview = await fetchBirdeyeTokenOverview(address);
       if (overview && overview.price > 0) {
         const solPrice = await getSolPriceUsd();
-        // Convert USD price to SOL per token (priceEth convention)
-        const currentSol = overview.price / solPrice;
-        // Derive historical prices from % change: priceAtT = current / (1 + pct/100)
-        const fromPct = (pct: number | null) =>
-          pct !== null ? currentSol / (1 + pct / 100) : null;
+        // Use Birdeye's pre-computed historical prices directly — far more accurate
+        // than deriving from % change using a potentially stale currentPrice.
+        const toSol = (usdPrice: number | null) =>
+          usdPrice !== null && usdPrice > 0 && solPrice > 0 ? usdPrice / solPrice : null;
+
         res.json({
-          p5m:  fromPct(overview.priceChange30mPercent), // 30m as proxy for 5m
-          p1h:  fromPct(overview.priceChange1hPercent),
-          p6h:  fromPct(overview.priceChange6hPercent),
-          p24h: fromPct(overview.priceChange24hPercent),
+          p5m:  toSol(overview.history5mPrice),
+          p1h:  toSol(overview.history1hPrice),
+          p6h:  toSol(overview.history6hPrice),
+          p24h: toSol(overview.history24hPrice),
         });
         return;
       }

@@ -98,7 +98,7 @@ export async function fetchBirdeyeTokenMeta(address: string): Promise<BirdeyeTok
     logoURI:        data.logoURI   ?? null,
     decimals:       data.decimals  ?? 6,
     priceUsd:       data.price     ?? null,
-    marketCapUsd:   data.mc        ?? null,
+    marketCapUsd:   (data.marketCap ?? data.mc) ?? null,  // Birdeye field is "marketCap" not "mc"
     v24hUSD:        data.v24hUSD   ?? null,
     liquidity:      data.liquidity ?? null,
     priceChange24h: data.priceChange24hPercent ?? null,
@@ -194,17 +194,28 @@ export async function fetchBirdeyeOHLCV(
 
 export interface BirdeyeTokenOverview {
   price:                   number;
-  mc:                      number | null;
+  mc:                      number | null;  // = marketCap field from Birdeye
   v24hUSD:                 number | null;
+  vBuy24hUSD:              number | null;
+  vSell24hUSD:             number | null;
+  buy24h:                  number | null;  // trade count
+  sell24h:                 number | null;
   liquidity:               number | null;
+  circulatingSupply:       number | null;
   priceChange30mPercent:   number | null;
   priceChange1hPercent:    number | null;
   priceChange6hPercent:    number | null;
   priceChange24hPercent:   number | null;
+  // Historical prices at specific look-back windows (more accurate than computing from %)
+  history5mPrice:          number | null;
+  history1hPrice:          number | null;
+  history6hPrice:          number | null;
+  history24hPrice:         number | null;
 }
 
 /**
  * Fetch token overview (live price + 24h stats) from Birdeye.
+ * NOTE: Birdeye uses "marketCap" (not "mc") for market cap. "fdv" is fully diluted.
  * Consumes ~5 CU.
  */
 export async function fetchBirdeyeTokenOverview(address: string): Promise<BirdeyeTokenOverview | null> {
@@ -216,13 +227,22 @@ export async function fetchBirdeyeTokenOverview(address: string): Promise<Birdey
   };
   return {
     price:                 data.price as number,
-    mc:                    n("mc"),
+    mc:                    n("marketCap") ?? n("mc"),
     v24hUSD:               n("v24hUSD"),
+    vBuy24hUSD:            n("vBuy24hUSD"),
+    vSell24hUSD:           n("vSell24hUSD"),
+    buy24h:                n("buy24h"),
+    sell24h:               n("sell24h"),
     liquidity:             n("liquidity"),
+    circulatingSupply:     n("circulatingSupply"),
     priceChange30mPercent: n("priceChange30mPercent"),
     priceChange1hPercent:  n("priceChange1hPercent"),
     priceChange6hPercent:  n("priceChange6hPercent"),
     priceChange24hPercent: n("priceChange24hPercent"),
+    history5mPrice:        n("history5mPrice"),
+    history1hPrice:        n("history1hPrice"),
+    history6hPrice:        n("history6hPrice") ?? n("history8hPrice"),
+    history24hPrice:       n("history24hPrice"),
   };
 }
 

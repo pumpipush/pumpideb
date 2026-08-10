@@ -794,7 +794,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const priceStats = useMemo(() => {
     const now = Date.now();
     const livePrice = liveToken?.priceEth ? parseFloat(liveToken.priceEth) : null;
-    const currentPrice = livePrice ?? (token?.priceEth ? parseFloat(token.priceEth) : 0);
+    // For DEX tokens: token.priceEth in DB may be stale (set during backfill, not refreshed live).
+    // The OHLCV route fetches current Birdeye price and appends a synthetic latest candle; use that
+    // candle's close as currentPrice so the price panel stays in sync with the chart.
+    const _isDexToken = ["raydium","orca","meteora","pumpswap","raydium_launchlab"].includes(token?.platform ?? "");
+    const dexOhlcvPrice = _isDexToken ? (serverOhlcv?.bars?.slice(-1)[0]?.close ?? null) : null;
+    const currentPrice = livePrice ?? dexOhlcvPrice ?? (token?.priceEth ? parseFloat(token.priceEth) : 0);
     const allTradesForVol = [...liveTrades, ...(history ?? [])];
 
     // ── Client-side fallback (limited to 100-row history + live SSE trades) ──
@@ -865,7 +870,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       p24h: pct(refP24h),
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveToken, token?.priceEth, liveTrades, history, serverStats, serverPriceHistory]);
+  }, [liveToken, token?.priceEth, token?.platform, serverOhlcv, liveTrades, history, serverStats, serverPriceHistory]);
 
   // ── Price flash effect — runs after priceStats is declared ──
   useEffect(() => {
