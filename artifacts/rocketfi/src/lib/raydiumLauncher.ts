@@ -136,6 +136,7 @@ async function _tryRaydiumUpload(params: RaydiumUploadParams): Promise<string> {
 
 // ── Transaction Builder ───────────────────────────────────────────────────────
 
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 /**
  * Build the Raydium LaunchLab create-token transaction(s).
  *
@@ -144,8 +145,8 @@ async function _tryRaydiumUpload(params: RaydiumUploadParams): Promise<string> {
  * where signers[i] are the non-wallet keypairs required for transactions[i].
  *
  * This function:
- *  1. Partial-signs each transaction with its per-tx SDK signers + mintKeypair
- *  2. Does NOT overwrite the SDK-set recentBlockhash (that would invalidate signatures)
+ *  1. Fetches recentBlockhash from RPC and stamps each transaction (SDK does not set it)
+ *  2. Partial-signs each transaction with its per-tx SDK signers + mintKeypair
  *  3. Returns all transactions for the caller to sign sequentially with user wallet
  */
 export async function buildRaydiumLaunchTx(
@@ -165,12 +166,12 @@ export async function buildRaydiumLaunchTx(
   const { Raydium, TxVersion } = sdk;
 
   // ── Init Raydium SDK ──────────────────────────────────────────────────────
-  // owner must be PublicKey | Keypair — not a raw string
-  // disableLoadToken skips the 400 k-token list download (~30 MB), not needed for launchpad
+  // owner must be a PublicKey, not a raw string.
+  // disableLoadToken skips the 400 k-token list download (~30 MB), not needed for launchpad.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const raydium = await (Raydium as any).load({
     connection:       conn,
-    owner:            owner,          // PublicKey, not string
+    owner:            owner,           // PublicKey, not string
     cluster:          "mainnet" as const,
     disableLoadToken: true,
   });
@@ -180,10 +181,13 @@ export async function buildRaydiumLaunchTx(
   const configs: any[] = await raydium.api.fetchLaunchConfigs();
   if (!configs?.length) throw new Error("Tidak ada konfigurasi Raydium LaunchLab tersedia");
 
-  // Prefer SOL-denominated config (mintB is always nested under .key per ApiLaunchConfig shape)
+  // Prefer SOL-denominated config, fall back to first available.
+  // Check both c.mintB and c.key?.mintB — API shape may vary across SDK versions.
   const solanaMint = "So11111111111111111111111111111111111111112";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const configEntry = configs.find((c: any) => c.key?.mintB === solanaMint) ?? configs[0];
+  const configEntry = configs.find((c: any) =>
+    c.mintB === solanaMint || c.key?.mintB === solanaMint
+  ) ?? configs[0];
   const configPubKey: string = configEntry.key?.pubKey ?? configEntry.pubKey ?? configEntry.id;
   if (!configPubKey) throw new Error("Config ID tidak ditemukan dari Raydium API");
   const configId = new PublicKey(configPubKey);
@@ -243,13 +247,24 @@ export async function buildRaydiumLaunchTx(
 
   if (!txs.length) throw new Error("SDK tidak menghasilkan transaksi");
 
-  // ── Partial-sign each transaction ─────────────────────────────────────────
-  // IMPORTANT: The SDK has already set recentBlockhash on each transaction.
-  // Do NOT overwrite it — that would invalidate any signatures already applied.
+  // ── Fetch blockhash and stamp each transaction ────────────────────────────
+  // TxVersion.LEGACY: the Raydium SDK returns transactions WITHOUT recentBlockhash
+  // set (verified by smoke test against 0.2.60-alpha). We must fetch it from the
+  // RPC and set it on every transaction before partial-signing — partialSign throws
+  // "Transaction recentBlockhash required" otherwise.
   //
-  // For each tx: sign with per-tx SDK signers + mintKeypair (if not already signed).
+  // If the SDK ever starts setting the blockhash itself (future alpha update),
+  // the `?? blockhash` fallback means we do not overwrite an existing value.
+  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+
+  // ── Partial-sign each transaction ─────────────────────────────────────────
+  // For each tx: set blockhash (if missing), then sign with per-tx SDK signers
+  // + mintKeypair. The user's wallet adds its signature separately via the caller.
   for (let i = 0; i < txs.length; i++) {
     const tx = txs[i];
+
+    // Set blockhash if the SDK left it unset (current behavior as of 0.2.60-alpha)
+    if (!tx.recentBlockhash) tx.recentBlockhash = blockhash;
 
     // Ensure feePayer is set (SDK should have done this, but be defensive)
     if (!tx.feePayer) tx.feePayer = owner;
@@ -268,19 +283,20 @@ export async function buildRaydiumLaunchTx(
       seen.add(key);
       try {
         tx.partialSign(signer);
-      } catch {
-        // May already be signed — ignore
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // Tolerate "already signed" — SDK may have pre-signed with this key.
+        // Re-throw anything else so bugs surface early instead of silently failing.
+        if (!msg.toLowerCase().includes("already") && !msg.toLowerCase().includes("duplicate")) {
+          throw new Error(`Gagal partial-sign transaksi ${i}: ${msg}`);
+        }
       }
     }
   }
 
-  // ── Collect blockhash for confirmation tracking ───────────────────────────
-  // Read from the first SDK-built transaction (don't set a new one)
-  const txBlockhash = txs[0].recentBlockhash ?? "";
-
-  // Fetch lastValidBlockHeight separately — the SDK's blockhash was just fetched,
-  // so this RPC call returns a very close estimate for the same epoch
-  const { lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+  // ── Blockhash for confirmation tracking ──────────────────────────────────
+  // Use the blockhash fetched above (already stamped onto each tx).
+  const txBlockhash = txs[0].recentBlockhash ?? blockhash;
 
   return {
     transactions:        txs,
