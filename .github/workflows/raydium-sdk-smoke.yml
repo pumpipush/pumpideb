@@ -1,0 +1,96 @@
+name: Raydium SDK Smoke Test
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Runs the Raydium LaunchLab smoke test automatically whenever the SDK version
+# pin changes (pre-merge gate) and every night (regression catch).
+#
+# WHY THIS EXISTS
+# ───────────────
+# @raydium-io/raydium-sdk-v2 is an alpha package that ships breaking changes
+# without notice. raydiumLauncher.ts depends on several undocumented SDK
+# behaviors (Raydium.load() options, fetchLaunchConfigs() shape,
+# createLaunchpad() result shape, recentBlockhash behavior). A silent break
+# on any of these will prevent users from launching tokens.
+#
+# This workflow catches regressions automatically before they reach users.
+#
+# WHAT IT TESTS
+# ─────────────
+# • SDK initialises and exposes the expected API surface
+# • fetchLaunchConfigs() returns a non-empty array with valid pubKey fields
+# • createLaunchpad() builds transactions without throwing
+# • Transaction shape (MultiTxBuildData vs TxBuildData) is handled
+# • recentBlockhash behavior: caller-must-set vs SDK-sets
+# • partialSign with mintKeypair succeeds after blockhash is stamped
+#
+# No transactions are submitted — the test is read-only against mainnet.
+# No SOL is spent. No API keys are required (public RPC endpoint).
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  # ── Pre-merge gate: fires on any PR that touches the SDK version pin ────────
+  pull_request:
+    paths:
+      - "artifacts/rocketfi/package.json"
+      - "artifacts/rocketfi/src/lib/raydiumLauncher.ts"
+      - "artifacts/rocketfi/src/lib/__tests__/raydiumLaunchLab.smoke.test.ts"
+
+  # ── Post-merge: run on main so a green badge is always fresh ───────────────
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "artifacts/rocketfi/package.json"
+      - "artifacts/rocketfi/src/lib/raydiumLauncher.ts"
+      - "artifacts/rocketfi/src/lib/__tests__/raydiumLaunchLab.smoke.test.ts"
+
+  # ── Nightly regression catch: runs even when no one touched the SDK ─────────
+  schedule:
+    - cron: "0 2 * * *"   # 02:00 UTC every day
+
+  # ── Manual trigger for debugging or ad-hoc verification ────────────────────
+  workflow_dispatch:
+
+concurrency:
+  # Only one smoke run at a time per branch; cancel stale runs on force-push.
+  group: raydium-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: LaunchLab smoke test (mainnet read-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Raydium LaunchLab smoke test
+        # test:smoke already sets RUN_SMOKE_TESTS=1 (see artifacts/rocketfi/package.json)
+        run: pnpm --filter @workspace/rocketfi test:smoke
+        env:
+          # Explicit for clarity; the script sets this too via the npm script definition
+          RUN_SMOKE_TESTS: "1"
+
+      # On scheduled / push runs: show which SDK version just passed
+      - name: Report SDK version tested
+        if: always()
+        run: |
+          VERSION=$(node -e "const p=require('./artifacts/rocketfi/package.json'); console.log(p.dependencies['@raydium-io/raydium-sdk-v2'] ?? p.devDependencies['@raydium-io/raydium-sdk-v2'] ?? 'unknown')")
+          echo "Raydium SDK version tested: $VERSION"
