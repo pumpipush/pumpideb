@@ -2320,19 +2320,20 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   );
                 }
 
-                // Position tracking is only accurate for pump.fun tokens.
-                // pump.fun mints always use 6 decimals and emit price_eth in
-                // SOL/token. LetsBONK and Raydium mint decimals and price
-                // normalisation differ per adapter and are not yet stored in DB,
-                // so we explicitly scope this feature to avoid showing inflated /
-                // incorrect PnL for those platforms.
-                if (token.platform !== "pump_fun") {
+                // Position tracking is accurate for pump.fun and pumpswap tokens.
+                // Both use 6 decimals and the same SOL/token price convention.
+                // PumpSwap tokens are pump.fun graduates — same decimal and price
+                // normalisation, so P&L math is identical.
+                // LetsBONK and Raydium LaunchLab have different decimal/price
+                // conventions not yet stored in the DB, so we exclude them.
+                const POSITION_SUPPORTED_PLATFORMS = new Set(["pump_fun", "pumpswap"]);
+                if (!POSITION_SUPPORTED_PLATFORMS.has(token.platform ?? "")) {
                   return (
                     <div className="flex flex-col items-center justify-center py-14 gap-3 rounded-lg"
                       style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
                       <Activity className="h-7 w-7" style={{ color: "#334155" }} />
                       <p className="text-[14px] font-medium text-center" style={{ color: "#64748b" }}>
-                        Position tracking is only available for Pump.fun tokens
+                        Position tracking is not yet available for this platform
                       </p>
                     </div>
                   );
