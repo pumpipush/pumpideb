@@ -37,13 +37,17 @@ const SKIP_MINTS = new Set([
 
 class PumpSwapIndexer extends SolanaRpcIndexer {
   /**
-   * Rate limiter for free RPC. PumpSwap generates 100-200 events/second;
-   * free RPC can sustain ~1-2 getTransaction calls/second reliably.
-   * At 1 event/3 s we capture ~20 real on-chain trades per minute — enough
-   * to keep prices accurate without a paid RPC.
+   * Rate limiter — PumpSwap generates 100-200 events/second.
+   * Each getTransaction = 100 Compute Units on Alchemy.
+   *
+   * Alchemy free tier: 30M CU/month → budget ≈ 300K calls/month ≈ 10K/day ≈ 1 call/8.6s.
+   * We use 30s to leave headroom for pump.fun + Raydium calls.
+   *
+   * At 1 call/30s we capture ~2 trades/minute per token — enough to keep
+   * prices accurate.  Adjust down if you upgrade to a paid Alchemy plan.
    */
   private _lastTradePassMs = 0;
-  private readonly _tradeIntervalMs = 3000;
+  private readonly _tradeIntervalMs = 30_000;
 
   constructor() {
     super({ programId: PUMPSWAP_PROGRAM, adapterName: PLATFORM });
