@@ -15,6 +15,66 @@
  *
  * @raydium-io/raydium-sdk-v2 is dynamically imported so the ~10 MB chunk
  * only downloads when the user first clicks "Launch on Raydium LaunchLab".
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * SDK VERSION PIN — READ BEFORE UPGRADING
+ * ─────────────────────────────────────────────────────────────────────────────
+ * @raydium-io/raydium-sdk-v2 is pinned to an exact version (no ^ or ~) in
+ * package.json because the launcher depends on several undocumented internal
+ * behaviors that silently break across alpha releases:
+ *
+ *   1. INIT OPTION: disableLoadToken
+ *      Raydium.load({ disableLoadToken: true }) skips the ~30 MB token-list
+ *      download. If this option is renamed or removed, init will silently
+ *      download 30 MB on every launch attempt.
+ *      VERIFY: Raydium.load() still accepts disableLoadToken; init completes
+ *              in < 5s without a large network transfer.
+ *
+ *   2. CONFIG SHAPE: fetchLaunchConfigs() response entries
+ *      The code falls back across three possible key locations:
+ *        configEntry.key?.pubKey  ← current primary path (0.2.60-alpha)
+ *        configEntry.pubKey       ← seen in earlier alphas
+ *        configEntry.id           ← seen in pre-alpha shapes
+ *      If none resolves, launch throws "Config ID tidak ditemukan".
+ *      VERIFY: at least one of these fields is truthy on every config entry;
+ *              and at least one entry has mintB === SOL wrapped mint.
+ *
+ *   3. TX RESULT SHAPE: createLaunchpad() return value
+ *      We defensively handle two known shapes:
+ *        MultiTxBuildData: { transactions: Transaction[], signers: Signer[][] }
+ *        TxBuildData:      { transaction: Transaction,   signers: Signer[]  }
+ *      VERIFY: sdkResult has .transactions (array) or .transaction (singular).
+ *
+ *   4. BLOCKHASH BEHAVIOR: SDK does NOT set recentBlockhash on LEGACY txs
+ *      As of 0.2.60-alpha, LEGACY transactions come back without recentBlockhash
+ *      set — we must fetch it from the RPC and stamp each tx before partialSign.
+ *      VERIFY (smoke test assertion): tx.recentBlockhash is undefined after
+ *              createLaunchpad() returns; our code sets it before signing.
+ *              If the SDK starts setting it, the `?? blockhash` fallback is
+ *              harmless — but remove the extra RPC call if confirmed stable.
+ *
+ *   5. EXTRA SIGNERS BEHAVIOR: SDK does not auto-sign returned transactions
+ *      extraSigners / mintKeypair must be passed to partialSign manually —
+ *      the SDK does not call partialSign internally. Tolerate "already signed"
+ *      errors in case a future version changes this.
+ *      VERIFY: transactions still require mintKeypair partial-sign to be
+ *              serialisable.
+ *
+ * UPGRADE CHECKLIST (run for every bump of @raydium-io/raydium-sdk-v2):
+ *   □ 1. Update the pinned version in package.json (no ^ or ~)
+ *   □ 2. Run the mainnet smoke test:
+ *          RUN_SMOKE_TESTS=1 pnpm --filter @workspace/rocketfi test:smoke
+ *        All assertions must pass without modification.
+ *   □ 3. Run the unit tests (mocked SDK, fast):
+ *          pnpm --filter @workspace/rocketfi test
+ *        All shape-variant tests must pass.
+ *   □ 4. Verify init: Raydium.load() still accepts disableLoadToken
+ *   □ 5. Verify config shape: confirm which of key.pubKey/pubKey/id is populated
+ *   □ 6. Verify tx shape: confirm transactions[] vs transaction field name
+ *   □ 7. Verify blockhash: check tx.recentBlockhash after createLaunchpad()
+ *   □ 8. Manual test: attempt a launch on mainnet with a throwaway wallet
+ *   □ 9. Update the SDK_VERIFIED_VERSION constant below and this comment block
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { Keypair, PublicKey, Transaction } from "@solana/web3.js";
@@ -23,6 +83,13 @@ import { uploadToPumpFunIpfs } from "./pumpfunLauncher";
 import { getConnection } from "./solanaConnection";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+
+/**
+ * The exact SDK version this launcher was last verified against.
+ * Update this constant (and the upgrade checklist in the file header) whenever
+ * the pinned version in package.json is bumped.
+ */
+export const SDK_VERIFIED_VERSION = "0.2.60-alpha";
 
 /** Raydium LaunchLab on-chain program (mainnet) */
 export const RAYDIUM_LAUNCHPAD_PROGRAM_ID =
@@ -383,8 +450,12 @@ export async function buildRaydiumLaunchTx(
     // Ensure feePayer is set (SDK should have done this, but be defensive)
     if (!tx.feePayer) tx.feePayer = owner;
 
-    // Collect all non-wallet signers for this transaction
-    const txSignerSet = (perTxSigners[i] ?? []) as { publicKey: PublicKey; secretKey: Uint8Array }[];
+    // Collect all non-wallet signers for this transaction.
+    // Filter out any nullish entries that can arise when the SDK returns a flat
+    // signers[] shorter than the transactions[] (e.g. signers: []).
+    const txSignerSet = ((perTxSigners[i] ?? []) as Array<{ publicKey: PublicKey; secretKey: Uint8Array } | null | undefined>).filter(
+      (s): s is { publicKey: PublicKey; secretKey: Uint8Array } => s != null,
+    );
 
     // Always include mintKeypair — it must sign the create instruction
     const candidates = [mintKeypair as { publicKey: PublicKey; secretKey: Uint8Array }, ...txSignerSet];
@@ -399,9 +470,14 @@ export async function buildRaydiumLaunchTx(
         tx.partialSign(signer);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        // Tolerate "already signed" — SDK may have pre-signed with this key.
-        // Re-throw anything else so bugs surface early instead of silently failing.
-        if (!msg.toLowerCase().includes("already") && !msg.toLowerCase().includes("duplicate")) {
+        const lower = msg.toLowerCase();
+        // Tolerable errors — do not re-throw:
+        //   "already" / "duplicate" — SDK may have pre-signed with this key.
+        //   "unknown signer"        — this keypair is not referenced in this
+        //                             particular transaction's instructions; safe
+        //                             to skip when iterating all candidates.
+        // Re-throw anything else so real bugs surface early.
+        if (!lower.includes("already") && !lower.includes("duplicate") && !lower.includes("unknown")) {
           throw new Error(`Gagal partial-sign transaksi ${i}: ${msg}`);
         }
       }
