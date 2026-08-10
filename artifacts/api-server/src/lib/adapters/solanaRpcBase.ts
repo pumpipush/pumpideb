@@ -18,16 +18,26 @@ import { logger as rootLogger } from "../logger";
 export const PUBLICNODE_WSS  = "wss://solana-rpc.publicnode.com";
 export const PUBLICNODE_HTTP = "https://solana-rpc.publicnode.com";
 
+/** Alchemy Solana endpoints — used as primary when ALCHEMY_API_KEY is set. */
+function alchemyWss():  string | null {
+  const key = process.env["ALCHEMY_API_KEY"];
+  return key ? `wss://solana-mainnet.g.alchemy.com/v2/${key}` : null;
+}
+function alchemyHttp(): string | null {
+  const key = process.env["ALCHEMY_API_KEY"];
+  return key ? `https://solana-mainnet.g.alchemy.com/v2/${key}` : null;
+}
+
 /** Free public Solana WebSocket RPC endpoints — rotated on silent-drop reconnects. */
 export const FALLBACK_WSS_RPCS = [
+  "wss://solana-rpc.publicnode.com",             // PublicNode
   "wss://api.mainnet-beta.solana.com",           // Solana Foundation
   "wss://rpc.ankr.com/solana/ws",                // Ankr free tier
-  "wss://solana-rpc.publicnode.com",             // PublicNode (back as third option)
 ] as const;
 
-/** Free public Solana RPC endpoints used as fallbacks when the primary is rate-limited.
- *  Only truly keyless endpoints — Ankr/Triton/Omnia all require API keys. */
+/** Free public Solana HTTP RPC endpoints used as fallbacks when the primary is rate-limited. */
 export const FALLBACK_HTTP_RPCS = [
+  "https://solana-rpc.publicnode.com",    // PublicNode
   "https://api.mainnet-beta.solana.com",  // Solana Foundation — keyless
 ] as const;
 
@@ -124,10 +134,11 @@ export abstract class SolanaRpcIndexer {
   }) {
     this.programId   = opts.programId;
     this._watchdogMs = opts.watchdogMs ?? 30_000;
-    // Round-robin WSS pool: start with caller-supplied or PublicNode, then fallbacks
-    const primary = opts.wssUrl ?? PUBLICNODE_WSS;
+    // Round-robin WSS pool: Alchemy (if key set) → caller-supplied → PublicNode, then free fallbacks
+    const primary = opts.wssUrl ?? alchemyWss() ?? PUBLICNODE_WSS;
     this._wssUrls = [primary, ...FALLBACK_WSS_RPCS.filter(u => u !== primary)];
-    this.httpUrl   = opts.httpUrl ?? PUBLICNODE_HTTP;
+    // HTTP: Alchemy → caller-supplied → PublicNode
+    this.httpUrl   = opts.httpUrl ?? alchemyHttp() ?? PUBLICNODE_HTTP;
     this.log       = rootLogger.child({ adapter: opts.adapterName });
   }
 
@@ -160,14 +171,14 @@ export abstract class SolanaRpcIndexer {
   // ── RPC helpers ────────────────────────────────────────────────────────────
 
   // ── Concurrency limiter (semaphore with queue) ─────────────────────────────
-  // PublicNode free tier allows ~10 req/s. Cap concurrent getTransaction calls
-  // to avoid rate limits. Excess calls are queued (up to _rpcQueueMax) so no
-  // event is silently discarded while the RPC is temporarily saturated.
-  // Only if the queue itself is full (sustained overload) are new arrivals
-  // dropped — this is an explicit backpressure boundary, not a silent loss.
+  // Cap concurrent getTransaction calls to avoid RPC rate limits.
+  // Alchemy free tier: ~330 req/s → use 16 concurrent.
+  // PublicNode / public endpoints: ~4 req/s → use 4 concurrent.
+  // Excess calls are queued (up to _rpcQueueMax) so no event is silently
+  // discarded while the RPC is temporarily saturated.
   private _rpcInFlight   = 0;
-  private readonly _rpcMaxConcurrent = 4;  // keep low — PublicNode free tier rate-limits at ~4 req/s
-  private readonly _rpcQueueMax      = 32; // small queue — stale events aren't worth processing
+  private readonly _rpcMaxConcurrent = process.env["ALCHEMY_API_KEY"] ? 16 : 4;
+  private readonly _rpcQueueMax      = 64; // larger queue is fine with Alchemy's headroom
   private _rpcQueue: Array<() => void> = [];
 
   private _acquireRpcSlot(): Promise<void> {
