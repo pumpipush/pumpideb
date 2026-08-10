@@ -22,7 +22,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { computeHoldingRow, atomicToDisplayTokens, formatTokenAmount } from "../utils.js";
+import { computeHoldingRow, atomicToDisplayTokens, formatTokenAmount, formatAtomicTokenAmount } from "../utils.js";
 
 // ────────────────────────────────────────────────────────────────────────────────
 // computeHoldingRow — the PortfolioTab sole calculation path
@@ -152,6 +152,82 @@ describe("atomicToDisplayTokens — 6-decimal pump.fun convention", () => {
   it("respects the decimals parameter for non-standard tokens", () => {
     expect(atomicToDisplayTokens(1_000_000_000, 9)).toBe(1); // wSOL (9 dec)
     expect(atomicToDisplayTokens(42, 0)).toBe(42);           // 0-decimal
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// formatAtomicTokenAmount — safe call site for DB/API token amounts
+// ────────────────────────────────────────────────────────────────────────────────
+
+describe("formatAtomicTokenAmount — internal ÷1e6 so call sites cannot forget", () => {
+  it("converts the original bug case: '1500000' atomic → '1.5' display (not '1.50m')", () => {
+    const result = formatAtomicTokenAmount("1500000");
+    expect(result).not.toMatch(/m$/);             // no million suffix
+    expect(result).not.toMatch(/[kmbtq]$/);       // no any magnitude suffix
+    expect(parseFloat(result.replace(/,/g, ""))).toBeCloseTo(1.5, 3);
+  });
+
+  it("1,000,000 atomic → '1' display token", () => {
+    const result = formatAtomicTokenAmount("1000000");
+    expect(parseFloat(result)).toBeCloseTo(1, 5);
+  });
+
+  it("10,000,000 atomic → '10' display tokens", () => {
+    const result = formatAtomicTokenAmount("10000000");
+    expect(parseFloat(result.replace(/,/g, ""))).toBeCloseTo(10, 3);
+  });
+
+  it("50,952,000 atomic → '50.95' (trade table fix: was '50.95m')", () => {
+    // This was the exact value triggering "50.95m" in the trade table bug.
+    const buggy = formatTokenAmount("50952000");    // raw → "50.95m" (wrong)
+    const fixed  = formatAtomicTokenAmount("50952000"); // atomic → "50.95" (right)
+    expect(buggy).toBe("50.95m");                  // proves what the bug looked like
+    expect(fixed).not.toMatch(/m$/);
+    expect(parseFloat(fixed.replace(/,/g, ""))).toBeCloseTo(50.952, 2);
+  });
+
+  it("whale: 10 billion atomic → '10.00k' display tokens", () => {
+    const result = formatAtomicTokenAmount("10000000000");
+    expect(result).toMatch(/k$/);
+    expect(result).toContain("10");
+  });
+
+  it("tiny: 100 atomic → display value < 1 (rounds to '0' at 2dp)", () => {
+    // 100 / 1e6 = 0.0001 whole tokens.
+    // formatTokenAmount uses toLocaleString(maximumFractionDigits:2) → "0".
+    // The key is no billion/million suffix, and no crash.
+    const result = formatAtomicTokenAmount("100");
+    expect(result).not.toMatch(/[kmbtq]$/);
+    // 0.0001 rounds to "0" at 2 decimal places — that's expected behaviour
+    expect(["0", "0.00", "0.0001"]).toContain(result);
+  });
+
+  it("null/undefined/empty → '0'", () => {
+    expect(formatAtomicTokenAmount(null)).toBe("0");
+    expect(formatAtomicTokenAmount(undefined)).toBe("0");
+    expect(formatAtomicTokenAmount("")).toBe("0");
+  });
+
+  it("accepts a numeric value as well as a string", () => {
+    expect(formatAtomicTokenAmount(1_500_000)).not.toMatch(/m$/);
+    expect(parseFloat(formatAtomicTokenAmount(1_500_000))).toBeCloseTo(1.5, 3);
+  });
+
+  it("respects the decimals parameter for 9-decimal tokens", () => {
+    // 1,000,000,000 atomic with 9 decimals = 1 display token (not 1,000)
+    const result = formatAtomicTokenAmount("1000000000", 9);
+    expect(parseFloat(result)).toBeCloseTo(1, 5);
+    expect(result).not.toMatch(/k$/);  // must NOT be "1.00k"
+  });
+
+  it("is safe to call where formatTokenAmount(String(bal / 1e6)) was used", () => {
+    // Holders tab old pattern: formatTokenAmount(String(bal / 1e6))
+    // New pattern: formatAtomicTokenAmount(String(bal))
+    // Both must produce the same output.
+    const bal = 2_500_000; // raw atomic
+    const oldWay = formatTokenAmount(String(bal / 1e6));
+    const newWay = formatAtomicTokenAmount(String(bal));
+    expect(newWay).toBe(oldWay); // identical output, safer API
   });
 });
 

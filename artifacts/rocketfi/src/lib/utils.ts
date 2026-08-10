@@ -205,7 +205,13 @@ function formatTokenAmountInternal(amt: string | null | undefined): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
-/** Format raw token amount (Pump.fun tokenAmount is in whole token units) */
+/**
+ * Format a token amount that is already in **display (whole-token) units**.
+ *
+ * Call this when the value has already been divided by 10^decimals.
+ * If you have a raw atomic value from the DB or API, call
+ * `formatAtomicTokenAmount` instead — it handles the division internally.
+ */
 export function formatTokenAmount(amt: string | null | undefined): string {
   const n = parseFloat(amt ?? "0");
   if (!n || !Number.isFinite(n)) return "0";
@@ -216,6 +222,28 @@ export function formatTokenAmount(amt: string | null | undefined): string {
   if (n >= 1e6)  return `${(n / 1e6).toFixed(2)}m`;
   if (n >= 1e3)  return `${(n / 1e3).toFixed(1)}k`;
   return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+/**
+ * Format a **raw atomic** token amount from the DB or a trade API response.
+ *
+ * This is the safe call site for `trade.tokenAmount`, `holders[].balance`,
+ * and any other value stored in atomic units. It calls `atomicToDisplayTokens`
+ * internally so callers cannot accidentally forget the ÷10^decimals step.
+ *
+ * @param raw      Raw atomic amount (numeric string or number, e.g. "1500000")
+ * @param decimals On-chain decimal places (default 6 for pump.fun/PumpSwap/LaunchLab)
+ *
+ * @example
+ *   formatAtomicTokenAmount("1500000")      // → "1.5"   (not "1.50m")
+ *   formatAtomicTokenAmount("1000000000", 9) // → "1"     (wSOL convention)
+ */
+export function formatAtomicTokenAmount(
+  raw: string | number | null | undefined,
+  decimals = 6,
+): string {
+  const display = atomicToDisplayTokens(raw ?? 0, decimals);
+  return formatTokenAmount(String(display));
 }
 
 // ── General utilities ──────────────────────────────────────────────────────────

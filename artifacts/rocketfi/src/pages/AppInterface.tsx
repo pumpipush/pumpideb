@@ -55,7 +55,7 @@ import {
   type ExternalSolanaToken,
 } from "@/lib/external-tokens";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
-import { formatSol, formatTokenAmount, atomicToDisplayTokens, computeHoldingRow } from "@/lib/utils";
+import { formatSol, formatTokenAmount, formatAtomicTokenAmount, atomicToDisplayTokens, computeHoldingRow } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { copyToClipboard as fireClipboard } from "@/components/shared/CopyToast";
@@ -2215,7 +2215,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         const isLive = idx < dedupedLive.length;
                         const isBuy = trade.isBuy;
                         const solAmt = parseFloat(trade.ethAmount || "0") / 1e9;
-                        const tokAmt = parseFloat(trade.tokenAmount || "0") / 1e6;
+                        const tokAmt = trade.tokenAmount || "0"; // raw atomic — formatted below with formatAtomicTokenAmount
                         const usdVal = solPrice ? solAmt * solPrice : null;
                         const pricePerTokSol = trade.priceEth ? parseFloat(trade.priceEth) : null;
                         const pricePerTokUsd = pricePerTokSol && solPrice ? pricePerTokSol * solPrice : null;
@@ -2243,7 +2243,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                             </td>
                             {/* Token amount */}
                             <td className="px-3 py-2 text-right font-mono text-[13px]" style={{ color: "#e2e8f0" }}>
-                              {formatTokenAmount(String(tokAmt))}
+                              {formatAtomicTokenAmount(tokAmt)}
                             </td>
                             {/* SOL */}
                             <td className="px-3 py-2 text-right font-mono text-[13px]" style={{ color: "#94a3b8" }}>
@@ -2510,7 +2510,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               )}
                             </div>
                           </td>
-                          <td className="px-3 py-2.5 text-right text-[14px] text-foreground">{formatTokenAmount(String(bal / 1e6))}</td>
+                          <td className="px-3 py-2.5 text-right text-[14px] text-foreground">{formatAtomicTokenAmount(String(bal))}</td>
                           <td className="px-3 py-2.5 text-right text-[14px] text-primary font-bold">{pct.toFixed(1)}%</td>
                           <td className="px-3 py-2.5">
                             <div className="h-1.5 w-20 bg-muted/50 rounded-full overflow-hidden">
