@@ -11,7 +11,7 @@ import {
 import { emitTrade, emitSnapshot, tradeEmitter, type TradeEvent, type SnapshotEvent } from "../lib/tradeEmitter";
 import type { NewTokenEvent } from "../lib/tradeEmitter"; // imported for type completeness
 import { registerGraduatedMint } from "../lib/adapters/raydium-amm";
-import { fetchBirdeyeOHLCV, fetchBirdeyeTokenOverview, getSolPriceUsd } from "../lib/birdeye.js";
+import { fetchBirdeyeOHLCV, fetchBirdeyeTokenOverview, fetchBirdeyeTokenTrades, getSolPriceUsd } from "../lib/birdeye.js";
 
 // Platforms that use Birdeye for OHLCV + price-history (no internal trade stream in prod yet)
 const DEX_PLATFORMS = new Set(["raydium", "orca", "meteora", "pumpswap", "raydium_launchlab"]);
@@ -622,23 +622,108 @@ router.get("/tokens/:address/trades", async (req, res): Promise<void> => {
     return;
   }
 
+  const address = params.data.address;
+
+  // Determine platform first so we can skip the price guard for DEX tokens
+  const [tokenRow] = await db
+    .select({ platform: tokensTable.platform })
+    .from(tokensTable)
+    .where(eq(tokensTable.address, address))
+    .limit(1);
+
+  const isDex = tokenRow && DEX_PLATFORMS.has(tokenRow.platform);
+
   const trades = await db
     .select()
     .from(tradesTable)
     .where(
       and(
-        eq(tradesTable.tokenAddress, params.data.address),
-        // Sanity guard: pump.fun prices are never legitimately above ~0.0001 SOL/token.
-        // 1.0 SOL/token is a generous ceiling that blocks corrupted price spikes from
-        // appearing in the trade history, even if a future heal-job regression writes bad data.
-        or(
-          isNull(tradesTable.priceEth),
-          sql`CAST(${tradesTable.priceEth} AS DOUBLE PRECISION) < 1.0`,
-        ),
+        eq(tradesTable.tokenAddress, address),
+        // Sanity guard for pump.fun only: prices are never legitimately above 1.0 SOL/token.
+        // DEX tokens (cbBTC ~849 SOL/token) must NOT have this filter applied.
+        isDex
+          ? undefined
+          : or(
+              isNull(tradesTable.priceEth),
+              sql`CAST(${tradesTable.priceEth} AS DOUBLE PRECISION) < 1.0`,
+            ),
       ),
     )
     .orderBy(desc(tradesTable.timestamp))
     .limit(100);
+
+  // Internal trades exist — return them directly
+  if (trades.length > 0) {
+    res.json(TradeHistoryResponse.parse(trades));
+    return;
+  }
+
+  // No internal trades → proxy from Birdeye for DEX tokens
+  if (isDex) {
+    const [birdeyeTrades, solPrice] = await Promise.all([
+      fetchBirdeyeTokenTrades(address, 50),
+      getSolPriceUsd(),
+    ]);
+
+    if (birdeyeTrades && birdeyeTrades.length > 0) {
+      // Deduplicate by txHash — Birdeye may return each swap leg separately (multi-hop routes).
+      // Prefer the leg where our token appears as an exact match in `to` or `from`.
+      const seen = new Map<string, (typeof birdeyeTrades)[number]>();
+      for (const item of birdeyeTrades) {
+        const existing = seen.get(item.txHash);
+        if (!existing) {
+          seen.set(item.txHash, item);
+        } else {
+          const isExact = item.to.address === address || item.from.address === address;
+          if (isExact) seen.set(item.txHash, item);
+        }
+      }
+      const deduped = Array.from(seen.values());
+
+      const mapped = deduped.map((item, idx) => {
+        // Determine buy/sell: if the token we're tracking is in "to", it was bought
+        const isBuy = item.to.address === address
+          ? true
+          : item.from.address === address
+          ? false
+          : item.side === "buy";
+
+        const tokenSide = (item.to.address === address) ? item.to : item.from;
+        const otherSide = (item.to.address === address) ? item.from : item.to;
+
+        // Token amount in atomic units (ui amount × 10^decimals)
+        const tokenDecimals = tokenSide.decimals ?? 6;
+        const tokenUiAmt    = Math.abs(tokenSide.uiAmount);
+        const tokenAmount   = String(Math.round(tokenUiAmt * Math.pow(10, tokenDecimals)));
+
+        // Trade value in SOL lamports (other-side USD value ÷ SOL price × 1e9)
+        const tradeUsd      = Math.abs(otherSide.uiAmount) * (otherSide.price || item.tokenPrice || 0);
+        const ethAmount     = solPrice > 0 ? String(Math.round(tradeUsd / solPrice * 1e9)) : "0";
+
+        // Price: SOL per token
+        const priceEth = item.tokenPrice > 0 && solPrice > 0
+          ? String(item.tokenPrice / solPrice)
+          : null;
+
+        return {
+          id:             -(item.blockUnixTime * 100 + idx), // synthetic negative ID — won't clash with DB
+          tokenAddress:   address,
+          traderAddress:  item.owner,
+          isBuy,
+          ethAmount,
+          tokenAmount,
+          priceEth,
+          txHash:         item.txHash,
+          platform:       tokenRow.platform,
+          timestamp:      new Date(item.blockUnixTime * 1000).toISOString(),
+        };
+      });
+
+      // Bypass zod parse — Birdeye data matches shape but uses synthetic IDs
+      res.json(mapped);
+      return;
+    }
+  }
 
   res.json(TradeHistoryResponse.parse(trades));
 });

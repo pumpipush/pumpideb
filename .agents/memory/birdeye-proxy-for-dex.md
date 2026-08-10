@@ -1,39 +1,54 @@
 ---
-name: Birdeye proxy for DEX token detail pages
-description: How OHLCV, price-history, and stats endpoints fall back to Birdeye for DEX tokens with no internal trade history
+name: Birdeye proxy for DEX token pages
+description: OHLCV/price-history/stats/trades proxy to Birdeye when internal trades table is empty; field names, trade dedup, and current-candle synthetic bar
 ---
 
-## The pattern
+## What this covers
 
-DEX tokens (raydium, orca, meteora, pumpswap, raydium_launchlab) have no rows in the `trades` table in dev (streaming adapters are disabled). Without this proxy, token detail pages load as empty templates.
+For DEX tokens (raydium, orca, meteora, pumpswap, raydium_launchlab), internal `trades` table is empty because streaming adapters are disabled in dev. All live data comes from Birdeye.
 
-The fix lives in `artifacts/api-server/src/routes/trades.ts`:
+## Endpoints that proxy to Birdeye
 
-1. **OHLCV** (`GET /tokens/:address/ohlcv?tf=`): After computing `bars` from the trades table, if `bars.length === 0` AND the token's `platform` is in `DEX_PLATFORMS`, call `fetchBirdeyeOHLCV(address, tf, timeFrom, now)` and convert USD prices → SOL/token by dividing by `getSolPriceUsd()`.
+1. **`GET /ohlcv`** — `fetchBirdeyeOHLCV` + `fetchBirdeyeTokenOverview` in parallel.
+   - Convert bar prices USD→SOL (÷solPrice)
+   - Append synthetic current candle using `overview.price` so chart last bar matches live price
+   - Background-update `token.price_eth` + `token.price_usd` in DB (non-fatal)
 
-2. **price-history** (`GET /tokens/:address/price-history`): After querying trades for p5m/p1h/p6h/p24h, if all values are null AND platform is a DEX, call `fetchBirdeyeTokenOverview()` and compute historical prices from `currentSol / (1 + pct/100)`.
+2. **`GET /price-history`** — use Birdeye's `history5mPrice`, `history1hPrice`, `history6hPrice`, `history24hPrice` **directly** (NOT computed from % change — that's stale and inaccurate)
 
-3. **stats** (`GET /tokens/:address/stats`): If vol24h_sol=0 AND platform is a DEX, use Birdeye `overview.v24hUSD / solPrice` as vol24h.
+3. **`GET /stats`** — `fetchBirdeyeTokenOverview` for vol24h. Use `vBuy24hUSD`/`vSell24hUSD` for accurate buy/sell split. Use `buy24h`/`sell24h` for txn counts.
 
-**Why:** pump.fun uses priceEth in SOL units (e.g. 2.84e-8). Birdeye returns USD. Divide by solPrice to get the same SOL/token unit. Frontend multiplies by SOL price to get USD display.
+4. **`GET /trades`** — `fetchBirdeyeTokenTrades` (`/defi/txs/token?tx_type=swap&sort_type=desc`).
+   - **Dedup by txHash** — Birdeye returns each leg of multi-hop swaps separately; keep the leg where our token is in `from` or `to`.
+   - Compute `isBuy`: `to.address === tokenAddress` → true; `from.address === tokenAddress` → false; else `side === "buy"`
+   - `tokenAmount` = `uiAmount × 10^decimals` (atomic)
+   - `ethAmount` = other-side value in USD ÷ solPrice × 1e9 (lamports)
+   - `priceEth` = `tokenPrice / solPrice`
+   - Use synthetic negative IDs to avoid collision with real DB IDs
 
-## pctChange24h for list/bubble views
+## Birdeye field name gotchas
 
-`fetch24hPctChanges()` in tokens.ts queries the trades table (pump.fun only works). DEX tokens need a fallback to the `tokens.pct_change_24h` DB column.
+- Market cap: field is `marketCap` (NOT `mc`!) — `n("marketCap") ?? n("mc")`
+- Volume fields: `v24hUSD`, `vBuy24hUSD`, `vSell24hUSD`
+- Txn counts: `buy24h`, `sell24h`
+- Historical prices: `history5mPrice`, `history1hPrice`, `history6hPrice`, `history8hPrice`, `history24hPrice`
+- Supply: `circulatingSupply` (number, e.g. 3363 for cbBTC)
+- Trade item structure: `from`/`to` (each has `address`, `uiAmount`, `price`, `decimals`, `changeAmount`)
 
-**How it works now:**
-1. SQL query: first/last price_eth from trades within 24h
-2. For addresses not in step 1 result: query `tokens.pct_change_24h` column
+## pct_change_24h DB column (migration 0003)
 
-**Populating pct_change_24h:**
-- `formatToken()` now falls back to `t.pctChange24h` (DB column) when no live argument provided
-- `enrich-dex-pct.mjs` script: queries Birdeye token_overview for top 300 DEX tokens, stores in DB
-- Meteora backfill uses `fetchBirdeyeTokenMeta()` which now includes `priceChange24hPercent`
-- Re-run `node artifacts/api-server/dist/scripts/enrich-dex-pct.mjs` periodically to refresh
+`DOUBLE PRECISION` column on `tokens` table. Populated by `enrich-dex-pct.mjs` (run periodically, e.g. every 6h). `fetch24hPctChanges()` in `tokens.ts` falls back to this column for addresses with no internal trades.
 
-## DB schema
-- `tokens.pct_change_24h DOUBLE PRECISION` — migration 0003
-- Set by `enrich-dex-pct.mjs`, also updated during Meteora backfill
+**Why:** The `GET /price-history` endpoint computes % changes on-the-fly from Birdeye; this column is a cache for the explore/bubble chart which can't call Birdeye per-token.
 
-## Birdeye timeframes
-BIRDEYE_HISTORY_SECS map in trades.ts: 1m→4h, 5m→24h, 15m→3d, 1H→30d, 4H→90d, 1D→1y, 1W→2y. Birdeye tf param names match internal names exactly.
+## Price consistency (frontend)
+
+`priceStats.currentPrice` in `AppInterface.tsx` for DEX tokens reads from `serverOhlcv?.bars?.slice(-1)[0]?.close` (last OHLCV bar's close, which has the synthetic current price). This keeps price panel and chart in sync.
+
+## Trade display loading time
+
+Birdeye proxy trades take ~1.5s. The Trades tab shows skeleton rows during this time — expected, not a bug. Trades refresh every 10s (`refetchInterval: 10_000`).
+
+## priceEth filter bug (trades endpoint)
+
+The `CAST(priceEth AS DOUBLE PRECISION) < 1.0` guard is for pump.fun only. For DEX tokens (e.g. cbBTC at ~848 SOL/token), this filter must be skipped. Check `DEX_PLATFORMS.has(platform)` and set `isDex` flag to skip the filter.

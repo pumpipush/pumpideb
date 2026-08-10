@@ -246,6 +246,37 @@ export async function fetchBirdeyeTokenOverview(address: string): Promise<Birdey
   };
 }
 
+// ── Token trade history from Birdeye ─────────────────────────────────────────
+
+export interface BirdeyeTradeItem {
+  txHash:        string;
+  blockUnixTime: number;
+  owner:         string;
+  side:          "buy" | "sell";
+  tokenPrice:    number;
+  from: { address: string; uiAmount: number; price: number; decimals: number; changeAmount: number };
+  to:   { address: string; uiAmount: number; price: number; decimals: number; changeAmount: number };
+}
+
+/**
+ * Fetch recent swap transactions for a token from Birdeye.
+ * Returns the last `limit` swaps (max 50 per call), newest first.
+ * Consumes ~5 CU per call.
+ */
+export async function fetchBirdeyeTokenTrades(
+  address: string,
+  limit = 50,
+): Promise<BirdeyeTradeItem[] | null> {
+  const params = new URLSearchParams({
+    address,
+    tx_type: "swap",
+    sort_type: "desc",
+    limit: String(Math.min(limit, 50)),
+  });
+  const data = await birdeyeGet<{ items?: unknown[] }>(`/defi/txs/token?${params}`);
+  return (data?.items as BirdeyeTradeItem[] | undefined) ?? null;
+}
+
 export async function getSolPriceUsd(): Promise<number> {
   const WSOL = "So11111111111111111111111111111111111111112";
   const data = await birdeyeGet<{ value: number }>(`/defi/price?address=${WSOL}`);
