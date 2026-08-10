@@ -2174,23 +2174,26 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 <table className="text-[14px]" style={{ minWidth: "520px", width: "100%" }}>
                   <thead style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
                     <tr>
-                      <th className="text-left px-3 py-2.5 font-normal text-[14px]" style={{ color: "#94a3b8" }}>Type</th>
-                      <th className="text-right px-3 py-2.5 font-normal text-[14px]" style={{ color: "#94a3b8" }}>Amount SOL</th>
-                      <th className="text-right px-3 py-2.5 font-normal text-[14px]" style={{ color: "#94a3b8" }}>{token.symbol}</th>
-                      <th className="text-right px-3 py-2.5 font-normal text-[14px]" style={{ color: "#94a3b8" }}>Time</th>
-                      <th className="text-right px-3 py-2.5 font-normal text-[14px]" style={{ color: "#94a3b8" }}>Txn</th>
+                      <th className="text-left px-3 py-2 font-normal text-[12px] uppercase tracking-wide" style={{ color: "#64748b" }}>Date</th>
+                      <th className="text-left px-3 py-2 font-normal text-[12px] uppercase tracking-wide" style={{ color: "#64748b" }}>Type</th>
+                      <th className="text-right px-3 py-2 font-normal text-[12px] uppercase tracking-wide" style={{ color: "#64748b" }}>USD</th>
+                      <th className="text-right px-3 py-2 font-normal text-[12px] uppercase tracking-wide" style={{ color: "#64748b" }}>{token.symbol}</th>
+                      <th className="text-right px-3 py-2 font-normal text-[12px] uppercase tracking-wide" style={{ color: "#64748b" }}>SOL</th>
+                      <th className="text-right px-3 py-2 font-normal text-[12px] uppercase tracking-wide" style={{ color: "#64748b" }}>Price</th>
+                      <th className="text-right px-3 py-2 font-normal text-[12px] uppercase tracking-wide" style={{ color: "#64748b" }}>Maker</th>
+                      <th className="text-right px-3 py-2 font-normal text-[12px] uppercase tracking-wide" style={{ color: "#64748b" }}>Txn</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loadingHistory ? (
                       [...Array(4)].map((_, i) => (
                         <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                          <td colSpan={5} className="px-3 py-3"><Skeleton className="h-3.5 w-full" /></td>
+                          <td colSpan={8} className="px-3 py-3"><Skeleton className="h-3.5 w-full" /></td>
                         </tr>
                       ))
                     ) : historyError ? (
                       <tr>
-                        <td colSpan={5} className="px-3 py-10 text-center text-[13px]" style={{ color: "#f87171" }}>
+                        <td colSpan={8} className="px-3 py-10 text-center text-[13px]" style={{ color: "#f87171" }}>
                           Failed to load trades.{" "}
                           <button onClick={() => refetchHistory()} className="underline hover:opacity-80 transition-opacity">Retry</button>
                         </td>
@@ -2202,7 +2205,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       if (!allRows.length) {
                         return (
                           <tr>
-                            <td colSpan={5} className="px-3 py-10 text-center text-[13px]" style={{ color: "#475569" }}>
+                            <td colSpan={8} className="px-3 py-10 text-center text-[13px]" style={{ color: "#475569" }}>
                               No trades recorded yet.
                             </td>
                           </tr>
@@ -2211,52 +2214,77 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       return allRows.map((trade, idx) => {
                         const isLive = idx < dedupedLive.length;
                         const isBuy = trade.isBuy;
+                        const solAmt = parseFloat(trade.ethAmount || "0") / 1e9;
+                        const tokAmt = parseFloat(trade.tokenAmount || "0") / 1e6;
+                        const usdVal = solPrice ? solAmt * solPrice : null;
+                        const pricePerTokSol = trade.priceEth ? parseFloat(trade.priceEth) : null;
+                        const pricePerTokUsd = pricePerTokSol && solPrice ? pricePerTokSol * solPrice : null;
+                        const rowColor = isBuy ? "#4ade80" : "#f87171";
+                        const rowBg   = isBuy ? "rgba(74,222,128,0.04)" : "rgba(248,113,113,0.04)";
                         return (
                           <tr
                             key={trade.txHash ?? trade.id}
-                            className={isLive ? (isBuy ? "animate-trade-buy" : "animate-trade-sell") : "transition-colors"}
-                            style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
-                            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
-                            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                            className={isLive ? (isBuy ? "animate-trade-buy" : "animate-trade-sell") : ""}
+                            style={{ borderBottom: "1px solid rgba(255,255,255,0.035)", background: isLive ? rowBg : "transparent", transition: "background 0.15s" }}
+                            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+                            onMouseLeave={e => (e.currentTarget.style.background = isLive ? rowBg : "transparent")}
                           >
-                            {/* Type */}
-                            <td className="px-3 py-2.5">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[14px] font-normal"
-                                  style={{ color: isBuy ? "#4ade80" : "#f87171" }}>
-                                  {isBuy ? "Buy" : "Sell"}
-                                </span>
-                              </div>
-                            </td>
-                            {/* Amount SOL */}
-                            <td className="px-3 py-2.5 text-right font-mono text-[14px]" style={{ color: "#e2e8f0" }}>
-                              {formatSol(trade.ethAmount)}
-                            </td>
-                            {/* Token amount — tokenAmount in DB is raw atomic units (pump.fun = 6 decimals) */}
-                            <td className="px-3 py-2.5 text-right font-mono text-[14px]" style={{ color: "#94a3b8" }}>
-                              {formatTokenAmount(String(parseFloat(trade.tokenAmount || "0") / 1e6))}
-                            </td>
-                            {/* Time */}
-                            <td className="px-3 py-2.5 text-right text-[14px]" style={{ color: "#94a3b8" }}>
+                            {/* Date */}
+                            <td className="px-3 py-2 text-left font-mono text-[12px]" style={{ color: "#64748b", whiteSpace: "nowrap" }}>
                               {timeAgo(trade.timestamp)}
                             </td>
+                            {/* Type */}
+                            <td className="px-3 py-2 text-left text-[13px] font-semibold" style={{ color: rowColor }}>
+                              {isBuy ? "Buy" : "Sell"}
+                            </td>
+                            {/* USD */}
+                            <td className="px-3 py-2 text-right font-mono text-[13px]" style={{ color: rowColor }}>
+                              {usdVal != null ? (usdVal >= 1 ? `$${usdVal.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : `$${usdVal.toFixed(2)}`) : "—"}
+                            </td>
+                            {/* Token amount */}
+                            <td className="px-3 py-2 text-right font-mono text-[13px]" style={{ color: "#e2e8f0" }}>
+                              {formatTokenAmount(String(tokAmt))}
+                            </td>
+                            {/* SOL */}
+                            <td className="px-3 py-2 text-right font-mono text-[13px]" style={{ color: "#94a3b8" }}>
+                              {formatSol(trade.ethAmount)}
+                            </td>
+                            {/* Price */}
+                            <td className="px-3 py-2 text-right font-mono text-[13px]" style={{ color: "#94a3b8" }}>
+                              {pricePerTokUsd != null ? formatTokenPrice(pricePerTokUsd) : pricePerTokSol != null ? `${pricePerTokSol.toPrecision(4)} SOL` : "—"}
+                            </td>
+                            {/* Maker */}
+                            <td className="px-3 py-2 text-right">
+                              {trade.traderAddress ? (
+                                <a
+                                  href={`https://solscan.io/account/${trade.traderAddress}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-mono text-[12px] transition-colors"
+                                  style={{ color: "#64748b" }}
+                                  onMouseEnter={e => ((e.currentTarget as HTMLAnchorElement).style.color = "#94a3b8")}
+                                  onMouseLeave={e => ((e.currentTarget as HTMLAnchorElement).style.color = "#64748b")}
+                                >
+                                  {trade.traderAddress.slice(0, 4)}…{trade.traderAddress.slice(-4)}
+                                </a>
+                              ) : <span style={{ color: "#475569" }}>—</span>}
+                            </td>
                             {/* Txn */}
-                            <td className="px-3 py-2.5 text-right">
+                            <td className="px-3 py-2 text-right">
                               {trade.txHash ? (
                                 <a
                                   href={`https://solscan.io/tx/${trade.txHash}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 font-mono text-[12px] transition-colors"
-                                  style={{ color: "#94a3b8" }}
-                                  onMouseEnter={e => ((e.currentTarget as HTMLAnchorElement).style.color = "#cbd5e1")}
-                                  onMouseLeave={e => ((e.currentTarget as HTMLAnchorElement).style.color = "#94a3b8")}
+                                  className="inline-flex items-center justify-end transition-colors"
+                                  style={{ color: "#475569" }}
+                                  onMouseEnter={e => ((e.currentTarget as HTMLAnchorElement).style.color = "#94a3b8")}
+                                  onMouseLeave={e => ((e.currentTarget as HTMLAnchorElement).style.color = "#475569")}
                                 >
-                                  {trade.txHash.slice(0, 6)}…
-                                  <ExternalLink className="h-3 w-3" />
+                                  <ExternalLink className="h-3.5 w-3.5" />
                                 </a>
                               ) : (
-                                <span className="font-mono text-[12px]" style={{ color: "#475569" }}>—</span>
+                                <span style={{ color: "#475569" }}>—</span>
                               )}
                             </td>
                           </tr>
