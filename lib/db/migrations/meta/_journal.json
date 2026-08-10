@@ -29,6 +29,27 @@
       "when": 1786321800000,
       "tag": "0003_add_pct_change_24h",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786350000000,
+      "tag": "0004_add_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786380000000,
+      "tag": "0005_add_decimals",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786410000000,
+      "tag": "0006_add_metadata_uri",
+      "breakpoints": true
     }
   ]
 }

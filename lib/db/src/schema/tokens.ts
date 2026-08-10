@@ -37,6 +37,11 @@ export const tokensTable = pgTable("tokens", {
   pctChange24h:   doublePrecision("pct_change_24h"),  // 24h price % change; refreshed from Birdeye for DEX tokens
   /** SPL token decimal places. pump.fun / PumpSwap / LaunchLab all use 6. Stored so future platforms with different decimals work correctly. */
   decimals: integer("decimals").notNull().default(6),
+  /** On-chain metadata URI decoded from the createLaunchpad instruction (IPFS / Arweave / CDN).
+   *  Stored at token creation time and used as a fallback enrichment source when the
+   *  Raydium /mint/ids registry has not yet indexed the token. Null for platforms that
+   *  don't embed a URI in their creation instruction (pump.fun uses the pump API instead). */
+  metadataUri: text("metadata_uri"),
 });
 
 export const insertTokenSchema = createInsertSchema(tokensTable).omit({

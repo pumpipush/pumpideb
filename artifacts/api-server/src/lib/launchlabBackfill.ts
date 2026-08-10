@@ -26,6 +26,7 @@ import { fileURLToPath } from "url";
 import { eq } from "drizzle-orm";
 import { db, tokensTable } from "@workspace/db";
 import { logger as rootLogger } from "./logger";
+import { fetchSafeUriMeta } from "./safeUriFetch";
 
 const log = rootLogger.child({ module: "launchlab-backfill" });
 
@@ -124,50 +125,6 @@ function readBorshStr(buf: Uint8Array, off: number): [string, number] {
   const end = off + 4 + len;
   if (end > buf.length) throw new RangeError("borsh underflow (str)");
   return [new TextDecoder().decode(buf.subarray(off + 4, end)), end];
-}
-
-// ── IPFS / URI metadata helpers ───────────────────────────────────────────────
-
-function resolveIpfs(url: string): string {
-  return url
-    .replace(/^ipfs:\/\//, "https://ipfs.io/ipfs/")
-    .replace(/https?:\/\/cf-ipfs\.com\/ipfs\//, "https://ipfs.io/ipfs/");
-}
-
-interface UriMeta {
-  imageUrl:    string | null;
-  description: string | null;
-  twitterUrl:  string | null;
-  telegramUrl: string | null;
-  websiteUrl:  string | null;
-}
-
-async function fetchMetaFromUri(uri: string): Promise<UriMeta | null> {
-  if (!uri) return null;
-  try {
-    const res = await fetch(resolveIpfs(uri), {
-      signal:  AbortSignal.timeout(10_000),
-      headers: { "User-Agent": "RocketFi/1.0" },
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as {
-      image?:       string;
-      description?: string;
-      twitter?:     string;
-      telegram?:    string;
-      website?:     string;
-    };
-    const rawImg = json.image?.trim() || null;
-    return {
-      imageUrl:    rawImg ? resolveIpfs(rawImg) : null,
-      description: json.description?.trim() || null,
-      twitterUrl:  json.twitter?.trim()     || null,
-      telegramUrl: json.telegram?.trim()    || null,
-      websiteUrl:  json.website?.trim()     || null,
-    };
-  } catch {
-    return null;
-  }
 }
 
 // ── Instruction decoder ───────────────────────────────────────────────────────
@@ -342,6 +299,7 @@ async function processSignaturePage(sigs: SigEntry[]): Promise<{ inserted: numbe
         priceEth:             LL_INIT_PRICE_ETH,
         platform:             PLATFORM,
         chain:                CHAIN,
+        metadataUri:          decoded.uri ?? null,
         ...(decoded.blockTime
           ? { createdAt: new Date(decoded.blockTime * 1000) }
           : {}),
@@ -352,7 +310,7 @@ async function processSignaturePage(sigs: SigEntry[]): Promise<{ inserted: numbe
 
       // Async: fetch metadata from URI — don't block the main loop
       if (decoded.uri) {
-        void fetchMetaFromUri(decoded.uri).then(async (meta) => {
+        void fetchSafeUriMeta(decoded.uri).then(async (meta) => {
           if (!meta) return;
           const upd: Record<string, string | null> = {};
           if (meta.imageUrl)    upd["imageUrl"]    = meta.imageUrl;

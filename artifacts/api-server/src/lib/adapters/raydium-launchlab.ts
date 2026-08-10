@@ -24,6 +24,7 @@ import { eq, sql } from "drizzle-orm";
 import { db, tokensTable, tradesTable } from "@workspace/db";
 import { emitTrade, emitNewToken } from "../tradeEmitter";
 import { logger as rootLogger } from "../logger";
+import { fetchSafeUriMeta } from "../safeUriFetch";
 import {
   SolanaRpcIndexer,
   detectInstructionType,
@@ -89,50 +90,6 @@ function readBorshStr(buf: Uint8Array, off: number): [string, number] {
   const end = off + 4 + len;
   if (end > buf.length) throw new RangeError("borsh underflow (string)");
   return [new TextDecoder().decode(buf.subarray(off + 4, end)), end];
-}
-
-// ── Metadata helpers ──────────────────────────────────────────────────────────
-
-function resolveIpfs(url: string): string {
-  return url
-    .replace(/^ipfs:\/\//, "https://ipfs.io/ipfs/")
-    .replace(/https?:\/\/cf-ipfs\.com\/ipfs\//, "https://ipfs.io/ipfs/");
-}
-
-interface UriMeta {
-  imageUrl:    string | null;
-  description: string | null;
-  twitterUrl:  string | null;
-  telegramUrl: string | null;
-  websiteUrl:  string | null;
-}
-
-async function fetchMetaFromUri(uri: string): Promise<UriMeta | null> {
-  if (!uri) return null;
-  try {
-    const res = await fetch(resolveIpfs(uri), {
-      signal:  AbortSignal.timeout(10_000),
-      headers: { "User-Agent": "RocketFi/1.0" },
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as {
-      image?:       string;
-      description?: string;
-      twitter?:     string;
-      telegram?:    string;
-      website?:     string;
-    };
-    const rawImage = json.image?.trim() || null;
-    return {
-      imageUrl:    rawImage ? resolveIpfs(rawImage) : null,
-      description: json.description?.trim() || null,
-      twitterUrl:  json.twitter?.trim()     || null,
-      telegramUrl: json.telegram?.trim()    || null,
-      websiteUrl:  json.website?.trim()     || null,
-    };
-  } catch {
-    return null;
-  }
 }
 
 // ── Indexer ───────────────────────────────────────────────────────────────────
@@ -202,7 +159,9 @@ class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
     const symbol = params?.symbol ?? "???";
     const uri    = params?.uri    ?? null;
 
-    // Insert the token row with bonding-curve genesis state
+    // Insert the token row with bonding-curve genesis state.
+    // metadataUri is stored so the enrichment loop can fetch image/description
+    // from the on-chain URI when Raydium's /mint/ids registry hasn't indexed it yet.
     await db.insert(tokensTable).values({
       address:              mint,
       name,
@@ -217,6 +176,7 @@ class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
       priceEth:             LL_INIT_PRICE_ETH,
       platform:             PLATFORM,
       chain:                CHAIN,
+      metadataUri:          uri ?? null,
     }).onConflictDoNothing();
 
     this.log.info({ mint, name, symbol, marketCapEth: LL_INIT_MC_LAMPORTS },
@@ -246,7 +206,7 @@ class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
         if (!done) { done = true; broadcast(null); }
       }, 3_000);
 
-      fetchMetaFromUri(uri)
+      fetchSafeUriMeta(uri)
         .then(async (meta) => {
           clearTimeout(fallback);
           if (meta) {

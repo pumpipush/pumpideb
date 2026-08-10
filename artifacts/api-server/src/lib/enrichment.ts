@@ -27,6 +27,7 @@ import { and, desc, gte, isNull, like, or, not, eq, inArray, sql, gt } from "dri
 import { db, tokensTable, tradesTable } from "@workspace/db";
 import { logger } from "./logger";
 import { emitSnapshot } from "./tradeEmitter";
+import { fetchSafeUriMeta } from "./safeUriFetch";
 import {
   fetchDexScreenerTokens,
   pairToDbFields,
@@ -125,7 +126,11 @@ interface EnrichResult {
   websiteUrl?:  string | null;
 }
 
-async function fetchMeta(mint: string, platform: string): Promise<EnrichResult | null> {
+async function fetchMeta(
+  mint:        string,
+  platform:    string,
+  metadataUri: string | null = null,
+): Promise<EnrichResult | null> {
   if (platform === "pump_fun") {
     // Primary: pump.fun API (may be blocked/rate-limited from hosted environments)
     const pump = await fetchPumpMeta(mint);
@@ -153,12 +158,30 @@ async function fetchMeta(mint: string, platform: string): Promise<EnrichResult |
     platform === "letsbonk" ||
     platform === "daos_fun"
   ) {
-    // Raydium's /mint/ids endpoint provides generic Solana token metadata
-    // for any SPL token, used as the common enrichment source for all
-    // Solana platforms other than pump_fun.
-    const meta = await fetchRaydiumMeta(mint);
-    if (!meta) return null;
-    return { name: meta.name, symbol: meta.symbol, imageUrl: meta.logoURI ?? null };
+    // Primary: Raydium's /mint/ids endpoint provides generic Solana token metadata.
+    const ray = await fetchRaydiumMeta(mint);
+    if (ray) return { name: ray.name, symbol: ray.symbol, imageUrl: ray.logoURI ?? null };
+
+    // Fallback for LaunchLab: the createLaunchpad instruction embeds a metadata URI
+    // (IPFS / Arweave / CDN) that holds the full token JSON including name, symbol,
+    // image, description, and socials.  Very new tokens may not be in Raydium's
+    // registry yet — this lets us resolve them immediately from on-chain data.
+    // fetchSafeUriMeta applies the allowlist-based SSRF guard before any fetch.
+    if (platform === "raydium_launchlab" && metadataUri) {
+      const uriMeta = await fetchSafeUriMeta(metadataUri);
+      if (!uriMeta) return null;
+      return {
+        name:        uriMeta.name    ?? undefined,
+        symbol:      uriMeta.symbol  ?? undefined,
+        imageUrl:    uriMeta.imageUrl,
+        description: uriMeta.description,
+        twitterUrl:  uriMeta.twitterUrl,
+        telegramUrl: uriMeta.telegramUrl,
+        websiteUrl:  uriMeta.websiteUrl,
+      };
+    }
+
+    return null;
   }
 
   return null;
@@ -176,6 +199,7 @@ interface TokenRow {
   telegramUrl: string | null;
   websiteUrl:  string | null;
   platform:    string;
+  metadataUri: string | null;
 }
 
 /**
@@ -216,7 +240,7 @@ export function computeEnrichmentUpdate(
 // ── Enrich a single token ──────────────────────────────────────────────────────
 
 async function enrichOne(token: TokenRow): Promise<void> {
-  const meta = await fetchMeta(token.address, token.platform);
+  const meta = await fetchMeta(token.address, token.platform, token.metadataUri);
   if (!meta) return; // upstream API not ready yet
 
   const update = computeEnrichmentUpdate(token, meta);
@@ -276,6 +300,7 @@ async function enrichTick(): Promise<void> {
         telegramUrl: tokensTable.telegramUrl,
         websiteUrl:  tokensTable.websiteUrl,
         platform:    tokensTable.platform,
+        metadataUri: tokensTable.metadataUri,
       })
       .from(tokensTable)
       .where(
@@ -308,6 +333,7 @@ async function enrichTick(): Promise<void> {
         telegramUrl: tokensTable.telegramUrl,
         websiteUrl:  tokensTable.websiteUrl,
         platform:    tokensTable.platform,
+        metadataUri: tokensTable.metadataUri,
       })
       .from(tokensTable)
       .where(
