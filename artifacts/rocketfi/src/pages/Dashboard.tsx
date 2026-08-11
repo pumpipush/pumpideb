@@ -751,19 +751,17 @@ export default function Dashboard() {
   });
 
 
-  // Bubble map: top 40 tokens by volume.
-  // Poll every 60s (not 30s) — real-time price movement is already delivered
-  // via the WebSocket live-update feed; the REST poll only needs to catch new
-  // tokens entering the top-40 list and refresh the 24h pct-change window.
-  // staleTime=55s prevents redundant refetches on window-focus / tab switch.
+  // Bubble map: top trending tokens by smart score (5m + 1h activity).
+  // Poll every 30s — trending rankings shift faster than all-time volume.
+  // staleTime=25s prevents redundant refetches on window-focus / tab switch.
   // refetchOnWindowFocus=false avoids hammering the API when the user alt-tabs.
-  const bubbleListParams = { sort: ListTokensSort.volume, limit: 60 };
+  const bubbleListParams = { sort: ListTokensSort.trending, limit: 60 };
   const { data: bubbleRawTokens } = useListTokens(
     bubbleListParams,
     {
       query: {
-        refetchInterval:      20_000,
-        staleTime:            18_000,
+        refetchInterval:      30_000,
+        staleTime:            25_000,
         refetchOnWindowFocus: false,
         queryKey:             getListTokensQueryKey(bubbleListParams),
       },
@@ -948,7 +946,7 @@ export default function Dashboard() {
                       style={{ borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: "6px solid #1e293b" }} />
                     <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
                       style={{ background: "#1e293b", border: "1px solid rgba(255,255,255,0.1)", color: "#cbd5e1", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
-                      Shows the top tokens by trading volume. Bubble size reflects volume — green means price up, red means price down in the last 24h.
+                      Shows the hottest tokens right now — ranked by recent trading activity (last 5 min &amp; 1 hour). Bubble size reflects rank. Green = price up, red = price down in the last 24h.
                     </div>
                   </div>
                 </div>
