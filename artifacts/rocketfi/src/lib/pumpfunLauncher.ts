@@ -105,40 +105,65 @@ function getATA(owner: PublicKey, mint: PublicKey): PublicKey {
 // ── IPFS Upload ───────────────────────────────────────────────────────────────
 
 /**
- * Upload token metadata + image to pump.fun's IPFS endpoint.
+ * Upload token metadata + image to our self-hosted metadata endpoint.
  *
- * Returns the metadataUri that must be embedded in the create instruction.
- * Retries once on network failure.
+ * pump.fun's /api/ipfs endpoint is blocked from Replit datacenter IPs (Cloudflare
+ * 530) and rejects cross-origin browser requests. We avoid it entirely by hosting
+ * the metadata ourselves via the API server's object storage.
  *
- * Note: pump.fun allows cross-origin requests to /api/ipfs for token creation.
- * If CORS becomes an issue, proxy through a backend endpoint.
+ * Flow:
+ *   1. Encode the image as base64 in the browser (no binary/multipart complexity)
+ *   2. POST JSON to /api/pump-ipfs-upload
+ *   3. Server uploads image + metadata JSON to GCS public path
+ *   4. Server returns an absolute HTTPS metadataUri
+ *
+ * pump.fun's on-chain program only stores the metadataUri string and accepts any
+ * publicly reachable HTTPS URL — not exclusively IPFS URIs.
+ *
+ * Returns the metadataUri to embed in the create instruction.
+ * Retries once on transient network failure.
  */
 export async function uploadToPumpFunIpfs(fields: PumpFunIpfsFields): Promise<string> {
-  const attempt = async () => {
-    const body = new FormData();
-    body.append("name",        fields.name);
-    body.append("symbol",      fields.symbol);
-    body.append("description", fields.description);
-    body.append("showName",    "true");
-    if (fields.twitter)  body.append("twitter",  fields.twitter);
-    if (fields.telegram) body.append("telegram", fields.telegram);
-    if (fields.website)  body.append("website",  fields.website);
-    body.append("file", fields.image, fields.image.name);
+  // Convert File → base64 using FileReader (browser-native, no Buffer polyfill needed)
+  const imageBase64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // FileReader.readAsDataURL produces "data:<mime>;base64,<data>" — strip prefix
+      const commaIdx = result.indexOf(",");
+      resolve(commaIdx >= 0 ? result.slice(commaIdx + 1) : result);
+    };
+    reader.onerror = () => reject(new Error("Failed to read image file"));
+    reader.readAsDataURL(fields.image);
+  });
 
-    const res = await fetch("https://pump.fun/api/ipfs", {
+  const attempt = async () => {
+    const body: Record<string, string> = {
+      name:        fields.name,
+      symbol:      fields.symbol,
+      description: fields.description,
+      imageBase64,
+      imageType:   fields.image.type || "image/png",
+    };
+    if (fields.twitter)  body.twitter  = fields.twitter;
+    if (fields.telegram) body.telegram = fields.telegram;
+    if (fields.website)  body.website  = fields.website;
+
+    const res = await fetch("/api/pump-ipfs-upload", {
       method: "POST",
-      body,
-      signal: AbortSignal.timeout(20_000),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!res.ok) {
       const text = await res.text().catch(() => `HTTP ${res.status}`);
-      throw new Error(`pump.fun IPFS upload failed (${res.status}): ${text}`);
+      throw new Error(`pump.fun metadata upload failed (${res.status}): ${text}`);
     }
 
-    const data = await res.json() as { metadataUri?: string; metadata?: unknown };
+    const data = await res.json() as { metadataUri?: string };
     if (!data.metadataUri) {
-      throw new Error("pump.fun IPFS response did not include metadataUri");
+      throw new Error("Metadata upload response did not include metadataUri");
     }
     return data.metadataUri;
   };

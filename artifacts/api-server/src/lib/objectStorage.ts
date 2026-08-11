@@ -194,6 +194,30 @@ export class ObjectStorageService {
     return normalizedPath;
   }
 
+  /**
+   * Upload a file directly to the first PUBLIC_OBJECT_SEARCH_PATH so it is
+   * immediately reachable via GET /api/storage/public-objects/{subPath}.
+   *
+   * @param subPath   Path under the public prefix, e.g. "token-meta/uuid.json"
+   * @param content   File content as a Buffer
+   * @param contentType  MIME type stored in GCS metadata
+   */
+  async uploadToPublicPath(
+    subPath: string,
+    content: Buffer,
+    contentType: string,
+  ): Promise<void> {
+    const paths = this.getPublicObjectSearchPaths();
+    // Strip trailing slash; split into '/bucketName/optional/prefix'
+    const basePath = paths[0].replace(/\/$/, "");
+    const parts = basePath.split("/").filter(Boolean);
+    const bucketName = parts[0];
+    const prefix = parts.slice(1).join("/");
+    const objectName = prefix ? `${prefix}/${subPath}` : subPath;
+    const file = objectStorageClient.bucket(bucketName).file(objectName);
+    await file.save(content, { contentType, resumable: false });
+  }
+
   async canAccessObjectEntity({
     userId,
     objectFile,
