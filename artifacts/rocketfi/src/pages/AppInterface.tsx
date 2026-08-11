@@ -1368,6 +1368,17 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const ChartSection = useMemo(() => {
     if (!token) return null;
 
+    // OHLCV still in flight — show inline placeholder so the token page appears
+    // immediately while the chart loads in the background.
+    if (chartBars.length === 0 && ohlcvLoading) {
+      return (
+        <div className="border border-border/20 rounded-sm mb-0 flex flex-col items-center justify-center gap-2"
+          style={{ height: 280, background: "#0B1220" }}>
+          <Loader2 className="w-5 h-5 animate-spin" style={{ color: "rgba(99,102,241,0.5)" }} />
+          <span className="text-xs" style={{ color: "rgba(148,163,184,0.45)" }}>Loading charts...</span>
+        </div>
+      );
+    }
 
     // Empty state — only show after server has responded with zero bars
     if (chartBars.length === 0) {
@@ -1758,7 +1769,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     );
   }
 
-  if ((loadingToken && !token) || (!!token && ohlcvLoading && chartBars.length === 0)) return (
+  if (loadingToken && !token) return (
     <div className="flex flex-col items-center justify-center gap-3 w-full" style={{ minHeight: 400 }}>
       <Loader2 className="w-9 h-9 animate-spin" style={{ color: "rgba(99,102,241,0.8)" }} />
       <span className="text-sm font-medium" style={{ color: "rgba(148,163,184,0.7)" }}>Loading charts...</span>
