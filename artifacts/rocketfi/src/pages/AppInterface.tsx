@@ -434,7 +434,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               >
                 <img src="/pumpfun.png" alt="pump.fun" className="w-4 h-4 rounded-full object-cover shrink-0" style={{ opacity: platform === "pumpfun" ? 1 : 0.4 }} />
                 <span className="text-[12px] font-semibold"
-                  style={{ color: platform === "pumpfun" ? "#c084fc" : "#64748b" }}>Pump.fun</span>
+                  style={{ color: platform === "pumpfun" ? "#f1f5f9" : "#64748b" }}>Pump.fun</span>
               </button>
               {/* Raydium LaunchLab */}
               <button
