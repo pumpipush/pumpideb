@@ -639,11 +639,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           <div className="px-5 pt-5 pb-5 space-y-4">
 
             {/* Launch cost info (only when idle) */}
-            {launchStep === "idle" && platform === "pumpfun" && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
-                style={{ background: "rgba(168,85,247,0.08)", border: "1px solid rgba(168,85,247,0.20)" }}>
-              </div>
-            )}
             {launchStep === "idle" && platform === "raydium" && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
                 style={{ background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.20)" }}>
