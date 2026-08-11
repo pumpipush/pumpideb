@@ -20,7 +20,7 @@ import {
   CommandDialog,
   CommandList,
 } from "@/components/ui/command";
-import { formatMCUsd } from "@/lib/utils";
+import { formatMCUsd, formatTokenPrice } from "@/lib/utils";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Rocket, TrendingUp, Zap, Search, ArrowRight, Globe, ExternalLink } from "lucide-react";
@@ -424,7 +424,7 @@ export function SearchDialog() {
                       className="w-full flex items-center gap-3 px-3 py-2.5 rounded-sm hover:bg-white/[0.05] transition-colors group text-left"
                       onClick={() => go(`/app?token=${token.address}`)}
                     >
-                      <div className="text-[10px] font-mono text-muted-foreground/40 w-4 text-right shrink-0">{i + 1}</div>
+                      <div className="text-[10px] font-mono text-muted-foreground/70 w-4 text-right shrink-0">{i + 1}</div>
                       <TokenAvatar symbol={token.symbol} imageUrl={token.imageUrl} size={36} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
@@ -437,7 +437,11 @@ export function SearchDialog() {
                           {token.tradeCount.toLocaleString()} trades
                         </div>
                       </div>
-                      <span className="text-xs font-mono font-bold text-primary shrink-0">{formatMCUsd(token.marketCapEth, solPrice)}</span>
+                      <span className="text-xs font-mono font-bold text-foreground shrink-0">
+                        {token.priceUsd != null
+                          ? `$${formatTokenPrice(token.priceUsd)}`
+                          : "—"}
+                      </span>
                     </button>
                   ))}
             </div>
