@@ -2586,7 +2586,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
                                 {/* Last active */}
                                 <td className="hidden lg:table-cell px-3 py-3 text-right">
-                                  <span className="font-mono text-[13px]" style={{ color: "#475569" }}>
+                                  <span className="font-mono text-[13px]" style={{ color: "#94a3b8" }}>
                                     {timeAgo(w.lastActivity)}
                                   </span>
                                 </td>
