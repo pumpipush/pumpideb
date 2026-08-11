@@ -26,7 +26,7 @@ export const tokensTable = pgTable("tokens", {
   telegramUrl: text("telegram_url"),
   websiteUrl: text("website_url"),
   platform: text("platform").notNull().default("unknown"),
-  chain: text("chain").notNull().default("base"),
+  chain: text("chain").notNull().default("solana"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   // ── Multi-DEX columns (nullable — only set for non-pump.fun tokens) ─────────
   poolAddress:    text("pool_address"),

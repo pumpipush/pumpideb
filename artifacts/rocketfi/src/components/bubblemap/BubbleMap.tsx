@@ -615,7 +615,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
 
       // Load logo
       const resolvedUrl = t.imageUrl
-        ? (t.imageUrl.startsWith("http") ? t.imageUrl : `/api/image-proxy?url=${encodeURIComponent(t.imageUrl)}`)
+        ? (t.imageUrl.startsWith("http") ? t.imageUrl : `/api/proxy-image?url=${encodeURIComponent(t.imageUrl)}`)
         : null;
       if (resolvedUrl && !bubble.img) {
         bubble.img = loadImage(resolvedUrl, () => {
