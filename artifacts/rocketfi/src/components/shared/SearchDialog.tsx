@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/command";
 import { formatMC } from "@/lib/utils";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
-import { Rocket, TrendingUp, Zap, Search, ArrowRight, Globe } from "lucide-react";
+import { Rocket, TrendingUp, Zap, Search, ArrowRight, Globe, ExternalLink } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   setExternalToken, ensureJupiterList, searchClientJupiterTokens,
@@ -90,6 +90,10 @@ interface SearchResult {
 /* ─────────────────────────────────────── SolanaToken alias */
 // ExternalSolanaToken from external-tokens.ts already matches this shape.
 // Re-export it as SolanaToken for internal use in this file.
+
+/* ─────────────────────────────────────── helpers */
+const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+function isSolanaAddress(s: string) { return SOLANA_ADDRESS_RE.test(s.trim()); }
 
 /* ─────────────────────────────────────── main dialog */
 export function SearchDialog() {
@@ -195,11 +199,12 @@ export function SearchDialog() {
 
   const platformTokens = searchResult?.platformTokens ?? [];
   const solanaTokens   = searchResult?.solanaTokens   ?? [];
+  const isAddress      = isSolanaAddress(query);
   const showSearch     = query.length >= 1;
   const showTrending   = query.length === 0;
   const noPlatform     = platformTokens.length === 0;
   const noSolana       = solanaTokens.length   === 0;
-  const noResults      = noPlatform && noSolana && !isFetching;
+  const noResults      = noPlatform && noSolana && !isFetching && !isAddress;
 
   return (
     <CommandDialog
@@ -224,7 +229,13 @@ export function SearchDialog() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search any Solana token by name or symbol…"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && isAddress) {
+              e.preventDefault();
+              go(`/app?token=${query.trim()}`);
+            }
+          }}
+          placeholder="Search name, symbol, or paste address…"
           className="flex-1 h-14 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/60 font-mono"
           autoFocus
         />
@@ -254,6 +265,32 @@ export function SearchDialog() {
                     <Skeleton className="h-3 w-12" />
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* ── Direct address navigation ── */}
+            {isAddress && (
+              <div className="p-2">
+                <div className="px-2 py-1.5 flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-muted-foreground/60">
+                  <ExternalLink className="h-3 w-3" /> Token Address
+                </div>
+                <button
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-sm hover:bg-white/[0.05] transition-colors group text-left"
+                  onClick={() => go(`/app?token=${query.trim()}`)}
+                >
+                  <div className="h-9 w-9 rounded flex items-center justify-center shrink-0"
+                    style={{ background: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.25)" }}>
+                    <ExternalLink className="h-4 w-4" style={{ color: "rgba(99,102,241,0.8)" }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold text-foreground">Open token page</div>
+                    <div className="text-[10px] font-mono text-muted-foreground mt-0.5 truncate">{query.trim()}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <kbd className="hidden sm:inline-flex h-5 items-center rounded border border-border/50 bg-muted/50 px-1.5 text-[10px] font-mono text-muted-foreground/50">↵</kbd>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-primary transition-colors" />
+                  </div>
+                </button>
               </div>
             )}
 
