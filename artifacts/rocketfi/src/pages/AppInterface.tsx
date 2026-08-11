@@ -22,6 +22,7 @@ import { IndicatorModal } from "@/components/chart/IndicatorModal";
 import { tradesFromLocalBars, syntheticBars, type ChartTimeframe } from "@/lib/ohlcv";
 import { tradesFromLocal, syntheticCandles, Timeframe } from "@/lib/ohlcv";
 import { useTokenStream } from "@/hooks/useTokenStream";
+import { useSolBalance } from "@/hooks/useSolBalance";
 
 import { ethers } from "ethers";
 import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, formatTokenPrice, formatPct, cn, timeAgo } from "@/lib/utils";
@@ -947,6 +948,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const { toast } = useToast();
   const { submitTx } = useTxToast();
   const solPrice = useSolPrice();
+  const { solBalance, refresh: refreshSolBalance } = useSolBalance(wallet);
 
   // Live SSE stream — real-time trade events
   const { liveTrades, liveToken, connected } = useTokenStream(selectedAddress);
@@ -1671,6 +1673,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       );
     } finally {
       setIsTradePending(false);
+      refreshSolBalance();
     }
   };
 
@@ -3010,6 +3013,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             jupiterQuote={jupiterQuote}
             jupiterQuoteLoading={jupiterQuoteLoading}
             jupiterQuoteError={jupiterQuoteError}
+            solBalance={solBalance}
           />
         </div>
 
@@ -3061,11 +3065,14 @@ interface TradePanelFormProps {
    * external / non-pump.fun tokens (e.g. 9 for SOL, 6 for USDC, etc.).
    */
   tokenDecimals?: number;
+  /** Native SOL balance of the connected wallet (in SOL, not lamports). Null when not connected. */
+  solBalance?: number | null;
 }
 
 function TradePanelForm({
   tradeMode, setTradeMode, amount, setAmount, token, wallet, handleTrade, isPending,
   isGraduated, jupiterQuote, jupiterQuoteLoading, jupiterQuoteError, tokenDecimals = 6,
+  solBalance,
 }: TradePanelFormProps) {
   const swapSettings = useSwapSettings();
 
@@ -3103,6 +3110,16 @@ function TradePanelForm({
           </span>
           <SwapSettingsPopover />
         </div>
+
+        {/* SOL balance — only shown when wallet is connected */}
+        {wallet && solBalance !== null && solBalance !== undefined && (
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-muted-foreground">Balance</span>
+            <span className="font-mono text-foreground/80">
+              ◎{solBalance.toFixed(4)} SOL
+            </span>
+          </div>
+        )}
 
         {/* Preset amounts */}
         <div className="flex gap-2">
@@ -3549,6 +3566,7 @@ interface ExternalTokenTradeProps {
 function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
   const { openWalletModal, signAndSendTransaction } = useWallet();
   const { submitTx } = useTxToast();
+  const { solBalance, refresh: refreshSolBalance } = useSolBalance(wallet);
   const [tradeMode, setTradeMode]           = useState<"buy" | "sell">("buy");
   const [amount, setAmount]                 = useState("");
   const [isTradePending, setIsTradePending] = useState(false);
@@ -3636,6 +3654,7 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
       await submitTx(doTrade(), tradeMode === "buy" ? "Buy" : "Sell");
     } finally {
       setIsTradePending(false);
+      refreshSolBalance();
     }
   };
 
@@ -3712,6 +3731,7 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
               jupiterQuoteLoading={jupiterQuoteLoading}
               jupiterQuoteError={jupiterQuoteError}
               tokenDecimals={token.decimals}
+              solBalance={solBalance}
             />
           </div>
         </div>
