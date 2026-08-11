@@ -936,7 +936,7 @@ export default function Dashboard() {
           {/* ── Bubble Map — full width ── */}
           <section className="mb-3 md:mb-5">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-[20px] font-medium text-foreground">Market Bubbles</h2>
+              <h2 className="text-[20px] font-medium text-foreground">Bubble Map</h2>
             </div>
             <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
               {bubbleTokens.length === 0 ? (
