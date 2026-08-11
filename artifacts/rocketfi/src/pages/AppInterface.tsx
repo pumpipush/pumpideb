@@ -276,15 +276,14 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         image:       imageFile,
       });
 
-      // Step 2: Build transaction + simulate
+      // Step 2: Build transaction via pumpportal.fun (always matches current pump.fun format)
       setLaunchStep("building");
-      const { transaction, mintKeypair, mintAddress: newMint, blockhash, lastValidBlockHeight } =
+      const { transaction, mintAddress: newMint, blockhash, lastValidBlockHeight } =
         await buildPumpFunCreateTx(wallet, name.trim(), symbol.trim().toUpperCase(), metadataUri);
       await simulatePumpFunCreate(transaction);
 
-      // Step 3: User signs in wallet
+      // Step 3: User signs in wallet (mint keypair already signed inside buildPumpFunCreateTx)
       setLaunchStep("signing");
-      transaction.partialSign(mintKeypair);
       const sig = await signAndSendTransaction(transaction);
 
       // Step 4: Wait for on-chain confirmation

@@ -2,66 +2,29 @@
  * pumpfunLauncher.ts — On-chain token creation for pump.fun bonding curve.
  *
  * Flow:
- *   1. uploadToPumpFunIpfs()    → POST image + metadata to pump.fun IPFS → metadataUri
- *   2. buildPumpFunCreateTx()   → derive PDAs, encode create instruction, assemble tx
- *   3. (caller) simulate tx     → connection.simulateTransaction(tx) — sigVerify: false
- *   4. (caller) tx.partialSign(mintKeypair)
- *   5. (caller) signAndSendTransaction(tx) → wallet adds user sig + broadcasts
- *   6. (caller) waitForConfirmation(connection, sig)
+ *   1. uploadToPumpFunIpfs()     → POST image + metadata to our server → metadataUri
+ *   2. buildPumpFunCreateTx()    → call pumpportal.fun to build the correct tx
+ *   3. (caller) simulate tx      → connection.simulateTransaction(tx)
+ *   4. (caller) signAndSendTransaction(tx) → wallet signs + broadcasts
+ *   5. (caller) waitForConfirmation(sig)
  *
- * Cost: ~0.02 SOL for pump.fun fee + ~0.003 SOL rent for mint/metadata accounts
+ * Why pumpportal.fun?
+ *   Pump.fun upgraded their on-chain program (same program ID, new bytecode) in 2025.
+ *   The new version uses Token-2022, a different global state account, 17 accounts per
+ *   create instruction, and a completely different data layout — none of which matches
+ *   the old hand-built approach. Pumpportal's /api/trade-local always builds transactions
+ *   against the current pump.fun program, so we delegate transaction construction there.
+ *
+ * The mint keypair is generated client-side and injected into the pumpportal request so
+ * the returned transaction already includes the mint's partial signature before the
+ * user wallet adds its own signature.
  */
 
 import {
-  ComputeBudgetProgram,
   Keypair,
-  PublicKey,
-  SystemProgram,
-  SYSVAR_RENT_PUBKEY,
-  Transaction,
-  TransactionInstruction,
+  VersionedTransaction,
 } from "@solana/web3.js";
 import { getConnection } from "./solanaConnection";
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-/** pump.fun bonding curve program (mainnet) */
-const PUMP_FUN_PROGRAM_ID = new PublicKey(
-  "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
-);
-
-/** pump.fun global state account (fixed known address) */
-const PUMP_FUN_GLOBAL = new PublicKey(
-  "4wTV1YmiEkRvAtNtsSGPtUrqRYQMe5zznTJ67bBb2GQZ",
-);
-
-/** Anchor event authority PDA — seed: ["__event_authority"] */
-const PUMP_EVENT_AUTHORITY = new PublicKey(
-  "Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp9F1",
-);
-
-/** Metaplex Token Metadata program */
-const MPL_TOKEN_METADATA = new PublicKey(
-  "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
-);
-
-const TOKEN_PROGRAM_ID = new PublicKey(
-  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-);
-
-/** Canonical Associated Token Program ID */
-const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(
-  "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bSf",
-);
-
-/**
- * Anchor discriminator for "create": sha256("global:create")[0:8]
- * = [24, 30, 200, 40, 5, 28, 7, 119]
- */
-const CREATE_DISCRIMINATOR = new Uint8Array([24, 30, 200, 40, 5, 28, 7, 119]);
-
-/** Priority fee in micro-lamports — keeps the tx competitive without overpaying */
-const CREATE_PRIORITY_MICRO_LAMPORTS = 50_000;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -76,30 +39,10 @@ export interface PumpFunIpfsFields {
 }
 
 export interface PumpFunCreateTxResult {
-  transaction:         Transaction;
-  mintKeypair:         Keypair;
-  mintAddress:         string;
-  blockhash:           string;
+  transaction:          VersionedTransaction;
+  mintAddress:          string;
+  blockhash:            string;
   lastValidBlockHeight: number;
-}
-
-// ── Borsh helpers ─────────────────────────────────────────────────────────────
-
-/** Encode a UTF-8 string as Borsh bytes: 4-byte LE length prefix + content */
-function borshStr(s: string): Buffer {
-  const encoded = Buffer.from(s, "utf8");
-  const len = Buffer.allocUnsafe(4);
-  len.writeUInt32LE(encoded.length, 0);
-  return Buffer.concat([len, encoded]);
-}
-
-// ── ATA derivation ────────────────────────────────────────────────────────────
-
-function getATA(owner: PublicKey, mint: PublicKey): PublicKey {
-  return PublicKey.findProgramAddressSync(
-    [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-  )[0];
 }
 
 // ── IPFS Upload ───────────────────────────────────────────────────────────────
@@ -119,9 +62,6 @@ function getATA(owner: PublicKey, mint: PublicKey): PublicKey {
  *
  * pump.fun's on-chain program only stores the metadataUri string and accepts any
  * publicly reachable HTTPS URL — not exclusively IPFS URIs.
- *
- * Returns the metadataUri to embed in the create instruction.
- * Retries once on transient network failure.
  */
 export async function uploadToPumpFunIpfs(fields: PumpFunIpfsFields): Promise<string> {
   // Convert File → base64 using FileReader (browser-native, no Buffer polyfill needed)
@@ -183,14 +123,20 @@ export async function uploadToPumpFunIpfs(fields: PumpFunIpfsFields): Promise<st
 // ── Transaction Builder ───────────────────────────────────────────────────────
 
 /**
- * Build a pump.fun token CREATE transaction ready for simulation + signing.
+ * Build a pump.fun token CREATE transaction via pumpportal.fun's local tx builder.
  *
- * Generates a fresh mint Keypair internally — the caller receives it in the
- * result so they can partialSign before handing to the wallet.
+ * Pumpportal always generates transactions compatible with pump.fun's current
+ * on-chain program version, so this stays correct across pump.fun upgrades.
  *
- * The returned transaction is UNSIGNED. Call:
- *   tx.partialSign(mintKeypair)           — mint signature
- *   await signAndSendTransaction(tx)      — wallet adds user sig + broadcasts
+ * The mint Keypair is generated locally and injected into the request so pumpportal
+ * includes the mint's partial signature in the returned transaction. The caller only
+ * needs to pass the result straight to signAndSendTransaction — no additional
+ * partialSign step needed.
+ *
+ * @param walletAddress  Signer's base58 public key
+ * @param name           Token name
+ * @param symbol         Ticker symbol (uppercased)
+ * @param metadataUri    Public HTTPS URL to the token metadata JSON
  */
 export async function buildPumpFunCreateTx(
   walletAddress:  string,
@@ -198,97 +144,67 @@ export async function buildPumpFunCreateTx(
   symbol:         string,
   metadataUri:    string,
 ): Promise<PumpFunCreateTxResult> {
-  const user        = new PublicKey(walletAddress);
+  // Generate a fresh mint keypair — we control the mint address
   const mintKeypair = Keypair.generate();
-  const mint        = mintKeypair.publicKey;
 
-  // ── Derive all required PDAs ───────────────────────────────────────────────
-  const [mintAuthority] = PublicKey.findProgramAddressSync(
-    [Buffer.from("mint-authority")],
-    PUMP_FUN_PROGRAM_ID,
-  );
-  const [bondingCurve] = PublicKey.findProgramAddressSync(
-    [Buffer.from("bonding-curve"), mint.toBuffer()],
-    PUMP_FUN_PROGRAM_ID,
-  );
-  const associatedBondingCurve = getATA(bondingCurve, mint);
-  const [metadataPDA] = PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("metadata"),
-      MPL_TOKEN_METADATA.toBuffer(),
-      mint.toBuffer(),
-    ],
-    MPL_TOKEN_METADATA,
-  );
-
-  // ── Encode create instruction data (Borsh) ─────────────────────────────────
-  const data = Buffer.concat([
-    Buffer.from(CREATE_DISCRIMINATOR),
-    borshStr(name),
-    borshStr(symbol),
-    borshStr(metadataUri),
-  ]);
-
-  // ── Build create instruction ───────────────────────────────────────────────
-  // Account ordering exactly matches the pump.fun IDL:
-  // https://github.com/pump-fun/pump.fun-program-idl
-  const createIx = new TransactionInstruction({
-    programId: PUMP_FUN_PROGRAM_ID,
-    keys: [
-      { pubkey: mint,                        isSigner: true,  isWritable: true  },
-      { pubkey: mintAuthority,               isSigner: false, isWritable: false },
-      { pubkey: bondingCurve,                isSigner: false, isWritable: true  },
-      { pubkey: associatedBondingCurve,      isSigner: false, isWritable: true  },
-      { pubkey: PUMP_FUN_GLOBAL,             isSigner: false, isWritable: false },
-      { pubkey: MPL_TOKEN_METADATA,          isSigner: false, isWritable: false },
-      { pubkey: metadataPDA,                 isSigner: false, isWritable: true  },
-      { pubkey: user,                        isSigner: true,  isWritable: true  },
-      { pubkey: SystemProgram.programId,     isSigner: false, isWritable: false },
-      { pubkey: TOKEN_PROGRAM_ID,            isSigner: false, isWritable: false },
-      { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-      { pubkey: SYSVAR_RENT_PUBKEY,          isSigner: false, isWritable: false },
-      { pubkey: PUMP_EVENT_AUTHORITY,        isSigner: false, isWritable: false },
-      { pubkey: PUMP_FUN_PROGRAM_ID,         isSigner: false, isWritable: false },
-    ],
-    data,
+  const res = await fetch("https://pumpportal.fun/api/trade-local", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      publicKey:        walletAddress,
+      action:           "create",
+      tokenMetadata:    { name, symbol, uri: metadataUri },
+      mint:             mintKeypair.publicKey.toBase58(),
+      denominatedInSol: "true",
+      amount:           0,        // no forced initial buy
+      slippage:         10,
+      priorityFee:      0.0005,
+      pool:             "pump",
+    }),
+    signal: AbortSignal.timeout(20_000),
   });
 
-  // ── Assemble transaction ───────────────────────────────────────────────────
-  const tx = new Transaction();
-  // Priority fee — keeps tx from getting dropped under congestion
-  tx.add(ComputeBudgetProgram.setComputeUnitPrice({
-    microLamports: CREATE_PRIORITY_MICRO_LAMPORTS,
-  }));
-  tx.add(createIx);
+  if (!res.ok) {
+    const text = await res.text().catch(() => `HTTP ${res.status}`);
+    throw new Error(`Failed to build pump.fun transaction: ${text}`);
+  }
 
-  tx.feePayer = user;
+  // Pumpportal returns raw bytes of a VersionedTransaction
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const tx = VersionedTransaction.deserialize(bytes);
+
+  // Add mint keypair's partial signature so the wallet only needs to add its own
+  tx.sign([mintKeypair]);
+
   const conn = getConnection();
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
-  tx.recentBlockhash = blockhash;
 
   return {
     transaction: tx,
-    mintKeypair,
-    mintAddress: mint.toBase58(),
+    mintAddress: mintKeypair.publicKey.toBase58(),
     blockhash,
     lastValidBlockHeight,
   };
 }
 
+// ── Simulation ────────────────────────────────────────────────────────────────
+
 /**
- * Simulate a pump.fun create transaction without signature verification.
+ * Simulate a pump.fun create VersionedTransaction without signature verification.
  *
- * Calling simulateTransaction WITHOUT signers sets sigVerify: false in the
- * RPC call — signatures are not checked, only instruction logic is evaluated.
- * This lets us detect instruction errors (insufficient SOL, bad accounts, etc.)
+ * Detects instruction-level errors (bad accounts, insufficient SOL, etc.)
  * before asking the user to approve in their wallet.
  *
  * @throws Error with a human-readable message extracted from program logs
  */
-export async function simulatePumpFunCreate(tx: Transaction): Promise<void> {
+export async function simulatePumpFunCreate(tx: VersionedTransaction): Promise<void> {
   const conn = getConnection();
-  // No signers → @solana/web3.js sets sigVerify: false automatically
-  const { value: sim } = await conn.simulateTransaction(tx);
+  const { value: sim } = await conn.simulateTransaction(tx, {
+    // replaceRecentBlockhash lets the RPC use a fresh blockhash for the simulation
+    // so it doesn't fail due to an expired blockhash from the pumpportal call
+    replaceRecentBlockhash: true,
+    sigVerify: false,
+  });
 
   if (sim.err) {
     const logs = sim.logs ?? [];
@@ -304,9 +220,8 @@ export async function simulatePumpFunCreate(tx: Transaction): Promise<void> {
 
 /**
  * Approximate SOL cost to launch a pump.fun token:
- *   - pump.fun creation fee: ~0.02 SOL
- *   - Rent for mint account: ~0.0015 SOL
- *   - Rent for metadata account: ~0.006 SOL
+ *   - Rent for Token-2022 mint + metadata extension: ~0.003 SOL
+ *   - pump.fun protocol fee: ~0.015 SOL
  *   - Priority fee + transaction fee: ~0.001 SOL
  */
-export const PUMP_FUN_LAUNCH_COST_SOL = 0.03;
+export const PUMP_FUN_LAUNCH_COST_SOL = 0.02;
