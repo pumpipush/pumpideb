@@ -69,41 +69,6 @@ import { copyToClipboard as fireClipboard } from "@/components/shared/CopyToast"
 import { useLocation, useSearch } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 
-function TokenDetailSkeleton() {
-  return (
-    <div className="flex flex-col md:flex-row gap-0 w-full animate-slideDown">
-      <div className="flex-1 min-w-0 pr-0 md:pr-8 md:border-r border-border/50 pb-8">
-        <div className="flex gap-4 items-start mb-6">
-          <Skeleton className="h-16 w-16 shrink-0 rounded-sm" />
-          <div className="flex flex-col gap-2 pt-1 w-full max-w-sm">
-            <Skeleton className="h-6 w-3/4" />
-            <Skeleton className="h-4 w-1/2 mt-1" />
-          </div>
-        </div>
-        <div className="mb-6 flex gap-3">
-          <Skeleton className="h-8 w-24" />
-          <Skeleton className="h-8 w-24" />
-        </div>
-        <Skeleton className="w-full h-[340px] mb-3 rounded-sm" />
-        <Skeleton className="w-full h-8 mb-10" />
-        <div className="mb-10">
-          <Skeleton className="h-4 w-full mb-3" />
-          <Skeleton className="h-3 w-1/2" />
-        </div>
-      </div>
-      <div className="w-full md:w-[350px] shrink-0 pl-0 md:pl-8 md:sticky top-6 self-start pt-8 md:pt-0 space-y-6">
-        <div className="bg-card border border-border p-4 rounded-sm space-y-5">
-          <div className="flex gap-2"><Skeleton className="h-10 flex-1" /><Skeleton className="h-10 flex-1" /></div>
-          <Skeleton className="h-14 w-full" />
-          <Skeleton className="h-14 w-full" />
-        </div>
-        <div className="bg-card border border-border p-4 rounded-sm space-y-4">
-          <Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-full" />
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function AppInterface() {
   const [, setLocation] = useLocation();
@@ -1810,7 +1775,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     );
   }
 
-  if (loadingToken && !token) return <TokenDetailSkeleton />;
+  if (loadingToken && !token) return (
+    <div className="flex items-center justify-center w-full" style={{ minHeight: 400 }}>
+      <Loader2 className="w-9 h-9 animate-spin" style={{ color: "rgba(99,102,241,0.8)" }} />
+    </div>
+  );
 
   if (tokenError) {
     // Token not in our DB — render the external token page instead of an error.
@@ -3529,7 +3498,11 @@ function ExternalTokenLoader({ address, wallet }: { address: string | null; wall
   }, [address]);
 
   // While Jupiter list is loading, show a skeleton
-  if (!extToken && !notFound) return <TokenDetailSkeleton />;
+  if (!extToken && !notFound) return (
+    <div className="flex items-center justify-center w-full" style={{ minHeight: 400 }}>
+      <Loader2 className="w-9 h-9 animate-spin" style={{ color: "rgba(99,102,241,0.8)" }} />
+    </div>
+  );
 
   if (notFound || !extToken) {
     return (
