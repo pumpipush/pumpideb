@@ -2267,7 +2267,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               </td>
 
                               {/* Time */}
-                              <td className="px-3 py-2.5 text-left font-mono text-[11px] whitespace-nowrap" style={{ color: "#475569" }}>
+                              <td className="px-3 py-2.5 text-left font-mono text-[11px] whitespace-nowrap" style={{ color: "#94a3b8" }}>
                                 {timeAgo(trade.timestamp)}
                               </td>
 
@@ -2287,17 +2287,17 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               </td>
 
                               {/* Token amount */}
-                              <td className="px-3 py-2.5 text-right font-mono text-[12px]" style={{ color: "#94a3b8" }}>
+                              <td className="px-3 py-2.5 text-right font-mono text-[12px]" style={{ color: "#cbd5e1" }}>
                                 {formatAtomicTokenAmount(tokAmt)}
                               </td>
 
                               {/* SOL */}
-                              <td className="px-3 py-2.5 text-right font-mono text-[12px]" style={{ color: "#64748b" }}>
+                              <td className="px-3 py-2.5 text-right font-mono text-[12px]" style={{ color: "#94a3b8" }}>
                                 {formatSol(trade.ethAmount)}
                               </td>
 
                               {/* Price */}
-                              <td className="px-3 py-2.5 text-right font-mono text-[12px]" style={{ color: "#64748b" }}>
+                              <td className="px-3 py-2.5 text-right font-mono text-[12px]" style={{ color: "#94a3b8" }}>
                                 {pricePerTokUsd != null ? formatTokenPrice(pricePerTokUsd) : pricePerTokSol != null ? `${pricePerTokSol.toPrecision(3)} SOL` : "—"}
                               </td>
 
