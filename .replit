@@ -25,4 +25,3 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.shared]
-BIRDEYE_API_KEY = "69116f6c93ef414aa22a8933f28cfa81"

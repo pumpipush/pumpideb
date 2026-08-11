@@ -154,7 +154,7 @@ export function useFeedStream(): UseFeedStreamResult {
     };
 
     es.onmessage = (e: MessageEvent) => {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || es !== esRef.current) return; // discard events from stale sources
       lastEventMs.current = Date.now();
       try {
         const event = JSON.parse(e.data as string) as FeedEvent;
@@ -201,7 +201,7 @@ export function useFeedStream(): UseFeedStreamResult {
     };
 
     es.onerror = () => {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || es !== esRef.current) return; // ignore errors from replaced sources
       showDisconnectedAfterGrace();
       // Close — don't rely on native auto-reconnect through the reverse proxy.
       es.close();

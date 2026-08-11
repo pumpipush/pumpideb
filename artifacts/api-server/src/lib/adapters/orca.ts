@@ -81,7 +81,7 @@ class OrcaIndexer extends SolanaRpcIndexer {
     const priceEth     = meta.priceUsd     ? usdToLamports(meta.priceUsd,     solPrice) : null;
     const marketCapEth = meta.marketCapUsd ? usdToLamports(meta.marketCapUsd, solPrice) : null;
 
-    await db.insert(tokensTable).values({
+    const inserted = await db.insert(tokensTable).values({
       address:        mint,
       name:           meta.name,
       symbol:         meta.symbol,
@@ -95,7 +95,11 @@ class OrcaIndexer extends SolanaRpcIndexer {
       liquidityUsd:   meta.liquidity    ?? null,
       priceUsd:       meta.priceUsd     ?? null,
       marketCapUsd:   meta.marketCapUsd ?? null,
-    }).onConflictDoNothing();
+    }).onConflictDoNothing().returning({ id: tokensTable.id });
+
+    // Only broadcast if we actually inserted a new row — concurrent pool events
+    // for the same mint can both pass the SELECT check above and reach this point.
+    if (inserted.length === 0) return;
 
     this.log.info({ mint, name: meta.name }, "orca: new token indexed");
 

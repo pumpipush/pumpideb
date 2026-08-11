@@ -47,18 +47,21 @@ export function useSolPrice(): number | null {
   const [price, setPrice] = useState<number | null>(cachedPrice);
 
   useEffect(() => {
-    // subscribe to updates
+    let active = true;
+
+    // subscribe to broadcast updates from the module-level cache
     listeners.add(setPrice);
-    // trigger refresh (no-op if cache is fresh)
-    refresh().then(p => { if (p !== null) setPrice(p); });
+    // trigger refresh (no-op if cache is fresh); guard against post-unmount set
+    refresh().then(p => { if (active && p !== null) setPrice(p); });
 
     // re-fetch on a 60 s interval
     const id = setInterval(() => {
       cacheTs = 0; // force refresh
-      refresh().then(p => { if (p !== null) setPrice(p); });
+      refresh().then(p => { if (active && p !== null) setPrice(p); });
     }, CACHE_TTL_MS);
 
     return () => {
+      active = false;
       listeners.delete(setPrice);
       clearInterval(id);
     };

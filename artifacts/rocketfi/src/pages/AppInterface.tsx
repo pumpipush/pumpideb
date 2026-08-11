@@ -1110,6 +1110,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
     const { slippageBps } = getSwapSettings();
 
+    let cancelled = false; // sequence guard: ignore results from superseded requests
+
     const fetchQuote = async () => {
       setJupiterQuoteLoading(true);
       setJupiterQuoteError(null);
@@ -1128,12 +1130,15 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         const outputMint = tradeMode === "buy" ? token.address : WSOL_MINT;
 
         const quote = await getJupiterQuote(inputMint, outputMint, amountBaseUnits, slippageBps);
+        // Discard result if the effect was cleaned up (amount/token changed) while in-flight
+        if (cancelled) return;
         setJupiterQuote(quote);
       } catch (err) {
+        if (cancelled) return;
         setJupiterQuoteError(err instanceof Error ? err.message.slice(0, 120) : "Quote unavailable");
         setJupiterQuote(null);
       } finally {
-        setJupiterQuoteLoading(false);
+        if (!cancelled) setJupiterQuoteLoading(false);
       }
     };
 
@@ -1143,6 +1148,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     const refreshTimer  = setInterval(fetchQuote, 15_000);
 
     return () => {
+      cancelled = true;
       clearTimeout(debounceTimer);
       clearInterval(refreshTimer);
     };
