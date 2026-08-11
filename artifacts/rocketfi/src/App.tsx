@@ -12,6 +12,7 @@ import { WalletProvider } from '@/contexts/WalletContext';
 import { SearchDialog } from '@/components/shared/SearchDialog';
 import { CopyToastProvider } from '@/components/shared/CopyToast';
 import { AuthModal } from '@/components/shared/AuthModal';
+import { UsernameNudgeBanner } from '@/components/shared/UsernameNudgeBanner';
 import { Redirect } from 'wouter';
 
 const queryClient = new QueryClient({
@@ -43,6 +44,7 @@ function AppShell() {
       <div className="flex-1 flex flex-col md:ml-[220px] min-w-0">
         <Navbar />
         <main ref={mainRef} className="flex-1 overflow-y-auto overflow-x-hidden pb-16 md:pb-0 pt-[60px]">
+          <UsernameNudgeBanner />
           <Switch>
             <Route path="/" component={Dashboard} />
             <Route path="/dashboard"><Redirect to="/" /></Route>

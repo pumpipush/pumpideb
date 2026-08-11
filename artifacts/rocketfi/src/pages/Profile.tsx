@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { useParams, useLocation } from "wouter";
+import { useState, useEffect, useRef } from "react";
 import {
   useGetProfile,
   useGetRecentActivity,
@@ -17,6 +16,7 @@ import { formatAddress, formatMC, formatEth, formatSol, timeAgo, cn, diceBearUrl
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { useParams, useLocation, useSearch } from "wouter";
 const XIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.91-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
@@ -109,10 +109,14 @@ export default function ProfilePage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug ?? "";
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
   const { wallet } = useWallet();
 
   // slug can be a username or a wallet address (32-44 base58 chars)
   const looksLikeAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(slug);
+
+  // Whether the page was opened with ?editUsername=1 (from the username nudge banner)
+  const editUsernameParam = new URLSearchParams(searchString).get("editUsername") === "1";
 
   const [activeTab, setActiveTab] = useState<Tab>("activity");
   const [editOpen, setEditOpen] = useState(false);
@@ -124,6 +128,15 @@ export default function ProfilePage() {
   // Resolved wallet address — from profile if loaded, or directly if slug is an address
   const address = profile?.address ?? (looksLikeAddress ? slug : "");
   const isOwner = !!wallet && !!address && wallet.toLowerCase() === address.toLowerCase();
+
+  // ── Auto-open edit modal when coming from the username nudge banner ────────
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (!editUsernameParam || !isOwner || autoOpenedRef.current || isLoading) return;
+    autoOpenedRef.current = true;
+    setEditOpen(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editUsernameParam, isOwner, isLoading]);
 
   // ── Wallet portfolio (on-chain balances) ──────────────────────────────────
   const { data: portfolio, isLoading: portfolioLoading, error: portfolioError } = useQuery<WalletPortfolio>({
@@ -613,6 +626,7 @@ export default function ProfilePage() {
       <ProfileEditModal
         open={editOpen}
         onOpenChange={setEditOpen}
+        focusUsername={editUsernameParam}
         onSaved={(newUsername) => {
           if (newUsername && newUsername !== slug) {
             setLocation(`/profile/${newUsername}`);

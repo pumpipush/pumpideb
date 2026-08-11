@@ -68,9 +68,11 @@ interface ProfileEditModalProps {
   onOpenChange: (open: boolean) => void;
   /** Called after a successful save with the (potentially new) username. */
   onSaved?: (username: string) => void;
+  /** When true, focuses the username input as soon as the form initialises. */
+  focusUsername?: boolean;
 }
 
-export function ProfileEditModal({ open, onOpenChange, onSaved }: ProfileEditModalProps) {
+export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }: ProfileEditModalProps) {
   const { wallet, signMessage } = useWallet();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -94,6 +96,7 @@ export function ProfileEditModal({ open, onOpenChange, onSaved }: ProfileEditMod
   const [saving, setSaving] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const usernameInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize form reactively: wait for the profile query to settle before
   // populating fields so we never open with stale/blank data.
@@ -120,6 +123,11 @@ export function ProfileEditModal({ open, onOpenChange, onSaved }: ProfileEditMod
       avatarUrl: profile?.avatarUrl ?? "",
       avatarPreview: profile?.avatarUrl ?? "",
     });
+
+    // Focus the username field after it renders (e.g. when coming from the nudge banner)
+    if (focusUsername) {
+      setTimeout(() => usernameInputRef.current?.focus(), 50);
+    }
     // Only re-init when the modal first opens or profile identity changes.
     // Intentionally omit `profile` fields from deps so typing doesn't reset the form.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -317,6 +325,7 @@ export function ProfileEditModal({ open, onOpenChange, onSaved }: ProfileEditMod
         <div className="space-y-1 mb-4">
           <label className="text-xs font-medium text-muted-foreground">Username</label>
           <Input
+            ref={usernameInputRef}
             value={form.username}
             onChange={(e) => setForm((f) => f && { ...f, username: e.target.value })}
             className="h-9 text-sm rounded-sm bg-background border-border/50"
