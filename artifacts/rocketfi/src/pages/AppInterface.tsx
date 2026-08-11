@@ -39,6 +39,7 @@ import { SwapSettingsPopover } from "@/components/shared/SwapSettingsPopover";
 import { useSwapSettings, formatSlippage, formatPriorityFee, getSwapSettings } from "@/stores/swapSettings";
 import { useTxToast } from "@/hooks/useTxToast";
 import { buildPumpFunBuyTx, buildPumpFunSellTx, waitForTxConfirmation } from "@/lib/pumpfun-swap";
+import { buildLaunchLabBuyTx, buildLaunchLabSellTx } from "@/lib/launchlabSwap";
 import {
   uploadToPumpFunIpfs,
   buildPumpFunCreateTx,
@@ -1514,7 +1515,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       const isTradeable =
         token.platform === "pump_fun" ||
         token.platform === "pumpswap" ||
-        (token.platform === "raydium_launchlab" && !!token.graduated);
+        token.platform === "raydium_launchlab"; // graduated → Jupiter; bonding-curve → LaunchLab SDK
 
       if (!isTradeable) {
         throw new Error(
@@ -1564,6 +1565,51 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         refetchHistory();
 
         return jupSig;
+      }
+
+      // ── Raydium LaunchLab bonding-curve path (non-graduated) ─────────────────
+      // Graduated LaunchLab tokens are already handled by the Jupiter block above.
+      // Non-graduated tokens use the Raydium SDK's launchpad.buyToken / sellToken.
+      // The SDK fetches live pool state from RPC, builds the instruction, and returns
+      // a LEGACY transaction ready for the wallet to sign.
+      if (token.platform === "raydium_launchlab") {
+        const LAUNCHLAB_ATOMS = 1_000_000; // 6 decimal places, same as pump.fun
+
+        let llSig: string;
+        let llHash: string;
+        let llHeight: number;
+
+        if (tradeMode === "buy") {
+          const solIn = BigInt(Math.round(numAmount * 1e9));
+          const res = await buildLaunchLabBuyTx({
+            mint:                      token.address,
+            user:                      wallet,
+            solLamports:               solIn,
+            slippageBps:               safeBps,
+            priorityFeeMicroLamports:  priorityFee,
+          });
+          llSig = await signAndSendTransaction(res.transaction);
+          llHash = res.blockhash;
+          llHeight = res.lastValidBlockHeight;
+        } else {
+          const tokenIn = BigInt(Math.round(numAmount * LAUNCHLAB_ATOMS));
+          const res = await buildLaunchLabSellTx({
+            mint:                      token.address,
+            user:                      wallet,
+            tokenAtoms:                tokenIn,
+            slippageBps:               safeBps,
+            priorityFeeMicroLamports:  priorityFee,
+          });
+          llSig = await signAndSendTransaction(res.transaction);
+          llHash = res.blockhash;
+          llHeight = res.lastValidBlockHeight;
+        }
+
+        await waitForTxConfirmation(llSig, llHash, llHeight);
+        setAmount("");
+        refetchToken();
+        refetchHistory();
+        return llSig;
       }
 
       // pump.fun: 6 decimal places → 1 display token = 1,000,000 token atoms
