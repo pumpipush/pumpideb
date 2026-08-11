@@ -448,11 +448,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               >
                 <img src="/raydium-launchlab.png" alt="Raydium LaunchLab" className="w-4 h-4 rounded-full object-cover shrink-0" style={{ opacity: platform === "raydium" ? 1 : 0.4 }} />
                 <span className="text-[12px] font-semibold"
-                  style={{ color: platform === "raydium" ? "#93c5fd" : "#64748b" }}>Raydium LaunchLab</span>
-                {platform === "raydium" && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded font-bold"
-                    style={{ background: "rgba(59,130,246,0.20)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.30)" }}>NEW</span>
-                )}
+                  style={{ color: platform === "raydium" ? "#f1f5f9" : "#64748b" }}>Raydium LaunchLab</span>
               </button>
             </div>
           </div>
