@@ -948,7 +948,7 @@ export default function Dashboard() {
                       style={{ borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: "6px solid #1e293b" }} />
                     <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
                       style={{ background: "#1e293b", border: "1px solid rgba(255,255,255,0.1)", color: "#cbd5e1", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
-                      Visualizes the top tokens by market cap as bubbles. Bubble size reflects market cap — green means price up, red means price down in the last 24h.
+                      Menampilkan token dengan volume trading tertinggi — hingga 60 token di desktop, 20 di mobile. Ukuran bubble mencerminkan volume, warna hijau berarti harga naik dan merah berarti turun dalam 24 jam terakhir.
                     </div>
                   </div>
                 </div>
