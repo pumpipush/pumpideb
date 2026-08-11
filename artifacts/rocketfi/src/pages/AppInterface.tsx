@@ -475,7 +475,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                   value={name}
                   onChange={e => setName(e.target.value)}
                   disabled={isLaunching}
-                  className="h-10 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 text-[14px]"
+                  className="h-10 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 text-[14px] placeholder:text-slate-600"
                   required
                 />
               </div>
@@ -491,7 +491,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                     value={symbol}
                     onChange={e => setSymbol(e.target.value.toUpperCase())}
                     disabled={isLaunching}
-                    className="h-10 pl-7 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 font-mono uppercase tracking-widest text-[14px]"
+                    className="h-10 pl-7 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 font-mono uppercase tracking-widest text-[14px] placeholder:text-slate-600"
                     maxLength={10}
                     required
                   />
@@ -545,8 +545,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                     style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
                     <UploadCloud className="h-5 w-5" style={{ color: "#64748b" }} />
                   </div>
-                  <p className="text-[13px] font-medium" style={{ color: "#94a3b8" }}>
-                    Drop image here or <span style={{ color: "#e2e8f0" }}>browse</span>
+                  <p className="text-[13px] font-medium" style={{ color: "#475569" }}>
+                    Drop image here or <span style={{ color: "#64748b" }}>browse</span>
                   </p>
                 </div>
               )}
