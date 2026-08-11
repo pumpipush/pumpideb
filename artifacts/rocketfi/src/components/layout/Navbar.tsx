@@ -103,7 +103,7 @@ export function Navbar() {
             <path d="M10 19h4v2.5a.5.5 0 01-.5.5h-3a.5.5 0 01-.5-.5V19z" opacity=".7"/>
           </svg>
         </div>
-        <span className="font-bold text-sm text-foreground tracking-tight">Mintix <span style={{ color: "#4ade80" }}>fun</span></span>
+        <span className="font-bold text-sm text-foreground tracking-tight">Pump<span style={{ color: "#4ade80" }}>i</span></span>
       </Link>
 
       {/* Desktop: full search bar */}

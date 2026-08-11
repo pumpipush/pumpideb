@@ -24,7 +24,7 @@ export default function SignIn() {
             <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.5)]">
               <Rocket className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-white tracking-tight">Mintix <span className="text-primary">fun</span></span>
+            <span className="text-xl font-bold text-white tracking-tight">Pump<span className="text-primary">i</span></span>
           </div>
 
           {/* Hero copy */}
@@ -74,13 +74,13 @@ export default function SignIn() {
           <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center shadow-[0_0_16px_rgba(59,130,246,0.5)]">
             <Rocket className="w-4 h-4 text-white" />
           </div>
-          <span className="text-lg font-bold text-white tracking-tight">Mintix <span className="text-primary">fun</span></span>
+          <span className="text-lg font-bold text-white tracking-tight">Pump<span className="text-primary">i</span></span>
         </div>
 
         <div className="w-full max-w-[380px] relative">
           {/* Header */}
           <div className="mb-10 text-center">
-            <h2 className="text-3xl font-bold text-white mb-3 tracking-tight">Sign in to Mintix.fun</h2>
+            <h2 className="text-3xl font-bold text-white mb-3 tracking-tight">Sign in to Pumpi</h2>
             <p className="text-sm text-white/40 leading-relaxed">
               Connect your Solana wallet to start trading<br className="hidden sm:block" /> and launching tokens.
             </p>
@@ -106,7 +106,7 @@ export default function SignIn() {
 
           {/* Footer */}
           <p className="text-center text-sm text-white/30">
-            New to Mintix?{" "}
+            New to Pumpi?{" "}
             <a href="/signup" className="text-primary hover:text-primary/80 font-semibold transition-colors">
               Get started
             </a>

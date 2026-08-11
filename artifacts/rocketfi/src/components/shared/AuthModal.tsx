@@ -53,7 +53,7 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                 Connect your wallet
               </h2>
               <p className="text-sm text-white/40 mb-7 max-w-[260px] leading-relaxed">
-                Connect a Solana wallet to start trading and launching tokens on Mintix.
+                Connect a Solana wallet to start trading and launching coins on Pumpi.
               </p>
 
               {/* CTA */}

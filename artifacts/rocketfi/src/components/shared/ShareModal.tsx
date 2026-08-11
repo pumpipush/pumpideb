@@ -233,11 +233,11 @@ async function generateCardCanvas(
 
   // ── Footer ────────────────────────────────────────────────────────────────
   const footerY = H - 20;
-  // mintix logo mark (simple rocket emoji-style "⬆" replaced with text)
+  // pumpi logo mark
   ctx.fillStyle = `rgba(${r1},${g1},${b1},0.9)`;
   ctx.font = `bold 11px -apple-system,BlinkMacSystemFont,sans-serif`;
   ctx.textAlign = "left"; ctx.textBaseline = "bottom";
-  ctx.fillText("🚀 mintix.fun", 24, footerY);
+  ctx.fillText("🚀 pumpi.io", 24, footerY);
 
   // address
   ctx.fillStyle = "rgba(255,255,255,0.20)";
@@ -254,8 +254,8 @@ async function generateCardCanvas(
 
 export function ShareModal({ token, open, onClose, solPrice, priceStats }: ShareModalProps) {
   const url = `${window.location.origin}/app?token=${token.address}`;
-  const tweetText = `🚀 Just found $${token.symbol} on Mintix fun!\n\nMC: ${formatMCUsd(token.marketCapEth, solPrice ?? null)}${priceStats?.p24h ? ` · 24h ${priceStats.p24h.val}` : ""}\n\n${url}`;
-  const telegramText = encodeURIComponent(`🔥 $${token.symbol} on Mintix fun — ${formatMCUsd(token.marketCapEth, solPrice ?? null)} MC\n${url}`);
+  const tweetText = `🚀 Just found $${token.symbol} on Pumpi!\n\nMC: ${formatMCUsd(token.marketCapEth, solPrice ?? null)}${priceStats?.p24h ? ` · 24h ${priceStats.p24h.val}` : ""}\n\n${url}`;
+  const telegramText = encodeURIComponent(`🔥 $${token.symbol} on Pumpi — ${formatMCUsd(token.marketCapEth, solPrice ?? null)} MC\n${url}`);
 
   const [c1, c2] = getGradient(token.symbol);
   const [downloading, setDownloading] = useState(false);
@@ -286,7 +286,7 @@ export function ShareModal({ token, open, onClose, solPrice, priceStats }: Share
         if (!blob) return;
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement("a");
-        a.href = blobUrl; a.download = `${token.symbol}-mintix.png`;
+        a.href = blobUrl; a.download = `${token.symbol}-pumpi.png`;
         document.body.appendChild(a); a.click();
         setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 200);
       }, "image/png");
@@ -353,7 +353,7 @@ export function ShareModal({ token, open, onClose, solPrice, priceStats }: Share
 
               {/* Footer */}
               <div className="flex justify-between items-center pt-0.5">
-                <span className="text-[10px] font-bold" style={{ color: c1 }}>🚀 mintix.fun</span>
+                <span className="text-[10px] font-bold" style={{ color: c1 }}>🚀 pumpi.io</span>
                 <span className="text-[9px] font-mono text-white/20">
                   {token.address.slice(0,6)}...{token.address.slice(-4)}
                 </span>
@@ -394,7 +394,7 @@ export function ShareModal({ token, open, onClose, solPrice, priceStats }: Share
               <span className="text-[10px] font-semibold text-white/40 group-hover:text-white/70">Telegram</span>
             </a>
 
-            <a href={`https://warpcast.com/~/compose?text=${encodeURIComponent(`🚀 $${token.symbol} on Mintix fun — ${formatMCUsd(token.marketCapEth, solPrice ?? null)} MC\n${url}`)}`}
+            <a href={`https://warpcast.com/~/compose?text=${encodeURIComponent(`🚀 $${token.symbol} on Pumpi — ${formatMCUsd(token.marketCapEth, solPrice ?? null)} MC\n${url}`)}`}
               target="_blank" rel="noopener noreferrer"
               className="flex flex-col items-center gap-1.5 py-2.5 rounded-xl bg-white/4 hover:bg-[#7C65C1]/10 border border-white/6 hover:border-[#7C65C1]/25 transition-all group">
               <div className="h-7 w-7 rounded-full bg-[#7C65C1] flex items-center justify-center group-hover:scale-110 transition-transform">

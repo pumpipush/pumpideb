@@ -112,10 +112,10 @@ export default function Home() {
         <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-primary font-bold">
             <Flame className="h-5 w-5" />
-            <span>Mintix <span className="text-white/50 font-normal">fun</span></span>
+            <span>Pump<span className="text-white/50 font-normal">i</span></span>
           </div>
           <p className="text-sm text-muted-foreground text-center md:text-left">
-            © {new Date().getFullYear()} Mintix Protocol. All systems nominal.
+            © {new Date().getFullYear()} Pumpi. All systems nominal.
           </p>
           <div className="flex gap-4">
             <span className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors"><SiX className="h-5 w-5" /></span>

@@ -32,7 +32,7 @@ export const SLIPPAGE_PRESETS = [10, 50, 100] as const; // 0.1%, 0.5%, 1%
 
 // ── Singleton store ───────────────────────────────────────────────────────────
 
-const STORAGE_KEY = "mintix_swap_settings";
+const STORAGE_KEY = "pumpi_swap_settings";
 
 const DEFAULTS: SwapSettings = {
   slippageBps: 100,   // 1%

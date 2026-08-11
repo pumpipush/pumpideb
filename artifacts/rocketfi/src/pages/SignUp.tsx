@@ -24,13 +24,13 @@ export default function SignUp() {
             <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.5)]">
               <Rocket className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-white tracking-tight">Mintix <span className="text-primary">fun</span></span>
+            <span className="text-xl font-bold text-white tracking-tight">Pump<span className="text-primary">i</span></span>
           </div>
 
           {/* Feature list */}
           <div className="mt-auto mb-10 space-y-6">
             <div>
-              <p className="text-white/40 text-xs font-semibold uppercase tracking-widest mb-4">Why join Mintix?</p>
+              <p className="text-white/40 text-xs font-semibold uppercase tracking-widest mb-4">Why join Pumpi?</p>
               {[
                 { title: "Launch in seconds", desc: "Deploy a bonding curve token with one click — no presale, no team allocation." },
                 { title: "Trade fairly",      desc: "Every token starts equal. Price is set by the curve, not insiders." },
@@ -79,7 +79,7 @@ export default function SignUp() {
           <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center shadow-[0_0_16px_rgba(59,130,246,0.5)]">
             <Rocket className="w-4 h-4 text-white" />
           </div>
-          <span className="text-lg font-bold text-white tracking-tight">Mintix <span className="text-primary">fun</span></span>
+          <span className="text-lg font-bold text-white tracking-tight">Pump<span className="text-primary">i</span></span>
         </div>
 
         <div className="w-full max-w-[380px] relative">

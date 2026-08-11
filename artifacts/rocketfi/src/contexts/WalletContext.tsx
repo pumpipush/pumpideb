@@ -26,7 +26,7 @@ import type { SolanaProvider, WalletName } from "@/lib/solana";
 import { WALLET_DESCRIPTORS } from "@/lib/solana";
 import { WalletSelectModal } from "@/components/shared/WalletSelectModal";
 
-const STORAGE_KEY = "mintix_last_wallet";
+const STORAGE_KEY = "pumpi_last_wallet";
 
 interface WalletContextValue {
   /** Base58-encoded Solana public key, or null if not connected */
