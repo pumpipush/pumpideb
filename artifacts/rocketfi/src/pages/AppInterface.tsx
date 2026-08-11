@@ -546,7 +546,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                     <UploadCloud className="h-5 w-5" style={{ color: "#64748b" }} />
                   </div>
                   <p className="text-[13px] font-medium" style={{ color: "#475569" }}>
-                    Drop image here or <span style={{ color: "#64748b" }}>browse</span>
+                    Drop image here or <span style={{ color: "#e2e8f0" }}>browse</span>
                   </p>
                 </div>
               )}
