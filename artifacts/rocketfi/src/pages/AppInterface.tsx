@@ -2179,13 +2179,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.025)" }}>
                         {/* Left strip column */}
                         <th style={{ width: 3, padding: 0 }} />
-                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#475569" }}>Time</th>
-                        <th className="text-left px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#475569" }}>Type</th>
-                        <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#475569" }}>USD</th>
-                        <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#475569" }}>{token.symbol}</th>
-                        <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#475569" }}>SOL</th>
-                        <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#475569" }}>Price</th>
-                        <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#475569" }}>Maker</th>
+                        <th className="text-left px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Time</th>
+                        <th className="text-left px-2 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Type</th>
+                        <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>USD</th>
+                        <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>{token.symbol}</th>
+                        <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>SOL</th>
+                        <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Price</th>
+                        <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Maker</th>
                         <th style={{ width: 36 }} />
                       </tr>
                     </thead>
