@@ -47,7 +47,7 @@ function AppShell() {
             <Route path="/" component={Dashboard} />
             <Route path="/dashboard"><Redirect to="/" /></Route>
             <Route path="/app" component={AppInterface} />
-            <Route path="/profile/:address" component={ProfilePage} />
+            <Route path="/profile/:slug" component={ProfilePage} />
             {/* signin/signup show the dashboard behind the auth modal */}
             <Route path="/signin"><Dashboard /></Route>
             <Route path="/signup"><Dashboard /></Route>

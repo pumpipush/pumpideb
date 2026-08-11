@@ -148,26 +148,15 @@ type WalletPortfolio = {
 };
 
 export default function ProfilePage() {
-  const params = useParams<{ address: string }>();
-  const address = params.address ?? "";
+  const params = useParams<{ slug: string }>();
+  const slug = params.slug ?? "";
   const [, setLocation] = useLocation();
   const { wallet, signMessage } = useWallet();
-  const isOwner = wallet?.toLowerCase() === address.toLowerCase();
+
+  // slug can be a username or a wallet address (32-44 base58 chars)
+  const looksLikeAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(slug);
 
   const [activeTab, setActiveTab] = useState<Tab>("activity");
-
-  // ── Wallet portfolio (on-chain balances) ──────────────────────────────────
-  const { data: portfolio, isLoading: portfolioLoading, error: portfolioError } = useQuery<WalletPortfolio>({
-    queryKey: ["wallet-portfolio", address],
-    queryFn: async () => {
-      const res = await fetch(`/api/wallet/${address}/portfolio`);
-      if (!res.ok) throw new Error("Failed to fetch portfolio");
-      return res.json() as Promise<WalletPortfolio>;
-    },
-    enabled: activeTab === "wallet" && !!address,
-    staleTime: 60_000,
-    retry: 1,
-  });
   const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editForm, setEditForm] = useState<{
@@ -182,8 +171,25 @@ export default function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const { data: profile, isLoading, refetch } = useGetProfile(address, {
-    query: { enabled: !!address, retry: false, queryKey: getGetProfileQueryKey(address) },
+  const { data: profile, isLoading, refetch } = useGetProfile(slug, {
+    query: { enabled: !!slug, retry: false, queryKey: getGetProfileQueryKey(slug) },
+  });
+
+  // Resolved wallet address — from profile if loaded, or directly if slug is an address
+  const address = profile?.address ?? (looksLikeAddress ? slug : "");
+  const isOwner = !!wallet && !!address && wallet.toLowerCase() === address.toLowerCase();
+
+  // ── Wallet portfolio (on-chain balances) ──────────────────────────────────
+  const { data: portfolio, isLoading: portfolioLoading, error: portfolioError } = useQuery<WalletPortfolio>({
+    queryKey: ["wallet-portfolio", address],
+    queryFn: async () => {
+      const res = await fetch(`/api/wallet/${address}/portfolio`);
+      if (!res.ok) throw new Error("Failed to fetch portfolio");
+      return res.json() as Promise<WalletPortfolio>;
+    },
+    enabled: activeTab === "wallet" && !!address,
+    staleTime: 60_000,
+    retry: 1,
   });
 
   const activityParams = { limit: 200 };
@@ -324,7 +330,14 @@ export default function ProfilePage() {
 
       setEditOpen(false);
       setEditForm(null);
-      refetch();
+      const saved = await res.json() as { username?: string };
+      // If username changed (or was set for first time), redirect to the new clean URL
+      const newSlug = saved.username ?? slug;
+      if (newSlug !== slug) {
+        setLocation(`/profile/${newSlug}`);
+      } else {
+        refetch();
+      }
       toast({ title: "Profile saved", description: "Your profile has been updated." });
     } catch (e: unknown) {
       // Profile save failed — keep modal open, show error

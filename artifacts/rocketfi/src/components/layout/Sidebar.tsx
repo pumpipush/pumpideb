@@ -74,10 +74,10 @@ export function Sidebar() {
         {/* Profile link — only visible when wallet connected */}
         {wallet && (
           <Link
-            href={`/profile/${wallet}`}
+            href={`/profile/${profile?.username ?? wallet}`}
             className={cn(
               "flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-all duration-200 rounded-sm group",
-              location === `/profile/${wallet}`
+              location === `/profile/${profile?.username ?? wallet}`
                 ? "bg-primary/15 text-foreground nav-active-bar"
                 : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
             )}
@@ -136,10 +136,10 @@ export function BottomNav() {
 
       {/* Profile tab (mobile) — shows avatar when connected, generic icon when not */}
       <Link
-        href={wallet ? `/profile/${wallet}` : "/app"}
+        href={wallet ? `/profile/${profile?.username ?? wallet}` : "/app"}
         className={cn(
           "flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-wide transition-all duration-200",
-          wallet && location === `/profile/${wallet}` ? "text-primary" : "text-muted-foreground"
+          wallet && location === `/profile/${profile?.username ?? wallet}` ? "text-primary" : "text-muted-foreground"
         )}
       >
         {wallet && profile?.avatarUrl ? (
@@ -148,7 +148,7 @@ export function BottomNav() {
             alt="avatar"
             className={cn(
               "w-5 h-5 rounded-full object-cover border",
-              location === `/profile/${wallet}` ? "border-primary" : "border-border"
+              location === `/profile/${profile?.username ?? wallet}` ? "border-primary" : "border-border"
             )}
           />
         ) : wallet ? (

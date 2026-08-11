@@ -23,7 +23,7 @@
  */
 
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { db, profilesTable } from "@workspace/db";
 import {
   GetProfileParams,
@@ -60,20 +60,33 @@ router.post("/profiles/challenge", (req, res): void => {
   res.json({ nonce });
 });
 
-// ── GET /profiles/:address ────────────────────────────────────────────────────
+// ── GET /profiles/:identifier ─────────────────────────────────────────────────
 // Public — no auth required.
+// :identifier can be a wallet address (32–44 base58 chars) OR a username.
+// Address lookup is exact; username lookup is case-insensitive.
 
 router.get("/profiles/:address", async (req, res): Promise<void> => {
-  const parsed = GetProfileParams.safeParse(req.params);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid address" });
+  const identifier = String(req.params.address ?? "").trim();
+  if (!identifier) {
+    res.status(400).json({ error: "Missing identifier" });
     return;
   }
+
+  // Solana addresses are base58, always 32-44 characters.
+  // Usernames are typically shorter and may contain underscores.
+  const looksLikeAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(identifier);
 
   const [profile] = await db
     .select()
     .from(profilesTable)
-    .where(eq(profilesTable.address, parsed.data.address))
+    .where(
+      looksLikeAddress
+        ? eq(profilesTable.address, identifier)
+        : or(
+            eq(profilesTable.username, identifier),
+            eq(profilesTable.username, identifier.toLowerCase()),
+          )
+    )
     .limit(1);
 
   if (!profile) {
