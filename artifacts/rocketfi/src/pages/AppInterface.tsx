@@ -645,10 +645,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
             {launchStep === "idle" && platform === "pumpfun" && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
                 style={{ background: "rgba(168,85,247,0.08)", border: "1px solid rgba(168,85,247,0.20)" }}>
-                <ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "#a855f7" }} />
-                <span className="text-[12px]" style={{ color: "#c084fc" }}>
-                  Biaya launch pump.fun: ~{PUMP_FUN_LAUNCH_COST_SOL} SOL (fee + rent akun mint & metadata)
-                </span>
               </div>
             )}
             {launchStep === "idle" && platform === "raydium" && (
