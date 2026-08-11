@@ -1069,6 +1069,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // Bug fix: React state for tx/holders sub-tab instead of imperative DOM manipulation
   const [activeSubTab, setActiveSubTab] = useState<"tx" | "holders" | "positions">("tx");
   const [descExpanded, setDescExpanded] = useState(false);
+  const [tradeDisplayLimit, setTradeDisplayLimit] = useState(50);
 
   // Reset per-token UI state whenever the viewed token changes
   useEffect(() => {
@@ -1076,6 +1077,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     setAmount("");
     setActiveSubTab("tx");
     setDescExpanded(false);
+    setTradeDisplayLimit(50);
     // Reset Jupiter quote when switching tokens
     setJupiterQuote(null);
     setJupiterQuoteError(null);
@@ -2213,7 +2215,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       ) : (() => {
                         const historyTxHashes = new Set((history ?? []).map(t => t.txHash));
                         const dedupedLive = liveTrades.filter(lt => !historyTxHashes.has(lt.txHash));
-                        const allRows = [...dedupedLive, ...(history ?? [])].slice(0, 50);
+                        const allTrades = [...dedupedLive, ...(history ?? [])];
+                        const allRows = allTrades.slice(0, tradeDisplayLimit);
                         if (!allRows.length) {
                           return (
                             <tr>
@@ -2344,6 +2347,29 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       })()}
                     </tbody>
                   </table>
+
+                  {/* Load More */}
+                  {(() => {
+                    const historyTxHashes = new Set((history ?? []).map(t => t.txHash));
+                    const dedupedLive = liveTrades.filter(lt => !historyTxHashes.has(lt.txHash));
+                    const total = [...dedupedLive, ...(history ?? [])].length;
+                    if (total <= tradeDisplayLimit) return null;
+                    const remaining = total - tradeDisplayLimit;
+                    return (
+                      <div className="flex justify-center py-3 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+                        <button
+                          onClick={() => setTradeDisplayLimit(n => n + 50)}
+                          className="flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium transition-all"
+                          style={{ background: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.08)" }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.09)"; (e.currentTarget as HTMLButtonElement).style.color = "#e2e8f0"; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)"; (e.currentTarget as HTMLButtonElement).style.color = "#94a3b8"; }}
+                        >
+                          Load {Math.min(remaining, 50)} more
+                          <span className="text-[11px] font-mono px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.07)", color: "#64748b" }}>{remaining} remaining</span>
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
