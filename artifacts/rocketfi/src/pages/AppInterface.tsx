@@ -1368,21 +1368,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const ChartSection = useMemo(() => {
     if (!token) return null;
 
-    // When switching between tokens, the full-panel overlay already signals loading —
-    // skip the chart skeleton so they don't stack (double loading).
-    if (isSwitching) {
+    // Chart data still loading — show a spinner inside the chart box.
+    // One global spinner handles the token fetch; this handles the OHLCV fetch separately.
+    if (chartBars.length === 0 && (ohlcvLoading || isSwitching)) {
       return (
-        <div className="border border-border/20 rounded-sm mb-0"
-          style={{ height: 280, background: "#0B1220" }} />
-      );
-    }
-
-    // Still loading from server — show a plain dark placeholder so no second spinner appears.
-    // The full-page skeleton (first load) or the overlay spinner (switching) already signals loading.
-    if (chartBars.length === 0 && ohlcvLoading) {
-      return (
-        <div className="border border-border/20 rounded-sm mb-0"
-          style={{ height: 280, background: "#0B1220" }} />
+        <div className="border border-border/20 rounded-sm mb-0 flex items-center justify-center"
+          style={{ height: 280, background: "#0B1220" }}>
+          <Loader2 className="w-6 h-6 animate-spin" style={{ color: "rgba(99,102,241,0.5)" }} />
+        </div>
       );
     }
 
@@ -1806,14 +1799,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   return (
     /* Full-bleed two-column layout — mirrors pump.fun */
     <div className="relative flex flex-col md:flex-row w-full animate-slideDown md:h-[calc(100dvh-96px)] min-w-[320px] md:min-w-[680px]">
-
-      {/* Token-switching overlay — keeps stale data visible but signals loading */}
-      {isSwitching && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none"
-          style={{ background: "rgba(9,9,11,0.55)", backdropFilter: "blur(2px)" }}>
-          <Loader2 className="w-9 h-9 animate-spin" style={{ color: "rgba(99,102,241,0.8)" }} />
-        </div>
-      )}
 
       {/* ── LEFT: scrollable chart + info ── */}
       <div data-token-panel className="flex-1 min-w-0 overflow-y-auto border-r border-border/20 px-0 md:px-5 py-0 md:py-4 pb-20 md:pb-6">
