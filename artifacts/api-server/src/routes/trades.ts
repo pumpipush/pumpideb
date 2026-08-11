@@ -18,6 +18,95 @@ import { fetchAndParseTrade } from "../lib/tradeVerifier.js";
 // Platforms that use Birdeye for OHLCV + price-history (no internal trade stream in prod yet)
 const DEX_PLATFORMS = new Set(["pumpswap", "raydium_launchlab"]);
 
+// ── Birdeye backfill helper ────────────────────────────────────────────────────
+// Fetches the last 50 trades from Birdeye for a DEX token and persists them to
+// the trades table (ON CONFLICT DO NOTHING on tx_hash). Fully idempotent — safe
+// to call many times. Returns the count of newly-inserted rows (0 if all already
+// present or Birdeye is unavailable).
+//
+// This is the mechanism by which Jupiter/aggregator swaps enter the DB for
+// graduated tokens: our on-chain logsSubscribe only sees direct PumpSwap and
+// Raydium swaps; Jupiter-routed swaps go through different program paths and
+// are invisible to those adapters. Birdeye's `/defi/txs/token` endpoint
+// aggregates across all DEX venues, so it captures these missing trades.
+async function backfillBirdeyeTradesToDb(
+  address: string,
+  platform: string,
+  tokenName: string | null,
+  tokenSymbol: string | null,
+): Promise<number> {
+  try {
+    const [birdeyeTrades, solPrice] = await Promise.all([
+      fetchBirdeyeTokenTrades(address, 50),
+      getSolPriceUsd(),
+    ]);
+    if (!birdeyeTrades || birdeyeTrades.length === 0) return 0;
+
+    // Dedup by txHash — Birdeye can return each swap leg separately for multi-hop routes.
+    // Prefer the leg where the tracked token appears as an exact from/to address.
+    const seen = new Map<string, typeof birdeyeTrades[number]>();
+    for (const item of birdeyeTrades) {
+      const existing = seen.get(item.txHash);
+      if (!existing) {
+        seen.set(item.txHash, item);
+      } else {
+        const isExact = item.to.address === address || item.from.address === address;
+        if (isExact) seen.set(item.txHash, item);
+      }
+    }
+
+    const rows = Array.from(seen.values()).map(item => {
+      const isBuy = item.to.address === address
+        ? true
+        : item.from.address === address
+        ? false
+        : item.side === "buy";
+
+      const tokenSide = (item.to.address === address) ? item.to : item.from;
+      const otherSide = (item.to.address === address) ? item.from : item.to;
+
+      const tokenDecimals = tokenSide.decimals ?? 6;
+      const tokenAmount   = String(Math.round(Math.abs(tokenSide.uiAmount) * Math.pow(10, tokenDecimals)));
+
+      // Trade value in SOL lamports (other-side USD value ÷ SOL price × 1e9)
+      const tradeUsd  = Math.abs(otherSide.uiAmount) * (otherSide.price || item.tokenPrice || 0);
+      const ethAmount = solPrice > 0 ? String(Math.round(tradeUsd / solPrice * 1e9)) : "0";
+
+      // Price in SOL per token
+      const priceEth = item.tokenPrice > 0 && solPrice > 0
+        ? String(item.tokenPrice / solPrice)
+        : null;
+
+      return {
+        tokenAddress:  address,
+        tokenName:     tokenName ?? null,
+        tokenSymbol:   tokenSymbol ?? null,
+        traderAddress: item.owner,
+        isBuy,
+        ethAmount,
+        tokenAmount,
+        priceEth,
+        txHash:    item.txHash,
+        platform,
+        timestamp: new Date(item.blockUnixTime * 1000),
+      };
+    });
+
+    if (rows.length === 0) return 0;
+
+    const inserted = await db
+      .insert(tradesTable)
+      .values(rows)
+      .onConflictDoNothing()
+      .returning({ id: tradesTable.id });
+
+    return inserted.length;
+  } catch {
+    // Non-fatal — backfill is best-effort
+    return 0;
+  }
+}
+
 /** Solana base58 transaction signature: 64 bytes encoded as 87-88 base58 chars. */
 const SOLANA_SIG_RE = /^[1-9A-HJ-NP-Za-km-z]{87,88}$/;
 
@@ -79,6 +168,18 @@ router.get("/tokens/:address/stream", async (req: Request, res: Response) => {
   const isPumpFun = address.endsWith("pump");
   if (tokenRow?.graduated || (!tokenRow && isPumpFun)) {
     registerGraduatedMint(address);
+  }
+
+  // For graduated DEX tokens, backfill the last 50 Birdeye trades into the DB
+  // in the background. This ensures Jupiter/aggregator swaps are captured even
+  // if they were never seen by our on-chain logsSubscribe adapters.
+  if (tokenRow?.graduated && tokenRow.platform && DEX_PLATFORMS.has(tokenRow.platform)) {
+    void backfillBirdeyeTradesToDb(
+      address,
+      tokenRow.platform,
+      tokenRow.name ?? null,
+      tokenRow.symbol ?? null,
+    ).catch(() => { /* non-fatal */ });
   }
 
   if (tokenRow) {
@@ -800,6 +901,17 @@ router.get("/tokens/:address/trades", async (req, res): Promise<void> => {
 
       // Bypass zod parse — Birdeye data matches shape but uses synthetic IDs
       res.json(mapped);
+
+      // Background: persist these trades to DB so Top Wallets and future
+      // requests benefit from a populated trade history. Idempotent — any
+      // trades already in DB (from the on-chain indexer) are skipped.
+      void backfillBirdeyeTradesToDb(
+        address,
+        tokenRow.platform,
+        null,
+        null,
+      ).catch(() => { /* non-fatal */ });
+
       return;
     }
   }
@@ -956,6 +1068,27 @@ router.post("/tokens/:address/trades", async (req, res): Promise<void> => {
 router.get("/tokens/:address/top-wallets", async (req, res): Promise<void> => {
   const address = req.params.address as string;
   if (!address) { res.status(400).json({ error: "address required" }); return; }
+
+  // For DEX tokens (graduated pump.fun → pumpswap, raydium_launchlab), pull the
+  // latest Birdeye trades into the DB before computing wallet stats. This captures
+  // Jupiter/aggregator swaps that our on-chain adapters never saw, so the leaderboard
+  // reflects the real post-graduation trade history rather than just indexed samples.
+  // Birdeye call + DB upsert adds ~300–400 ms on the first view; repeat calls are
+  // near-instant because ON CONFLICT DO NOTHING skips already-present rows.
+  const [tokenRowForWallets] = await db
+    .select({ platform: tokensTable.platform, name: tokensTable.name, symbol: tokensTable.symbol })
+    .from(tokensTable)
+    .where(eq(tokensTable.address, address))
+    .limit(1);
+
+  if (tokenRowForWallets && DEX_PLATFORMS.has(tokenRowForWallets.platform)) {
+    await backfillBirdeyeTradesToDb(
+      address,
+      tokenRowForWallets.platform,
+      tokenRowForWallets.name ?? null,
+      tokenRowForWallets.symbol ?? null,
+    );
+  }
 
   const { rows } = await pool.query<{
     trader_address: string;
