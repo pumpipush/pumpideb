@@ -16,5 +16,12 @@
   "devDependencies": {
     "prettier": "^3.9.6",
     "typescript": "~5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "adm-zip": ">=0.6.0",
+      "ws": ">=8.21.0",
+      "serialize-javascript": ">=7.0.3"
+    }
   }
 }
