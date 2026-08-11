@@ -1,14 +1,21 @@
 import { Button } from "@/components/ui/button";
-import { Search, Wallet } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Search, Wallet, User, Copy, LogOut, ExternalLink } from "lucide-react";
 import { useWallet } from "@/contexts/WalletContext";
 import { useGetProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
 import { formatAddress, diceBearUrl } from "@/lib/utils";
-import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Link, useLocation } from "wouter";
 import { openSearch } from "@/components/shared/SearchDialog";
 import { useState } from "react";
 import { WalletSelectModal } from "@/components/shared/WalletSelectModal";
 import { useToast } from "@/hooks/use-toast";
+import { copyToClipboard } from "@/components/shared/CopyToast";
 
 function WalletButton() {
   const { wallet, walletName, disconnect } = useWallet();
@@ -55,38 +62,84 @@ function WalletButton() {
     );
   }
 
+  const profileSlug = profile?.username ?? wallet;
+
   return (
     <div className="flex items-center gap-2 shrink-0">
-      {/* Address pill — desktop only */}
-      <div className="hidden sm:flex items-center gap-1.5 h-8 px-2.5 bg-card border border-border/50 rounded-sm" title={wallet}>
-        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-        <span className="text-xs font-mono text-muted-foreground">{formatAddress(wallet)}</span>
-        {walletName && (
-          <span className="text-[10px] text-white/30 font-medium">{walletName}</span>
-        )}
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button className="flex items-center gap-2 rounded-sm px-2 py-1 hover:bg-white/5 transition-colors group outline-none">
+            {/* Address pill — desktop only */}
+            <div className="hidden sm:flex items-center gap-1.5 h-7 px-2 bg-card border border-border/50 rounded-sm group-hover:border-border transition-colors" title={wallet}>
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span className="text-xs font-mono text-muted-foreground">{formatAddress(wallet)}</span>
+              {walletName && (
+                <span className="text-[10px] text-white/30 font-medium">{walletName}</span>
+              )}
+            </div>
+            {/* Avatar */}
+            <div className="relative h-8 w-8 rounded-full overflow-hidden border-2 border-border group-hover:border-primary/50 transition-colors shrink-0">
+              <img
+                src={profile?.avatarUrl || diceBearUrl(wallet)}
+                alt={profile?.username ?? wallet}
+                className="w-full h-full object-cover"
+                style={{ imageRendering: profile?.avatarUrl ? "auto" : "pixelated" }}
+              />
+            </div>
+          </button>
+        </DropdownMenuTrigger>
 
-      {/* Profile avatar — always visible */}
-      <Link href={`/profile/${profile?.username ?? wallet}`}>
-        <button className="relative h-8 w-8 rounded-full overflow-hidden border-2 border-border hover:border-primary/50 transition-colors shrink-0">
-          <img
-            src={profile?.avatarUrl || diceBearUrl(wallet)}
-            alt={profile?.username ?? wallet}
-            className="w-full h-full object-cover"
-            style={{ imageRendering: profile?.avatarUrl ? "auto" : "pixelated" }}
-          />
-        </button>
-      </Link>
+        <DropdownMenuContent align="end" className="w-52 rounded-sm">
+          {/* Identity header */}
+          <div className="px-3 py-2.5 border-b border-border/50">
+            <p className="text-sm font-semibold text-foreground truncate">
+              {profile?.username ?? formatAddress(wallet)}
+            </p>
+            <p className="text-[11px] font-mono text-muted-foreground truncate mt-0.5">{formatAddress(wallet)}</p>
+          </div>
 
-      {/* Disconnect — desktop only */}
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground transition-colors hidden sm:flex"
-        onClick={() => void handleDisconnect()}
-      >
-        Disconnect
-      </Button>
+          <div className="py-1">
+            <DropdownMenuItem asChild>
+              <Link href={`/profile/${profileSlug}`} className="flex items-center gap-2.5 cursor-pointer">
+                <User className="w-3.5 h-3.5 text-muted-foreground" />
+                View Profile
+              </Link>
+            </DropdownMenuItem>
+
+            <DropdownMenuItem
+              onSelect={() => copyToClipboard(wallet, "Address copied")}
+              className="flex items-center gap-2.5 cursor-pointer"
+            >
+              <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+              Copy Address
+            </DropdownMenuItem>
+
+            <DropdownMenuItem asChild>
+              <a
+                href={`https://solscan.io/account/${wallet}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2.5 cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+                View on Solscan
+              </a>
+            </DropdownMenuItem>
+          </div>
+
+          <DropdownMenuSeparator />
+
+          <div className="py-1">
+            <DropdownMenuItem
+              onSelect={() => void handleDisconnect()}
+              className="flex items-center gap-2.5 cursor-pointer text-red-400 focus:text-red-400"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Disconnect
+            </DropdownMenuItem>
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
