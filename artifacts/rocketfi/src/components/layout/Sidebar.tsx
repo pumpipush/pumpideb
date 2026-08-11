@@ -12,11 +12,11 @@ function LaunchTokenButton() {
   const [hovered, setHovered] = useState(false);
   return (
     <Button
-      className="w-full bg-primary text-primary-foreground rounded-[8px] font-bold text-sm h-9 transition-all duration-200 active:scale-[0.98] flex items-center gap-2"
+      className="w-full rounded-[8px] font-bold text-sm h-9 transition-all duration-200 active:scale-[0.98] flex items-center gap-2"
       style={{
-        background: "hsl(28, 95%, 56%)",
-        color: "#1a0a00",
-        boxShadow: hovered ? "0 0 18px rgba(251,121,22,0.30)" : undefined,
+        background: hovered ? "#22c55e" : "#16a34a",
+        color: "#052e16",
+        boxShadow: hovered ? "0 0 18px rgba(74,222,128,0.28)" : undefined,
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -40,7 +40,7 @@ export function Sidebar() {
       <div className="p-4 flex flex-col gap-4">
         <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight text-primary transition-all duration-150 cursor-pointer">
           <Rocket className="h-5 w-5" />
-          <span>Mintix <span style={{ color: "hsl(28, 95%, 56%)" }} className="font-normal">fun</span></span>
+          <span>Mintix <span style={{ color: "#4ade80" }} className="font-normal">fun</span></span>
         </Link>
         <div className="h-px w-full bg-border/50" />
       </div>

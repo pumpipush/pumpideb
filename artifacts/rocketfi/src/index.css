@@ -108,12 +108,12 @@
 
   --radius: 0.375rem;
 
-  /* ── Brand accent: rocket orange ──────────────────────────────────────
+  /* ── Brand accent: trading green ──────────────────────────────────────
      Used for primary CTAs (Launch Token button) and key highlights.
-     Does NOT override --primary (near-white) so existing UI is unaffected. */
-  --brand: 28 95% 56%;
-  --brand-foreground: 28 100% 8%;
-  --brand-glow: rgba(251, 121, 22, 0.25);
+     Consistent with the existing buy/profit green across the app. */
+  --brand: 142 76% 55%;
+  --brand-foreground: 142 100% 7%;
+  --brand-glow: rgba(74, 222, 128, 0.25);
 }
 
 @layer base {

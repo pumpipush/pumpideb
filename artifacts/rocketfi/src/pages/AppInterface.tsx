@@ -2535,9 +2535,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     const pct = (bal / totalSupply) * 100;
 
                     // Rank styling: gold / silver / bronze / default
-                    const rankColor = idx === 0 ? "#f59e0b" : idx === 1 ? "#94a3b8" : idx === 2 ? "#b87333" : "#334155";
-                    const rankBg    = idx === 0 ? "rgba(245,158,11,0.14)" : idx === 1 ? "rgba(148,163,184,0.10)" : idx === 2 ? "rgba(184,115,51,0.12)" : "rgba(255,255,255,0.04)";
-                    const barColor  = idx === 0 ? "#f59e0b" : idx === 1 ? "#94a3b8" : idx === 2 ? "#b87333" : "hsl(28 95% 56%)";
+                    const rankColor = idx === 0 ? "#4ade80" : idx === 1 ? "#94a3b8" : idx === 2 ? "#6ee7b7" : "#334155";
+                    const rankBg    = idx === 0 ? "rgba(74,222,128,0.14)" : idx === 1 ? "rgba(148,163,184,0.10)" : idx === 2 ? "rgba(110,231,183,0.10)" : "rgba(255,255,255,0.04)";
+                    const barColor  = idx === 0 ? "#4ade80" : idx === 1 ? "#94a3b8" : idx === 2 ? "#6ee7b7" : "#16a34a";
 
                     return (
                       <div key={addr}
@@ -2568,7 +2568,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                             </span>
                             {idx === 0 && (
                               <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide"
-                                style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.3)" }}>
+                                style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)" }}>
                                 TOP
                               </span>
                             )}
