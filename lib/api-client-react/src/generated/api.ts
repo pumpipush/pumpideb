@@ -35,6 +35,7 @@ import type {
   Token,
   TokenInput,
   TokenUpdate,
+  TopWalletsResponse,
   Trade,
   TradeInput,
   UploadUrlRequest,
@@ -1276,6 +1277,64 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 
 export type GetStorageObjectQueryResult = NonNullable<Awaited<ReturnType<typeof getStorageObject>>>
 export type GetStorageObjectQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get top wallets (P&L leaderboard) for a token
+ */
+export const getTopWallets = (
+  address: string,
+  options?: SecondParameter<typeof customFetch>,
+  signal?: AbortSignal,
+) => {
+  return customFetch<TopWalletsResponse>(
+    `/api/tokens/${address}/top-wallets`,
+    { ...options, method: 'GET', signal },
+  );
+};
+
+export const getGetTopWalletsQueryKey = (address: string) =>
+  [`/api/tokens/${address}/top-wallets`] as const;
+
+export const getGetTopWalletsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTopWallets>>,
+  TError = ErrorType<unknown>,
+>(
+  address: string,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getTopWallets>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetTopWalletsQueryKey(address);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTopWallets>>> = ({ signal }) =>
+    getTopWallets(address, requestOptions, signal);
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!address,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getTopWallets>>, TError, TData> & { queryKey: QueryKey };
+};
+
+export type GetTopWalletsQueryResult = NonNullable<Awaited<ReturnType<typeof getTopWallets>>>;
+export type GetTopWalletsQueryError = ErrorType<unknown>;
+
+export function useGetTopWallets<
+  TData = Awaited<ReturnType<typeof getTopWallets>>,
+  TError = ErrorType<unknown>,
+>(
+  address: string,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getTopWallets>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTopWalletsQueryOptions(address, options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return withQueryKey(query, queryOptions.queryKey);
+}
 
 
 /**

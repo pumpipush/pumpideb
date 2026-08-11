@@ -9,6 +9,7 @@ import {
   useGetTokenOhlcv,
   useListTokens,
   useGetTrendingTokens,
+  useGetTopWallets,
   getListTokensQueryKey,
 } from "@workspace/api-client-react";
 import { useWallet } from "@/contexts/WalletContext";
@@ -958,6 +959,17 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     }
   });
 
+  // ── Top wallets P&L leaderboard ──────────────────────────────────────────────
+  const { data: topWalletsData, isLoading: loadingTopWallets, isError: topWalletsError, refetch: refetchTopWallets } = useGetTopWallets(selectedAddress || "", {
+    query: {
+      enabled: !!selectedAddress,
+      queryKey: ["topWallets", selectedAddress],
+      refetchInterval: 15_000,
+      staleTime: 12_000,
+    }
+  });
+  const topWallets = topWalletsData?.wallets ?? [];
+
   // ── Server-side reference prices for % change (SQL — no 100-row cap) ────────
   // High-volume tokens exhaust the 100-row history in < 2 min, so we query DB
   // directly for the closest valid price before each cutoff.
@@ -1067,7 +1079,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [timeframe, setTimeframe] = useState<Timeframe>("1h");
   const [shareOpen, setShareOpen] = useState(false);
   // Bug fix: React state for tx/holders sub-tab instead of imperative DOM manipulation
-  const [activeSubTab, setActiveSubTab] = useState<"tx" | "holders" | "positions">("tx");
+  const [activeSubTab, setActiveSubTab] = useState<"tx" | "holders" | "wallets" | "positions">("tx");
   const [descExpanded, setDescExpanded] = useState(false);
   const [tradeDisplayLimit, setTradeDisplayLimit] = useState(50);
 
@@ -2154,6 +2166,18 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   <Users className="h-3.5 w-3.5" /> Holders{holders.length > 0 && <span className="ml-1 text-[11px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.08)", color: activeSubTab === "holders" ? "#e2e8f0" : "#94a3b8" }}>{holders.length.toLocaleString()}</span>}
                 </button>
                 <button
+                  onClick={() => setActiveSubTab("wallets")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all shrink-0"
+                  style={{
+                    background: activeSubTab === "wallets" ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+                    color: activeSubTab === "wallets" ? "#e2e8f0" : "#64748b",
+                    border: "1px solid " + (activeSubTab === "wallets" ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
+                  }}
+                >
+                  <Eye className="h-3.5 w-3.5" /> Top Wallets
+                  {topWallets.length > 0 && <span className="ml-1 text-[11px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.08)", color: activeSubTab === "wallets" ? "#e2e8f0" : "#94a3b8" }}>{topWallets.length}</span>}
+                </button>
+                <button
                   onClick={() => setActiveSubTab("positions")}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all shrink-0"
                   style={{
@@ -2372,6 +2396,209 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   })()}
                 </div>
               </div>
+
+              {/* Top Wallets panel */}
+              {activeSubTab === "wallets" && (() => {
+                const LAMPORTS = 1e9;
+                const ATOMIC   = 1e6;
+                const creatorAddress = (token as any).creatorAddress as string | undefined;
+                const currentPriceSol = priceStats.currentPrice;
+                const maxBalance = topWallets.length > 0 ? parseFloat(topWallets[0].balance) : 1;
+
+                const rankColor = (i: number) =>
+                  i === 0 ? "#f59e0b" : i === 1 ? "#94a3b8" : i === 2 ? "#2dd4bf" : "#475569";
+
+                return (
+                  <div className="overflow-hidden rounded-lg" style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
+
+                    {/* Summary bar */}
+                    {!loadingTopWallets && topWallets.length > 0 && (
+                      <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
+                        <div className="flex items-center gap-1.5">
+                          <Users className="h-3.5 w-3.5" style={{ color: "#64748b" }} />
+                          <span className="text-[14px] font-semibold" style={{ color: "#e2e8f0" }}>
+                            {topWallets.length} wallets tracked
+                          </span>
+                        </div>
+                        {creatorAddress && topWallets.some(w => w.address === creatorAddress) && (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                            style={{ background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.3)", color: "#c084fc" }}>
+                            DEV still holding
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                      <table style={{ minWidth: "580px", width: "100%", borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
+                            <th style={{ width: 3, padding: 0 }} />
+                            <th className="text-center px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8", width: 40 }}>#</th>
+                            <th className="text-left   px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Wallet</th>
+                            <th className="text-right  px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Holdings</th>
+                            <th className="hidden md:table-cell text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Avg Entry</th>
+                            <th className="text-right  px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>P&amp;L</th>
+                            <th className="hidden md:table-cell text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Trades</th>
+                            <th className="hidden lg:table-cell text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Last</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {loadingTopWallets ? (
+                            Array.from({ length: 8 }).map((_, i) => (
+                              <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                                <td style={{ width: 3, padding: 0 }}><div style={{ width: 3, height: 40, background: "#1e293b" }} /></td>
+                                <td className="px-3 py-3 text-center"><Skeleton className="h-3.5 w-5 mx-auto" /></td>
+                                <td className="px-3 py-3"><div className="flex items-center gap-2"><Skeleton className="h-5 w-5 rounded-full" /><Skeleton className="h-3.5 w-24" /></div></td>
+                                <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-16 ml-auto" /></td>
+                                <td className="hidden md:table-cell px-3 py-3 text-right"><Skeleton className="h-3 w-20 ml-auto" /></td>
+                                <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-16 ml-auto" /></td>
+                                <td className="hidden md:table-cell px-3 py-3 text-right"><Skeleton className="h-3 w-12 ml-auto" /></td>
+                                <td className="hidden lg:table-cell px-3 py-3 text-right"><Skeleton className="h-3 w-10 ml-auto" /></td>
+                              </tr>
+                            ))
+                          ) : topWalletsError ? (
+                            <tr>
+                              <td colSpan={8} className="px-4 py-12 text-center">
+                                <div className="flex flex-col items-center gap-2">
+                                  <AlertCircle className="h-5 w-5" style={{ color: "#f87171" }} />
+                                  <span className="text-[13px]" style={{ color: "#f87171" }}>Failed to load wallet data.</span>
+                                  <button onClick={() => refetchTopWallets()} className="text-[12px] underline hover:opacity-80" style={{ color: "#64748b" }}>Retry</button>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : topWallets.length === 0 ? (
+                            <tr>
+                              <td colSpan={8} className="px-4 py-14 text-center">
+                                <div className="flex flex-col items-center gap-2">
+                                  <Eye className="h-6 w-6" style={{ color: "#334155" }} />
+                                  <span className="text-[14px] font-semibold" style={{ color: "#475569" }}>No wallet data yet</span>
+                                  <span className="text-[12px]" style={{ color: "#334155" }}>Wallets appear once trades are recorded</span>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : topWallets.map((w, idx) => {
+                            const solIn          = parseFloat(w.totalSolIn)  / LAMPORTS;
+                            const solOut         = parseFloat(w.totalSolOut) / LAMPORTS;
+                            const rawBalance     = parseFloat(w.balance);
+                            const displayBalance = rawBalance / ATOMIC;
+                            const currentVal     = displayBalance * currentPriceSol;
+                            const pnlSol         = (solOut + currentVal) - solIn;
+                            const isProfit       = pnlSol >= 0;
+                            const hasPnl         = solIn > 0;
+                            const stripColor     = !hasPnl ? "#1e293b" : isProfit ? "#4ade80" : "#f87171";
+                            const pnlColor       = isProfit ? "#4ade80" : "#f87171";
+
+                            const avgEntryLam    = w.avgEntryLamportsPerToken ? parseFloat(w.avgEntryLamportsPerToken) : null;
+                            const avgEntrySol    = avgEntryLam != null ? avgEntryLam / 1e3 : null;
+
+                            const isCreator      = !!creatorAddress && w.address === creatorAddress;
+                            const avatarHue      = (w.address.split("").reduce((a: number, c: string) => a + c.charCodeAt(0), 0) * 37) % 360;
+                            const pct            = (rawBalance / maxBalance) * 100;
+
+                            return (
+                              <tr key={w.address}
+                                style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background 0.15s" }}
+                                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+                                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                              >
+                                {/* Left strip */}
+                                <td style={{ width: 3, padding: 0 }}>
+                                  <div style={{ width: 3, minHeight: 44, background: stripColor, opacity: hasPnl ? 0.7 : 0.2 }} />
+                                </td>
+
+                                {/* Rank */}
+                                <td className="px-3 py-3 text-center">
+                                  <span className="font-mono text-[13px] font-bold" style={{ color: rankColor(idx) }}>
+                                    {idx + 1}
+                                  </span>
+                                </td>
+
+                                {/* Wallet */}
+                                <td className="px-3 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-full shrink-0"
+                                      style={{ background: `hsl(${avatarHue} 65% 45%)`, display: "inline-block" }} />
+                                    <a
+                                      href={`https://solscan.io/account/${w.address}`}
+                                      target="_blank" rel="noopener noreferrer"
+                                      className="font-mono text-[13px] hover:text-white transition-colors"
+                                      style={{ color: "#94a3b8" }}
+                                    >
+                                      {w.address.slice(0, 4)}…{w.address.slice(-4)}
+                                    </a>
+                                    {isCreator && (
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0"
+                                        style={{ background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.3)", color: "#c084fc" }}>
+                                        DEV
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+
+                                {/* Holdings + mini progress bar */}
+                                <td className="px-3 py-3 text-right">
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className="font-mono text-[13px] font-semibold" style={{ color: "#e2e8f0" }}>
+                                      {formatAtomicTokenAmount(w.balance)}
+                                    </span>
+                                    <div className="w-16 h-0.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+                                      <div style={{ width: `${pct}%`, height: "100%", background: rankColor(idx), opacity: 0.7 }} />
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Avg Entry */}
+                                <td className="hidden md:table-cell px-3 py-3 text-right">
+                                  <span className="font-mono text-[13px]" style={{ color: "#64748b" }}>
+                                    {avgEntrySol != null
+                                      ? (solPrice ? formatTokenPrice(avgEntrySol * solPrice) : avgEntrySol.toPrecision(3) + " SOL")
+                                      : "—"}
+                                  </span>
+                                </td>
+
+                                {/* P&L */}
+                                <td className="px-3 py-3 text-right">
+                                  {hasPnl ? (
+                                    <div className="flex flex-col items-end">
+                                      <span className="font-mono text-[13px] font-bold" style={{ color: pnlColor }}>
+                                        {isProfit ? "+" : ""}{pnlSol.toFixed(3)} SOL
+                                      </span>
+                                      {solPrice && (
+                                        <span className="font-mono text-[11px]" style={{ color: "#475569" }}>
+                                          {isProfit ? "+" : ""}{formatUSD(Math.abs(pnlSol) * solPrice)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span style={{ color: "#334155" }}>—</span>
+                                  )}
+                                </td>
+
+                                {/* Trades */}
+                                <td className="hidden md:table-cell px-3 py-3 text-right">
+                                  <span className="font-mono text-[13px]" style={{ color: "#64748b" }}>
+                                    <span style={{ color: "#4ade80" }}>{w.buyCount}b</span>
+                                    {" / "}
+                                    <span style={{ color: "#f87171" }}>{w.sellCount}s</span>
+                                  </span>
+                                </td>
+
+                                {/* Last active */}
+                                <td className="hidden lg:table-cell px-3 py-3 text-right">
+                                  <span className="font-mono text-[13px]" style={{ color: "#475569" }}>
+                                    {timeAgo(w.lastActivity)}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Positions panel */}
               {activeSubTab === "positions" && (() => {

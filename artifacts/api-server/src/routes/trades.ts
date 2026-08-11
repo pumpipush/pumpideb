@@ -951,4 +951,64 @@ router.post("/tokens/:address/trades", async (req, res): Promise<void> => {
   res.status(201).json(RecordTradeResponse.parse(trade));
 });
 
+// GET /tokens/:address/top-wallets — per-wallet P&L and trade stats across ALL trades in DB.
+// Returns top 50 wallets by net token balance with SOL in/out, avg entry, and trade counts.
+router.get("/tokens/:address/top-wallets", async (req, res): Promise<void> => {
+  const address = req.params.address as string;
+  if (!address) { res.status(400).json({ error: "address required" }); return; }
+
+  const { rows } = await pool.query<{
+    trader_address: string;
+    balance: string;
+    total_sol_in: string;
+    total_sol_out: string;
+    buy_count: string;
+    sell_count: string;
+    trade_count: string;
+    last_activity: string;
+    avg_entry_lamports_per_token: string | null;
+  }>(`
+    SELECT
+      trader_address,
+      SUM(CASE WHEN is_buy
+        THEN  CAST(NULLIF(token_amount, '') AS NUMERIC)
+        ELSE -CAST(NULLIF(token_amount, '') AS NUMERIC)
+      END) AS balance,
+      COALESCE(SUM(CASE WHEN is_buy      THEN CAST(NULLIF(eth_amount,'') AS NUMERIC) ELSE 0 END), 0) AS total_sol_in,
+      COALESCE(SUM(CASE WHEN NOT is_buy  THEN CAST(NULLIF(eth_amount,'') AS NUMERIC) ELSE 0 END), 0) AS total_sol_out,
+      SUM(CASE WHEN is_buy      THEN 1 ELSE 0 END)::int AS buy_count,
+      SUM(CASE WHEN NOT is_buy  THEN 1 ELSE 0 END)::int AS sell_count,
+      COUNT(*)::int AS trade_count,
+      MAX(timestamp) AS last_activity,
+      SUM(CASE WHEN is_buy THEN CAST(NULLIF(eth_amount,'') AS NUMERIC) ELSE 0 END) /
+        NULLIF(SUM(CASE WHEN is_buy THEN CAST(NULLIF(token_amount,'') AS NUMERIC) ELSE 0 END), 0)
+        AS avg_entry_lamports_per_token
+    FROM trades
+    WHERE token_address = $1
+      AND token_amount IS NOT NULL AND token_amount <> '' AND token_amount <> '0'
+      AND eth_amount   IS NOT NULL AND eth_amount   <> ''
+    GROUP BY trader_address
+    HAVING SUM(CASE WHEN is_buy
+      THEN  CAST(NULLIF(token_amount, '') AS NUMERIC)
+      ELSE -CAST(NULLIF(token_amount, '') AS NUMERIC)
+    END) > 0
+    ORDER BY balance DESC
+    LIMIT 50
+  `, [address]);
+
+  const wallets = rows.map(r => ({
+    address:                    r.trader_address,
+    balance:                    r.balance,
+    totalSolIn:                 r.total_sol_in,
+    totalSolOut:                r.total_sol_out,
+    buyCount:                   Number(r.buy_count),
+    sellCount:                  Number(r.sell_count),
+    tradeCount:                 Number(r.trade_count),
+    lastActivity:               new Date(r.last_activity),
+    avgEntryLamportsPerToken:   r.avg_entry_lamports_per_token ?? null,
+  }));
+
+  res.json({ wallets, count: wallets.length });
+});
+
 export default router;

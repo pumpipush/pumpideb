@@ -272,3 +272,21 @@ export type GetRecentActivityParams = {
 limit?: number;
 };
 
+export interface TopWalletItem {
+  address: string;
+  balance: string;
+  totalSolIn: string;
+  totalSolOut: string;
+  buyCount: number;
+  sellCount: number;
+  tradeCount: number;
+  lastActivity: string;
+  /** @nullable */
+  avgEntryLamportsPerToken: string | null;
+}
+
+export interface TopWalletsResponse {
+  wallets: TopWalletItem[];
+  count: number;
+}
+
