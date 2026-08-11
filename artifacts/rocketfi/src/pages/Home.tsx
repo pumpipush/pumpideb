@@ -85,7 +85,7 @@ export default function Home() {
               <FeatureCard 
                 icon={<Orbit className="h-8 w-8 text-primary" />}
                 title="DEX Graduation"
-                desc="Hit the market cap threshold and the token automatically migrates to Raydium. Liquidity is locked forever."
+                desc="Hit the market cap threshold and the coin automatically migrates to Raydium. Liquidity is locked forever."
               />
             </div>
           </div>

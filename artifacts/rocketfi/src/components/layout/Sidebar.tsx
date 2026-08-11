@@ -22,7 +22,7 @@ function LaunchTokenButton() {
       onMouseLeave={() => setHovered(false)}
     >
       <Rocket className="h-4 w-4" />
-      Launch Token
+      Create New Coin
     </Button>
   );
 }

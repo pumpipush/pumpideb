@@ -132,7 +132,7 @@ export default function AppInterface() {
           <TabsList className="flex justify-start bg-transparent p-0 h-auto rounded-none gap-0 min-w-max">
             <TabsTrigger value="launch"    className={TAB_TRIGGER}><Rocket className="w-3.5 h-3.5 mr-1.5" />Launch</TabsTrigger>
             <TabsTrigger value="trade"     className={TAB_TRIGGER}><ArrowRightLeft className="w-3.5 h-3.5 mr-1.5" />Trade</TabsTrigger>
-            <TabsTrigger value="portfolio" className={TAB_TRIGGER}><Wallet className="w-3.5 h-3.5 mr-1.5" />My Tokens</TabsTrigger>
+            <TabsTrigger value="portfolio" className={TAB_TRIGGER}><Wallet className="w-3.5 h-3.5 mr-1.5" />My Coins</TabsTrigger>
           </TabsList>
         </div>
 
@@ -413,7 +413,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
             style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.14)" }}>
             <Rocket className="h-4 w-4" style={{ color: "#e2e8f0" }} />
           </div>
-          <h2 className="text-[20px] font-bold text-foreground tracking-tight">Launch a Token</h2>
+          <h2 className="text-[20px] font-bold text-foreground tracking-tight">Create a Coin</h2>
         </div>
 
         {/* ── Platform selector ── */}
@@ -463,7 +463,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
             <div className="flex items-center gap-2 mb-4">
               <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
                 style={{ background: "rgba(255,255,255,0.08)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.18)" }}>1</span>
-              <span className="text-[13px] font-semibold text-foreground">Token Identity</span>
+              <span className="text-[13px] font-semibold text-foreground">Coin Identity</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -512,7 +512,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
             <div className="flex items-center gap-2 mb-4">
               <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
                 style={{ background: "rgba(255,255,255,0.08)", color: "#cbd5e1", border: "1px solid rgba(255,255,255,0.18)" }}>2</span>
-              <span className="text-[13px] font-semibold text-foreground">Token Logo</span>
+              <span className="text-[13px] font-semibold text-foreground">Coin Logo</span>
               <span className="ml-auto text-[11px]" style={{ color: "#94a3b8" }}>PNG · JPG · GIF · Max 5MB</span>
             </div>
             <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
@@ -566,7 +566,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               </span>
             </div>
             <Textarea
-              placeholder="Write a short description about your token..."
+              placeholder="Write a short description about your coin..."
               value={desc}
               onChange={e => setDesc(e.target.value.slice(0, 300))}
               disabled={isLaunching}
@@ -774,7 +774,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 <div className="font-semibold truncate text-[14px] leading-tight">
                   {name
                     ? <span className="text-foreground">{name}</span>
-                    : <span style={{ color: "#94a3b8" }}>Token Name</span>}
+                    : <span style={{ color: "#94a3b8" }}>Coin Name</span>}
                 </div>
                 <div className="text-[11px] font-mono mt-0.5 truncate">
                   {symbol
@@ -797,7 +797,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               <p className="text-[12px] leading-relaxed line-clamp-3">
                 {desc
                   ? <span style={{ color: "#cbd5e1" }}>{desc}</span>
-                  : <span style={{ color: "#64748b" }}>Your description will appear here. Tell the community what makes this token unique.</span>}
+                  : <span style={{ color: "#64748b" }}>Your description will appear here. Tell the community what makes this coin unique.</span>}
               </p>
 
               {/* Mock stats */}
@@ -1737,7 +1737,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] border border-border/50 border-dashed rounded-sm p-8 bg-card max-w-2xl mx-auto mt-8 animate-slideDown">
         <Search className="h-10 w-10 text-muted-foreground mb-4 opacity-40" />
-        <h2 className="text-lg font-bold mb-2 text-foreground">Search for a token to trade</h2>
+        <h2 className="text-lg font-bold mb-2 text-foreground">Search for a coin to trade</h2>
         <div className="w-full max-w-md relative mt-2">
           <Input 
             placeholder="Search by name or symbol..." 
@@ -2606,7 +2606,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       </div>
                       <div className="text-center space-y-1">
                         <p className="text-[14px] font-semibold" style={{ color: "#cbd5e1" }}>Connect your wallet</p>
-                        <p className="text-[12px]" style={{ color: "#475569" }}>Track your position and PnL for this token</p>
+                        <p className="text-[12px]" style={{ color: "#475569" }}>Track your position and PnL for this coin</p>
                       </div>
                       <button
                         onClick={() => openWalletModal()}
@@ -2704,7 +2704,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       <TrendingUp className="h-8 w-8" style={{ color: "#334155" }} />
                       <div className="text-center space-y-1">
                         <p className="text-[14px] font-semibold" style={{ color: "#cbd5e1" }}>No position yet</p>
-                        <p className="text-[12px]" style={{ color: "#475569" }}>Buy this token to start tracking your P&L</p>
+                        <p className="text-[12px]" style={{ color: "#475569" }}>Buy this coin to start tracking your P&L</p>
                       </div>
                     </div>
                   );
@@ -3371,7 +3371,7 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
     <div className="max-w-[800px] animate-slideDown">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-[16px] font-bold text-foreground">
-          My Tokens
+          My Coins
           <span className="ml-2 text-[12px] font-normal px-2 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.07)", color: "#94a3b8" }}>
             {holdings.length}
           </span>
@@ -3666,7 +3666,7 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
           style={{ background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.2)" }}>
           <Globe className="h-4 w-4 shrink-0 mt-0.5" style={{ color: "#a78bfa" }} />
           <div style={{ color: "#94a3b8" }}>
-            <span className="font-semibold text-foreground">{token.name}</span> is a Solana token not launched on our
+            <span className="font-semibold text-foreground">{token.name}</span> is a Solana coin not launched on our
             platform. Trading routes through <span className="font-semibold" style={{ color: "#a78bfa" }}>Jupiter DEX aggregator</span> for best execution.
             Historical charts are not available for external tokens.
           </div>

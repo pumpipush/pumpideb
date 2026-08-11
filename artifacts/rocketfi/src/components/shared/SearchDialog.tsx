@@ -274,7 +274,7 @@ export function SearchDialog() {
             {isAddress && (
               <div className="p-2">
                 <div className="px-2 py-1.5 flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-bold text-muted-foreground/60">
-                  <ExternalLink className="h-3 w-3" /> Token Address
+                  <ExternalLink className="h-3 w-3" /> Coin Address
                 </div>
                 <button
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-sm hover:bg-white/[0.05] transition-colors group text-left"
@@ -285,7 +285,7 @@ export function SearchDialog() {
                     <ExternalLink className="h-4 w-4" style={{ color: "rgba(99,102,241,0.8)" }} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold text-foreground">Open token page</div>
+                    <div className="text-sm font-bold text-foreground">Open coin page</div>
                     <div className="text-[10px] font-mono text-muted-foreground mt-0.5 truncate">{query.trim()}</div>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -470,7 +470,7 @@ export function SearchDialog() {
                 <div className="h-6 w-6 rounded bg-muted/60 flex items-center justify-center shrink-0">
                   <Rocket className="h-3 w-3 text-primary" />
                 </div>
-                <span className="text-sm text-foreground">Launch a token</span>
+                <span className="text-sm text-foreground">Create a coin</span>
                 <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/30 ml-auto shrink-0" />
               </button>
             </div>
