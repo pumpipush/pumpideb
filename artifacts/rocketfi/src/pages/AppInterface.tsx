@@ -1368,22 +1368,31 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const ChartSection = useMemo(() => {
     if (!token) return null;
 
+    // Shared wrapper that matches the real chart's dimensions exactly — prevents layout jump.
+    // Toolbar spacer (36px) + same responsive canvas height as the real ChartCanvas container.
+    const ChartPlaceholder = ({ children }: { children: React.ReactNode }) => (
+      <div className="border border-border/20 rounded-sm overflow-hidden mb-0" style={{ background: "#0B1220" }}>
+        <div style={{ height: 36, background: "#0d1726", borderBottom: "1px solid rgba(255,255,255,0.08)" }} />
+        <div className="h-[260px] sm:h-[340px] lg:h-[400px] xl:h-[440px] flex items-center justify-center">
+          {children}
+        </div>
+      </div>
+    );
+
     // OHLCV still in flight — show a text-only placeholder (no spinner).
     // The one global spinner already handles the initial token fetch.
     if (chartBars.length === 0 && ohlcvLoading) {
       return (
-        <div className="border border-border/20 rounded-sm mb-0 flex items-center justify-center"
-          style={{ height: 280, background: "#0B1220" }}>
+        <ChartPlaceholder>
           <span className="text-xs tracking-wide" style={{ color: "rgba(148,163,184,0.4)" }}>Loading charts...</span>
-        </div>
+        </ChartPlaceholder>
       );
     }
 
     // Empty state — only show after server has responded with zero bars
     if (chartBars.length === 0) {
       return (
-        <div className="border border-border/20 rounded-sm flex items-center justify-center mb-0"
-          style={{ height: 280, background: "#0B1220" }}>
+        <ChartPlaceholder>
           <div className="flex flex-col items-center gap-2 text-center px-8">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#334155" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
@@ -1391,7 +1400,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             <p className="text-sm font-medium" style={{ color: "#475569" }}>No trades yet</p>
             <p className="text-xs" style={{ color: "#334155" }}>Chart populates in real time as trades arrive</p>
           </div>
-        </div>
+        </ChartPlaceholder>
       );
     }
 
