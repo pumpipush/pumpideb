@@ -347,7 +347,7 @@ function ChartNoData({ visible }: { visible: boolean }) {
 /* ── Loading skeleton ───────────────────────────────────────────────── */
 function ChartSkeleton({ visible }: { visible: boolean }) {
   return (
-    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3"
+    <div className="absolute inset-0 z-10 flex items-center justify-center"
       style={{
         background: BG,
         opacity: visible ? 1 : 0,
@@ -357,18 +357,10 @@ function ChartSkeleton({ visible }: { visible: boolean }) {
     >
       <svg width="36" height="36" viewBox="0 0 36 36"
         style={{ animation: "chartSpinnerRotate 0.9s linear infinite", flexShrink: 0 }}>
-        <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="3" />
+        <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3" />
         <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(59,130,246,0.75)" strokeWidth="3"
           strokeLinecap="round" strokeDasharray="30 65" />
       </svg>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.8)", fontFamily: "'Trebuchet MS', sans-serif" }}>
-          Loading chart
-        </span>
-        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontFamily: "'Trebuchet MS', sans-serif" }}>
-          Please wait…
-        </span>
-      </div>
     </div>
   );
 }

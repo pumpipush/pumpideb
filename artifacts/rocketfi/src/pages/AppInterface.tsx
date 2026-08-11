@@ -1368,7 +1368,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const ChartSection = useMemo(() => {
     if (!token) return null;
 
-    // Shared wrapper that matches the real chart's dimensions exactly — prevents layout jump.
+    // Shared wrapper — matches real chart dimensions exactly to prevent layout jump.
     // Toolbar spacer (36px) + same responsive canvas height as the real ChartCanvas container.
     const ChartPlaceholder = ({ children }: { children: React.ReactNode }) => (
       <div className="border border-border/20 rounded-sm overflow-hidden mb-0" style={{ background: "#0B1220" }}>
@@ -1379,17 +1379,22 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       </div>
     );
 
-    // OHLCV still in flight — show a text-only placeholder (no spinner).
-    // The one global spinner already handles the initial token fetch.
+    // Professional spinner — same SVG as ChartCanvas's internal ChartSkeleton.
+    const ChartSpinner = () => (
+      <svg width="36" height="36" viewBox="0 0 36 36"
+        style={{ animation: "chartSpinnerRotate 0.9s linear infinite", flexShrink: 0 }}>
+        <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3" />
+        <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(59,130,246,0.75)" strokeWidth="3"
+          strokeLinecap="round" strokeDasharray="30 65" />
+      </svg>
+    );
+
+    // OHLCV still in flight — spinner only, no text.
     if (chartBars.length === 0 && ohlcvLoading) {
-      return (
-        <ChartPlaceholder>
-          <span className="text-xs tracking-wide" style={{ color: "rgba(148,163,184,0.4)" }}>Loading charts...</span>
-        </ChartPlaceholder>
-      );
+      return <ChartPlaceholder><ChartSpinner /></ChartPlaceholder>;
     }
 
-    // Empty state — only show after server has responded with zero bars
+    // Empty state — only show after server has responded with zero bars.
     if (chartBars.length === 0) {
       return (
         <ChartPlaceholder>
@@ -1778,41 +1783,24 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   }
 
   if (loadingToken && !token) {
-    const Shimmer = ({ w, h, r = 6 }: { w: string; h: number; r?: number }) => (
-      <div className="animate-pulse rounded" style={{ width: w, height: h, borderRadius: r, background: "rgba(255,255,255,0.06)" }} />
-    );
     return (
       <div className="flex flex-col md:flex-row w-full md:h-[calc(100dvh-96px)] min-w-[320px] md:min-w-[680px]">
-        {/* Left column skeleton */}
+        {/* Left column — spinner only in the chart area */}
         <div className="flex-1 min-w-0 border-r border-border/20 px-3 pt-3 md:px-5 md:pt-4 pb-6 flex flex-col gap-4">
-          {/* Token header */}
-          <div className="flex gap-3 items-start">
-            <div className="animate-pulse rounded" style={{ width: 52, height: 52, borderRadius: 8, flexShrink: 0, background: "rgba(255,255,255,0.06)" }} />
-            <div className="flex flex-col gap-2 flex-1 pt-1">
-              <Shimmer w="140px" h={16} />
-              <Shimmer w="80px" h={12} />
-            </div>
-          </div>
-          {/* Chart placeholder — same dimensions as real chart */}
           <div className="border border-border/20 rounded-sm overflow-hidden" style={{ background: "#0B1220" }}>
             <div style={{ height: 36, background: "#0d1726", borderBottom: "1px solid rgba(255,255,255,0.08)" }} />
             <div className="h-[260px] sm:h-[340px] lg:h-[400px] xl:h-[440px] flex items-center justify-center">
-              <span className="text-xs tracking-wide" style={{ color: "rgba(148,163,184,0.35)" }}>Loading charts...</span>
+              <svg width="36" height="36" viewBox="0 0 36 36"
+                style={{ animation: "chartSpinnerRotate 0.9s linear infinite", flexShrink: 0 }}>
+                <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3" />
+                <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(59,130,246,0.75)" strokeWidth="3"
+                  strokeLinecap="round" strokeDasharray="30 65" />
+              </svg>
             </div>
           </div>
-          {/* Stats row */}
-          <div className="flex gap-3 flex-wrap">
-            {[90, 70, 80, 60].map((w, i) => <Shimmer key={i} w={`${w}px`} h={32} />)}
-          </div>
         </div>
-        {/* Right column skeleton (trade panel) */}
-        <div className="w-full md:w-[320px] xl:w-[360px] shrink-0 px-3 pt-3 md:px-4 md:pt-4 flex flex-col gap-3">
-          <Shimmer w="100%" h={36} />
-          <Shimmer w="100%" h={48} />
-          <Shimmer w="100%" h={44} />
-          <Shimmer w="100%" h={44} />
-          <Shimmer w="100%" h={48} />
-        </div>
+        {/* Right column — empty while token loads */}
+        <div className="w-full md:w-[320px] xl:w-[360px] shrink-0" />
       </div>
     );
   }
