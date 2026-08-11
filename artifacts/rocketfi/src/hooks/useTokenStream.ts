@@ -4,7 +4,8 @@
  *
  * Reliability strategy:
  *  1. On onerror: close the dead EventSource and schedule an explicit reconnect
- *     after 3 s (native auto-reconnect is unreliable through Replit's proxy).
+ *     with exponential backoff + jitter (1 s → 2 s → 4 s → … capped at 30 s).
+ *     Native auto-reconnect is unreliable through Replit's reverse proxy.
  *  2. Watchdog timer: if no event (trade or snapshot) has arrived for 45 s,
  *     force a reconnect regardless of readyState — covers silent proxy drops
  *     that never fire onerror.
@@ -53,9 +54,16 @@ interface UseTokenStreamResult {
 }
 
 const MAX_LIVE_TRADES  = 200;
-const RECONNECT_DELAY  = 3_000;   // ms before attempting reconnect after error
-const WATCHDOG_TICK    = 30_000;  // ms between watchdog checks
-const WATCHDOG_SILENCE = 45_000;  // ms of silence before watchdog forces reconnect
+const WATCHDOG_TICK    = 30_000;   // ms between watchdog checks
+const WATCHDOG_SILENCE = 45_000;   // ms of silence before watchdog forces reconnect
+const RECONNECT_BASE   =  1_000;   // ms — first backoff interval
+const RECONNECT_MAX    = 30_000;   // ms — ceiling for exponential backoff
+
+/** Exponential backoff with ≤1 s random jitter to spread reconnect storms. */
+function reconnectDelayMs(attempt: number): number {
+  const base = Math.min(RECONNECT_BASE * Math.pow(2, attempt), RECONNECT_MAX);
+  return base + Math.random() * 1_000;
+}
 
 export function useTokenStream(tokenAddress: string | null): UseTokenStreamResult {
   const [liveTrades, setLiveTrades] = useState<LiveTrade[]>([]);
@@ -67,6 +75,7 @@ export function useTokenStream(tokenAddress: string | null): UseTokenStreamResul
   const esRef              = useRef<EventSource | null>(null);
   const reconnectTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastEventMs        = useRef<number>(0);
+  const reconnectAttempts  = useRef<number>(0);
   const tokenAddressRef    = useRef<string | null>(null);
   tokenAddressRef.current  = tokenAddress;
 
@@ -85,11 +94,12 @@ export function useTokenStream(tokenAddress: string | null): UseTokenStreamResul
     }
 
     const es = new EventSource(`/api/tokens/${address}/stream`);
-    esRef.current    = es;
+    esRef.current       = es;
     lastEventMs.current = Date.now();
 
     es.onopen = () => {
       setConnected(true);
+      reconnectAttempts.current = 0;
       lastEventMs.current = Date.now();
     };
 
@@ -121,12 +131,14 @@ export function useTokenStream(tokenAddress: string | null): UseTokenStreamResul
         clearTimeout(reconnectTimer.current);
         reconnectTimer.current = null;
       }
-      // Reconnect after a short delay (only if address hasn't changed).
+      // Reconnect with backoff (only if address hasn't changed).
+      const delay = reconnectDelayMs(reconnectAttempts.current);
+      reconnectAttempts.current += 1;
       reconnectTimer.current = setTimeout(() => {
         if (tokenAddressRef.current === address) {
           openStream(address);
         }
-      }, RECONNECT_DELAY);
+      }, delay);
     };
   }, []); // stable — no deps
 
@@ -142,7 +154,8 @@ export function useTokenStream(tokenAddress: string | null): UseTokenStreamResul
       return;
     }
 
-    // Fresh token selected — clear stale data and connect
+    // Fresh token selected — reset backoff, clear stale data, and connect
+    reconnectAttempts.current = 0;
     setLiveTrades([]);
     setLiveToken(null);
     openStream(tokenAddress);
@@ -156,6 +169,7 @@ export function useTokenStream(tokenAddress: string | null): UseTokenStreamResul
         tokenAddressRef.current === tokenAddress &&
         Date.now() - lastEventMs.current > WATCHDOG_SILENCE
       ) {
+        setConnected(false);
         openStream(tokenAddress);
       }
     }, WATCHDOG_TICK);

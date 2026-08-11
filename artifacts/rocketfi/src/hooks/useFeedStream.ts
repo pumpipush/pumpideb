@@ -10,6 +10,15 @@
  *   liveTradeStats — latest per-token trade stats (price, mcap, volume, tradeCount)
  *                    updated in real time; used by Dashboard cards to show live data
  *   connected      — whether the SSE connection is open
+ *
+ * Reliability strategy:
+ *  1. On onerror: close the dead EventSource and schedule an explicit reconnect
+ *     with exponential backoff + jitter (1 s → 2 s → 4 s → … capped at 30 s).
+ *     Native auto-reconnect is unreliable through Replit's reverse proxy.
+ *  2. Watchdog timer: if no event (trade, newToken, or SSE comment) has arrived
+ *     for 45 s, force a reconnect regardless of readyState — covers silent proxy
+ *     drops that never fire onerror.  connected is set to false during the gap
+ *     so the UI can show a "reconnecting…" indicator.
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -46,6 +55,18 @@ const MAX_LIVE_TOKENS = 100;
 /** How long the "NEW" badge stays visible (ms) */
 export const BADGE_TTL_MS = 12_000;
 
+// ── Reconnect / watchdog constants ────────────────────────────────────────────
+const WATCHDOG_TICK    = 30_000;   // ms between watchdog checks
+const WATCHDOG_SILENCE = 45_000;   // ms of silence before watchdog forces reconnect
+const RECONNECT_BASE   =  1_000;   // ms — first backoff interval
+const RECONNECT_MAX    = 30_000;   // ms — ceiling for exponential backoff
+
+/** Exponential backoff with ≤1 s random jitter to spread reconnect storms. */
+function reconnectDelayMs(attempt: number): number {
+  const base = Math.min(RECONNECT_BASE * Math.pow(2, attempt), RECONNECT_MAX);
+  return base + Math.random() * 1_000;
+}
+
 // ── Internal event shapes (from SSE) ──────────────────────────────────────────
 
 interface FeedEventNewToken {
@@ -79,16 +100,17 @@ export interface UseFeedStreamResult {
   connected:      boolean;
 }
 
-const RECONNECT_DELAY_MS = 3_000;
-
 export function useFeedStream(): UseFeedStreamResult {
   const [liveTokens,     setLiveTokens]     = useState<FeedToken[]>([]);
   const [liveTradeStats, setLiveTradeStats] = useState<Map<string, FeedTradeStats>>(new Map());
   const [connected,      setConnected]      = useState(false);
-  const esRef           = useRef<EventSource | null>(null);
-  const reconnectTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const timerRefs       = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const mountedRef      = useRef(true);
+
+  const esRef             = useRef<EventSource | null>(null);
+  const reconnectTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timerRefs         = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const mountedRef        = useRef(true);
+  const lastEventMs       = useRef<number>(0);
+  const reconnectAttempts = useRef<number>(0);
 
   const openStream = useCallback(() => {
     // Tear down any existing connection + pending reconnect
@@ -97,11 +119,18 @@ export function useFeedStream(): UseFeedStreamResult {
 
     const es = new EventSource("/api/feed/stream");
     esRef.current = es;
+    lastEventMs.current = Date.now();
 
-    es.onopen = () => { if (mountedRef.current) setConnected(true); };
+    es.onopen = () => {
+      if (!mountedRef.current) return;
+      setConnected(true);
+      reconnectAttempts.current = 0;
+      lastEventMs.current = Date.now();
+    };
 
     es.onmessage = (e: MessageEvent) => {
       if (!mountedRef.current) return;
+      lastEventMs.current = Date.now();
       try {
         const event = JSON.parse(e.data as string) as FeedEvent;
 
@@ -154,9 +183,11 @@ export function useFeedStream(): UseFeedStreamResult {
       esRef.current = null;
       // Guard against stacked timers from repeated onerror calls.
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      const delay = reconnectDelayMs(reconnectAttempts.current);
+      reconnectAttempts.current += 1;
       reconnectTimer.current = setTimeout(() => {
         if (mountedRef.current) openStream();
-      }, RECONNECT_DELAY_MS);
+      }, delay);
     };
   }, []); // stable — no external deps
 
@@ -164,8 +195,20 @@ export function useFeedStream(): UseFeedStreamResult {
     mountedRef.current = true;
     openStream();
 
+    // ── Watchdog ──────────────────────────────────────────────────────────────
+    // Polls every WATCHDOG_TICK ms. If the last received event is older than
+    // WATCHDOG_SILENCE, the connection is silently dead (proxy held it open
+    // without sending data and never fired onerror). Force a fresh connection.
+    const watchdog = setInterval(() => {
+      if (mountedRef.current && Date.now() - lastEventMs.current > WATCHDOG_SILENCE) {
+        setConnected(false);
+        openStream();
+      }
+    }, WATCHDOG_TICK);
+
     return () => {
       mountedRef.current = false;
+      clearInterval(watchdog);
       if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
       if (esRef.current) { esRef.current.close(); esRef.current = null; }
       timerRefs.current.forEach((t) => clearTimeout(t));

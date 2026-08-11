@@ -143,8 +143,9 @@ router.get("/tokens/:address/stream", async (req: Request, res: Response) => {
   res.setHeader("X-Accel-Buffering", "no"); // disable nginx buffering if present
   res.flushHeaders();
 
-  // Initial ping to confirm connection is live
-  res.write(": ping\n\n");
+  // Initial ping — sent as a real data frame so the client's onmessage fires
+  // and resets the watchdog timer immediately on connect.
+  res.write(`data: ${JSON.stringify({ type: "ping" })}\n\n`);
 
   // Immediately push the current token state so the UI populates without
   // waiting for the next trade event to arrive.
@@ -203,9 +204,12 @@ router.get("/tokens/:address/stream", async (req: Request, res: Response) => {
     res.write(`data: ${JSON.stringify(snapshot)}\n\n`);
   }
 
-  // Send a heartbeat comment every 25s so the connection stays alive through proxies
+  // Send a heartbeat data frame every 25 s.
+  // Must be a real "data:" SSE frame — comment lines (": ping") are invisible
+  // to the browser's EventSource.onmessage and would never reset the client
+  // watchdog timer, causing spurious reconnects on quiet streams.
   const heartbeat = setInterval(() => {
-    res.write(": ping\n\n");
+    res.write(`data: ${JSON.stringify({ type: "ping" })}\n\n`);
   }, 25_000);
 
   const tradeHandler    = (event: TradeEvent)    => res.write(`data: ${JSON.stringify(event)}\n\n`);

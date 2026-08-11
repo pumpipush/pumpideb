@@ -34,11 +34,16 @@ router.get("/feed/stream", (req: Request, res: Response) => {
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
 
-  // Initial ping so the client knows the connection is live
-  res.write(": ping\n\n");
+  // Initial ping — sent as a real data frame so the client's onmessage fires
+  // and resets the watchdog timer immediately on connect.
+  res.write(`data: ${JSON.stringify({ type: "ping" })}\n\n`);
 
+  // Periodic heartbeat data frame every HEARTBEAT_INTERVAL_MS.
+  // Must be a real "data:" SSE frame — comment lines (": ping") are invisible
+  // to the browser's EventSource.onmessage and would never reset the client
+  // watchdog timer, causing spurious reconnects on quiet streams.
   const heartbeat = setInterval(() => {
-    res.write(": ping\n\n");
+    res.write(`data: ${JSON.stringify({ type: "ping" })}\n\n`);
   }, HEARTBEAT_INTERVAL_MS);
 
   const onTrade = (event: TradeEvent) => {

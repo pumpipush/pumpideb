@@ -656,6 +656,21 @@ function PlatformFilterStrip({
         ))}
       </div>
 
+      {/* Live feed status indicator — only visible when disconnected */}
+      {!connected && (
+        <div
+          className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-semibold whitespace-nowrap"
+          style={{
+            background: "rgba(239,68,68,0.08)",
+            borderColor: "rgba(239,68,68,0.25)",
+            color: "#f87171",
+          }}
+          title="Live feed disconnected — reconnecting…"
+        >
+          <WifiOff className="w-3 h-3 shrink-0" />
+          <span className="hidden sm:inline">Reconnecting…</span>
+        </div>
+      )}
     </div>
   );
 }
