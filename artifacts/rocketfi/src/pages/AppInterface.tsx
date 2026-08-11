@@ -2476,61 +2476,130 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               })()}
 
               {/* Holders panel */}
-              <div className={`overflow-x-auto rounded-b-sm border-x border-b border-border/40 ${activeSubTab !== "holders" ? "hidden" : ""}`}>
-                <table className="w-full text-[14px] font-mono">
-                  <thead className="text-muted-foreground border-b border-border/40 bg-muted/20 text-[14px]">
-                    <tr>
-                      <th className="text-left px-3 py-2.5 font-medium" style={{ color: "#94a3b8" }}>#</th>
-                      <th className="text-left px-3 py-2.5 font-medium" style={{ color: "#94a3b8" }}>Address</th>
-                      <th className="text-right px-3 py-2.5 font-medium" style={{ color: "#94a3b8" }}>{token.symbol}</th>
-                      <th className="text-right px-3 py-2.5 font-medium" style={{ color: "#94a3b8" }}>Share</th>
-                      <th className="px-3 py-2.5 w-24"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/20">
-                    {loadingHolders ? (
-                      [...Array(4)].map((_, i) => (
-                        <tr key={i}><td colSpan={5} className="px-3 py-2.5"><Skeleton className="h-3.5 w-full" /></td></tr>
-                      ))
-                    ) : holders.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="px-3 py-10 text-center">
-                          <p className="text-[13px] font-medium" style={{ color: "#475569" }}>No holders yet</p>
-                          <p className="text-[11px] mt-1" style={{ color: "#334155" }}>Holder data appears once the first buy is made</p>
-                        </td>
-                      </tr>
-                    ) : holders.map(({ address: addr, balance }, idx) => {
-                      const bal = Math.max(0, parseFloat(balance) || 0);
-                      const pct = (bal / totalSupply) * 100;
-                      return (
-                        <tr key={addr} className="hover:bg-white/[0.025] transition-colors">
-                          <td className="px-3 py-2.5 text-[14px]" style={{ color: "#64748b" }}>{idx + 1}</td>
-                          <td className="px-3 py-2.5 text-[14px]">
-                            <div className="flex items-center gap-2">
-                              <TokenAvatar symbol={addr.slice(0, 4)} size={20} shape="circle" />
-                              <span
-                                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                                onClick={() => copyToClipboard(addr)}
-                              >
-                                {formatAddress(addr)}
+              <div className={`rounded-lg overflow-hidden ${activeSubTab !== "holders" ? "hidden" : ""}`}
+                style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
+
+                {/* Summary bar */}
+                {holders.length > 0 && (() => {
+                  const top10Pct = holders.slice(0, 10).reduce((s, h) => {
+                    const b = Math.max(0, parseFloat(h.balance) || 0);
+                    return s + (b / totalSupply) * 100;
+                  }, 0);
+                  const isConcentrated = top10Pct > 50;
+                  return (
+                    <div className="flex items-center justify-between px-4 py-2.5"
+                      style={{ background: "rgba(255,255,255,0.025)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                      <div className="flex items-center gap-1.5">
+                        <Users className="h-3.5 w-3.5" style={{ color: "#64748b" }} />
+                        <span className="text-[12px] font-semibold" style={{ color: "#94a3b8" }}>
+                          {holders.length.toLocaleString()} holders
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px]" style={{ color: "#475569" }}>Top 10 own</span>
+                        <span className="text-[12px] font-bold font-mono"
+                          style={{ color: isConcentrated ? "#f87171" : "#64748b" }}>
+                          {top10Pct.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Holder rows */}
+                <div>
+                  {loadingHolders ? (
+                    [...Array(5)].map((_, i) => (
+                      <div key={i} className="flex items-center gap-3 px-4 py-3"
+                        style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                        <div className="w-6 h-6 rounded-md bg-white/[0.06] animate-pulse shrink-0" />
+                        <div className="w-[22px] h-[22px] rounded-full bg-white/[0.06] animate-pulse shrink-0" />
+                        <div className="flex-1 h-3 rounded bg-white/[0.05] animate-pulse" />
+                        <div className="w-20 h-3 rounded bg-white/[0.05] animate-pulse" />
+                        <div className="w-10 h-3 rounded bg-white/[0.05] animate-pulse" />
+                      </div>
+                    ))
+                  ) : holders.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-14 gap-3">
+                      <div className="w-11 h-11 rounded-xl flex items-center justify-center"
+                        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                        <Users className="h-5 w-5" style={{ color: "#334155" }} />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-[13px] font-semibold" style={{ color: "#475569" }}>No holders yet</p>
+                        <p className="text-[11px] mt-1" style={{ color: "#334155" }}>Appears once the first buy is made</p>
+                      </div>
+                    </div>
+                  ) : holders.map(({ address: addr, balance }, idx) => {
+                    const bal = Math.max(0, parseFloat(balance) || 0);
+                    const pct = (bal / totalSupply) * 100;
+
+                    // Rank styling: gold / silver / bronze / default
+                    const rankColor = idx === 0 ? "#f59e0b" : idx === 1 ? "#94a3b8" : idx === 2 ? "#b87333" : "#334155";
+                    const rankBg    = idx === 0 ? "rgba(245,158,11,0.14)" : idx === 1 ? "rgba(148,163,184,0.10)" : idx === 2 ? "rgba(184,115,51,0.12)" : "rgba(255,255,255,0.04)";
+                    const barColor  = idx === 0 ? "#f59e0b" : idx === 1 ? "#94a3b8" : idx === 2 ? "#b87333" : "hsl(28 95% 56%)";
+
+                    return (
+                      <div key={addr}
+                        className="group relative transition-colors"
+                        style={{ borderBottom: idx < holders.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.02)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                      >
+                        <div className="flex items-center gap-3 px-4 py-3 pb-[14px]">
+                          {/* Rank badge */}
+                          <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 text-[11px] font-bold tabular-nums"
+                            style={{ background: rankBg, color: rankColor }}>
+                            {idx + 1}
+                          </div>
+
+                          {/* Avatar */}
+                          <TokenAvatar symbol={addr.slice(0, 4)} size={22} shape="circle" />
+
+                          {/* Address — click to copy */}
+                          <button
+                            className="flex-1 text-left flex items-center gap-2 min-w-0"
+                            onClick={() => copyToClipboard(addr)}
+                            title={addr}
+                          >
+                            <span className="font-mono text-[13px] transition-colors group-hover:text-slate-300 truncate"
+                              style={{ color: "#94a3b8" }}>
+                              {formatAddress(addr)}
+                            </span>
+                            {idx === 0 && (
+                              <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide"
+                                style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.3)" }}>
+                                TOP
                               </span>
-                              {idx === 0 && (
-                                <span className="text-[9px] px-1 py-0.5 rounded bg-primary/15 text-primary border border-primary/20 font-bold">TOP</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2.5 text-right text-[14px] text-foreground">{formatAtomicTokenAmount(String(bal))}</td>
-                          <td className="px-3 py-2.5 text-right text-[14px] text-primary font-bold">{pct.toFixed(1)}%</td>
-                          <td className="px-3 py-2.5">
-                            <div className="h-1.5 w-20 bg-muted/50 rounded-full overflow-hidden">
-                              <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(pct, 100)}%` }} />
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                            )}
+                          </button>
+
+                          {/* Balance */}
+                          <div className="text-right shrink-0">
+                            <p className="font-mono text-[13px] font-semibold" style={{ color: "#e2e8f0" }}>
+                              {formatAtomicTokenAmount(String(bal))}
+                            </p>
+                            <p className="text-[10px]" style={{ color: "#475569" }}>{token.symbol}</p>
+                          </div>
+
+                          {/* Share % */}
+                          <div className="w-12 text-right shrink-0">
+                            <span className="font-mono text-[13px] font-bold" style={{ color: rankColor !== "#334155" ? rankColor : "#64748b" }}>
+                              {pct.toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Progress bar — pinned to bottom of row */}
+                        <div className="absolute bottom-0 left-0 right-0 h-[2px]"
+                          style={{ background: "rgba(255,255,255,0.04)" }}>
+                          <div className="h-full transition-[width] duration-700 ease-out"
+                            style={{ width: `${Math.min(pct, 100)}%`, background: barColor, opacity: 0.65 }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           );
