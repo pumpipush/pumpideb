@@ -20,10 +20,7 @@
  * user wallet adds its own signature.
  */
 
-import {
-  Keypair,
-  VersionedTransaction,
-} from "@solana/web3.js";
+import { VersionedTransaction } from "@solana/web3.js";
 import { getConnection } from "./solanaConnection";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -144,8 +141,15 @@ export async function buildPumpFunCreateTx(
   symbol:         string,
   metadataUri:    string,
 ): Promise<PumpFunCreateTxResult> {
-  // Generate a fresh mint keypair — we control the mint address
-  const mintKeypair = Keypair.generate();
+  // We do NOT generate our own mint keypair.
+  //
+  // Pumpportal grinds keypairs server-side until it finds one ending in "pump"
+  // (matching pump.fun's native address style). When `mint` is omitted from the
+  // request, pumpportal generates and signs with that keypair itself — the returned
+  // transaction already carries the mint's partial signature.
+  //
+  // Generating our own keypair and passing it here would bypass the grinding,
+  // resulting in a random address with no "pump" suffix.
 
   const res = await fetch("https://pumpportal.fun/api/trade-local", {
     method: "POST",
@@ -154,14 +158,14 @@ export async function buildPumpFunCreateTx(
       publicKey:        walletAddress,
       action:           "create",
       tokenMetadata:    { name, symbol, uri: metadataUri },
-      mint:             mintKeypair.publicKey.toBase58(),
+      // mint intentionally omitted — pumpportal generates a "pump"-suffixed address
       denominatedInSol: "true",
       amount:           0,        // no forced initial buy
       slippage:         10,
       priorityFee:      0.0005,
       pool:             "pump",
     }),
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(30_000), // grinding takes a few extra seconds
   });
 
   if (!res.ok) {
@@ -169,19 +173,29 @@ export async function buildPumpFunCreateTx(
     throw new Error(`Failed to build pump.fun transaction: ${text}`);
   }
 
-  // Pumpportal returns raw bytes of a VersionedTransaction
+  // Pumpportal returns raw bytes of a VersionedTransaction already signed by the mint keypair
   const bytes = new Uint8Array(await res.arrayBuffer());
   const tx = VersionedTransaction.deserialize(bytes);
 
-  // Add mint keypair's partial signature so the wallet only needs to add its own
-  tx.sign([mintKeypair]);
+  // Recover the mint address: pumpportal always places the "pump"-suffixed key in the
+  // static account list. The wallet public key is also there — find the one ending in "pump".
+  const mintAddress =
+    tx.message.staticAccountKeys.find(k => k.toBase58().endsWith("pump"))?.toBase58()
+    // Fallback: first non-wallet non-system account (extremely unlikely to be needed)
+    ?? tx.message.staticAccountKeys
+        .map(k => k.toBase58())
+        .find(a => a !== walletAddress);
+
+  if (!mintAddress) {
+    throw new Error("Could not determine mint address from pumpportal transaction");
+  }
 
   const conn = getConnection();
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
 
   return {
     transaction: tx,
-    mintAddress: mintKeypair.publicKey.toBase58(),
+    mintAddress,
     blockhash,
     lastValidBlockHeight,
   };
