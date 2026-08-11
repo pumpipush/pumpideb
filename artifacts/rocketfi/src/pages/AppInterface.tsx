@@ -1777,12 +1777,45 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     );
   }
 
-  if (loadingToken && !token) return (
-    <div className="flex flex-col items-center justify-center gap-3 w-full" style={{ minHeight: 400 }}>
-      <Loader2 className="w-9 h-9 animate-spin" style={{ color: "rgba(99,102,241,0.8)" }} />
-      <span className="text-sm font-medium" style={{ color: "rgba(148,163,184,0.7)" }}>Loading charts...</span>
-    </div>
-  );
+  if (loadingToken && !token) {
+    const Shimmer = ({ w, h, r = 6 }: { w: string; h: number; r?: number }) => (
+      <div className="animate-pulse rounded" style={{ width: w, height: h, borderRadius: r, background: "rgba(255,255,255,0.06)" }} />
+    );
+    return (
+      <div className="flex flex-col md:flex-row w-full md:h-[calc(100dvh-96px)] min-w-[320px] md:min-w-[680px]">
+        {/* Left column skeleton */}
+        <div className="flex-1 min-w-0 border-r border-border/20 px-3 pt-3 md:px-5 md:pt-4 pb-6 flex flex-col gap-4">
+          {/* Token header */}
+          <div className="flex gap-3 items-start">
+            <div className="animate-pulse rounded" style={{ width: 52, height: 52, borderRadius: 8, flexShrink: 0, background: "rgba(255,255,255,0.06)" }} />
+            <div className="flex flex-col gap-2 flex-1 pt-1">
+              <Shimmer w="140px" h={16} />
+              <Shimmer w="80px" h={12} />
+            </div>
+          </div>
+          {/* Chart placeholder — same dimensions as real chart */}
+          <div className="border border-border/20 rounded-sm overflow-hidden" style={{ background: "#0B1220" }}>
+            <div style={{ height: 36, background: "#0d1726", borderBottom: "1px solid rgba(255,255,255,0.08)" }} />
+            <div className="h-[260px] sm:h-[340px] lg:h-[400px] xl:h-[440px] flex items-center justify-center">
+              <span className="text-xs tracking-wide" style={{ color: "rgba(148,163,184,0.35)" }}>Loading charts...</span>
+            </div>
+          </div>
+          {/* Stats row */}
+          <div className="flex gap-3 flex-wrap">
+            {[90, 70, 80, 60].map((w, i) => <Shimmer key={i} w={`${w}px`} h={32} />)}
+          </div>
+        </div>
+        {/* Right column skeleton (trade panel) */}
+        <div className="w-full md:w-[320px] xl:w-[360px] shrink-0 px-3 pt-3 md:px-4 md:pt-4 flex flex-col gap-3">
+          <Shimmer w="100%" h={36} />
+          <Shimmer w="100%" h={48} />
+          <Shimmer w="100%" h={44} />
+          <Shimmer w="100%" h={44} />
+          <Shimmer w="100%" h={48} />
+        </div>
+      </div>
+    );
+  }
 
   if (tokenError) {
     // Token not in our DB — render the external token page instead of an error.
