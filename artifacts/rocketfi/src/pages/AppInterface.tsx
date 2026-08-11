@@ -26,7 +26,12 @@ import { ethers } from "ethers";
 import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, formatTokenPrice, cn, timeAgo } from "@/lib/utils";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { ShareModal } from "@/components/shared/ShareModal";
-import { Search, ArrowRightLeft, Share2, Copy, Twitter, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare, Rocket, ShieldCheck, Zap, CheckCircle2, UploadCloud, Wallet, Eye, AlertCircle, Send, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, ArrowRightLeft, Share2, Copy, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare, Rocket, ShieldCheck, Zap, CheckCircle2, UploadCloud, Wallet, Eye, AlertCircle, Send, ChevronDown, ChevronUp } from "lucide-react";
+const XIcon = ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} style={style} aria-hidden="true">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.91-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+  </svg>
+);
 import { SwapSettingsPopover } from "@/components/shared/SwapSettingsPopover";
 import { useSwapSettings, formatSlippage, formatPriorityFee, getSwapSettings } from "@/stores/swapSettings";
 import { useTxToast } from "@/hooks/useTxToast";
@@ -630,7 +635,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               <div className="mt-4 space-y-3">
                 <div className="space-y-1.5">
                   <label className="text-[12px] font-medium text-muted-foreground flex items-center gap-1.5">
-                    <Twitter className="h-3 w-3" /> Twitter / X
+                    <XIcon className="h-3 w-3" /> X (Twitter)
                   </label>
                   <Input
                     placeholder="https://twitter.com/yourtoken"
@@ -862,7 +867,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               {/* Social links preview */}
               {(twitter || telegram || website) && (
                 <div className="flex items-center gap-3 pt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                  {twitter  && <Twitter className="h-3 w-3"  style={{ color: "#64748b" }} />}
+                  {twitter  && <XIcon className="h-3 w-3"  style={{ color: "#64748b" }} />}
                   {telegram && <Send    className="h-3 w-3"  style={{ color: "#64748b" }} />}
                   {website  && <Globe   className="h-3 w-3"  style={{ color: "#64748b" }} />}
                 </div>
@@ -1823,29 +1828,20 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             </div>
             <div className="flex items-center gap-2 mt-2">
               {(token as any).twitterUrl && (
-                <a href={(token as any).twitterUrl} target="_blank" rel="noopener noreferrer" className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Twitter"><Twitter className="h-4 w-4" /></a>
+                <a href={(token as any).twitterUrl} target="_blank" rel="noopener noreferrer" className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="X (Twitter)"><XIcon className="h-4 w-4" /></a>
               )}
               {(token as any).websiteUrl && (
                 <a href={(token as any).websiteUrl} target="_blank" rel="noopener noreferrer" className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Website"><Globe className="h-4 w-4" /></a>
               )}
-              {/* Platform source link — always visible so users can verify on the origin launchpad */}
-              {getPlatformUrl(token.platform as PlatformId, token.address) && (
-                <a
-                  href={getPlatformUrl(token.platform as PlatformId, token.address)!}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="h-8 px-2.5 flex items-center gap-1.5 rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground text-[11px] font-semibold"
-                  title={`View on ${token.platform}`}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  {token.platform === "pump_fun" ? "Pump.fun" :
-                   token.platform === "moonshot" ? "Moonshot" :
-                   token.platform === "letsbonk" ? "LetsBONK" :
-                   token.platform === "daos_fun" ? "Daos.fun" :
-                   token.platform === "raydium_launchlab" ? "Raydium" : "Source"}
-                </a>
-              )}
-              <button className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Copy address" onClick={() => copyToClipboard(token.address)}><Copy className="h-4 w-4" /></button>
+              {/* Address pill with copy */}
+              <button
+                className="h-8 px-2.5 flex items-center gap-1.5 rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground font-mono text-[12px]"
+                title={token.address}
+                onClick={() => copyToClipboard(token.address)}
+              >
+                {token.address.slice(0, 4)}…{token.address.slice(-4)}
+                <Copy className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
           {/* Share button — top-right, aligned with coin name */}
