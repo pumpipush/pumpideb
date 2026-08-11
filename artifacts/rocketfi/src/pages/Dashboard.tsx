@@ -340,7 +340,7 @@ function TableView({ tokens, solPrice, activeTab, startRank }: {
                       {rank}
                     </span>
                   ) : (
-                    <span className="text-[12px] text-muted-foreground/30 font-mono tabular-nums">{rank}</span>
+                    <span className="text-[12px] text-muted-foreground/60 font-mono tabular-nums">{rank}</span>
                   )}
                 </td>
 

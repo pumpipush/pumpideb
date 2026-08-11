@@ -2535,8 +2535,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     const pct = (bal / totalSupply) * 100;
 
                     // Rank styling: gold / silver / bronze / default
-                    const rankColor = idx === 0 ? "#4ade80" : idx === 1 ? "#94a3b8" : idx === 2 ? "#6ee7b7" : "#334155";
-                    const rankBg    = idx === 0 ? "rgba(74,222,128,0.14)" : idx === 1 ? "rgba(148,163,184,0.10)" : idx === 2 ? "rgba(110,231,183,0.10)" : "rgba(255,255,255,0.04)";
+                    const rankColor = idx === 0 ? "#4ade80" : idx === 1 ? "#94a3b8" : idx === 2 ? "#6ee7b7" : "#94a3b8";
+                    const rankBg    = idx === 0 ? "rgba(74,222,128,0.14)" : idx === 1 ? "rgba(148,163,184,0.10)" : idx === 2 ? "rgba(110,231,183,0.10)" : "rgba(148,163,184,0.07)";
                     const barColor  = idx === 0 ? "#4ade80" : idx === 1 ? "#94a3b8" : idx === 2 ? "#6ee7b7" : "#16a34a";
 
                     return (
