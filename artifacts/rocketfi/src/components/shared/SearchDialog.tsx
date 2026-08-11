@@ -20,7 +20,8 @@ import {
   CommandDialog,
   CommandList,
 } from "@/components/ui/command";
-import { formatMC } from "@/lib/utils";
+import { formatMCUsd } from "@/lib/utils";
+import { useSolPrice } from "@/hooks/useSolPrice";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Rocket, TrendingUp, Zap, Search, ArrowRight, Globe, ExternalLink } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -100,6 +101,7 @@ export function SearchDialog() {
   const { open, close } = useSearchOpen();
   const [query, setQuery] = useState("");
   const [, setLocation] = useLocation();
+  const solPrice = useSolPrice();
 
   // Increments after every Jupiter fetch attempt (success or failure with backoff).
   // Including this counter in the queryKey makes React Query automatically re-fetch
@@ -330,7 +332,7 @@ export function SearchDialog() {
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[10px] font-mono text-muted-foreground">
-                          MC: <span className="text-foreground">{formatMC(token.marketCapEth)}</span>
+                          MC: <span className="text-foreground">{formatMCUsd(token.marketCapEth, solPrice)}</span>
                         </span>
                         <span className="text-muted-foreground/40">·</span>
                         <span className="text-[10px] font-mono text-muted-foreground">
@@ -430,12 +432,12 @@ export function SearchDialog() {
                           <span className="text-xs font-mono text-primary shrink-0">${token.symbol}</span>
                         </div>
                         <div className="text-[10px] font-mono text-muted-foreground mt-0.5">
-                          MC: <span className="text-foreground">{formatMC(token.marketCapEth)}</span>
+                          MC: <span className="text-foreground">{formatMCUsd(token.marketCapEth, solPrice)}</span>
                           <span className="mx-1.5 text-muted-foreground/40">·</span>
                           {token.tradeCount.toLocaleString()} trades
                         </div>
                       </div>
-                      <span className="text-xs font-mono font-bold text-primary shrink-0">{formatMC(token.marketCapEth)}</span>
+                      <span className="text-xs font-mono font-bold text-primary shrink-0">{formatMCUsd(token.marketCapEth, solPrice)}</span>
                     </button>
                   ))}
             </div>
