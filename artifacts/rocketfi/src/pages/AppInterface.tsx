@@ -24,7 +24,7 @@ import { tradesFromLocal, syntheticCandles, Timeframe } from "@/lib/ohlcv";
 import { useTokenStream } from "@/hooks/useTokenStream";
 
 import { ethers } from "ethers";
-import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, formatTokenPrice, cn, timeAgo } from "@/lib/utils";
+import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, formatTokenPrice, formatPct, cn, timeAgo } from "@/lib/utils";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { ShareModal } from "@/components/shared/ShareModal";
 import { Search, ArrowRightLeft, Share2, Copy, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare, Rocket, ShieldCheck, Zap, CheckCircle2, UploadCloud, Wallet, Eye, AlertCircle, Send, ChevronDown, ChevronUp } from "lucide-react";
@@ -1244,11 +1244,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     const pct = (old: number | null): { val: string; up: boolean } | null => {
       if (!old || old === 0 || currentPrice === 0) return null;
       const diff = ((currentPrice - old) / old) * 100;
-      const abs = Math.abs(diff);
-      const fmt = abs >= 10_000 ? (abs / 1000).toFixed(1) + "K"
-                : abs >= 1_000  ? (abs / 1000).toFixed(2) + "K"
-                : abs.toFixed(2);
-      return { val: (diff >= 0 ? "+" : "-") + fmt + "%", up: diff >= 0 };
+      return { val: formatPct(diff), up: diff >= 0 };
     };
 
     return {
@@ -2756,7 +2752,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       <div className="flex flex-col items-end">
                         <span className="text-[11px] font-medium mb-1" style={{ color: "#64748b" }}>Return</span>
                         <span className="text-[20px] font-bold font-mono" style={{ color: pnlColor }}>
-                          {isProfit ? "+" : ""}{totalPnlPct.toFixed(2)}%
+                          {formatPct(totalPnlPct)}
                         </span>
                       </div>
                     </div>

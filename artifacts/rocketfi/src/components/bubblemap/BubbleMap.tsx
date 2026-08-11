@@ -6,6 +6,7 @@
  * - Hover tooltip, zoom/pan, click-to-navigate
  */
 import { useEffect, useRef, useCallback, useState } from "react";
+import { formatPct } from "@/lib/utils";
 import { useLocation } from "wouter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -302,7 +303,7 @@ function drawBubble(
   if (rank >= TOP_CIRCLES) {
     ctx.globalAlpha = fadeAlpha;
     const col     = circleColors(b.pctChange);
-    const pct     = (b.pctChange >= 0 ? "+" : "") + b.pctChange.toFixed(2) + "%";
+    const pct     = formatPct(b.pctChange);
     const name    = b.name.substring(0, 11);
     const logoR   = 7;
     const nameSz  = 8;
@@ -430,7 +431,7 @@ function drawBubble(
   // ── Content inside circle ─────────────────────────────────────────────────
   const showLogo   = r >= 44 && b.img && b.imgLoaded && b.img.naturalWidth > 0;
   const showSymbol = r >= 32;
-  const pctText    = (b.pctChange >= 0 ? "+" : "") + b.pctChange.toFixed(2) + "%";
+  const pctText    = formatPct(b.pctChange);
   const pctFontSz  = 10;
   const symFontSz  = Math.max(9,  Math.min(r * 0.18, 13));
   const logoR      = r * 0.25;
@@ -864,7 +865,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
             <div className="flex justify-between gap-4 mt-0.5">
               <span style={{ color: "#94a3b8" }}>Change</span>
               <span className="font-mono font-bold" style={{ color: pctColor }}>
-                {pct >= 0 ? "+" : ""}{pct.toFixed(2)}%
+                {formatPct(pct)}
               </span>
             </div>
             <div className="flex justify-between gap-4 mt-0.5">

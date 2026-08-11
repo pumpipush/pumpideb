@@ -6,6 +6,22 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Format a percentage change with sign and compact K suffix for ≥ 1000%.
+ * Examples: +1.23%, -45%, +1.5K%, -12K%
+ */
+export function formatPct(pct: number): string {
+  const sign = pct >= 0 ? "+" : "−";
+  const abs = Math.abs(pct);
+  if (abs >= 1_000) {
+    const k = abs / 1000;
+    return `${sign}${Number.isInteger(k) ? k.toFixed(0) : k.toFixed(1)}K%`;
+  }
+  if (abs >= 100) return `${sign}${abs.toFixed(0)}%`;
+  if (abs >= 10)  return `${sign}${abs.toFixed(1)}%`;
+  return `${sign}${abs.toFixed(2)}%`;
+}
+
 export function formatAddress(address: string) {
   if (!address) return "";
   return `${address.slice(0, 6)}...${address.slice(-4)}`;

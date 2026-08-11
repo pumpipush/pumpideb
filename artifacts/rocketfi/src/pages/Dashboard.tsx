@@ -6,7 +6,7 @@ import {
   type ListTokensPlatform,
 } from "@workspace/api-client-react";
 
-import { formatMC, formatMCUsd, formatTokenPrice, cn, timeAgo, resolveImageUrl } from "@/lib/utils";
+import { formatMC, formatMCUsd, formatTokenPrice, formatPct, cn, timeAgo, resolveImageUrl } from "@/lib/utils";
 import BubbleMap, { type TokenBubbleInput } from "@/components/bubblemap/BubbleMap";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
@@ -477,12 +477,10 @@ const RANK_STYLES: Record<number, { bg: string; text: string; border: string }> 
 };
 
 // ─── Grid card ────────────────────────────────────────────────────────────────
-/** Format a pct change number as "+1.23%" or "-0.45%" */
+/** Format a pct change number as "+1.23%", "-0.45%", "+1.5K%" for ≥ 1000% */
 function fmtPct(pct: number | null | undefined): string | null {
   if (pct == null || !isFinite(pct)) return null;
-  const abs = Math.abs(pct);
-  const str = abs >= 100 ? abs.toFixed(0) : abs >= 10 ? abs.toFixed(1) : abs.toFixed(2);
-  return `${pct >= 0 ? "+" : "−"}${str}%`;
+  return formatPct(pct);
 }
 
 function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; rank: number; solPrice: number | null; activeTab: SortTab }) {
