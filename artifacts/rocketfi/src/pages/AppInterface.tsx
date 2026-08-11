@@ -2328,18 +2328,18 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                                     href={`https://solscan.io/tx/${trade.txHash}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex items-center justify-center w-6 h-6 rounded-md transition-all"
-                                    style={{ background: "rgba(255,255,255,0.04)", color: "#334155" }}
+                                    className="inline-flex items-center justify-center w-7 h-7 rounded-md transition-all"
+                                    style={{ background: "rgba(255,255,255,0.07)", color: "#64748b" }}
                                     onMouseEnter={e => {
-                                      (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.09)";
-                                      (e.currentTarget as HTMLAnchorElement).style.color = "#94a3b8";
+                                      (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.13)";
+                                      (e.currentTarget as HTMLAnchorElement).style.color = "#cbd5e1";
                                     }}
                                     onMouseLeave={e => {
-                                      (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.04)";
-                                      (e.currentTarget as HTMLAnchorElement).style.color = "#334155";
+                                      (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.07)";
+                                      (e.currentTarget as HTMLAnchorElement).style.color = "#64748b";
                                     }}
                                   >
-                                    <ExternalLink className="h-3 w-3" />
+                                    <ExternalLink className="h-3.5 w-3.5" />
                                   </a>
                                 ) : null}
                               </td>
