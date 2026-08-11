@@ -56,8 +56,6 @@ export function IndicatorModal({ open, onClose, active, onToggle }: IndicatorMod
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
-  if (!open) return null;
-
   const q = query.trim().toLowerCase();
   const filtered = q
     ? ALL_INDICATORS.filter(ind =>
@@ -70,14 +68,20 @@ export function IndicatorModal({ open, onClose, active, onToggle }: IndicatorMod
   const hoveredDef = hovered ? ALL_INDICATORS.find(i => i.id === hovered) : null;
 
   return (
+    /* Keep mounted even when closed so CSS transition plays on exit */
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-      onClick={onClose}
+      onClick={open ? onClose : undefined}
+      style={{
+        pointerEvents: open ? "auto" : "none",
+        opacity:       open ? 1 : 0,
+        transition:    "opacity 150ms ease",
+      }}
     >
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" />
 
-      {/* Panel */}
+      {/* Panel — slides up on mobile, fades+scales on desktop */}
       <div
         className="relative flex flex-col w-full sm:w-[420px] rounded-t-2xl sm:rounded-2xl overflow-hidden shadow-2xl"
         style={{
@@ -85,6 +89,9 @@ export function IndicatorModal({ open, onClose, active, onToggle }: IndicatorMod
           border:       "1px solid rgba(255,255,255,0.09)",
           maxHeight:    "min(560px, 85vh)",
           boxShadow:    "0 32px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05)",
+          transform:    open ? "translateY(0) scale(1)" : "translateY(12px) scale(0.98)",
+          opacity:      open ? 1 : 0,
+          transition:   "transform 220ms cubic-bezier(0.16,1,0.3,1), opacity 150ms ease",
         }}
         onClick={e => e.stopPropagation()}
       >

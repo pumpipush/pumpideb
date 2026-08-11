@@ -122,7 +122,13 @@ export function WalletSelectModal({ open, onOpenChange, onSuccess }: WalletSelec
                     onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.07)")}
                     onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
                   >
-                    <img src={WALLET_ICON_OVERRIDES[descriptor.name] ?? descriptor.icon} alt={descriptor.name} className="w-9 h-9 rounded-xl shrink-0 object-cover" />
+                    <img
+                      src={WALLET_ICON_OVERRIDES[descriptor.name] ?? descriptor.icon}
+                      alt={descriptor.name}
+                      className="w-9 h-9 rounded-xl shrink-0 object-cover transition-opacity duration-300"
+                      style={{ opacity: 0 }}
+                      onLoad={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = "1"; }}
+                    />
                     <span className="flex-1 text-[14px] font-semibold" style={{ color: "#e2e8f0" }}>{descriptor.name}</span>
                     {installed && !isConnecting && (
                       <span className="text-[12px] font-medium mr-1" style={{ color: "#4ade80" }}>

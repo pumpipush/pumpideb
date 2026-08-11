@@ -55,10 +55,10 @@ export default function Home() {
         <section className="border-y border-border/50 bg-muted/20">
           <div className="container mx-auto px-4 py-8">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-              <StatBlock label="Total Volume" value={isLoading ? "..." : `${formatEth(stats?.totalVolumeEth || "0")} ETH`} />
-              <StatBlock label="Tokens Launched" value={isLoading ? "..." : stats?.totalTokens?.toLocaleString()} />
-              <StatBlock label="Tokens Graduated" value={isLoading ? "..." : stats?.totalGraduated?.toLocaleString()} />
-              <StatBlock label="24h Trades" value={isLoading ? "..." : stats?.tradesLast24h?.toLocaleString()} />
+              <StatBlock label="Total Volume" value={isLoading ? null : `${formatEth(stats?.totalVolumeEth || "0")} ETH`} />
+              <StatBlock label="Tokens Launched" value={isLoading ? null : stats?.totalTokens?.toLocaleString()} />
+              <StatBlock label="Tokens Graduated" value={isLoading ? null : stats?.totalGraduated?.toLocaleString()} />
+              <StatBlock label="24h Trades" value={isLoading ? null : stats?.tradesLast24h?.toLocaleString()} />
             </div>
           </div>
         </section>
@@ -128,11 +128,14 @@ export default function Home() {
   );
 }
 
-function StatBlock({ label, value }: { label: string, value: string | undefined }) {
+function StatBlock({ label, value }: { label: string, value: string | undefined | null }) {
   return (
     <div className="flex flex-col items-center justify-center p-4 border border-border/30 rounded-xl bg-card/30 backdrop-blur">
       <span className="text-sm text-muted-foreground mb-1 uppercase tracking-wider">{label}</span>
-      <span className="text-2xl md:text-3xl font-bold text-foreground">{value}</span>
+      {value == null
+        ? <div className="h-9 w-28 rounded-md bg-muted/60 animate-pulse mt-0.5" />
+        : <span className="text-2xl md:text-3xl font-bold text-foreground">{value}</span>
+      }
     </div>
   );
 }

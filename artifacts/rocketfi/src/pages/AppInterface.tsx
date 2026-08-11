@@ -1806,6 +1806,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   }
 
   if (loadingToken && !token) return <TokenDetailSkeleton />;
+
+  // When switching between two already-loaded tokens, keep stale UI visible
+  // but layer a translucent overlay so users know a load is in progress.
+  const isSwitching = loadingToken && !!token;
+
   if (tokenError) {
     // Token not in our DB — render the external token page instead of an error.
     // ExternalTokenLoader resolves metadata from:
@@ -1830,7 +1835,15 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
   return (
     /* Full-bleed two-column layout — mirrors pump.fun */
-    <div className="flex flex-col md:flex-row w-full animate-slideDown md:h-[calc(100dvh-96px)] min-w-[320px] md:min-w-[680px]">
+    <div className="relative flex flex-col md:flex-row w-full animate-slideDown md:h-[calc(100dvh-96px)] min-w-[320px] md:min-w-[680px]">
+
+      {/* Token-switching overlay — keeps stale data visible but signals loading */}
+      {isSwitching && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none"
+          style={{ background: "rgba(9,9,11,0.55)", backdropFilter: "blur(2px)" }}>
+          <Loader2 className="w-9 h-9 animate-spin" style={{ color: "rgba(99,102,241,0.8)" }} />
+        </div>
+      )}
 
       {/* ── LEFT: scrollable chart + info ── */}
       <div data-token-panel className="flex-1 min-w-0 overflow-y-auto border-r border-border/20 px-0 md:px-5 py-0 md:py-4 pb-20 md:pb-6">
@@ -3646,8 +3659,9 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
         <div className="flex gap-3 items-start mb-6">
           {token.logoURI ? (
             <img src={token.logoURI} alt={token.symbol}
-              className="h-14 w-14 rounded-lg object-cover shrink-0"
-              style={{ border: "1px solid rgba(255,255,255,0.12)" }}
+              className="h-14 w-14 rounded-lg object-cover shrink-0 transition-opacity duration-300"
+              style={{ border: "1px solid rgba(255,255,255,0.12)", opacity: 0 }}
+              onLoad={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = "1"; }}
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
           ) : (

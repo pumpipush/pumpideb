@@ -115,8 +115,9 @@ function TokenImage({ imageUrl, symbol, className, textSize = "text-5xl" }: {
   textSize?: string;
 }) {
   const [broken, setBroken] = useState(false);
-  // Reset broken state when imageUrl changes — enrichment can replace a bad URL
-  useEffect(() => { setBroken(false); }, [imageUrl]);
+  const [loaded, setLoaded]  = useState(false);
+  // Reset states when imageUrl changes — enrichment can replace a bad URL
+  useEffect(() => { setBroken(false); setLoaded(false); }, [imageUrl]);
   const src = resolveImageUrl(imageUrl ?? "") ?? "";
   if (!imageUrl || broken) {
     return (
@@ -127,8 +128,15 @@ function TokenImage({ imageUrl, symbol, className, textSize = "text-5xl" }: {
     );
   }
   return (
-    <img src={src} alt={symbol} className={cn("w-full h-full object-cover", className)}
-      loading="eager" onError={() => setBroken(true)} />
+    <img
+      src={src}
+      alt={symbol}
+      className={cn("w-full h-full object-cover transition-opacity duration-300", className)}
+      style={{ opacity: loaded ? 1 : 0 }}
+      loading="eager"
+      onLoad={() => setLoaded(true)}
+      onError={() => setBroken(true)}
+    />
   );
 }
 
