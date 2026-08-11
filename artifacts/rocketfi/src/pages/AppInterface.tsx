@@ -23,6 +23,7 @@ import { tradesFromLocalBars, syntheticBars, type ChartTimeframe } from "@/lib/o
 import { tradesFromLocal, syntheticCandles, Timeframe } from "@/lib/ohlcv";
 import { useTokenStream } from "@/hooks/useTokenStream";
 import { useSolBalance } from "@/hooks/useSolBalance";
+import { useTokenBalance } from "@/hooks/useTokenBalance";
 
 import { ethers } from "ethers";
 import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, formatTokenPrice, formatPct, cn, timeAgo } from "@/lib/utils";
@@ -63,6 +64,7 @@ import {
   getExternalToken, setExternalToken, ensureJupiterList, getJupiterTokenByAddress,
   type ExternalSolanaToken,
 } from "@/lib/external-tokens";
+import { computeSellPresetAmount } from "@/lib/tradePresets";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { formatSol, formatTokenAmount, formatAtomicTokenAmount, atomicToDisplayTokens, computeHoldingRow } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -950,6 +952,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const { submitTx } = useTxToast();
   const solPrice = useSolPrice();
   const { solBalance, refresh: refreshSolBalance } = useSolBalance(wallet);
+  // SPL token balance for the currently-viewed token — drives sell preset buttons
+  const { tokenBalance, atomicBalance, refresh: refreshTokenBalance } = useTokenBalance(wallet, selectedAddress);
 
   // Live SSE stream — real-time trade events
   const { liveTrades, liveToken, connected } = useTokenStream(selectedAddress);
@@ -1728,6 +1732,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     } finally {
       setIsTradePending(false);
       refreshSolBalance();
+      refreshTokenBalance();
     }
   };
 
@@ -2104,6 +2109,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               jupiterQuote={jupiterQuote}
               jupiterQuoteLoading={jupiterQuoteLoading}
               jupiterQuoteError={jupiterQuoteError}
+              solBalance={solBalance}
+              tokenBalance={tokenBalance}
+              atomicBalance={atomicBalance}
             />
           </div>
         </div>
@@ -3068,6 +3076,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             jupiterQuoteLoading={jupiterQuoteLoading}
             jupiterQuoteError={jupiterQuoteError}
             solBalance={solBalance}
+            tokenBalance={tokenBalance}
+            atomicBalance={atomicBalance}
           />
         </div>
 
@@ -3121,12 +3131,23 @@ interface TradePanelFormProps {
   tokenDecimals?: number;
   /** Native SOL balance of the connected wallet (in SOL, not lamports). Null when not connected. */
   solBalance?: number | null;
+  /**
+   * SPL token balance of the connected wallet for the currently-viewed token,
+   * in display units (already divided by 10^decimals). Null when not connected
+   * or still fetching. Drives sell preset buttons on graduated/DEX tokens.
+   */
+  tokenBalance?: number | null;
+  /**
+   * Raw atomic token balance string (tokenAmount.amount from RPC). Used with BigInt
+   * arithmetic in sell presets to guarantee the amount never exceeds actual holdings.
+   */
+  atomicBalance?: string | null;
 }
 
 function TradePanelForm({
   tradeMode, setTradeMode, amount, setAmount, token, wallet, handleTrade, isPending,
   isGraduated, jupiterQuote, jupiterQuoteLoading, jupiterQuoteError, tokenDecimals = 6,
-  solBalance,
+  solBalance, tokenBalance, atomicBalance,
 }: TradePanelFormProps) {
   const swapSettings = useSwapSettings();
   const solPrice = useSolPrice();
@@ -3166,13 +3187,31 @@ function TradePanelForm({
           <SwapSettingsPopover />
         </div>
 
-        {/* SOL balance — only shown when wallet is connected */}
-        {wallet && solBalance !== null && solBalance !== undefined && (
+        {/* SOL balance — shown in buy mode when wallet is connected */}
+        {tradeMode === "buy" && wallet && solBalance !== null && solBalance !== undefined && (
           <div className="flex items-center justify-between text-[11px]">
             <span className="text-muted-foreground">Balance</span>
             <span className="font-mono text-foreground/80">
               {solBalance.toFixed(4)} SOL
               {solPrice && <span className="text-muted-foreground ml-1.5">{formatUSD(solBalance * solPrice)}</span>}
+            </span>
+          </div>
+        )}
+
+        {/* Token balance — shown in sell mode when wallet is connected */}
+        {tradeMode === "sell" && wallet && (
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-muted-foreground">Balance</span>
+            <span className="font-mono text-foreground/80">
+              {tokenBalance == null
+                ? <span className="text-muted-foreground/50">–</span>
+                : tokenBalance === 0
+                  ? <span className="text-muted-foreground/50">0 {token.symbol}</span>
+                  : <>{tokenBalance >= 1
+                      ? tokenBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                      : tokenBalance.toPrecision(4)
+                    } {token.symbol}</>
+              }
             </span>
           </div>
         )}
@@ -3192,8 +3231,16 @@ function TradePanelForm({
                 key={label}
                 className="flex-1 py-1.5 bg-muted/60 rounded text-xs font-bold text-muted-foreground hover:bg-white/10 hover:text-foreground border border-border/40 transition-all duration-150 active:scale-95"
                 onClick={() => {
-                  const reserves = token.virtualTokenReserves ? parseFloat(token.virtualTokenReserves) : 0;
-                  setAmount((reserves * pct * 0.0001).toFixed(2));
+                  if (atomicBalance != null) {
+                    // Use exact atomic balance via BigInt — never rounds up, never
+                    // exceeds holdings regardless of token decimals or magnitude.
+                    setAmount(computeSellPresetAmount(BigInt(atomicBalance), pct, tokenDecimals));
+                  } else if (!wallet) {
+                    // No wallet connected — bonding-curve reserve as rough indication only
+                    const reserves = token.virtualTokenReserves ? parseFloat(token.virtualTokenReserves) : 0;
+                    setAmount((reserves * pct * 0.0001).toFixed(2));
+                  }
+                  // Wallet connected but balance still loading/error: do nothing
                 }}
               >{label}</button>
             ))
@@ -3623,6 +3670,7 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
   const { openWalletModal, signAndSendTransaction } = useWallet();
   const { submitTx } = useTxToast();
   const { solBalance, refresh: refreshSolBalance } = useSolBalance(wallet);
+  const { tokenBalance, atomicBalance, refresh: refreshTokenBalance } = useTokenBalance(wallet, token.address);
   const [tradeMode, setTradeMode]           = useState<"buy" | "sell">("buy");
   const [amount, setAmount]                 = useState("");
   const [isTradePending, setIsTradePending] = useState(false);
@@ -3711,6 +3759,7 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
     } finally {
       setIsTradePending(false);
       refreshSolBalance();
+      refreshTokenBalance();
     }
   };
 
@@ -3788,6 +3837,8 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
               jupiterQuoteError={jupiterQuoteError}
               tokenDecimals={token.decimals}
               solBalance={solBalance}
+              tokenBalance={tokenBalance}
+              atomicBalance={atomicBalance}
             />
           </div>
         </div>
