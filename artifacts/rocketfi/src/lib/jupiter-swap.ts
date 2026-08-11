@@ -22,8 +22,9 @@ import { Connection, VersionedTransaction } from "@solana/web3.js";
 /** Native SOL wrapped mint — used as the SOL leg in all Jupiter token↔SOL routes */
 export const WSOL_MINT = "So11111111111111111111111111111111111111112";
 
-const JUP_QUOTE_API = "https://quote-api.jup.ag/v6/quote";
-const JUP_SWAP_API  = "https://quote-api.jup.ag/v6/swap";
+// Jupiter moved the free tier from quote-api.jup.ag/v6 (deprecated) to lite.jup.ag/v6
+const JUP_QUOTE_API = "https://lite.jup.ag/v6/quote";
+const JUP_SWAP_API  = "https://lite.jup.ag/v6/swap";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

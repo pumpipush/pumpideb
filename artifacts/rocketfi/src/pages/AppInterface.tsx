@@ -1505,10 +1505,18 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       if (!isFinite(numAmount) || isNaN(numAmount) || numAmount <= 0) throw new Error("Invalid amount");
 
       // ── Platform guard ────────────────────────────────────────────────────────
-      // Real on-chain swaps are only available for pump.fun bonding curve tokens.
-      //   • graduated=true  → token is on PumpSwap/Raydium (task #104 — Jupiter)
-      //   • other platforms → moonshot, letsbonk, etc. (coming soon)
-      if (token.platform !== "pump_fun") {
+      // Supported paths:
+      //   pump_fun (not graduated) → bonding curve (buildPumpFunBuyTx/SellTx)
+      //   pump_fun (graduated)     → Jupiter DEX routing
+      //   pumpswap                 → always graduated, Jupiter DEX routing
+      //   raydium_launchlab (graduated) → Jupiter DEX routing
+      //   anything else            → not yet supported
+      const isTradeable =
+        token.platform === "pump_fun" ||
+        token.platform === "pumpswap" ||
+        (token.platform === "raydium_launchlab" && !!token.graduated);
+
+      if (!isTradeable) {
         throw new Error(
           `On-chain trading for ${token.platform ?? "this platform"} is coming soon.`
         );
