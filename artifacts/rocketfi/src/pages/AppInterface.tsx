@@ -716,12 +716,14 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 style={{
                   background: launchStep === "error"
                     ? "rgba(255,255,255,0.04)"
+                    : !wallet
+                    ? "hsl(var(--primary))"
                     : platform === "raydium"
                     ? "linear-gradient(135deg, #3b82f6, #2563eb)"
                     : "hsl(var(--primary))",
                   color: launchStep === "error" ? "#475569" : "hsl(var(--primary-foreground))",
                   border: "none",
-                  boxShadow: launchStep === "error" ? "none" : platform === "raydium" ? "0 0 20px rgba(59,130,246,0.20)" : "0 0 20px rgba(255,255,255,0.08)",
+                  boxShadow: launchStep === "error" ? "none" : !wallet ? "0 0 20px rgba(255,255,255,0.08)" : platform === "raydium" ? "0 0 20px rgba(59,130,246,0.20)" : "0 0 20px rgba(255,255,255,0.08)",
                   cursor: launchStep === "error" ? "not-allowed" : "pointer",
                 }}
               >
