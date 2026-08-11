@@ -2181,7 +2181,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>{token.symbol}</th>
                         <th className="hidden md:table-cell text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>SOL</th>
                         <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Price</th>
-                        <th className="hidden md:table-cell text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Maker</th>
+                        <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Maker</th>
                         <th style={{ width: 36 }} />
                       </tr>
                     </thead>
@@ -2196,7 +2196,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                             <td className="px-3 py-2.5 text-right"><Skeleton className="h-3 w-16 ml-auto" /></td>
                             <td className="hidden md:table-cell px-3 py-2.5 text-right"><Skeleton className="h-3 w-12 ml-auto" /></td>
                             <td className="px-3 py-2.5 text-right"><Skeleton className="h-3 w-14 ml-auto" /></td>
-                            <td className="hidden md:table-cell px-3 py-2.5 text-right"><Skeleton className="h-3 w-16 ml-auto" /></td>
+                            <td className="px-3 py-2.5 text-right"><Skeleton className="h-3 w-16 ml-auto" /></td>
                             <td />
                           </tr>
                         ))
@@ -2297,7 +2297,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               </td>
 
                               {/* Maker — avatar + address */}
-                              <td className="hidden md:table-cell px-3 py-2.5 text-right">
+                              <td className="px-3 py-2.5 text-right">
                                 {trade.traderAddress ? (
                                   <a
                                     href={`https://solscan.io/account/${trade.traderAddress}`}
