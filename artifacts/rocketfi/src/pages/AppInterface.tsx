@@ -2548,14 +2548,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       style={{ background: "rgba(255,255,255,0.025)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                       <div className="flex items-center gap-1.5">
                         <Users className="h-3.5 w-3.5" style={{ color: "#64748b" }} />
-                        <span className="text-[12px] font-semibold" style={{ color: "#94a3b8" }}>
+                        <span className="text-[14px] font-semibold" style={{ color: "#e2e8f0" }}>
                           {holders.length.toLocaleString()} holders
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[11px]" style={{ color: "#475569" }}>Top 10 own</span>
-                        <span className="text-[12px] font-bold font-mono"
-                          style={{ color: isConcentrated ? "#f87171" : "#64748b" }}>
+                        <span className="text-[12px]" style={{ color: "#94a3b8" }}>Top 10 own</span>
+                        <span className="text-[13px] font-bold font-mono"
+                          style={{ color: isConcentrated ? "#f87171" : "#94a3b8" }}>
                           {top10Pct.toFixed(1)}%
                         </span>
                       </div>
