@@ -1001,8 +1001,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       return json.holders ?? [];
     },
     enabled: !!selectedAddress,
-    refetchInterval: 30_000,
-    staleTime: 25_000,
+    refetchInterval: 15_000,
+    staleTime: 12_000,
   });
 
   // ── Server-side position (SQL aggregate across ALL trades — no 100-row cap) ─
@@ -2131,9 +2131,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           // The old client-side approach used the 100-row history cap, which wildly
           // underestimates holders for high-volume tokens (e.g. 34 instead of 265).
           const holders = serverHolders ?? [];
-          const totalSupply = holders.reduce(
-            (s, h) => s + Math.max(0, parseFloat(h.balance) || 0), 0
-          ) || 1;
+          // Use on-chain total supply as denominator so % of supply is accurate.
+          // token.totalSupply is in atomic units (pump.fun: 1e15 = 1B × 10^6).
+          // Fall back to sum of tracked balances only if the field is missing/zero.
+          const onChainSupply = token?.totalSupply ? parseFloat(token.totalSupply) : 0;
+          const totalSupply = onChainSupply > 0
+            ? onChainSupply
+            : (holders.reduce((s, h) => s + Math.max(0, parseFloat(h.balance) || 0), 0) || 1);
 
           return (
             <div className="mt-0 px-3 md:px-0">
