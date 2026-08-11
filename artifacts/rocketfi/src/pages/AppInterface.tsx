@@ -635,8 +635,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
             )}
           </div>
 
-          <div style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
-
           {/* ── Submit / Progress / Done ── */}
           <div className="px-5 pt-5 pb-5 space-y-4">
 
