@@ -1368,14 +1368,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const ChartSection = useMemo(() => {
     if (!token) return null;
 
-    // OHLCV still in flight — show inline placeholder so the token page appears
-    // immediately while the chart loads in the background.
+    // OHLCV still in flight — show a text-only placeholder (no spinner).
+    // The one global spinner already handles the initial token fetch.
     if (chartBars.length === 0 && ohlcvLoading) {
       return (
-        <div className="border border-border/20 rounded-sm mb-0 flex flex-col items-center justify-center gap-2"
+        <div className="border border-border/20 rounded-sm mb-0 flex items-center justify-center"
           style={{ height: 280, background: "#0B1220" }}>
-          <Loader2 className="w-5 h-5 animate-spin" style={{ color: "rgba(99,102,241,0.5)" }} />
-          <span className="text-xs" style={{ color: "rgba(148,163,184,0.45)" }}>Loading charts...</span>
+          <span className="text-xs tracking-wide" style={{ color: "rgba(148,163,184,0.4)" }}>Loading charts...</span>
         </div>
       );
     }
