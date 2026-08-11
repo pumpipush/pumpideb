@@ -1412,20 +1412,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       );
     }
 
-    // Still loading from server — show skeleton, not "No trades yet"
+    // Still loading from server — show a plain dark placeholder so no second spinner appears.
+    // The full-page skeleton (first load) or the overlay spinner (switching) already signals loading.
     if (chartBars.length === 0 && ohlcvLoading) {
       return (
-        <div className="border border-border/20 rounded-sm overflow-hidden mb-0 animate-pulse"
-          style={{ height: 280, background: "#0B1220" }}>
-          <div className="flex flex-col justify-end h-full gap-1 p-4">
-            {/* fake candle bars at varying heights */}
-            <div className="flex items-end gap-[3px] h-40">
-              {[40,65,30,80,55,70,45,90,60,75,35,85,50,95,42,68,38,78,52,88].map((h, i) => (
-                <div key={i} className="flex-1 rounded-sm" style={{ height: `${h}%`, background: "rgba(255,255,255,0.06)" }} />
-              ))}
-            </div>
-          </div>
-        </div>
+        <div className="border border-border/20 rounded-sm mb-0"
+          style={{ height: 280, background: "#0B1220" }} />
       );
     }
 
