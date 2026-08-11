@@ -14,9 +14,9 @@ function LaunchTokenButton() {
     <Button
       className="w-full rounded-[8px] font-bold text-sm h-9 transition-all duration-200 active:scale-[0.98] flex items-center gap-2"
       style={{
-        background: hovered ? "#22c55e" : "#16a34a",
-        color: "#052e16",
-        boxShadow: hovered ? "0 0 18px rgba(74,222,128,0.28)" : undefined,
+        background: hovered ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.88)",
+        color: "#0f172a",
+        boxShadow: hovered ? "0 2px 12px rgba(0,0,0,0.3)" : undefined,
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
