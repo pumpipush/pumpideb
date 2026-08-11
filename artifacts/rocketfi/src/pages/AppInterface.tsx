@@ -947,6 +947,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       queryKey: ["getToken", selectedAddress]
     } 
   });
+
+  // Derived early so useMemo below (ChartSection) can use it safely.
+  // true = switching between two already-loaded tokens (stale data still visible).
+  const isSwitching = loadingToken && !!token;
   
   const { data: history, refetch: refetchHistory, isLoading: loadingHistory, isError: historyError } = useTradeHistory(selectedAddress || "", {
     query: {
@@ -1399,6 +1403,15 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const ChartSection = useMemo(() => {
     if (!token) return null;
 
+    // When switching between tokens, the full-panel overlay already signals loading —
+    // skip the chart skeleton so they don't stack (double loading).
+    if (isSwitching) {
+      return (
+        <div className="border border-border/20 rounded-sm mb-0"
+          style={{ height: 280, background: "#0B1220" }} />
+      );
+    }
+
     // Still loading from server — show skeleton, not "No trades yet"
     if (chartBars.length === 0 && ohlcvLoading) {
       return (
@@ -1576,7 +1589,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       </div>
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartBars, chartType, chartTf, indicators, indOpen, connected, token?.address, token?.graduated, onCrosshairMove, solPrice]);
+  }, [chartBars, chartType, chartTf, indicators, indOpen, connected, token?.address, token?.graduated, onCrosshairMove, solPrice, isSwitching]);
 
   const handleTrade = async () => {
     if (!wallet) {
@@ -1806,10 +1819,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   }
 
   if (loadingToken && !token) return <TokenDetailSkeleton />;
-
-  // When switching between two already-loaded tokens, keep stale UI visible
-  // but layer a translucent overlay so users know a load is in progress.
-  const isSwitching = loadingToken && !!token;
 
   if (tokenError) {
     // Token not in our DB — render the external token page instead of an error.
