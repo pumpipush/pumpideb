@@ -638,16 +638,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           {/* ── Submit / Progress / Done ── */}
           <div className="px-5 pt-5 pb-5 space-y-4">
 
-            {/* Launch cost info (only when idle) */}
-            {launchStep === "idle" && platform === "raydium" && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
-                style={{ background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.20)" }}>
-                <ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "#60a5fa" }} />
-                <span className="text-[12px]" style={{ color: "#93c5fd" }}>
-                  Biaya launch Raydium LaunchLab: ~{RAYDIUM_LAUNCH_COST_SOL} SOL · SDK dimuat saat kamu klik launch
-                </span>
-              </div>
-            )}
 
             {/* Progress stepper (during launch) */}
             {isLaunching && (
