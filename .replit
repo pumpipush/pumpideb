@@ -25,3 +25,4 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.shared]
+VITE_PUMP_FEE_RECIPIENT = "JBCqngc3TYcz3Rtv5Md3CZyw8X6AxLik7gswCCttRS5E"
