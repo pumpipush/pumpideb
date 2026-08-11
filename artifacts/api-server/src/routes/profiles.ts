@@ -147,11 +147,22 @@ router.post("/profiles", async (req, res): Promise<void> => {
 
   // 4. Atomic insert — ON CONFLICT (address) DO NOTHING eliminates the TOCTOU race.
   //    If the profile already exists the INSERT silently skips and returns no rows.
-  const [inserted] = await db
-    .insert(profilesTable)
-    .values({ address: walletAddress, username: resolvedUsername, ...profileFields })
-    .onConflictDoNothing()
-    .returning();
+  //    A separate unique constraint on username means a concurrent claim of the same
+  //    handle produces a 23505 error — we surface that as a 409.
+  let inserted: typeof profilesTable.$inferSelect | undefined;
+  try {
+    [inserted] = await db
+      .insert(profilesTable)
+      .values({ address: walletAddress, username: resolvedUsername, ...profileFields })
+      .onConflictDoNothing()
+      .returning();
+  } catch (err: unknown) {
+    if ((err as { code?: string }).code === "23505") {
+      res.status(409).json({ error: "Username is already taken" });
+      return;
+    }
+    throw err;
+  }
 
   // 5. If the insert was skipped (profile already existed), fetch the existing row.
   const profile = inserted ?? (
@@ -240,14 +251,25 @@ router.patch("/profiles/:address", async (req, res): Promise<void> => {
   //    The DB target address comes from the verified walletAddress (not the route
   //    param), so even if a buggy client sends a mismatched URL the write lands
   //    on the signer's own row.
-  const [updated] = await db
-    .insert(profilesTable)
-    .values({ address: walletAddress, username: resolvedUsername, ...updateData })
-    .onConflictDoUpdate({
-      target: profilesTable.address,
-      set: { ...updateData, updatedAt: new Date() },
-    })
-    .returning();
+  //    The unique constraint on username produces a 23505 error when another
+  //    profile already owns the requested handle — surface that as a 409.
+  let updated: typeof profilesTable.$inferSelect | undefined;
+  try {
+    [updated] = await db
+      .insert(profilesTable)
+      .values({ address: walletAddress, username: resolvedUsername, ...updateData })
+      .onConflictDoUpdate({
+        target: profilesTable.address,
+        set: { ...updateData, updatedAt: new Date() },
+      })
+      .returning();
+  } catch (err: unknown) {
+    if ((err as { code?: string }).code === "23505") {
+      res.status(409).json({ error: "Username is already taken" });
+      return;
+    }
+    throw err;
+  }
 
   if (!updated) {
     res.status(500).json({ error: "Profile update failed" });

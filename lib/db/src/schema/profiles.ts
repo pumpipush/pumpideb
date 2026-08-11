@@ -4,7 +4,7 @@ import { z } from "zod/v4";
 
 export const profilesTable = pgTable("profiles", {
   address: text("address").primaryKey(),
-  username: text("username").notNull(),
+  username: text("username").notNull().unique(),
   bio: text("bio"),
   avatarUrl: text("avatar_url"),
   twitterHandle: text("twitter_handle"),

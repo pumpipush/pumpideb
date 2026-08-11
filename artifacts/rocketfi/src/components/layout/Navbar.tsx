@@ -73,7 +73,7 @@ function WalletButton() {
       <DropdownMenuTrigger asChild>
         <button className="flex items-center gap-2 h-9 pl-1.5 pr-2.5 rounded-full border border-border/60 bg-card hover:border-border hover:bg-card/80 transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 group shrink-0">
           {/* Avatar */}
-          <div className="h-6 w-6 rounded-full overflow-hidden border border-border/80 shrink-0">
+          <div className="h-7 w-7 rounded-full overflow-hidden border border-border/80 shrink-0">
             <img
               src={profile?.avatarUrl || diceBearUrl(wallet)}
               alt={displayName}
