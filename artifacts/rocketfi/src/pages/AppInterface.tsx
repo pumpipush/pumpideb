@@ -27,7 +27,8 @@ import { ethers } from "ethers";
 import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, formatTokenPrice, formatPct, cn, timeAgo } from "@/lib/utils";
 import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
 import { ShareModal } from "@/components/shared/ShareModal";
-import { Search, ArrowRightLeft, Share2, Copy, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare, Rocket, ShieldCheck, Zap, CheckCircle2, UploadCloud, Wallet, Eye, AlertCircle, Send, ChevronDown, ChevronUp, WifiOff } from "lucide-react";
+import { Search, ArrowRightLeft, Share2, Copy, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare, Rocket, ShieldCheck, Zap, CheckCircle2, UploadCloud, Wallet, Eye, AlertCircle, Send, ChevronDown, ChevronUp } from "lucide-react";
+import { ReconnectingChip } from "@/components/shared/ReconnectingChip";
 const XIcon = ({ className, style }: { className?: string; style?: React.CSSProperties }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className} style={style} aria-hidden="true">
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.91-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
@@ -2191,20 +2192,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 </button>
               </div>
               {/* Reconnecting indicator — shown when per-token SSE stream is down */}
-              {!connected && (
-                <div
-                  className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[12px] font-semibold whitespace-nowrap"
-                  style={{
-                    background: "rgba(239,68,68,0.08)",
-                    borderColor: "rgba(239,68,68,0.25)",
-                    color: "#f87171",
-                  }}
-                  title="Live stream disconnected — reconnecting…"
-                >
-                  <WifiOff className="w-3 h-3 shrink-0" />
-                  <span className="hidden sm:inline">Reconnecting…</span>
-                </div>
-              )}
+              {!connected && <ReconnectingChip />}
               </div>
 
               {/* Trades panel — premium redesign */}
