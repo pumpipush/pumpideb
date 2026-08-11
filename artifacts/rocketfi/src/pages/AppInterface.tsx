@@ -2263,14 +2263,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               </td>
 
                               {/* Time */}
-                              <td className="px-3 py-2.5 text-left font-mono text-[11px] whitespace-nowrap" style={{ color: "#94a3b8" }}>
+                              <td className="px-3 py-2.5 text-left font-mono text-[13px] whitespace-nowrap" style={{ color: "#94a3b8" }}>
                                 {timeAgo(trade.timestamp)}
                               </td>
 
-                              {/* Type pill */}
+                              {/* Type — plain text */}
                               <td className="px-2 py-2.5 text-left">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold tracking-wide"
-                                  style={{ background: sideBgPill, color: sideColor, border: `1px solid ${sideBdr}` }}>
+                                <span className="font-mono text-[13px] font-bold tracking-wide" style={{ color: sideColor }}>
                                   {isBuy ? "BUY" : "SELL"}
                                 </span>
                               </td>
@@ -2283,17 +2282,17 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               </td>
 
                               {/* Token amount */}
-                              <td className="px-3 py-2.5 text-right font-mono text-[12px]" style={{ color: "#cbd5e1" }}>
+                              <td className="px-3 py-2.5 text-right font-mono text-[13px]" style={{ color: "#cbd5e1" }}>
                                 {formatAtomicTokenAmount(tokAmt)}
                               </td>
 
                               {/* SOL */}
-                              <td className="px-3 py-2.5 text-right font-mono text-[12px]" style={{ color: "#94a3b8" }}>
+                              <td className="px-3 py-2.5 text-right font-mono text-[13px]" style={{ color: "#94a3b8" }}>
                                 {formatSol(trade.ethAmount)}
                               </td>
 
                               {/* Price */}
-                              <td className="px-3 py-2.5 text-right font-mono text-[12px]" style={{ color: "#94a3b8" }}>
+                              <td className="px-3 py-2.5 text-right font-mono text-[13px]" style={{ color: "#94a3b8" }}>
                                 {pricePerTokUsd != null ? formatTokenPrice(pricePerTokUsd) : pricePerTokSol != null ? `${pricePerTokSol.toPrecision(3)} SOL` : "—"}
                               </td>
 
@@ -2309,7 +2308,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                                   >
                                     <span className="w-4 h-4 rounded-full shrink-0 inline-block"
                                       style={{ background: `hsl(${avatarHue} 70% 45%)` }} />
-                                    <span className="font-mono text-[11px] transition-colors group-hover/maker:text-slate-200"
+                                    <span className="font-mono text-[13px] transition-colors group-hover/maker:text-slate-200"
                                       style={{ color: "#94a3b8" }}>
                                       {trade.traderAddress.slice(0, 4)}…{trade.traderAddress.slice(-4)}
                                     </span>
