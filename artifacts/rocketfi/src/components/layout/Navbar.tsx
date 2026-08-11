@@ -6,11 +6,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Wallet, User, Copy, LogOut, ExternalLink } from "lucide-react";
+import { Search, Wallet, UserCircle, Copy, LogOut, ExternalLink, ChevronDown } from "lucide-react";
 import { useWallet } from "@/contexts/WalletContext";
 import { useGetProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
 import { formatAddress, diceBearUrl } from "@/lib/utils";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { openSearch } from "@/components/shared/SearchDialog";
 import { useState } from "react";
 import { WalletSelectModal } from "@/components/shared/WalletSelectModal";
@@ -22,9 +22,9 @@ function WalletButton() {
   const [walletModal, setWalletModal] = useState(false);
   const { toast } = useToast();
 
-  async function handleDisconnect() {
+  async function handleLogout() {
     await disconnect();
-    toast({ title: "Wallet disconnected", description: "See you next time." });
+    toast({ title: "Logged out", description: "See you next time." });
   }
 
   const { data: profile } = useGetProfile(wallet ?? "", {
@@ -63,84 +63,112 @@ function WalletButton() {
   }
 
   const profileSlug = profile?.username ?? wallet;
+  const displayName = profile?.username ?? formatAddress(wallet);
 
   return (
-    <div className="flex items-center gap-2 shrink-0">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button className="flex items-center gap-2 rounded-sm px-2 py-1 hover:bg-white/5 transition-colors group outline-none">
-            {/* Address pill — desktop only */}
-            <div className="hidden sm:flex items-center gap-1.5 h-7 px-2 bg-card border border-border/50 rounded-sm group-hover:border-border transition-colors" title={wallet}>
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-              <span className="text-xs font-mono text-muted-foreground">{formatAddress(wallet)}</span>
-              {walletName && (
-                <span className="text-[10px] text-white/30 font-medium">{walletName}</span>
-              )}
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className="flex items-center gap-2 h-9 pl-1.5 pr-2.5 rounded-full border border-border/60 bg-card hover:border-border hover:bg-card/80 transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 group shrink-0">
+          {/* Avatar */}
+          <div className="h-6 w-6 rounded-full overflow-hidden border border-border/80 shrink-0">
+            <img
+              src={profile?.avatarUrl || diceBearUrl(wallet)}
+              alt={displayName}
+              className="w-full h-full object-cover"
+              style={{ imageRendering: profile?.avatarUrl ? "auto" : "pixelated" }}
+            />
+          </div>
+          {/* Name + address — desktop */}
+          <div className="hidden sm:flex flex-col items-start leading-none">
+            <span className="text-[12px] font-semibold text-foreground">{displayName}</span>
+            <span className="text-[10px] font-mono text-muted-foreground/70 mt-0.5">
+              {walletName ? walletName : formatAddress(wallet)}
+            </span>
+          </div>
+          <ChevronDown className="w-3 h-3 text-muted-foreground/60 group-data-[state=open]:rotate-180 transition-transform duration-200 hidden sm:block" />
+        </button>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent
+        align="end"
+        sideOffset={8}
+        className="w-60 p-0 rounded-xl border border-border/60 shadow-xl shadow-black/40 overflow-hidden"
+      >
+        {/* Profile header */}
+        <div className="flex items-center gap-3 px-4 py-3.5 bg-card/60">
+          <div className="h-10 w-10 rounded-full overflow-hidden border-2 border-border shrink-0">
+            <img
+              src={profile?.avatarUrl || diceBearUrl(wallet)}
+              alt={displayName}
+              className="w-full h-full object-cover"
+              style={{ imageRendering: profile?.avatarUrl ? "auto" : "pixelated" }}
+            />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground truncate">{displayName}</p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+              <p className="text-[11px] font-mono text-muted-foreground truncate">{formatAddress(wallet)}</p>
             </div>
-            {/* Avatar */}
-            <div className="relative h-8 w-8 rounded-full overflow-hidden border-2 border-border group-hover:border-primary/50 transition-colors shrink-0">
-              <img
-                src={profile?.avatarUrl || diceBearUrl(wallet)}
-                alt={profile?.username ?? wallet}
-                className="w-full h-full object-cover"
-                style={{ imageRendering: profile?.avatarUrl ? "auto" : "pixelated" }}
-              />
+          </div>
+        </div>
+
+        <DropdownMenuSeparator className="my-0" />
+
+        {/* Actions */}
+        <div className="p-1.5 flex flex-col gap-0.5">
+          <DropdownMenuItem asChild className="rounded-lg px-3 py-2.5 cursor-pointer gap-3 focus:bg-white/5">
+            <Link href={`/profile/${profileSlug}`}>
+              <UserCircle className="w-4 h-4 text-muted-foreground shrink-0" />
+              <div>
+                <p className="text-[13px] font-medium text-foreground">View Profile</p>
+                <p className="text-[11px] text-muted-foreground">See your public page</p>
+              </div>
+            </Link>
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            onSelect={() => copyToClipboard(wallet, "Address copied")}
+            className="rounded-lg px-3 py-2.5 cursor-pointer gap-3 focus:bg-white/5"
+          >
+            <Copy className="w-4 h-4 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-[13px] font-medium text-foreground">Copy Address</p>
+              <p className="text-[11px] text-muted-foreground font-mono">{formatAddress(wallet)}</p>
             </div>
-          </button>
-        </DropdownMenuTrigger>
+          </DropdownMenuItem>
 
-        <DropdownMenuContent align="end" className="w-52 rounded-sm">
-          {/* Identity header */}
-          <div className="px-3 py-2.5 border-b border-border/50">
-            <p className="text-sm font-semibold text-foreground truncate">
-              {profile?.username ?? formatAddress(wallet)}
-            </p>
-            <p className="text-[11px] font-mono text-muted-foreground truncate mt-0.5">{formatAddress(wallet)}</p>
-          </div>
-
-          <div className="py-1">
-            <DropdownMenuItem asChild>
-              <Link href={`/profile/${profileSlug}`} className="flex items-center gap-2.5 cursor-pointer">
-                <User className="w-3.5 h-3.5 text-muted-foreground" />
-                View Profile
-              </Link>
-            </DropdownMenuItem>
-
-            <DropdownMenuItem
-              onSelect={() => copyToClipboard(wallet, "Address copied")}
-              className="flex items-center gap-2.5 cursor-pointer"
+          <DropdownMenuItem asChild className="rounded-lg px-3 py-2.5 cursor-pointer gap-3 focus:bg-white/5">
+            <a
+              href={`https://solscan.io/account/${wallet}`}
+              target="_blank"
+              rel="noopener noreferrer"
             >
-              <Copy className="w-3.5 h-3.5 text-muted-foreground" />
-              Copy Address
-            </DropdownMenuItem>
+              <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0" />
+              <div>
+                <p className="text-[13px] font-medium text-foreground">View on Solscan</p>
+                <p className="text-[11px] text-muted-foreground">Check on-chain activity</p>
+              </div>
+            </a>
+          </DropdownMenuItem>
+        </div>
 
-            <DropdownMenuItem asChild>
-              <a
-                href={`https://solscan.io/account/${wallet}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2.5 cursor-pointer"
-              >
-                <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-                View on Solscan
-              </a>
-            </DropdownMenuItem>
-          </div>
+        <DropdownMenuSeparator className="my-0" />
 
-          <DropdownMenuSeparator />
-
-          <div className="py-1">
-            <DropdownMenuItem
-              onSelect={() => void handleDisconnect()}
-              className="flex items-center gap-2.5 cursor-pointer text-red-400 focus:text-red-400"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              Disconnect
-            </DropdownMenuItem>
-          </div>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+        <div className="p-1.5">
+          <DropdownMenuItem
+            onSelect={() => void handleLogout()}
+            className="rounded-lg px-3 py-2.5 cursor-pointer gap-3 focus:bg-red-500/10 text-red-400 focus:text-red-400"
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            <div>
+              <p className="text-[13px] font-medium">Log out</p>
+              <p className="text-[11px] opacity-60">Disconnect your wallet</p>
+            </div>
+          </DropdownMenuItem>
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
