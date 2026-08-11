@@ -6,7 +6,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Wallet, UserCircle, Copy, LogOut, ExternalLink, ChevronDown } from "lucide-react";
+import { Search, Wallet, UserCircle, Copy, LogOut, ExternalLink, ChevronDown, Pencil } from "lucide-react";
 import { useWallet } from "@/contexts/WalletContext";
 import { useGetProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
 import { formatAddress, diceBearUrl } from "@/lib/utils";
@@ -16,10 +16,12 @@ import { useState } from "react";
 import { WalletSelectModal } from "@/components/shared/WalletSelectModal";
 import { useToast } from "@/hooks/use-toast";
 import { copyToClipboard } from "@/components/shared/CopyToast";
+import { ProfileEditModal } from "@/components/shared/ProfileEditModal";
 
 function WalletButton() {
   const { wallet, walletName, disconnect } = useWallet();
   const [walletModal, setWalletModal] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const { toast } = useToast();
 
   async function handleLogout() {
@@ -66,6 +68,7 @@ function WalletButton() {
   const displayName = profile?.username ?? formatAddress(wallet);
 
   return (
+    <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className="flex items-center gap-2 h-9 pl-1.5 pr-2.5 rounded-full border border-border/60 bg-card hover:border-border hover:bg-card/80 transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 group shrink-0">
@@ -128,6 +131,17 @@ function WalletButton() {
           </DropdownMenuItem>
 
           <DropdownMenuItem
+            onSelect={() => setEditOpen(true)}
+            className="rounded-lg px-3 py-2.5 cursor-pointer gap-3 focus:bg-white/5"
+          >
+            <Pencil className="w-4 h-4 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-[13px] font-medium text-foreground">Edit Profile</p>
+              <p className="text-[11px] text-muted-foreground">Update name, bio & avatar</p>
+            </div>
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
             onSelect={() => copyToClipboard(wallet, "Address copied")}
             className="rounded-lg px-3 py-2.5 cursor-pointer gap-3 focus:bg-white/5"
           >
@@ -169,6 +183,9 @@ function WalletButton() {
         </div>
       </DropdownMenuContent>
     </DropdownMenu>
+
+    <ProfileEditModal open={editOpen} onOpenChange={setEditOpen} />
+    </>
   );
 }
 

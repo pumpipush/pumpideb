@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   useGetProfile,
@@ -7,14 +7,13 @@ import {
   getGetRecentActivityQueryKey,
   Profile,
 } from "@workspace/api-client-react";
+import { ProfileEditModal } from "@/components/shared/ProfileEditModal";
+import { generateUsername } from "@/lib/username";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { copyToClipboard } from "@/components/shared/CopyToast";
 import { useWallet } from "@/contexts/WalletContext";
 import { formatAddress, formatMC, formatEth, formatSol, timeAgo, cn, diceBearUrl } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -29,53 +28,12 @@ import {
   Copy,
   Share2,
   Edit2,
-  X,
-  Check,
-  ArrowLeft,
   Camera,
   Coins,
-  Activity,
-  TrendingUp,
   ExternalLink,
-  Loader2,
-  Wallet,
   AlertCircle,
 } from "lucide-react";
 
-// ─── Base58 encoder — used to encode wallet signatures for server auth ────────
-const BS58_ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-function bs58Encode(bytes: Uint8Array): string {
-  let n = 0n;
-  for (const b of bytes) n = n * 256n + BigInt(b);
-  const chars: string[] = [];
-  while (n > 0n) { chars.unshift(BS58_ALPHA[Number(n % 58n)]); n /= 58n; }
-  let leading = 0;
-  for (const b of bytes) { if (b !== 0) break; leading++; }
-  return "1".repeat(leading) + chars.join("");
-}
-
-// ─── Auto-username generator (deterministic from address) ─────────────────────
-const ADJECTIVES = [
-  "Swift","Neon","Cyber","Lunar","Solar","Cosmic","Dark","Hyper","Turbo","Iron",
-  "Laser","Void","Sonic","Alpha","Omega","Nova","Quantum","Pixel","Atomic","Prism",
-  "Shadow","Blazing","Golden","Silver","Stealth","Nitro","Rapid","Apex","Ultra","Infra",
-];
-const NOUNS = [
-  "Ape","Doge","Wolf","Fox","Bear","Eagle","Shark","Tiger","Panda","Hawk",
-  "Bull","Lynx","Viper","Cobra","Raven","Drake","Sphinx","Phoenix","Dragon","Jaguar",
-  "Falcon","Rhino","Manta","Bison","Badger","Gecko","Mantis","Panther","Raptor","Titan",
-];
-
-function generateUsername(address: string): string {
-  // XOR first 8 + last 8 hex chars so each wallet gets a unique name
-  const s1 = parseInt(address.slice(2, 10), 16) >>> 0;
-  const s2 = parseInt(address.slice(-8), 16) >>> 0;
-  const combined = (s1 ^ s2) >>> 0;
-  const adj = ADJECTIVES[combined % ADJECTIVES.length];
-  const noun = NOUNS[Math.floor(combined / ADJECTIVES.length) % NOUNS.length];
-  const num = ((s1 % 90) + (s2 % 910)); // 0–999
-  return `${adj}${noun}${num}`;
-}
 
 // ─── Banner gradient + accent from address ────────────────────────────────────
 function accentHue(address: string): number {
@@ -151,25 +109,13 @@ export default function ProfilePage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug ?? "";
   const [, setLocation] = useLocation();
-  const { wallet, signMessage } = useWallet();
+  const { wallet } = useWallet();
 
   // slug can be a username or a wallet address (32-44 base58 chars)
   const looksLikeAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(slug);
 
   const [activeTab, setActiveTab] = useState<Tab>("activity");
   const [editOpen, setEditOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [editForm, setEditForm] = useState<{
-    username: string;
-    bio: string;
-    twitterHandle: string;
-    websiteUrl: string;
-    avatarUrl: string;
-    avatarPreview: string;
-  } | null>(null);
-  const [avatarUploading, setAvatarUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const { toast } = useToast();
 
   const { data: profile, isLoading, refetch } = useGetProfile(slug, {
     query: { enabled: !!slug, retry: false, queryKey: getGetProfileQueryKey(slug) },
@@ -206,147 +152,6 @@ export default function ProfilePage() {
   const totalVolume = history
     ? history.reduce((sum, t) => sum + (parseFloat(t.ethAmount) || 0), 0)
     : 0;
-
-  // ── Edit helpers ──────────────────────────────────────────────────────────
-  const openEdit = () => {
-    // Works with or without an existing profile row — owners can create via first edit.
-    const uname = profile?.username ?? "";
-    const autoName = uname.startsWith("user_") ? generateUsername(address) : (uname || generateUsername(address));
-    setEditForm({
-      username: autoName,
-      bio: profile?.bio ?? "",
-      twitterHandle: profile?.twitterHandle ?? "",
-      websiteUrl: profile?.websiteUrl ?? "",
-      avatarUrl: profile?.avatarUrl ?? "",
-      avatarPreview: profile?.avatarUrl ?? "",
-    });
-    setEditOpen(true);
-  };
-
-  const closeEdit = () => {
-    setEditOpen(false);
-    setEditForm(null);
-  };
-
-  const handleAvatarFile = useCallback((file: File) => {
-    if (!file.type.startsWith("image/")) return;
-    setAvatarUploading(true);
-
-    // Resize + convert to base64
-    const reader = new FileReader();
-    reader.onerror = () => { setAvatarUploading(false); };
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onerror = () => { setAvatarUploading(false); };
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const SIZE = 256;
-        canvas.width = SIZE;
-        canvas.height = SIZE;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) { setAvatarUploading(false); return; }
-        // Crop to square from center
-        const minDim = Math.min(img.width, img.height);
-        const sx = (img.width - minDim) / 2;
-        const sy = (img.height - minDim) / 2;
-        ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, SIZE, SIZE);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
-        setEditForm((f) => f && { ...f, avatarUrl: dataUrl, avatarPreview: dataUrl });
-        setAvatarUploading(false);
-      };
-      img.src = e.target!.result as string;
-    };
-    reader.readAsDataURL(file);
-  }, []);
-
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleAvatarFile(file);
-    e.target.value = "";
-  };
-
-  // Bug fix: validate websiteUrl — only allow http/https to prevent javascript: XSS
-  const sanitizeUrl = (url: string): string | undefined => {
-    if (!url) return undefined;
-    try {
-      const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
-      return parsed.toString();
-    } catch {
-      return undefined;
-    }
-  };
-
-  const saveProfile = async () => {
-    if (!editForm || !wallet) return;
-    setSaving(true);
-    try {
-      // 1. Obtain a server-issued single-use nonce (prevents replay)
-      const challengeRes = await fetch(`/api/profiles/challenge`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "update", address }),
-      });
-      if (!challengeRes.ok) throw new Error("Failed to obtain signing challenge");
-      const { nonce } = await challengeRes.json() as { nonce: string };
-
-      // 2. Build the canonical message the server will verify
-      const message = `RocketFi:update:${address}:${nonce}`;
-
-      // 2. Sign with the connected wallet (Ed25519 over raw UTF-8 bytes)
-      const messageBytes = new TextEncoder().encode(message);
-      const sigBytes = await signMessage(messageBytes);
-
-      // 3. Validate signature length before encoding (64 bytes for Ed25519)
-      if (!(sigBytes instanceof Uint8Array) || sigBytes.length !== 64) {
-        throw new Error("Wallet returned an invalid signature — please try again");
-      }
-
-      // 4. Base58-encode the 64-byte signature for JSON transport
-      const signature = bs58Encode(sigBytes);
-
-      // 4. Send the authenticated PATCH — server derives address from verified signer
-      const res = await fetch(`/api/profiles/${address}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // Wallet auth fields (required by the server)
-          walletAddress: wallet,
-          signature,
-          message,
-          // Profile fields
-          username: editForm.username || undefined,
-          bio: editForm.bio || undefined,
-          twitterHandle: editForm.twitterHandle.replace(/^@+/, "").trim() || undefined,
-          websiteUrl: sanitizeUrl(editForm.websiteUrl),
-          avatarUrl: editForm.avatarUrl || undefined,
-        }),
-      });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(body.error ?? `Server error ${res.status}`);
-      }
-
-      setEditOpen(false);
-      setEditForm(null);
-      const saved = await res.json() as { username?: string };
-      // If username changed (or was set for first time), redirect to the new clean URL
-      const newSlug = saved.username ?? slug;
-      if (newSlug !== slug) {
-        setLocation(`/profile/${newSlug}`);
-      } else {
-        refetch();
-      }
-      toast({ title: "Profile saved", description: "Your profile has been updated." });
-    } catch (e: unknown) {
-      // Profile save failed — keep modal open, show error
-      const msg = e instanceof Error ? e.message : "Failed to save profile";
-      toast({ title: "Save failed", description: msg, variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
 
   // ── Render ────────────────────────────────────────────────────────────────
   if (isLoading) return <ProfileSkeleton />;
@@ -401,7 +206,7 @@ export default function ProfilePage() {
           <Button
             size="sm"
             className="rounded-sm h-9 px-5"
-            onClick={openEdit}
+            onClick={() => setEditOpen(true)}
           >
             <Edit2 className="w-3.5 h-3.5 mr-1.5" /> Set up your profile
           </Button>
@@ -453,7 +258,7 @@ export default function ProfilePage() {
             </div>
             {isOwner && (
               <button
-                onClick={openEdit}
+                onClick={() => setEditOpen(true)}
                 className="absolute bottom-0 right-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors border-2 border-background"
                 title="Edit profile"
               >
@@ -486,7 +291,7 @@ export default function ProfilePage() {
                 size="sm"
                 variant="outline"
                 className="h-8 text-xs rounded-sm border-primary/50 text-primary hover:bg-primary/10"
-                onClick={openEdit}
+                onClick={() => setEditOpen(true)}
               >
                 <Edit2 className="w-3 h-3 mr-1.5" /> Edit profile
               </Button>
@@ -804,155 +609,18 @@ export default function ProfilePage() {
 
       </>} {/* end {profile && <>} */}
 
-      {/* ══ Edit Profile Modal — rendered for owners regardless of whether profile exists ══ */}
-      {editOpen && editForm && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-          onClick={(e) => e.target === e.currentTarget && closeEdit()}
-        >
-          {/* backdrop */}
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeEdit} />
-
-          <div className="relative w-full sm:max-w-lg bg-card border border-border rounded-t-2xl sm:rounded-sm shadow-2xl p-5 sm:p-6 z-10 max-h-[90dvh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-bold text-foreground">Edit Profile</h2>
-              <button onClick={closeEdit} className="text-muted-foreground hover:text-foreground transition-colors">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* ── Avatar upload ── */}
-            <div className="flex items-center gap-4 mb-6">
-              <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-border bg-muted shrink-0">
-                <img
-                  src={editForm.avatarPreview || diceBearUrl(address)}
-                  alt="avatar"
-                  className="w-full h-full object-cover"
-                  style={{ imageRendering: editForm.avatarPreview ? "auto" : "pixelated" }}
-                />
-                {avatarUploading && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                    <Loader2 className="w-5 h-5 animate-spin text-white" />
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="rounded-sm h-8 text-xs"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={avatarUploading}
-                >
-                  <Camera className="w-3.5 h-3.5 mr-1.5" />
-                  {editForm.avatarPreview ? "Change photo" : "Upload photo"}
-                </Button>
-                {editForm.avatarPreview && (
-                  <button
-                    type="button"
-                    className="text-xs text-muted-foreground hover:text-destructive transition-colors text-left"
-                    onClick={() => setEditForm((f) => f && { ...f, avatarUrl: "", avatarPreview: "" })}
-                  >
-                    Remove photo
-                  </button>
-                )}
-                <p className="text-[10px] text-muted-foreground leading-tight">
-                  JPG, PNG, GIF — max 2 MB
-                </p>
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleFileInput}
-              />
-            </div>
-
-            {/* ── Username ── */}
-            <div className="space-y-1 mb-4">
-              <label className="text-xs font-medium text-muted-foreground">Username</label>
-              <Input
-                value={editForm.username}
-                onChange={(e) => setEditForm((f) => f && { ...f, username: e.target.value })}
-                className="h-9 text-sm rounded-sm bg-background border-border/50"
-                placeholder={generateUsername(address)}
-                maxLength={32}
-              />
-              <p className="text-[10px] text-muted-foreground">
-                Auto-generated: <span className="text-foreground/60">{generateUsername(address)}</span>
-              </p>
-            </div>
-
-            {/* ── Bio ── */}
-            <div className="space-y-1 mb-4">
-              <label className="text-xs font-medium text-muted-foreground">Bio</label>
-              <Textarea
-                value={editForm.bio}
-                onChange={(e) => setEditForm((f) => f && { ...f, bio: e.target.value })}
-                className="text-sm rounded-sm bg-background border-border/50 resize-none"
-                placeholder="Tell the community about yourself..."
-                rows={3}
-                maxLength={200}
-              />
-              <p className="text-[10px] text-muted-foreground text-right">{editForm.bio.length}/200</p>
-            </div>
-
-            {/* ── Social ── */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                  <XIcon className="w-3 h-3" /> X (Twitter)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
-                  <Input
-                    value={editForm.twitterHandle}
-                    onChange={(e) => setEditForm((f) => f && { ...f, twitterHandle: e.target.value.replace("@", "") })}
-                    className="h-9 text-sm rounded-sm bg-background border-border/50 pl-7"
-                    placeholder="username"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                  <Globe className="w-3 h-3" /> Website
-                </label>
-                <Input
-                  value={editForm.websiteUrl}
-                  onChange={(e) => setEditForm((f) => f && { ...f, websiteUrl: e.target.value })}
-                  className="h-9 text-sm rounded-sm bg-background border-border/50"
-                  placeholder="https://..."
-                />
-              </div>
-            </div>
-
-            {/* ── Actions ── */}
-            <div className="flex items-center gap-2">
-              <Button
-                className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-sm font-bold h-9 px-6 flex-1 sm:flex-none"
-                onClick={saveProfile}
-                disabled={saving || avatarUploading}
-              >
-                {saving ? (
-                  <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Saving…</>
-                ) : (
-                  <><Check className="w-3.5 h-3.5 mr-1.5" /> Save changes</>
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                className="rounded-sm h-9 text-muted-foreground hover:text-foreground"
-                onClick={closeEdit}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ══ Edit Profile Modal ══ */}
+      <ProfileEditModal
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSaved={(newUsername) => {
+          if (newUsername && newUsername !== slug) {
+            setLocation(`/profile/${newUsername}`);
+          } else {
+            refetch();
+          }
+        }}
+      />
     </div>
   );
 }
