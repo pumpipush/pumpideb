@@ -170,11 +170,15 @@ export async function buildPumpFunCreateTx(
   const bytes = new Uint8Array(await res.arrayBuffer());
   const tx = VersionedTransaction.deserialize(bytes);
 
-  // Add the mint keypair's partial signature — the wallet only needs to add its own
-  tx.sign([mintKeypair]);
-
+  // Pumpportal's blockhash may already be stale by the time the user approves in their
+  // wallet (each blockhash is only valid for ~150 slots ≈ 60 s). Refresh it before
+  // signing so the transaction stays valid through the wallet confirmation step.
   const conn = getConnection();
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+  tx.message.recentBlockhash = blockhash;
+
+  // Sign with the fresh blockhash — must happen AFTER the blockhash is updated
+  tx.sign([mintKeypair]);
 
   return {
     transaction: tx,
