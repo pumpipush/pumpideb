@@ -774,12 +774,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                     : <span style={{ color: "#64748b" }}>$TICKER</span>}
                 </div>
               </div>
-              <div className="shrink-0 px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wide"
-                style={platform === "raydium"
-                  ? { background: "rgba(59,130,246,0.15)", color: "#93c5fd", border: "1px solid rgba(59,130,246,0.30)" }
-                  : { background: "rgba(168,85,247,0.15)", color: "#c084fc", border: "1px solid rgba(168,85,247,0.30)" }}>
-                {platform === "raydium" ? "RAY" : "PUMP"}
-              </div>
             </div>
 
             <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "0 16px" }} />
