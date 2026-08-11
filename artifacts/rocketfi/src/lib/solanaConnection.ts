@@ -1,20 +1,31 @@
 /**
  * solanaConnection.ts — singleton Solana RPC connection for the frontend.
  *
- * Uses the same endpoint list as api-server's FALLBACK_HTTP_RPCS so both
- * sides of the app talk to the same set of public nodes.
- *
- * Cache the Connection instance so it isn't rebuilt on every React render
- * (each new Connection() opens a WebSocket internally when needed).
+ * Priority order:
+ *   1. VITE_ALCHEMY_API_KEY — Alchemy premium endpoint (fast, high rate limits)
+ *   2. VITE_SOLANA_RPC_URL  — custom override (any RPC URL)
+ *   3. PublicNode free RPC  — keyless fallback
  */
 
 import { Connection } from "@solana/web3.js";
 
-/** Free public Solana HTTP RPC endpoints — ordered by reliability.
- *  Mirror of api-server/src/lib/adapters/solanaRpcBase.ts:FALLBACK_HTTP_RPCS */
+function getPrimaryRpc(): string {
+  const alchemyKey = (import.meta as any).env?.VITE_ALCHEMY_API_KEY as string | undefined;
+  if (alchemyKey) return `https://solana-mainnet.g.alchemy.com/v2/${alchemyKey}`;
+
+  const custom = (import.meta as any).env?.VITE_SOLANA_RPC_URL as string | undefined;
+  if (custom) return custom;
+
+  return "https://solana-rpc.publicnode.com";
+}
+
+export const PRIMARY_RPC = getPrimaryRpc();
+
+/** Ordered list of HTTP RPC endpoints — primary first, then free fallbacks */
 export const RPC_ENDPOINTS = [
-  "https://solana-rpc.publicnode.com",   // PublicNode — primary (keyless, fast)
-  "https://api.mainnet-beta.solana.com", // Solana Foundation — fallback
+  PRIMARY_RPC,
+  "https://solana-rpc.publicnode.com",
+  "https://api.mainnet-beta.solana.com",
 ] as const;
 
 let _connection: Connection | null = null;
@@ -25,7 +36,7 @@ let _connection: Connection | null = null;
  */
 export function getConnection(): Connection {
   if (!_connection) {
-    _connection = new Connection(RPC_ENDPOINTS[0], "confirmed");
+    _connection = new Connection(PRIMARY_RPC, "confirmed");
   }
   return _connection;
 }

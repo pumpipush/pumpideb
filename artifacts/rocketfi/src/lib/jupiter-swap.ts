@@ -68,9 +68,13 @@ export interface BuildJupiterSwapTxResult {
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
+/** Priority: VITE_ALCHEMY_API_KEY → VITE_SOLANA_RPC_URL → PublicNode free */
 function getRpcUrl(): string {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (import.meta as any).env?.VITE_SOLANA_RPC_URL || "https://solana-rpc.publicnode.com";
+  const env = (import.meta as any).env;
+  if (env?.VITE_ALCHEMY_API_KEY) return `https://solana-mainnet.g.alchemy.com/v2/${env.VITE_ALCHEMY_API_KEY}`;
+  if (env?.VITE_SOLANA_RPC_URL)  return env.VITE_SOLANA_RPC_URL;
+  return "https://solana-rpc.publicnode.com";
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

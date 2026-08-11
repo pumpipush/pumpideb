@@ -70,10 +70,7 @@ const SELL_DISCRIMINATOR = new Uint8Array([ 51, 230, 133, 164,  1, 127, 131, 173
 /** Platform referral fee charged on every trade (0.25% = 25 bps) */
 const PLATFORM_FEE_BPS = 25;
 
-/**
- * Free public Solana RPC endpoints (tried in priority order).
- * Override with VITE_SOLANA_RPC_URL for higher rate limits.
- */
+/** Free public Solana RPC fallbacks (used when no Alchemy key is set) */
 const PUBLIC_RPCS = [
   "https://solana-rpc.publicnode.com",
   "https://rpc.ankr.com/solana",
@@ -110,10 +107,14 @@ function getATA(owner: PublicKey, mint: PublicKey): PublicKey {
   )[0];
 }
 
-/** Resolve the Solana RPC endpoint to use */
+/** Resolve the Solana RPC endpoint to use.
+ *  Priority: VITE_ALCHEMY_API_KEY → VITE_SOLANA_RPC_URL → PublicNode free */
 function getRpcUrl(): string {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (import.meta as any).env?.VITE_SOLANA_RPC_URL || PUBLIC_RPCS[0];
+  const env = (import.meta as any).env;
+  if (env?.VITE_ALCHEMY_API_KEY) return `https://solana-mainnet.g.alchemy.com/v2/${env.VITE_ALCHEMY_API_KEY}`;
+  if (env?.VITE_SOLANA_RPC_URL)  return env.VITE_SOLANA_RPC_URL;
+  return PUBLIC_RPCS[0];
 }
 
 /** Resolve the configured platform fee recipient wallet address, or null */
