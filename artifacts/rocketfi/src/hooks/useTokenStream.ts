@@ -62,20 +62,48 @@ const MAX_LIVE_TRADES  = 200;
 const WATCHDOG_TICK    = 30_000;   // ms between watchdog checks
 const WATCHDOG_SILENCE = 45_000;   // ms of silence before watchdog forces reconnect
 
+// How long to wait before showing the reconnecting chip after `connected` goes
+// false.  Suppresses the brief flash that occurs on every initial mount while
+// the first EventSource is still opening.
+const DISCONNECT_GRACE_MS = 500;
+
 export function useTokenStream(tokenAddress: string | null): UseTokenStreamResult {
   const [liveTrades, setLiveTrades] = useState<LiveTrade[]>([]);
   const [liveToken,  setLiveToken]  = useState<LiveTokenSnapshot | null>(null);
-  const [connected,  setConnected]  = useState(false);
+
+  // `displayConnected` is what callers see.  It starts optimistic (true) so
+  // the chip never flickers on mount.  It only flips to false after
+  // DISCONNECT_GRACE_MS of genuine disconnection.
+  const [displayConnected, setDisplayConnected] = useState(true);
+  const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const lastEventMs = useRef<number>(0);
+
+  /** Cancel any pending grace timer and immediately show connected. */
+  const handleConnected = () => {
+    if (disconnectTimerRef.current) {
+      clearTimeout(disconnectTimerRef.current);
+      disconnectTimerRef.current = null;
+    }
+    setDisplayConnected(true);
+  };
+
+  /** Start grace timer; only flip to disconnected if it fires un-interrupted. */
+  const handleDisconnected = () => {
+    if (disconnectTimerRef.current) return; // already counting
+    disconnectTimerRef.current = setTimeout(() => {
+      disconnectTimerRef.current = null;
+      setDisplayConnected(false);
+    }, DISCONNECT_GRACE_MS);
+  };
 
   // Create the controller once. State setters are stable across renders
   // (React guarantees this), so we don't need to recreate the controller.
   const ctrlRef = useRef<TokenStreamController | null>(null);
   if (!ctrlRef.current) {
     ctrlRef.current = new TokenStreamController({
-      onConnected:    () => setConnected(true),
-      onDisconnected: () => setConnected(false),
+      onConnected:    handleConnected,
+      onDisconnected: handleDisconnected,
       onLastEvent:    (ms) => { lastEventMs.current = ms; },
       onMessage: (data) => {
         try {
@@ -100,13 +128,25 @@ export function useTokenStream(tokenAddress: string | null): UseTokenStreamResul
       ctrl.setAddress(null);
       setLiveTrades([]);
       setLiveToken(null);
+      // No token → reset grace state so next mount starts fresh.
+      if (disconnectTimerRef.current) {
+        clearTimeout(disconnectTimerRef.current);
+        disconnectTimerRef.current = null;
+      }
+      setDisplayConnected(true);
       return;
     }
 
-    // Fresh token selected — reset stale data, then open.
+    // Fresh token selected — reset stale data and restart the grace window,
+    // then open the stream.
     setLiveTrades([]);
     setLiveToken(null);
     lastEventMs.current = Date.now();
+    if (disconnectTimerRef.current) {
+      clearTimeout(disconnectTimerRef.current);
+      disconnectTimerRef.current = null;
+    }
+    setDisplayConnected(true);
     ctrl.setAddress(tokenAddress);
 
     // ── Watchdog ──────────────────────────────────────────────────────────────
@@ -120,8 +160,12 @@ export function useTokenStream(tokenAddress: string | null): UseTokenStreamResul
     return () => {
       clearInterval(watchdog);
       ctrl.teardown();
+      if (disconnectTimerRef.current) {
+        clearTimeout(disconnectTimerRef.current);
+        disconnectTimerRef.current = null;
+      }
     };
   }, [tokenAddress]);
 
-  return { liveTrades, liveToken, connected };
+  return { liveTrades, liveToken, connected: displayConnected };
 }

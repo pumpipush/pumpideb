@@ -56,10 +56,12 @@ const MAX_LIVE_TOKENS = 100;
 export const BADGE_TTL_MS = 12_000;
 
 // ── Reconnect / watchdog constants ────────────────────────────────────────────
-const WATCHDOG_TICK    = 30_000;   // ms between watchdog checks
-const WATCHDOG_SILENCE = 45_000;   // ms of silence before watchdog forces reconnect
-const RECONNECT_BASE   =  1_000;   // ms — first backoff interval
-const RECONNECT_MAX    = 30_000;   // ms — ceiling for exponential backoff
+const WATCHDOG_TICK      = 30_000;   // ms between watchdog checks
+const WATCHDOG_SILENCE   = 45_000;   // ms of silence before watchdog forces reconnect
+const RECONNECT_BASE     =  1_000;   // ms — first backoff interval
+const RECONNECT_MAX      = 30_000;   // ms — ceiling for exponential backoff
+/** Delay before the reconnecting chip appears — suppresses the mount-flash */
+const DISCONNECT_GRACE_MS = 500;
 
 /** Exponential backoff with ≤1 s random jitter to spread reconnect storms. */
 function reconnectDelayMs(attempt: number): number {
@@ -103,7 +105,12 @@ export interface UseFeedStreamResult {
 export function useFeedStream(): UseFeedStreamResult {
   const [liveTokens,     setLiveTokens]     = useState<FeedToken[]>([]);
   const [liveTradeStats, setLiveTradeStats] = useState<Map<string, FeedTradeStats>>(new Map());
-  const [connected,      setConnected]      = useState(false);
+
+  // `displayConnected` starts optimistic (true) so the chip never flickers on
+  // initial mount while the first EventSource is still opening.
+  // It only flips to false after DISCONNECT_GRACE_MS of genuine disconnection.
+  const [displayConnected, setDisplayConnected] = useState(true);
+  const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const esRef             = useRef<EventSource | null>(null);
   const reconnectTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -111,6 +118,24 @@ export function useFeedStream(): UseFeedStreamResult {
   const mountedRef        = useRef(true);
   const lastEventMs       = useRef<number>(0);
   const reconnectAttempts = useRef<number>(0);
+
+  /** Cancel any pending grace timer and immediately show connected. */
+  const showConnected = useCallback(() => {
+    if (disconnectTimerRef.current) {
+      clearTimeout(disconnectTimerRef.current);
+      disconnectTimerRef.current = null;
+    }
+    setDisplayConnected(true);
+  }, []);
+
+  /** Start grace timer; only flip to disconnected if it fires un-interrupted. */
+  const showDisconnectedAfterGrace = useCallback(() => {
+    if (disconnectTimerRef.current) return; // already counting
+    disconnectTimerRef.current = setTimeout(() => {
+      disconnectTimerRef.current = null;
+      setDisplayConnected(false);
+    }, DISCONNECT_GRACE_MS);
+  }, []);
 
   const openStream = useCallback(() => {
     // Tear down any existing connection + pending reconnect
@@ -123,7 +148,7 @@ export function useFeedStream(): UseFeedStreamResult {
 
     es.onopen = () => {
       if (!mountedRef.current) return;
-      setConnected(true);
+      showConnected();
       reconnectAttempts.current = 0;
       lastEventMs.current = Date.now();
     };
@@ -177,7 +202,7 @@ export function useFeedStream(): UseFeedStreamResult {
 
     es.onerror = () => {
       if (!mountedRef.current) return;
-      setConnected(false);
+      showDisconnectedAfterGrace();
       // Close — don't rely on native auto-reconnect through the reverse proxy.
       es.close();
       esRef.current = null;
@@ -189,7 +214,7 @@ export function useFeedStream(): UseFeedStreamResult {
         if (mountedRef.current) openStream();
       }, delay);
     };
-  }, []); // stable — no external deps
+  }, [showConnected, showDisconnectedAfterGrace]); // stable callbacks from useCallback
 
   useEffect(() => {
     mountedRef.current = true;
@@ -201,7 +226,7 @@ export function useFeedStream(): UseFeedStreamResult {
     // without sending data and never fired onerror). Force a fresh connection.
     const watchdog = setInterval(() => {
       if (mountedRef.current && Date.now() - lastEventMs.current > WATCHDOG_SILENCE) {
-        setConnected(false);
+        showDisconnectedAfterGrace();
         openStream();
       }
     }, WATCHDOG_TICK);
@@ -213,8 +238,9 @@ export function useFeedStream(): UseFeedStreamResult {
       if (esRef.current) { esRef.current.close(); esRef.current = null; }
       timerRefs.current.forEach((t) => clearTimeout(t));
       timerRefs.current.clear();
+      if (disconnectTimerRef.current) { clearTimeout(disconnectTimerRef.current); disconnectTimerRef.current = null; }
     };
-  }, [openStream]);
+  }, [openStream, showDisconnectedAfterGrace]);
 
-  return { liveTokens, liveTradeStats, connected };
+  return { liveTokens, liveTradeStats, connected: displayConnected };
 }
