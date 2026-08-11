@@ -2390,7 +2390,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       <button
                         onClick={() => openWalletModal()}
                         className="px-6 py-2 rounded-lg text-[13px] font-semibold tracking-wide transition-all hover:opacity-90 active:scale-95"
-                        style={{ background: "rgba(255,255,255,0.88)", border: "none", color: "#0f172a" }}
+                        style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.25)", color: "#e2e8f0" }}
                       >
                         Connect Wallet
                       </button>
