@@ -2179,9 +2179,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         <th className="text-left px-2 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Type</th>
                         <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>USD</th>
                         <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>{token.symbol}</th>
-                        <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>SOL</th>
+                        <th className="hidden md:table-cell text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>SOL</th>
                         <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Price</th>
-                        <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Maker</th>
+                        <th className="hidden md:table-cell text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Maker</th>
                         <th style={{ width: 36 }} />
                       </tr>
                     </thead>
@@ -2191,12 +2191,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                           <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                             <td style={{ width: 3, padding: 0 }}><div style={{ width: 3, height: 36, background: "rgba(255,255,255,0.06)" }} /></td>
                             <td className="px-3 py-2.5"><Skeleton className="h-3 w-8" /></td>
-                            <td className="px-2 py-2.5"><Skeleton className="h-5 w-10 rounded-full" /></td>
+                            <td className="px-2 py-2.5"><Skeleton className="h-3.5 w-8" /></td>
                             <td className="px-3 py-2.5 text-right"><Skeleton className="h-3.5 w-14 ml-auto" /></td>
                             <td className="px-3 py-2.5 text-right"><Skeleton className="h-3 w-16 ml-auto" /></td>
-                            <td className="px-3 py-2.5 text-right"><Skeleton className="h-3 w-12 ml-auto" /></td>
+                            <td className="hidden md:table-cell px-3 py-2.5 text-right"><Skeleton className="h-3 w-12 ml-auto" /></td>
                             <td className="px-3 py-2.5 text-right"><Skeleton className="h-3 w-14 ml-auto" /></td>
-                            <td className="px-3 py-2.5 text-right"><Skeleton className="h-3 w-16 ml-auto" /></td>
+                            <td className="hidden md:table-cell px-3 py-2.5 text-right"><Skeleton className="h-3 w-16 ml-auto" /></td>
                             <td />
                           </tr>
                         ))
@@ -2287,7 +2287,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               </td>
 
                               {/* SOL */}
-                              <td className="px-3 py-2.5 text-right font-mono text-[13px]" style={{ color: "#94a3b8" }}>
+                              <td className="hidden md:table-cell px-3 py-2.5 text-right font-mono text-[13px]" style={{ color: "#94a3b8" }}>
                                 {formatSol(trade.ethAmount)}
                               </td>
 
@@ -2297,7 +2297,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               </td>
 
                               {/* Maker — avatar + address */}
-                              <td className="px-3 py-2.5 text-right">
+                              <td className="hidden md:table-cell px-3 py-2.5 text-right">
                                 {trade.traderAddress ? (
                                   <a
                                     href={`https://solscan.io/account/${trade.traderAddress}`}
