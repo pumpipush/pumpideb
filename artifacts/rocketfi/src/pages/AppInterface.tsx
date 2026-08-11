@@ -2565,7 +2565,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                                         {isProfit ? "+" : ""}{pnlSol.toFixed(3)} SOL
                                       </span>
                                       {solPrice && (
-                                        <span className="font-mono text-[11px]" style={{ color: "#475569" }}>
+                                        <span className="font-mono text-[11px]" style={{ color: "#94a3b8" }}>
                                           {isProfit ? "+" : ""}{formatUSD(Math.abs(pnlSol) * solPrice)}
                                         </span>
                                       )}
