@@ -435,7 +435,7 @@ function TableView({ tokens, solPrice, activeTab, startRank }: {
 
                 {/* Age */}
                 <td className="px-4 py-3 text-right hidden xl:table-cell">
-                  <span className="font-mono text-[12px] text-muted-foreground/75">{timeAgo(token.createdAt)}</span>
+                  <span className="font-mono text-[12px]" style={{ color: "#4ade80" }}>{timeAgo(token.createdAt)}</span>
                 </td>
 
                 {/* Trade button */}
