@@ -417,6 +417,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         </div>
 
         {/* ── Platform selector ── */}
+        <p className="text-[12px] font-semibold text-white/80 uppercase tracking-widest px-0.5">Launch on</p>
         <div className="p-1 rounded-xl flex gap-1"
           style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
           {/* Pump.fun */}
