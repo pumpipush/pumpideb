@@ -833,46 +833,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
             </div>
           </div>
 
-          {/* Platform info card */}
-          {platform === "pumpfun" ? (
-            <div className="rounded-xl p-3 space-y-2"
-              style={{ background: "rgba(168,85,247,0.06)", border: "1px solid rgba(168,85,247,0.15)" }}>
-              <div className="text-[11px] font-semibold" style={{ color: "#a855f7" }}>Pump.fun Bonding Curve</div>
-              <div className="space-y-1">
-                {[
-                  ["Supply", "1B tokens"],
-                  ["Target", "$69K market cap"],
-                  ["Fee",    "~1% per trade"],
-                ].map(([k, v]) => (
-                  <div key={k} className="flex justify-between text-[11px]">
-                    <span style={{ color: "#64748b" }}>{k}</span>
-                    <span style={{ color: "#94a3b8" }}>{v}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-xl p-3 space-y-2"
-              style={{ background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.20)" }}>
-              <div className="text-[11px] font-semibold" style={{ color: "#60a5fa" }}>Raydium LaunchLab</div>
-              <div className="space-y-1">
-                {[
-                  ["Supply",   "1T tokens (6 dec)"],
-                  ["Target",   "~85 SOL raised"],
-                  ["Graduate", "CPMM pool on Raydium"],
-                  ["Fee",      "~0.25% per trade"],
-                ].map(([k, v]) => (
-                  <div key={k} className="flex justify-between text-[11px]">
-                    <span style={{ color: "#64748b" }}>{k}</span>
-                    <span style={{ color: "#94a3b8" }}>{v}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-[10px] leading-relaxed pt-1" style={{ color: "#475569", borderTop: "1px solid rgba(59,130,246,0.12)" }}>
-                SDK dimuat saat launch pertama (~1–2 detik). Token langsung masuk ke LaunchLab bonding curve.
-              </p>
-            </div>
-          )}
 
         </div>
       </div>
