@@ -3415,45 +3415,116 @@ function TrendingSidebar({ onSelectToken }: { onSelectToken: (addr: string) => v
 //   3. Generic error state if address is not in the Jupiter list at all
 
 function ExternalTokenLoader({ address, wallet }: { address: string | null; wallet: string | null }) {
-  const [extToken, setExtToken]   = useState<ExternalSolanaToken | null>(() =>
+  const [extToken, setExtToken]     = useState<ExternalSolanaToken | null>(() =>
     address ? getExternalToken(address) : null
   );
-  const [notFound, setNotFound]   = useState(false);
+  const [notFound, setNotFound]     = useState(false);
+  // Whether we're polling our API waiting for a newly-created token to be indexed
+  const [indexing, setIndexing]     = useState(false);
+  const [pollCount, setPollCount]   = useState(0);
 
   useEffect(() => {
     if (!address) { setNotFound(true); return; }
-    // If already in module cache, render immediately
     const cached = getExternalToken(address);
     if (cached) { setExtToken(cached); return; }
 
     let cancelled = false;
-    // Download the Jupiter strict list (cached for the session) then look up the address
     ensureJupiterList().then(() => {
       if (cancelled) return;
-      // getJupiterTokenByAddress looks up the loaded list by mint address
       const found = getJupiterTokenByAddress(address);
       if (found) {
-        setExternalToken(found); // populate module cache for next navigation
+        setExternalToken(found);
         setExtToken(found);
       } else {
-        setNotFound(true);
+        // Not in Jupiter strict list — might be a freshly-launched coin.
+        // Poll our own API: the indexer picks up new pump.fun tokens in ~10–30 s.
+        setIndexing(true);
       }
     });
     return () => { cancelled = true; };
   }, [address]);
 
-  // While Jupiter list is loading, show a skeleton
-  if (!extToken && !notFound) return (
+  // Poll our API every 6 s while indexing (up to ~2 min before giving up)
+  useEffect(() => {
+    if (!indexing || !address) return;
+    const MAX_POLLS = 20;
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/tokens/${address}`, { signal: AbortSignal.timeout(5_000) });
+        if (cancelled) return;
+        if (res.ok) {
+          // Token now in DB — reload the page so the main query picks it up
+          window.location.reload();
+          return;
+        }
+      } catch { /* network error — keep polling */ }
+
+      if (cancelled) return;
+      setPollCount(c => {
+        if (c + 1 >= MAX_POLLS) { setIndexing(false); setNotFound(true); }
+        return c + 1;
+      });
+    };
+
+    const id = setInterval(poll, 6_000);
+    poll(); // run immediately too
+    return () => { cancelled = true; clearInterval(id); };
+  }, [indexing, address]);
+
+  // Loading: Jupiter list resolving
+  if (!extToken && !notFound && !indexing) return (
     <div className="flex items-center justify-center w-full" style={{ minHeight: 400 }}>
       <Loader2 className="w-9 h-9 animate-spin" style={{ color: "rgba(99,102,241,0.8)" }} />
     </div>
   );
 
+  // Indexing: token was just created, waiting for our indexer to pick it up
+  if (indexing) {
+    const pumpUrl    = `https://pump.fun/coin/${address}`;
+    const solscanUrl = `https://solscan.io/token/${address}`;
+    return (
+      <div className="flex flex-col items-center justify-center py-24 gap-4 text-center px-4">
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
+          style={{ background: "rgba(74,222,128,0.12)", border: "1px solid rgba(74,222,128,0.25)" }}>
+          <Rocket className="w-7 h-7" style={{ color: "#4ade80" }} />
+        </div>
+        <div className="space-y-1">
+          <p className="font-bold text-foreground text-[16px]">Coin launched! Indexing…</p>
+          <p className="text-muted-foreground text-sm max-w-xs">
+            Your coin is live on-chain. This page will refresh automatically once our indexer picks it up
+            (usually within 30 seconds).
+          </p>
+        </div>
+        <div className="flex items-center gap-2 mt-1">
+          <Loader2 className="w-4 h-4 animate-spin" style={{ color: "#4ade80" }} />
+          <span className="text-[12px]" style={{ color: "#4ade80" }}>
+            Checking… ({pollCount + 1}/{20})
+          </span>
+        </div>
+        <div className="flex gap-2 flex-wrap justify-center mt-2">
+          <a href={pumpUrl} target="_blank" rel="noopener noreferrer"
+            className="px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-colors"
+            style={{ background: "rgba(168,85,247,0.15)", color: "#c084fc", border: "1px solid rgba(168,85,247,0.30)" }}>
+            View on Pump.fun ↗
+          </a>
+          <a href={solscanUrl} target="_blank" rel="noopener noreferrer"
+            className="px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-colors"
+            style={{ background: "rgba(255,255,255,0.05)", color: "#94a3b8", border: "1px solid rgba(255,255,255,0.10)" }}>
+            View on Solscan ↗
+          </a>
+        </div>
+        <p className="text-[10px] font-mono break-all max-w-xs" style={{ color: "#475569" }}>{address}</p>
+      </div>
+    );
+  }
+
   if (notFound || !extToken) {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
         <span className="text-3xl">🔍</span>
-        <p className="font-bold text-foreground">Token not found</p>
+        <p className="font-bold text-foreground">Coin not found</p>
         <p className="text-muted-foreground font-mono text-sm max-w-xs">
           This address is not in our platform index or the Jupiter strict token list.
         </p>
