@@ -566,11 +566,11 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               </span>
             </div>
             <Textarea
-              placeholder="Tell the community what makes this token special — lore, utility, meme origin, anything..."
+              placeholder="Write a short description about your token..."
               value={desc}
               onChange={e => setDesc(e.target.value.slice(0, 300))}
               disabled={isLaunching}
-              className="rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 min-h-[90px] resize-none text-[14px]"
+              className="rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 min-h-[90px] resize-none text-[14px] placeholder:text-slate-600"
             />
           </div>
 
