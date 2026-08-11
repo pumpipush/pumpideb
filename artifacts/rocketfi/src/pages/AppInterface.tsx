@@ -2313,8 +2313,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                                   >
                                     <span className="w-4 h-4 rounded-full shrink-0 inline-block"
                                       style={{ background: `hsl(${avatarHue} 70% 45%)` }} />
-                                    <span className="font-mono text-[11px] transition-colors group-hover/maker:text-slate-300"
-                                      style={{ color: "#475569" }}>
+                                    <span className="font-mono text-[11px] transition-colors group-hover/maker:text-slate-200"
+                                      style={{ color: "#94a3b8" }}>
                                       {trade.traderAddress.slice(0, 4)}…{trade.traderAddress.slice(-4)}
                                     </span>
                                   </a>
