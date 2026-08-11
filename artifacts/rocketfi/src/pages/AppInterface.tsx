@@ -3075,6 +3075,7 @@ function TradePanelForm({
   solBalance,
 }: TradePanelFormProps) {
   const swapSettings = useSwapSettings();
+  const solPrice = useSolPrice();
 
   return (
     <>
@@ -3116,7 +3117,8 @@ function TradePanelForm({
           <div className="flex items-center justify-between text-[11px]">
             <span className="text-muted-foreground">Balance</span>
             <span className="font-mono text-foreground/80">
-              ◎{solBalance.toFixed(4)} SOL
+              {solPrice && <span className="text-muted-foreground mr-1.5">{formatUSD(solBalance * solPrice)}</span>}
+              {solBalance.toFixed(4)} SOL
             </span>
           </div>
         )}
