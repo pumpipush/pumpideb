@@ -380,7 +380,7 @@ function TableView({ tokens, solPrice, activeTab, startRank }: {
                           <span className="shrink-0 text-[9px] font-black text-primary bg-primary/10 border border-primary/25 px-1 py-0.5 rounded leading-none">GRAD</span>
                         )}
                       </div>
-                      <span className="text-[12px] font-mono text-muted-foreground/50 leading-none">{displaySymbol(token.symbol)}</span>
+                      <span className="text-[12px] font-mono text-muted-foreground/75 leading-none">{displaySymbol(token.symbol)}</span>
                     </div>
                   </Link>
                 </td>
