@@ -548,7 +548,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                   <p className="text-[13px] font-medium" style={{ color: "#94a3b8" }}>
                     Drop image here or <span style={{ color: "#e2e8f0" }}>browse</span>
                   </p>
-                  <p className="text-[11px]" style={{ color: "#94a3b8" }}>Recommended: 500 × 500 px · Required for pump.fun</p>
                 </div>
               )}
             </div>
