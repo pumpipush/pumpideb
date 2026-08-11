@@ -837,6 +837,13 @@ export default function Dashboard() {
           imageUrl:     t.imageUrl,
           marketCapEth: tradeSnap?.marketCapEth ?? t.marketCapEth,
           priceEth:     tradeSnap?.priceEth     ?? t.priceEth,
+          // Pull volume + trade count from the live trade snapshot so cards
+          // show real numbers from the first trade rather than blanks/zeros.
+          volumeEth:    tradeSnap?.volumeEth    ?? "0",
+          tradeCount:   tradeSnap?.tradeCount   ?? 0,
+          // 24h change and trades/hr have no history yet for brand-new tokens
+          pctChange24h: null,
+          trades1h:     null,
           createdAt:    t.createdAt,
           platform:     t.platform ?? "unknown",
           graduated:    false,
