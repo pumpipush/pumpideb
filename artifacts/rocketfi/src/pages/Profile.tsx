@@ -84,7 +84,7 @@ function accentHue(address: string): number {
 function bannerGradient(address: string): string {
   const h1 = accentHue(address);
   const h2 = (h1 + 140) % 360;
-  return `linear-gradient(135deg, hsl(${h1},65%,16%) 0%, hsl(${h2},55%,10%) 100%)`;
+  return `linear-gradient(135deg, hsl(${h1},70%,28%) 0%, hsl(${h2},60%,18%) 50%, hsl(${(h2 + 60) % 360},55%,12%) 100%)`;
 }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -341,7 +341,7 @@ export default function ProfilePage() {
   // Non-owner visiting a wallet with no profile — dead end
   if (!profile && !isOwner) {
     return (
-      <div className="max-w-3xl mx-auto px-4 pt-24 flex flex-col items-center gap-4">
+      <div className="max-w-3xl mx-auto px-4 pt-12 flex flex-col items-center gap-4">
         <div className="w-16 h-16 rounded-full flex items-center justify-center"
           style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
           <Coins className="w-7 h-7" style={{ color: "#334155" }} />
@@ -364,11 +364,11 @@ export default function ProfilePage() {
     : generateUsername(address);
 
   return (
-    <div className="w-full max-w-3xl pb-16 md:pb-20">
+    <div className="w-full max-w-3xl mx-auto pb-16 md:pb-20">
 
       {/* ── Owner empty-state (no profile row yet) ── */}
       {!profile && isOwner && (
-        <div className="max-w-xl mx-auto px-4 pt-20 text-center">
+        <div className="max-w-xl mx-auto px-4 pt-10 text-center">
           <div
             className="w-24 h-24 rounded-full overflow-hidden mx-auto mb-5 border-4 border-background"
             style={{ boxShadow: `0 0 0 2px hsl(${accentHue(address)},65%,52%)` }}
@@ -401,7 +401,7 @@ export default function ProfilePage() {
       {/* ── Back ── */}
       {/* ── Banner ── */}
       <div
-        className="relative mt-2 h-28 sm:h-40 w-full overflow-hidden"
+        className="relative h-28 sm:h-36 w-full overflow-hidden"
         style={{ background: bannerGradient(address) }}
       >
         {/* radial accent glow */}
