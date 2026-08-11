@@ -432,7 +432,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                   ? { background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.35)", cursor: "default" }
                   : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)", cursor: "pointer" }}
               >
-                <div className="w-4 h-4 rounded-full" style={{ background: "linear-gradient(135deg,#a855f7,#7c3aed)" }} />
+                <img src="/pumpfun.png" alt="pump.fun" className="w-4 h-4 rounded-full object-cover shrink-0" style={{ opacity: platform === "pumpfun" ? 1 : 0.4 }} />
                 <span className="text-[12px] font-semibold"
                   style={{ color: platform === "pumpfun" ? "#c084fc" : "#64748b" }}>Pump.fun</span>
               </button>
@@ -446,7 +446,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                   ? { background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.40)", cursor: "default" }
                   : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)", cursor: "pointer" }}
               >
-                <div className="w-4 h-4 rounded-full" style={{ background: "linear-gradient(135deg,#60a5fa,#3b82f6)" }} />
+                <img src="/raydium.jpg" alt="Raydium" className="w-4 h-4 rounded-full object-cover shrink-0" style={{ opacity: platform === "raydium" ? 1 : 0.4 }} />
                 <span className="text-[12px] font-semibold"
                   style={{ color: platform === "raydium" ? "#93c5fd" : "#64748b" }}>Raydium LaunchLab</span>
                 {platform === "raydium" && (
