@@ -163,10 +163,10 @@ export default function AppInterface() {
 type LaunchStep = "idle" | "uploading" | "building" | "signing" | "confirming" | "done" | "error";
 
 const LAUNCH_STEPS: { key: LaunchStep; label: string }[] = [
-  { key: "uploading",  label: "Uploading metadata ke IPFS" },
-  { key: "building",   label: "Membangun transaksi & simulasi" },
-  { key: "signing",    label: "Menunggu tanda tangan wallet" },
-  { key: "confirming", label: "Konfirmasi on-chain" },
+  { key: "uploading",  label: "Uploading metadata to IPFS" },
+  { key: "building",   label: "Building transaction & simulation" },
+  { key: "signing",    label: "Waiting for wallet signature" },
+  { key: "confirming", label: "Confirming on-chain" },
 ];
 
 function StepIcon({ step, active, done }: { step: LaunchStep; active: boolean; done: boolean }) {
@@ -218,11 +218,11 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      toast({ title: "File tidak valid", description: "Harap upload file gambar.", variant: "destructive" });
+      toast({ title: "Invalid file", description: "Please upload an image file.", variant: "destructive" });
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      toast({ title: "File terlalu besar", description: "Gambar maksimal 5 MB.", variant: "destructive" });
+      toast({ title: "File too large", description: "Image must be under 5 MB.", variant: "destructive" });
       return;
     }
     setImageFile(file);
@@ -237,11 +237,11 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     if (!wallet) { openWalletModal(); return; }
 
     if (!name.trim() || !symbol.trim()) {
-      toast({ title: "Field wajib diisi", description: "Nama dan ticker token tidak boleh kosong.", variant: "destructive" });
+      toast({ title: "Required fields missing", description: "Name and ticker cannot be empty.", variant: "destructive" });
       return;
     }
     if (symbol.trim().length > 10) {
-      toast({ title: "Ticker terlalu panjang", description: "Ticker maksimal 10 karakter.", variant: "destructive" });
+      toast({ title: "Ticker too long", description: "Ticker must be 10 characters or fewer.", variant: "destructive" });
       return;
     }
     if (!imageFile) {
@@ -299,13 +299,13 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       setLaunchStep("error");
       const raw = err instanceof Error ? err.message : String(err);
       if (/rejected|cancel|user denied/i.test(raw)) {
-        setLaunchError("Transaksi dibatalkan. Klik Launch lagi jika ingin mencoba ulang.");
+        setLaunchError("Transaction cancelled. Click Launch again to retry.");
       } else if (/ipfs|upload|fetch/i.test(raw)) {
-        setLaunchError(`Gagal upload metadata: ${raw}. Cek koneksi internet dan coba lagi.`);
+        setLaunchError(`Metadata upload failed: ${raw}. Check your internet connection and try again.`);
       } else if (/simulat/i.test(raw)) {
-        setLaunchError(`Simulasi gagal: ${raw}\n\nPastikan balance SOL kamu cukup (minimal ~${PUMP_FUN_LAUNCH_COST_SOL} SOL).`);
+        setLaunchError(`Simulation failed: ${raw}\n\nMake sure your SOL balance is sufficient (min ~${PUMP_FUN_LAUNCH_COST_SOL} SOL).`);
       } else if (/timeout|not confirmed|Blockhash/i.test(raw)) {
-        setLaunchError("Konfirmasi timeout. Transaksi mungkin sudah berhasil — cek wallet kamu sebelum mencoba lagi.");
+        setLaunchError("Confirmation timeout. The transaction may have already succeeded — check your wallet before retrying.");
       } else {
         setLaunchError(raw);
       }
@@ -377,15 +377,15 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       setLaunchStep("error");
       const raw = err instanceof Error ? err.message : String(err);
       if (/rejected|cancel|user denied/i.test(raw)) {
-        setLaunchError("Transaksi dibatalkan. Klik Launch lagi jika ingin mencoba ulang.");
+        setLaunchError("Transaction cancelled. Click Launch again to retry.");
       } else if (/upload|ipfs|fetch/i.test(raw)) {
-        setLaunchError(`Gagal upload metadata: ${raw}. Cek koneksi internet dan coba lagi.`);
+        setLaunchError(`Metadata upload failed: ${raw}. Check your internet connection and try again.`);
       } else if (/simulat/i.test(raw)) {
-        setLaunchError(`Simulasi gagal: ${raw}\n\nPastikan balance SOL kamu cukup (minimal ~${RAYDIUM_LAUNCH_COST_SOL} SOL).`);
+        setLaunchError(`Simulation failed: ${raw}\n\nMake sure your SOL balance is sufficient (min ~${RAYDIUM_LAUNCH_COST_SOL} SOL).`);
       } else if (/timeout|not confirmed|Blockhash/i.test(raw)) {
-        setLaunchError("Konfirmasi timeout. Transaksi mungkin sudah berhasil — cek wallet kamu sebelum mencoba lagi.");
+        setLaunchError("Confirmation timeout. The transaction may have already succeeded — check your wallet before retrying.");
       } else if (/SDK tidak|config|launchpad/i.test(raw)) {
-        setLaunchError(`Gagal terhubung ke Raydium LaunchLab: ${raw}. Coba lagi dalam beberapa detik.`);
+        setLaunchError(`Failed to connect to Raydium LaunchLab: ${raw}. Try again in a few seconds.`);
       } else {
         setLaunchError(raw);
       }
@@ -674,7 +674,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.25)" }}>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-5 w-5" style={{ color: "#4ade80" }} />
-                  <span className="text-[14px] font-bold" style={{ color: "#4ade80" }}>Token berhasil dilaunched! 🚀</span>
+                  <span className="text-[14px] font-bold" style={{ color: "#4ade80" }}>Coin launched successfully! 🚀</span>
                 </div>
                 <div className="font-mono text-[11px] px-2 py-1.5 rounded-lg break-all"
                   style={{ background: "rgba(0,0,0,0.3)", color: "#94a3b8" }}>
@@ -702,7 +702,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                   className="text-[12px] font-semibold px-4 py-2 rounded-lg transition-colors"
                   style={{ background: "rgba(239,68,68,0.15)", color: "#f87171", border: "1px solid rgba(239,68,68,0.30)" }}
                 >
-                  Coba Lagi
+                  Try Again
                 </button>
               </div>
             )}

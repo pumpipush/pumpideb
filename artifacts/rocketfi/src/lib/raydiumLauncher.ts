@@ -329,7 +329,7 @@ export async function buildRaydiumLaunchTx(
   metadataUri:     string,
   onSdkLoaded?:   () => void,
 ): Promise<RaydiumLaunchTxResult> {
-  if (symbol.length > 10) throw new Error("Ticker maksimal 10 karakter");
+  if (symbol.length > 10) throw new Error("Ticker must be 10 characters or fewer");
 
   const conn  = getConnection();
   const owner = new PublicKey(walletPublicKey);
@@ -400,7 +400,7 @@ export async function buildRaydiumLaunchTx(
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`Gagal membangun transaksi Raydium: ${msg}`);
+    throw new Error(`Failed to build Raydium transaction: ${msg}`);
   }
 
   // ── Extract transactions + per-tx signers ─────────────────────────────────
@@ -478,7 +478,7 @@ export async function buildRaydiumLaunchTx(
         //                             to skip when iterating all candidates.
         // Re-throw anything else so real bugs surface early.
         if (!lower.includes("already") && !lower.includes("duplicate") && !lower.includes("unknown")) {
-          throw new Error(`Gagal partial-sign transaksi ${i}: ${msg}`);
+          throw new Error(`Failed to partial-sign transaction ${i}: ${msg}`);
         }
       }
     }
