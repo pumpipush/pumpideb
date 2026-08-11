@@ -428,11 +428,11 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               onClick={() => setPlatform("pumpfun")}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg transition-all duration-150 whitespace-nowrap"
               style={platform === "pumpfun"
-                ? { background: "rgba(168,85,247,0.18)", border: "1px solid rgba(168,85,247,0.35)", cursor: "default" }
+                ? { background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.20)", cursor: "default" }
                 : { background: "transparent", border: "1px solid transparent", cursor: "pointer" }}
             >
               <img src="/pumpfun.png" alt="pump.fun" className="w-5 h-5 rounded-full object-cover shrink-0"
-                style={{ opacity: platform === "pumpfun" ? 1 : 0.45 }} />
+                style={{ opacity: platform === "pumpfun" ? 1 : 0.4 }} />
               <span className="text-[13px] font-semibold"
                 style={{ color: platform === "pumpfun" ? "#f1f5f9" : "#64748b" }}>Pump.fun</span>
             </button>
@@ -443,11 +443,11 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               onClick={() => { setPlatform("raydium"); preloadRaydiumSdk(); }}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg transition-all duration-150 whitespace-nowrap"
               style={platform === "raydium"
-                ? { background: "rgba(59,130,246,0.18)", border: "1px solid rgba(59,130,246,0.40)", cursor: "default" }
+                ? { background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.20)", cursor: "default" }
                 : { background: "transparent", border: "1px solid transparent", cursor: "pointer" }}
             >
-              <img src="/raydium-launchlab.png" alt="Raydium LaunchLab" className="w-5 h-5 rounded-full object-cover shrink-0"
-                style={{ opacity: platform === "raydium" ? 1 : 0.45 }} />
+              <img src="/raydium-launchlab.png" alt="Raydium LaunchLab" className="w-6 h-6 rounded-md object-contain shrink-0"
+                style={{ opacity: platform === "raydium" ? 1 : 0.4 }} />
               <span className="text-[13px] font-semibold"
                 style={{ color: platform === "raydium" ? "#f1f5f9" : "#64748b" }}>Raydium LaunchLab</span>
             </button>
