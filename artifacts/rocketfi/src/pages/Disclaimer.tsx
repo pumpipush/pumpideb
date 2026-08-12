@@ -47,10 +47,6 @@ export default function Disclaimer() {
 
           {/* Header */}
           <div className="mb-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-[11px] font-mono tracking-widest text-amber-400/70 uppercase mb-5">
-              <TriangleAlert className="w-3 h-3" />
-              Legal — Risk Disclaimer
-            </div>
             <h1 className="text-[32px] md:text-[38px] font-black text-foreground tracking-tight leading-tight mb-4">
               Disclaimer
             </h1>

@@ -39,10 +39,6 @@ export default function PrivacyPolicy() {
 
           {/* Header */}
           <div className="mb-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.05] border border-white/[0.10] text-[11px] font-mono tracking-widest text-foreground/40 uppercase mb-5">
-              <Shield className="w-3 h-3" />
-              Legal — Privacy Policy
-            </div>
             <h1 className="text-[32px] md:text-[38px] font-black text-foreground tracking-tight leading-tight mb-4">
               Privacy Policy
             </h1>
