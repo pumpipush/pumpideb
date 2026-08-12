@@ -1,3 +1,4 @@
+import { HelmetProvider } from 'react-helmet-async';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { Route, Switch, Router as WouterRouter, useLocation, useSearch } from 'wouter';
@@ -71,6 +72,7 @@ function AppShell() {
 
 function App() {
   return (
+    <HelmetProvider>
     <QueryClientProvider client={queryClient}>
       <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
         <WalletProvider>
@@ -81,6 +83,7 @@ function App() {
       </WouterRouter>
       <Toaster />
     </QueryClientProvider>
+    </HelmetProvider>
   );
 }
 

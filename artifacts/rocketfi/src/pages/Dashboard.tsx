@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import { SEO } from "@/components/seo/SEO";
 import {
   useListTokens,
   getListTokensQueryKey,
@@ -929,6 +930,11 @@ export default function Dashboard() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col min-h-full bg-background text-foreground">
+      <SEO
+        title="Explore Solana Memecoins"
+        description="Discover trending Solana memecoins in real time. Browse tokens launching on pump.fun, PumpSwap, and Raydium LaunchLab — track price, market cap, and volume all in one place."
+        keywords="trending memecoins, solana tokens, bubble map, pump.fun explore, token discovery"
+      />
       <div className="w-full max-w-[1400px] mx-auto pt-2 md:pt-4 px-3 md:px-5 flex-1">
         <div className="flex flex-col min-w-0">
 

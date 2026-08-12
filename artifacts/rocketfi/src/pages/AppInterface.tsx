@@ -65,6 +65,7 @@ import {
   type ExternalSolanaToken,
 } from "@/lib/external-tokens";
 import { computeSellPresetAmount } from "@/lib/tradePresets";
+import { SEO } from "@/components/seo/SEO";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { formatSol, formatTokenAmount, formatAtomicTokenAmount, atomicToDisplayTokens, computeHoldingRow } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -1824,6 +1825,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   return (
     /* Full-bleed two-column layout — mirrors pump.fun */
     <div className="relative flex flex-col md:flex-row w-full animate-slideDown md:h-[calc(100dvh-96px)] min-w-[320px] md:min-w-[680px]">
+      <SEO
+        title={`${displayName} ($${displaySymbol})`}
+        description={`Trade ${displayName} ($${displaySymbol}) on Pumpi — real-time chart, trade history, and one-click buy/sell on Solana.`}
+        image={displayImageUrl}
+        type="article"
+        url={`${typeof window !== "undefined" ? window.location.origin : ""}/app?token=${token.address}`}
+        keywords={`${displaySymbol}, ${displayName}, solana memecoin, trade ${displaySymbol}`}
+      />
 
       {/* ── LEFT: scrollable chart + info ── */}
       <div data-token-panel className="flex-1 min-w-0 overflow-y-auto border-r border-border/20 px-0 md:px-5 py-0 md:py-4 pb-20 md:pb-6">

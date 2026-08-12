@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { SEO } from "@/components/seo/SEO";
 import {
   useGetProfile,
   useGetRecentActivity,
@@ -194,8 +195,15 @@ export default function ProfilePage() {
     ? ((profile.username ?? "").startsWith("user_") ? generateUsername(address) : (profile.username ?? generateUsername(address)))
     : generateUsername(address);
 
+  const seoUsername = profile?.username ?? `Wallet ${formatAddress(address)}`;
+
   return (
     <div className="w-full max-w-3xl mx-auto pb-16 md:pb-20">
+      <SEO
+        title={`@${seoUsername}`}
+        description={`View ${seoUsername}'s token launches, trades, and Solana portfolio on Pumpi.`}
+        url={typeof window !== "undefined" ? window.location.href : undefined}
+      />
 
       {/* ── Owner empty-state (no profile row yet) ── */}
       {!profile && isOwner && (

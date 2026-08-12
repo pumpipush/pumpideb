@@ -366,6 +366,9 @@ importers:
       lightweight-charts:
         specifier: ^5.2.0
         version: 5.2.0
+      react-helmet-async:
+        specifier: ^3.0.0
+        version: 3.0.0(react@19.1.0)
       vite-plugin-node-polyfills:
         specifier: ^0.28.0
         version: 0.28.0(rollup@4.62.3)(vite@7.3.6(@types/node@25.9.5)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)(yaml@2.9.0))
@@ -3800,6 +3803,9 @@ packages:
     resolution: {integrity: sha512-5Hh7Y1wQbvY5ooGgPbDaL5iYLAPzMTUrjMulskHLH6wnv/A+1q5rgEaiuqEjB+oxGXIVZs1FF+R/KPN3ZSQYYg==}
     engines: {node: '>=12'}
 
+  invariant@2.2.4:
+    resolution: {integrity: sha512-phJfQVBuaJM5raOpJjSfkiD6BpbCE4Ns//LaXl6wGYtUBY83nWS6Rf9tXm2e8VaK60JEjYldbPif/A2B1C2gNA==}
+
   ipaddr.js@1.9.1:
     resolution: {integrity: sha512-0KI/607xoxSToH7GjN1FfSbLoU0+btTicjsQSWQlh/hZykN8KpmMf7uYwPW3R+akZ6R/w18ZlXSHBYXiYUPO3g==}
     engines: {node: '>= 0.10'}
@@ -4513,6 +4519,14 @@ packages:
     peerDependencies:
       react: ^19.1.0
 
+  react-fast-compare@3.2.2:
+    resolution: {integrity: sha512-nsO+KSNgo1SbJqJEYRE9ERzo7YtYbou/OqjSQKxV7jcKox7+usiUVZOAC+XnDOABXggQTno0Y1CpVnuWEc1boQ==}
+
+  react-helmet-async@3.0.0:
+    resolution: {integrity: sha512-nA3IEZfXiclgrz4KLxAhqJqIfFDuvzQwlKwpdmzZIuC1KNSghDEIXmyU0TKtbM+NafnkICcwx8CECFrZ/sL/1w==}
+    peerDependencies:
+      react: ^16.6.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
   react-hook-form@7.83.0:
     resolution: {integrity: sha512-AXt8cMCmx5a7u4uvpb2uRFVrWQhllI4pV+LSykxIac/hjt44TnQkmX9BKuQi2i+LDC62esmiLpilkav+kjVf/A==}
     engines: {node: '>=18.0.0'}
@@ -4719,6 +4733,9 @@ packages:
 
   shallow-equal@3.1.0:
     resolution: {integrity: sha512-pfVOw8QZIXpMbhBWvzBISicvToTiM5WBF1EeAUZDDSb5Dt29yl4AYbyywbJFSEsRUMr7gJaxqCdr4L3tQf9wVg==}
+
+  shallowequal@1.1.0:
+    resolution: {integrity: sha512-y0m1JoUZSlPAjXVtPPW70aZWfIL/dSP7AFkRnniLCrK/8MDKog3TySTBmckD+RObVxH0v4Tox67+F14PdED2oQ==}
 
   shebang-command@2.0.0:
     resolution: {integrity: sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==}
@@ -8429,6 +8446,10 @@ snapshots:
 
   internmap@2.0.3: {}
 
+  invariant@2.2.4:
+    dependencies:
+      loose-envify: 1.4.0
+
   ipaddr.js@1.9.1: {}
 
   is-arguments@1.2.0:
@@ -9132,6 +9153,15 @@ snapshots:
       react: 19.1.0
       scheduler: 0.26.0
 
+  react-fast-compare@3.2.2: {}
+
+  react-helmet-async@3.0.0(react@19.1.0):
+    dependencies:
+      invariant: 2.2.4
+      react: 19.1.0
+      react-fast-compare: 3.2.2
+      shallowequal: 1.1.0
+
   react-hook-form@7.83.0(react@19.1.0):
     dependencies:
       react: 19.1.0
@@ -9392,6 +9422,8 @@ snapshots:
       to-buffer: 1.2.2
 
   shallow-equal@3.1.0: {}
+
+  shallowequal@1.1.0: {}
 
   shebang-command@2.0.0:
     dependencies:
