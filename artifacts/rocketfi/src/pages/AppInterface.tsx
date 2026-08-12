@@ -3232,14 +3232,16 @@ function TradePanelForm({
             : [{ label: "25%", pct: 0.25 }, { label: "50%", pct: 0.5 }, { label: "100%", pct: 1 }].map(({ label, pct }) => (
               <button
                 key={label}
-                className="flex-1 py-1.5 bg-muted/60 rounded text-xs font-bold text-muted-foreground hover:bg-white/10 hover:text-foreground border border-border/40 transition-all duration-150 active:scale-95"
+                disabled={!wallet}
+                title={!wallet ? "Connect wallet to use presets" : undefined}
+                className="flex-1 py-1.5 bg-muted/60 rounded text-xs font-bold text-muted-foreground border border-border/40 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed hover:enabled:bg-white/10 hover:enabled:text-foreground active:enabled:scale-95"
                 onClick={() => {
                   if (atomicBalance != null) {
                     // Use exact atomic balance via BigInt — never rounds up, never
                     // exceeds holdings regardless of token decimals or magnitude.
                     setAmount(computeSellPresetAmount(BigInt(atomicBalance), pct, tokenDecimals));
                   }
-                  // No wallet or balance still loading: do nothing
+                  // Balance still loading: do nothing
                 }}
               >{label}</button>
             ))
