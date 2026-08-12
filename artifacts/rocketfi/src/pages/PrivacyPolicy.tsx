@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { SEO } from "@/components/seo/SEO";
 import { Link } from "wouter";
 import { ArrowLeft, Shield, Lock, Eye, Trash2, Download } from "lucide-react";
@@ -24,6 +25,11 @@ const TOC = [
 ];
 
 export default function PrivacyPolicy() {
+  useEffect(() => {
+    const main = document.querySelector('main');
+    if (main) main.scrollTop = 0;
+  }, []);
+
   return (
     <>
       <SEO title="Privacy Policy" description="How Pumpi collects, uses, and protects your information." />

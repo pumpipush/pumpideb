@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { SEO } from "@/components/seo/SEO";
 import { Link } from "wouter";
 import { ArrowLeft, FileText } from "lucide-react";
@@ -28,6 +29,11 @@ const TOC = [
 ];
 
 export default function TermsOfService() {
+  useEffect(() => {
+    const main = document.querySelector('main');
+    if (main) main.scrollTop = 0;
+  }, []);
+
   return (
     <>
       <SEO title="Terms of Service" description="Terms and conditions governing your use of the Pumpi platform." />

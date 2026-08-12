@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { SEO } from "@/components/seo/SEO";
 import { Link } from "wouter";
 import { ArrowLeft, TriangleAlert } from "lucide-react";
@@ -32,6 +33,11 @@ const TOC = [
 ];
 
 export default function Disclaimer() {
+  useEffect(() => {
+    const main = document.querySelector('main');
+    if (main) main.scrollTop = 0;
+  }, []);
+
   return (
     <>
       <SEO title="Disclaimer" description="Important risk disclosures and disclaimers for using Pumpi." />
