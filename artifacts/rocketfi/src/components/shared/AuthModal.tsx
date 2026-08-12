@@ -261,7 +261,7 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                   {/* ── Divider ── */}
                   <div className="flex items-center gap-3">
                     <div className="flex-1 h-px bg-white/[0.07]" />
-                    <span className="text-[11px] text-white/30 whitespace-nowrap">or connect a wallet</span>
+                    <span className="text-[11px] text-white/50 whitespace-nowrap">or connect a wallet</span>
                     <div className="flex-1 h-px bg-white/[0.07]" />
                   </div>
 
@@ -352,11 +352,11 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
               )}
 
               {/* Terms */}
-              <p className="text-[10.5px] text-white/20 text-center -mt-1">
+              <p className="text-[10.5px] text-white/40 text-center -mt-1">
                 By continuing you agree to our{" "}
-                <span className="text-white/35 hover:text-white/50 cursor-pointer transition-colors">
+                <a href="/terms" className="text-white/60 hover:text-white underline underline-offset-2 transition-colors">
                   Terms of Service
-                </span>
+                </a>
               </p>
             </div>
           </div>
