@@ -125,55 +125,73 @@ export function BottomNav() {
   });
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border/60 flex items-stretch h-16 safe-area-pb">
-      <Link
-        href="/"
-        className={cn(
-          "flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-wide transition-all duration-200",
-          location === "/" ? "text-primary" : "text-muted-foreground"
-        )}
-      >
-        <LayoutGrid className={cn("w-5 h-5 transition-transform duration-200", location === "/" ? "text-primary scale-110" : "")} />
-        Explore
-      </Link>
+    <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border/60 flex flex-col safe-area-pb">
+      {/* Legal link row */}
+      <div className="flex items-center justify-center gap-3 pt-1.5 pb-0.5">
+        <Link href="/privacy" className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+          Privacy
+        </Link>
+        <span className="text-[11px] text-muted-foreground/25">·</span>
+        <Link href="/disclaimer" className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+          Disclaimer
+        </Link>
+        <span className="text-[11px] text-muted-foreground/25">·</span>
+        <Link href="/terms" className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+          Terms
+        </Link>
+      </div>
 
-      <Link
-        href="/app"
-        className="flex-1 flex flex-col items-center justify-center"
-      >
-        <div className="relative bg-primary rounded-full w-12 h-12 flex items-center justify-center shadow-[0_0_16px_rgba(255,255,255,0.2)] -mt-5 fab-ring animate-floatY transition-transform duration-150 active:scale-90">
-          <Plus className="w-6 h-6 text-primary-foreground" strokeWidth={2.5} />
-        </div>
-      </Link>
+      {/* Nav icons row */}
+      <div className="flex items-stretch h-16">
+        <Link
+          href="/"
+          className={cn(
+            "flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-wide transition-all duration-200",
+            location === "/" ? "text-primary" : "text-muted-foreground"
+          )}
+        >
+          <LayoutGrid className={cn("w-5 h-5 transition-transform duration-200", location === "/" ? "text-primary scale-110" : "")} />
+          Explore
+        </Link>
 
-      {/* Profile tab (mobile) — shows avatar when connected, generic icon when not */}
-      <Link
-        href={wallet ? `/profile/${profile?.username ?? wallet}` : "/app"}
-        className={cn(
-          "flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-wide transition-all duration-200",
-          wallet && location === `/profile/${profile?.username ?? wallet}` ? "text-primary" : "text-muted-foreground"
-        )}
-      >
-        {wallet && profile?.avatarUrl ? (
-          <img
-            src={profile.avatarUrl}
-            alt="avatar"
-            className={cn(
-              "w-5 h-5 rounded-full object-cover border",
-              location === `/profile/${profile?.username ?? wallet}` ? "border-primary" : "border-border"
-            )}
-          />
-        ) : wallet ? (
-          <TokenAvatar
-            symbol={profile?.username || wallet.slice(0, 4)}
-            size={20}
-            shape="circle"
-          />
-        ) : (
-          <UserCircle2 className="w-5 h-5" />
-        )}
-        Profile
-      </Link>
+        <Link
+          href="/app"
+          className="flex-1 flex flex-col items-center justify-center"
+        >
+          <div className="relative bg-primary rounded-full w-12 h-12 flex items-center justify-center shadow-[0_0_16px_rgba(255,255,255,0.2)] -mt-5 fab-ring animate-floatY transition-transform duration-150 active:scale-90">
+            <Plus className="w-6 h-6 text-primary-foreground" strokeWidth={2.5} />
+          </div>
+        </Link>
+
+        {/* Profile tab (mobile) — shows avatar when connected, generic icon when not */}
+        <Link
+          href={wallet ? `/profile/${profile?.username ?? wallet}` : "/app"}
+          className={cn(
+            "flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-wide transition-all duration-200",
+            wallet && location === `/profile/${profile?.username ?? wallet}` ? "text-primary" : "text-muted-foreground"
+          )}
+        >
+          {wallet && profile?.avatarUrl ? (
+            <img
+              src={profile.avatarUrl}
+              alt="avatar"
+              className={cn(
+                "w-5 h-5 rounded-full object-cover border",
+                location === `/profile/${profile?.username ?? wallet}` ? "border-primary" : "border-border"
+              )}
+            />
+          ) : wallet ? (
+            <TokenAvatar
+              symbol={profile?.username || wallet.slice(0, 4)}
+              size={20}
+              shape="circle"
+            />
+          ) : (
+            <UserCircle2 className="w-5 h-5" />
+          )}
+          Profile
+        </Link>
+      </div>
     </div>
   );
 }
