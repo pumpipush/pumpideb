@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DISCLAIMER_VERSION } from "@/pages/Disclaimer";
 
 interface RiskAcknowledgmentModalProps {
   open: boolean;
@@ -117,9 +118,10 @@ export function RiskAcknowledgmentModal({ open, onConfirm, onDismiss }: RiskAckn
   );
 }
 
-/** Returns the localStorage key used to store risk acknowledgment for a given wallet. */
+/** Returns the localStorage key used to store risk acknowledgment for a given wallet.
+ *  The key includes DISCLAIMER_VERSION so bumping it in Disclaimer.tsx re-prompts all users. */
 export function getRiskAckKey(wallet: string): string {
-  return `risk_ack_v1_${wallet}`;
+  return `risk_ack_v${DISCLAIMER_VERSION}_${wallet}`;
 }
 
 /** Returns true if this wallet has already acknowledged trading risks. */

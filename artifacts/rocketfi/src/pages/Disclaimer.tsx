@@ -2,6 +2,12 @@ import { SEO } from "@/components/seo/SEO";
 import { Link } from "wouter";
 import { ArrowLeft, TriangleAlert } from "lucide-react";
 
+/** Bump this string whenever the Disclaimer content changes materially.
+ *  All users who acknowledged an older version will be re-prompted on their next trade.
+ *  NOTE: the legacy hardcoded key was risk_ack_v1_<wallet>; this starts at "2" so that
+ *  all existing users are re-prompted at least once after the versioning system is introduced. */
+export const DISCLAIMER_VERSION = "2";
+
 const LAST_UPDATED = "August 12, 2025";
 const CONTACT_EMAIL = "legal@pumpi.io";
 const SITE_URL = "https://pumpi.io";
