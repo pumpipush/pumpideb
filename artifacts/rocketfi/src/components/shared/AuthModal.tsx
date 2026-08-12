@@ -202,6 +202,9 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
 
               {/* Header */}
               <div className="flex flex-col items-center gap-1 pb-1">
+                <div className="w-12 h-12 rounded-2xl bg-white/[0.06] border border-white/[0.10] flex items-center justify-center mb-2 overflow-hidden">
+                  <img src="/icon-192.png" alt="Pumpi" className="w-8 h-8 object-contain" />
+                </div>
                 <h2 className="text-[18px] font-bold text-white leading-tight">
                   {step === "otp" ? "Check your email" : "Welcome back"}
                 </h2>
