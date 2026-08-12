@@ -51,7 +51,7 @@ export default function Disclaimer() {
               <TriangleAlert className="w-3 h-3" />
               Legal — Risk Disclaimer
             </div>
-            <h1 className="text-[36px] md:text-[44px] font-black text-foreground tracking-tight leading-[1.05] mb-4">
+            <h1 className="text-[32px] md:text-[38px] font-black text-foreground tracking-tight leading-tight mb-4">
               Disclaimer
             </h1>
             <div className="flex flex-wrap items-center gap-3 text-[13px] text-muted-foreground">
@@ -320,14 +320,12 @@ function Dot() {
 function Section({ n, id, title, children }: { n: number; id: string; title: string; children: React.ReactNode }) {
   return (
     <div id={id} className="py-10">
-      <div className="flex items-start gap-5 mb-6">
-        <span className="text-[52px] font-black leading-none text-white/[0.12] select-none tabular-nums shrink-0 -mt-2">
+      <div className="mb-6">
+        <span className="text-[44px] font-black leading-none text-white/[0.18] select-none tabular-nums block mb-2">
           {String(n).padStart(2, "0")}
         </span>
-        <div>
-          <p className="text-[10px] font-mono text-muted-foreground/50 tracking-widest uppercase mb-1">Section {n}</p>
-          <h2 className="text-[18px] font-bold text-foreground">{title}</h2>
-        </div>
+        <p className="text-[10px] font-mono text-muted-foreground/50 tracking-widest uppercase mb-1.5">Section {n}</p>
+        <h2 className="text-[19px] font-bold text-foreground">{title}</h2>
       </div>
       <div className="space-y-4 text-[14px] leading-relaxed text-foreground/80 [&_strong]:text-foreground/95 [&_a]:text-primary [&_a:hover]:underline [&_ul]:space-y-2.5 [&_li]:relative [&_li]:pl-4 [&_li]:before:absolute [&_li]:before:left-0 [&_li]:before:top-[0.52em] [&_li]:before:w-[5px] [&_li]:before:h-[5px] [&_li]:before:rounded-full [&_li]:before:bg-white/25">
         {children}
