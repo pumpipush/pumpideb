@@ -106,6 +106,10 @@ export function Sidebar() {
           <Link href="/disclaimer" className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors">
             Disclaimer
           </Link>
+          <span className="text-[11px] text-muted-foreground/25">·</span>
+          <Link href="/terms" className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+            Terms
+          </Link>
         </div>
       </div>
     </div>

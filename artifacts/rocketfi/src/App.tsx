@@ -9,6 +9,7 @@ import AppInterface from '@/pages/AppInterface';
 import ProfilePage from '@/pages/Profile';
 import PrivacyPolicy from '@/pages/PrivacyPolicy';
 import DisclaimerPage from '@/pages/Disclaimer';
+import TermsOfService from '@/pages/TermsOfService';
 import { Sidebar, BottomNav } from '@/components/layout/Sidebar';
 import { Navbar } from '@/components/layout/Navbar';
 import { WalletProvider } from '@/contexts/WalletContext';
@@ -75,6 +76,7 @@ function AppShell() {
             <Route path="/signup"><Dashboard /></Route>
             <Route path="/privacy" component={PrivacyPolicy} />
             <Route path="/disclaimer" component={DisclaimerPage} />
+            <Route path="/terms" component={TermsOfService} />
             <Route component={NotFound} />
           </Switch>
         </main>

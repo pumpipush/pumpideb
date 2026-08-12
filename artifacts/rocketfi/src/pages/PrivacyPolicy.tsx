@@ -190,6 +190,7 @@ export default function PrivacyPolicy() {
 
           <div className="mt-12 pt-6 border-t border-white/[0.07] flex flex-wrap gap-4 text-sm text-muted-foreground">
             <Link href="/disclaimer" className="hover:text-foreground transition-colors">Disclaimer</Link>
+            <Link href="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
             <Link href="/" className="hover:text-foreground transition-colors">← Back to Pumpi</Link>
           </div>
         </div>
