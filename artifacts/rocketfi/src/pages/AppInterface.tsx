@@ -1645,9 +1645,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       // amount conventions:
       //   buy  → numAmount is SOL to spend (denominatedInSol: true)
       //   sell → numAmount is display-unit tokens to sell (denominatedInSol: false)
-      const slippagePct    = safeBps / 100;
-      // Convert micro-lamports/CU to total SOL (assuming 200K CU per swap)
-      const priorityFeeSOL = priorityFee > 0 ? (priorityFee * 200_000) / 1e15 : 0;
+      const slippagePct = safeBps / 100;
+      // Always enforce a minimum 0.001 SOL priority fee for pump.fun bonding-curve trades.
+      // Without it, transactions routinely expire on the competitive pump.fun program
+      // (~150 slots ≈ 60 s window) because they sit at the bottom of the fee queue.
+      // 0.001 SOL is small enough to be negligible but large enough to land reliably.
+      const PUMP_MIN_PRIORITY_SOL = 0.001;
+      const computedPrioritySOL   = priorityFee > 0 ? (priorityFee * 200_000) / 1e15 : 0;
+      const priorityFeeSOL        = Math.max(PUMP_MIN_PRIORITY_SOL, computedPrioritySOL);
 
       const { transaction: portalTx, blockhash, lastValidBlockHeight } =
         tradeMode === "buy"

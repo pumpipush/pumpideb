@@ -91,7 +91,13 @@ export function useTxToast() {
           if (detail) msg = detail;
         }
         console.error("[useTxToast] tx failed:", err);
-        msg = msg.slice(0, 160);
+        // Replace the raw "block height exceeded" RPC error with a user-friendly hint.
+        // This happens when the transaction didn't land on-chain before the blockhash
+        // expired (~60 s). The trade was NOT executed — it's safe to retry.
+        if (/block height exceeded|blockheight exceeded/i.test(msg)) {
+          msg = "Transaction timed out — it was not executed. Please try again (network was congested).";
+        }
+        msg = msg.slice(0, 200);
       }
 
       update({
