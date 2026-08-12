@@ -27,6 +27,7 @@ import { eq } from "drizzle-orm";
 import { db, tokensTable } from "@workspace/db";
 import { logger as rootLogger } from "./logger";
 import { fetchSafeUriMeta } from "./safeUriFetch";
+import { bs58Decode, decodeLabCreateParamsRaw } from "./adapters/launchlabDecode";
 
 const log = rootLogger.child({ module: "launchlab-backfill" });
 
@@ -101,32 +102,6 @@ async function rpcPost(body: unknown, timeoutMs = 30_000): Promise<unknown> {
   throw lastErr ?? new Error("all RPC endpoints failed");
 }
 
-// ── Borsh / Base58 utilities (inlined — same as adapter) ──────────────────────
-
-const BS58_ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-
-function bs58Decode(s: string): Uint8Array {
-  let n = 0n;
-  for (const c of s) {
-    const i = BS58_ALPHA.indexOf(c);
-    if (i < 0) throw new Error(`bad base58 char: ${c}`);
-    n = n * 58n + BigInt(i);
-  }
-  const bytes: number[] = [];
-  while (n > 0n) { bytes.unshift(Number(n & 0xffn)); n >>= 8n; }
-  let leading = 0;
-  for (const c of s) { if (c !== "1") break; leading++; }
-  return new Uint8Array([...new Array<number>(leading).fill(0), ...bytes]);
-}
-
-function readBorshStr(buf: Uint8Array, off: number): [string, number] {
-  if (off + 4 > buf.length) throw new RangeError("borsh underflow (len)");
-  const len = new DataView(buf.buffer, buf.byteOffset + off, 4).getUint32(0, true);
-  const end = off + 4 + len;
-  if (end > buf.length) throw new RangeError("borsh underflow (str)");
-  return [new TextDecoder().decode(buf.subarray(off + 4, end)), end];
-}
-
 // ── Instruction decoder ───────────────────────────────────────────────────────
 
 interface DecodedCreate {
@@ -167,29 +142,22 @@ function decodeTx(tx: Record<string, unknown>): DecodedCreate | null {
   const instr = instrs.find(i => i.programIdIndex === progIdx);
   if (!instr?.data) return null;
 
-  // Decode Borsh: try offsets 40 (disc8+mintA32), 8 (disc8), 72 (disc8+2×pubkey)
-  for (const startOff of [40, 8, 72]) {
-    try {
-      const raw = bs58Decode(instr.data);
-      if (raw.length < startOff + 8) continue;
-      let off = startOff;
-      const [name,   o1] = readBorshStr(raw, off); off = o1;
-      const [symbol, o2] = readBorshStr(raw, off); off = o2;
-      const [uri]        = readBorshStr(raw, off);
-      const n = name.trim(), s = symbol.trim();
-      if (!n || !s) continue;
-      if (n.length > 64 || s.length > 16) continue;
-      // Reject binary garbage: control chars + Unicode replacement char
-      if (/[\x00-\x08\x0B\x0E-\x1F\x7F\uFFFD]/.test(n) ||
-          /[\x00-\x08\x0B\x0E-\x1F\x7F\uFFFD]/.test(s)) continue;
+  // Decode via shared utility (probes 13 offsets, validates, rejects garbage).
+  try {
+    const raw     = bs58Decode(instr.data);
+    const decoded = decodeLabCreateParamsRaw(raw);
+    if (decoded) {
       return {
-        mint, name: n, symbol: s,
-        uri: uri.trim() || null,
+        mint,
+        name:          decoded.name,
+        symbol:        decoded.symbol,
+        uri:           decoded.uri || null,
         creatorAddress,
-        blockTime: (tx["blockTime"] as number | null) ?? null,
+        blockTime:     (tx["blockTime"] as number | null) ?? null,
       };
-    } catch { continue; }
-  }
+    }
+  } catch { /* fall through to placeholder */ }
+
   // Borsh decode failed — use placeholder (enrichment loop will fill later)
   return {
     mint,

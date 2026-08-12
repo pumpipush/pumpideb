@@ -37,6 +37,8 @@ import {
   type LogEvent,
   type RpcTx,
 } from "./solanaRpcBase";
+import { bs58Decode, decodeLabCreateParamsRaw } from "./launchlabDecode";
+export { decodeLabCreateParamsRaw } from "./launchlabDecode";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -64,23 +66,9 @@ const SKIP_MINTS = new Set([
   "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
 ]);
 
-// ── Borsh / Base58 utilities ──────────────────────────────────────────────────
+// ── Base58 encode (adapter-local — only needed to format mint pubkeys) ────────
 
 const BS58_ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-
-function bs58Decode(s: string): Uint8Array {
-  let n = 0n;
-  for (const c of s) {
-    const i = BS58_ALPHA.indexOf(c);
-    if (i < 0) throw new Error(`bad base58 char: ${c}`);
-    n = n * 58n + BigInt(i);
-  }
-  const bytes: number[] = [];
-  while (n > 0n) { bytes.unshift(Number(n & 0xffn)); n >>= 8n; }
-  let leading = 0;
-  for (const c of s) { if (c !== "1") break; leading++; }
-  return new Uint8Array([...new Array<number>(leading).fill(0), ...bytes]);
-}
 
 function bs58Encode(bytes: Buffer | Uint8Array): string {
   let n = 0n;
@@ -90,14 +78,6 @@ function bs58Encode(bytes: Buffer | Uint8Array): string {
   let leading = 0;
   for (const b of bytes) { if (b !== 0) break; leading++; }
   return "1".repeat(leading) + chars.join("");
-}
-
-function readBorshStr(buf: Uint8Array, off: number): [string, number] {
-  if (off + 4 > buf.length) throw new RangeError("borsh underflow (length)");
-  const len = new DataView(buf.buffer, buf.byteOffset + off, 4).getUint32(0, true);
-  const end = off + 4 + len;
-  if (end > buf.length) throw new RangeError("borsh underflow (string)");
-  return [new TextDecoder().decode(buf.subarray(off + 4, end)), end];
 }
 
 // ── TradeEvent fast-path decoder ──────────────────────────────────────────────
@@ -631,8 +611,8 @@ class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
 
   /**
    * Decode name / symbol / uri from a LaunchLab createLaunchpad instruction.
-   * Anchor/Borsh layout: [8 disc][32 mintA][name][symbol][uri]…
-   * Probes multiple starting offsets to handle IDL param ordering variations.
+   * Delegates to the shared decodeLabCreateParamsRaw (launchlabDecode.ts) so
+   * offset probing and validation logic live in exactly one place.
    */
   private _decodeCreateParams(tx: RpcTx): { name: string; symbol: string; uri: string } | null {
     const keys   = tx.transaction?.message?.accountKeys   ?? [];
@@ -649,26 +629,7 @@ class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
     try {
       const raw = bs58Decode(instr.data);
       if (raw.length < 12) return null;
-
-      for (const startOff of [40, 8, 72]) {
-        if (startOff + 8 > raw.length) continue;
-        try {
-          let off = startOff;
-          const [name,   off1] = readBorshStr(raw, off);  off = off1;
-          const [symbol, off2] = readBorshStr(raw, off);  off = off2;
-          const [uri]          = readBorshStr(raw, off);
-
-          const n = name.trim();
-          const s = symbol.trim();
-          if (!n || !s) continue;
-          if (n.length > 64 || s.length > 16) continue;
-          if (/[\x00-\x08\x0B\x0E-\x1F\x7F\uFFFD]/.test(n) ||
-              /[\x00-\x08\x0B\x0E-\x1F\x7F\uFFFD]/.test(s)) continue;
-
-          return { name: n, symbol: s, uri: uri.trim() };
-        } catch { continue; }
-      }
-      return null;
+      return decodeLabCreateParamsRaw(raw);
     } catch {
       return null;
     }
@@ -690,39 +651,5 @@ export async function startRaydiumLaunchLabAdapter(): Promise<void> {
   indexer.start();
 }
 
-// ── Exported decode utility ────────────────────────────────────────────────────
-
-/**
- * Attempt to decode name / symbol / uri from raw LaunchLab createLaunchpad
- * instruction bytes.  Tries an expanded set of starting offsets so tokens that
- * landed with placeholder "???" (failed with the original 40/8/72 set) can be
- * resolved in the background enrichment pass.
- *
- * Exported so the enrichment module can call it without re-implementing Borsh
- * parsing.
- */
-export function decodeLabCreateParamsRaw(
-  raw: Uint8Array,
-): { name: string; symbol: string; uri: string } | null {
-  // Expanded offset list: original [40, 8, 72] plus additional candidates
-  // that cover less-common IDL param orderings observed in the wild.
-  for (const startOff of [40, 8, 72, 0, 16, 24, 48, 56, 64, 80, 96, 104, 112]) {
-    if (startOff + 8 > raw.length) continue;
-    try {
-      let off = startOff;
-      const [name,   off1] = readBorshStr(raw, off); off = off1;
-      const [symbol, off2] = readBorshStr(raw, off); off = off2;
-      const [uri]          = readBorshStr(raw, off);
-
-      const n = name.trim();
-      const s = symbol.trim();
-      if (!n || !s) continue;
-      if (n.length > 64 || s.length > 16) continue;
-      if (/[\x00-\x08\x0B\x0E-\x1F\x7F\uFFFD]/.test(n) ||
-          /[\x00-\x08\x0B\x0E-\x1F\x7F\uFFFD]/.test(s)) continue;
-
-      return { name: n, symbol: s, uri: uri.trim() };
-    } catch { continue; }
-  }
-  return null;
-}
+// decodeLabCreateParamsRaw is re-exported at the top of this file via:
+//   export { decodeLabCreateParamsRaw } from "./launchlabDecode";

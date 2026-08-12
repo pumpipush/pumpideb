@@ -35,7 +35,7 @@ import {
   bestSolanaPair,
   type DexScreenerPair,
 } from "./dexscreener";
-import { decodeLabCreateParamsRaw } from "./adapters/raydium-launchlab";
+import { bs58Decode as _bs58Decode, decodeLabCreateParamsRaw } from "./adapters/launchlabDecode";
 
 const POLL_INTERVAL_MS       = 30_000;
 const IDENTITY_BATCH_SIZE    = 20;  // max tokens per identity tick
@@ -649,21 +649,7 @@ async function _llRpcPost(body: unknown, timeoutMs = 20_000): Promise<unknown> {
   throw lastErr ?? new Error("all RPC endpoints failed");
 }
 
-/** Base58 decoder (duplicated here to avoid circular dep on adapters/). */
-const _BS58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-function _bs58Decode(s: string): Uint8Array {
-  let n = 0n;
-  for (const c of s) {
-    const i = _BS58.indexOf(c);
-    if (i < 0) throw new Error(`bad base58: ${c}`);
-    n = n * 58n + BigInt(i);
-  }
-  const bytes: number[] = [];
-  while (n > 0n) { bytes.unshift(Number(n & 0xffn)); n >>= 8n; }
-  let leading = 0;
-  for (const c of s) { if (c !== "1") break; leading++; }
-  return new Uint8Array([...new Array<number>(leading).fill(0), ...bytes]);
-}
+// _bs58Decode and decodeLabCreateParamsRaw imported from ./adapters/launchlabDecode
 
 interface _SigEntry { signature: string; err: unknown }
 interface _RpcTxResult { result?: Record<string, unknown> | null }
