@@ -71,7 +71,6 @@ import { formatSol, formatTokenAmount, formatAtomicTokenAmount, atomicToDisplayT
 import { useToast } from "@/hooks/use-toast";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { copyToClipboard as fireClipboard } from "@/components/shared/CopyToast";
-import { RiskAcknowledgmentModal, hasAcknowledgedRisks, saveRiskAcknowledgment } from "@/components/shared/RiskAcknowledgmentModal";
 import { useLocation, useSearch } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -986,9 +985,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [amount, setAmount] = useState("");
   /** True while a trade is in-flight (signing + broadcast + on-chain confirmation). */
   const [isTradePending, setIsTradePending] = useState(false);
-  /** Controls the one-time risk acknowledgment modal. */
-  const [showRiskModal, setShowRiskModal] = useState(false);
-
   // ── Jupiter quote state (graduated tokens routed through Jupiter DEX) ─────
   const [jupiterQuote, setJupiterQuote]               = useState<JupiterQuoteResponse | null>(null);
   const [jupiterQuoteLoading, setJupiterQuoteLoading] = useState(false);
@@ -1513,12 +1509,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     // Prevent concurrent submissions: user must wait for signing + on-chain confirmation.
     if (isTradePending) return;
 
-    // One-time risk acknowledgment — show modal on first trade per wallet
-    if (!hasAcknowledgedRisks(wallet)) {
-      setShowRiskModal(true);
-      return;
-    }
-
     // Read current swap settings at execution time
     const { slippageBps, priorityFee } = getSwapSettings();
 
@@ -1842,20 +1832,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   return (
     /* Full-bleed two-column layout — mirrors pump.fun */
     <div className="relative flex flex-col md:flex-row w-full animate-slideDown md:h-[calc(100dvh-96px)] min-w-[320px] md:min-w-[680px]">
-      {/* One-time risk acknowledgment modal */}
-      {wallet && (
-        <RiskAcknowledgmentModal
-          open={showRiskModal}
-          onConfirm={() => {
-            saveRiskAcknowledgment(wallet);
-            setShowRiskModal(false);
-            // Re-invoke trade now that ack is stored
-            handleTrade();
-          }}
-          onDismiss={() => setShowRiskModal(false)}
-        />
-      )}
-
       <SEO
         fullTitle={`${displayName} ($${displaySymbol}) | Pumpi`}
         description={`Trade ${displayName} ($${displaySymbol}) on Pumpi — real-time chart, trade history, and one-click buy/sell on Solana.`}
@@ -3825,8 +3801,6 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
   const [tradeMode, setTradeMode]           = useState<"buy" | "sell">("buy");
   const [amount, setAmount]                 = useState("");
   const [isTradePending, setIsTradePending] = useState(false);
-  /** Controls the one-time risk acknowledgment modal. */
-  const [showRiskModal, setShowRiskModal] = useState(false);
   const [jupiterQuote, setJupiterQuote]     = useState<JupiterQuoteResponse | null>(null);
   const [jupiterQuoteLoading, setJupiterQuoteLoading] = useState(false);
   const [jupiterQuoteError, setJupiterQuoteError]     = useState<string | null>(null);
@@ -3886,12 +3860,6 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
     if (!amount || parseFloat(amount) <= 0) return;
     if (isTradePending) return;
 
-    // One-time risk acknowledgment — show modal on first trade per wallet
-    if (!hasAcknowledgedRisks(wallet)) {
-      setShowRiskModal(true);
-      return;
-    }
-
     const doTrade = async (): Promise<string> => {
       const numAmount    = parseFloat(amount);
       // isFinite guard: BigInt(Math.round(Infinity * 1e9)) throws RangeError
@@ -3924,20 +3892,6 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
 
   return (
     <div className="flex flex-col md:flex-row w-full animate-slideDown md:h-[calc(100dvh-96px)] min-w-[320px] md:min-w-[680px]">
-
-      {/* One-time risk acknowledgment modal */}
-      {wallet && (
-        <RiskAcknowledgmentModal
-          open={showRiskModal}
-          onConfirm={() => {
-            saveRiskAcknowledgment(wallet);
-            setShowRiskModal(false);
-            // Re-invoke trade now that ack is stored
-            handleTrade();
-          }}
-          onDismiss={() => setShowRiskModal(false)}
-        />
-      )}
 
       {/* ── LEFT: token info ── */}
       <div className="flex-1 min-w-0 overflow-y-auto border-r border-border/20 px-3 md:px-5 py-4 pb-20 md:pb-6">
