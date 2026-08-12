@@ -1666,30 +1666,26 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       // and retries stalled transactions, unlike the wallet's default free RPC endpoint.
       const signedPortalTx  = await signVersionedTransaction(portalTx);
       const conn            = getConnection();
-      // sendRawTransaction returns the base58 signature immediately on broadcast.
-      // skipPreflight=true: skip the local simulation step so a price move between
-      // "pumpportal built the tx" and "user approved in wallet" (~7-13 s) doesn't
-      // cause a false SlippageExceeded error in simulation. The on-chain program
-      // still enforces slippage — if the price moved too far the tx fails on-chain
-      // and we report it via waitForJupiterTxConfirmation.
-      // maxRetries=5 tells the RPC to re-submit on its own if the tx isn't included yet.
+      // Broadcast via Alchemy (fast stake-weighted connections, 5 auto-retries).
+      // skipPreflight=true avoids the stale-state simulation error that fires when
+      // price moves between pumpportal building the tx and the user approving it.
       const txSignature = await conn.sendRawTransaction(signedPortalTx.serialize(), {
         skipPreflight: true,
         maxRetries:    5,
       });
 
-      // Confirm via blockhash strategy. After a timeout the function checks
-      // getSignatureStatuses so a tx that landed just before the window closed
-      // is correctly reported as success rather than "timed out".
-      await waitForJupiterTxConfirmation(txSignature, blockhash, lastValidBlockHeight);
-
-      // ── Refetch from server (indexer is the authoritative source) ─────────────
-      // The pump_fun adapter has already seen the on-chain TradeEvent by now and
-      // written the confirmed trade + updated reserves. We do NOT write to the
-      // DB from the client — stale browser quotes would corrupt aggregates.
+      // ── Optimistic release — same UX as pump.fun ──────────────────────────────
+      // The tx is now in the network and Alchemy is retrying on our behalf.
+      // Clear the input and trigger an immediate optimistic refetch so the UI
+      // feels instant. We confirm in the background and do a second refetch once
+      // the tx is finalized so any late-landing balance/reserve update is captured.
       setAmount("");
       refetchToken();
       refetchHistory();
+
+      waitForJupiterTxConfirmation(txSignature, blockhash, lastValidBlockHeight)
+        .then(() => { refetchToken(); refetchHistory(); })
+        .catch(err => console.warn("[pumpfun] bg confirmation:", err));
 
       // Real Solana signature (≥60 chars) → useTxToast shows Solscan link.
       return txSignature;
@@ -3215,14 +3211,14 @@ function TradePanelForm({
           <div className="flex items-baseline gap-1.5">
             {/* $ prefix — USD buy mode only */}
             {tradeMode === "buy" && inputCurrency === "USD" && (
-              <span className="text-3xl font-medium text-muted-foreground/40 select-none">$</span>
+              <span className={`${rawInput.length > 9 ? "text-lg" : rawInput.length > 6 ? "text-2xl" : "text-3xl"} font-medium text-muted-foreground/40 select-none`}>$</span>
             )}
-            {/* Auto-sizing transparent input */}
+            {/* Auto-sizing transparent input — font scales down as value gets longer */}
             <input
               type="number"
               inputMode="decimal"
               placeholder="0"
-              className="text-4xl font-medium bg-transparent border-none outline-none text-foreground text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              className={`${rawInput.length > 9 ? "text-lg" : rawInput.length > 6 ? "text-2xl" : "text-3xl"} font-medium bg-transparent border-none outline-none text-foreground text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
               style={{ width: rawInput ? `${Math.max(1.5, rawInput.replace(".", "").length + (rawInput.includes(".") ? 0.5 : 0) + 0.3)}ch` : "1.5ch" }}
               value={rawInput}
               onChange={e => handleRawChange(e.target.value)}
