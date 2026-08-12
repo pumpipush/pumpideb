@@ -3238,12 +3238,8 @@ function TradePanelForm({
                     // Use exact atomic balance via BigInt — never rounds up, never
                     // exceeds holdings regardless of token decimals or magnitude.
                     setAmount(computeSellPresetAmount(BigInt(atomicBalance), pct, tokenDecimals));
-                  } else if (!wallet) {
-                    // No wallet connected — bonding-curve reserve as rough indication only
-                    const reserves = token.virtualTokenReserves ? parseFloat(token.virtualTokenReserves) : 0;
-                    setAmount((reserves * pct * 0.0001).toFixed(2));
                   }
-                  // Wallet connected but balance still loading/error: do nothing
+                  // No wallet or balance still loading: do nothing
                 }}
               >{label}</button>
             ))
