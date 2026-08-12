@@ -236,23 +236,6 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                     Continue with Google
                   </button>
 
-                  {/* ── Apple / GitHub / X ── */}
-                  <div className="flex items-center gap-2">
-                    {[
-                      { icon: <SiApple className="w-[18px] h-[18px]" />, label: "Apple" },
-                      { icon: <SiGithub className="w-[18px] h-[18px]" />, label: "GitHub" },
-                      { icon: <SiX className="w-[16px] h-[16px]" />, label: "X" },
-                    ].map(({ icon, label }) => (
-                      <button
-                        key={label}
-                        title={`${label} — coming soon`}
-                        disabled
-                        className="flex-1 h-11 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-white/50 cursor-not-allowed opacity-50 transition-all"
-                      >
-                        {icon}
-                      </button>
-                    ))}
-                  </div>
 
                   {/* ── Email ── */}
                   <div className="relative flex items-center">
