@@ -811,7 +811,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
       const token = bubblesRef.current[idx];
       // Use SPA navigation (wouter) instead of a hard reload so the animation
       // doesn't abruptly stop and the browser doesn't flash a blank page.
-      navigate(`/token/${token.address}`);
+      navigate(`/coin/${token.address}`);
     }
   }, [canvasToWorld, clientToCanvas, findBubble, navigate]);
 

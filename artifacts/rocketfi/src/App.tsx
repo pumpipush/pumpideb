@@ -25,7 +25,7 @@ const queryClient = new QueryClient({
   },
 });
 
-/** Renders a token page at /token/:address — path-based URL for SEO. */
+/** Renders a token page at /coin/:address — path-based URL for SEO. */
 function TokenPage() {
   const params = useParams<{ address: string }>();
   return <AppInterface tokenAddress={params.address} />;
@@ -55,10 +55,12 @@ function AppShell() {
             <Route path="/" component={Dashboard} />
             <Route path="/explore"><Redirect to="/" /></Route>
             <Route path="/dashboard"><Redirect to="/" /></Route>
-            {/* Legacy /app route — redirects to /token/:address when ?token= is present */}
+            {/* Legacy /app route — redirects to /coin/:address when ?token= is present */}
             <Route path="/app" component={AppRoute} />
-            {/* Canonical SEO-friendly token pages */}
-            <Route path="/token/:address" component={TokenPage} />
+            {/* Legacy /token/:address — redirect to canonical /coin/:address */}
+            <Route path="/token/:address" component={LegacyTokenRedirect} />
+            {/* Canonical SEO-friendly coin pages */}
+            <Route path="/coin/:address" component={TokenPage} />
             <Route path="/profile/:slug" component={ProfilePage} />
             {/* signin/signup show the explore page behind the auth modal */}
             <Route path="/signin"><Dashboard /></Route>
@@ -100,12 +102,18 @@ export default App;
 
 /**
  * Thin shim for the legacy /app route.
- * If a ?token= query param is present, redirect to the canonical /token/:address path.
+ * If a ?token= query param is present, redirect to the canonical /coin/:address path.
  * Otherwise render AppInterface normally (launch / portfolio tabs).
  */
 function AppRoute() {
   const search = useSearch();
   const tokenParam = new URLSearchParams(search).get('token');
-  if (tokenParam) return <Redirect to={`/token/${tokenParam}`} />;
+  if (tokenParam) return <Redirect to={`/coin/${tokenParam}`} />;
   return <AppInterface />;
+}
+
+/** Redirect old /token/:address links to the canonical /coin/:address path. */
+function LegacyTokenRedirect() {
+  const params = useParams<{ address: string }>();
+  return <Redirect to={`/coin/${params.address}`} />;
 }

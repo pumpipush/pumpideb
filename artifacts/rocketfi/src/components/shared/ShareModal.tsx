@@ -253,7 +253,7 @@ async function generateCardCanvas(
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function ShareModal({ token, open, onClose, solPrice, priceStats }: ShareModalProps) {
-  const url = `${window.location.origin}/token/${token.address}`;
+  const url = `${window.location.origin}/coin/${token.address}`;
   const tweetText = `🚀 Just found $${token.symbol} on Pumpi!\n\nMC: ${formatMCUsd(token.marketCapEth, solPrice ?? null)}${priceStats?.p24h ? ` · 24h ${priceStats.p24h.val}` : ""}\n\n${url}`;
   const telegramText = encodeURIComponent(`🔥 $${token.symbol} on Pumpi — ${formatMCUsd(token.marketCapEth, solPrice ?? null)} MC\n${url}`);
 

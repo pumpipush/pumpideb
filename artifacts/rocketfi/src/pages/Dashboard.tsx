@@ -355,7 +355,7 @@ function TableView({ tokens, solPrice, activeTab, startRank }: {
 
                 {/* Token */}
                 <td className="px-4 py-3">
-                  <Link href={`/token/${token.address}`} className="flex items-center gap-3 min-w-0 group/row">
+                  <Link href={`/coin/${token.address}`} className="flex items-center gap-3 min-w-0 group/row">
                     {/* Avatar */}
                     <div className="relative shrink-0">
                       <div className="w-9 h-9 rounded-lg overflow-hidden ring-1 ring-white/[0.08]">
@@ -450,7 +450,7 @@ function TableView({ tokens, solPrice, activeTab, startRank }: {
                 {/* Trade button */}
                 <td className="px-4 py-3 text-right">
                   <Link
-                    href={`/token/${token.address}`}
+                    href={`/coin/${token.address}`}
                     className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all duration-150"
                     style={{
                       background: "rgba(59,130,246,0.10)",
@@ -509,7 +509,7 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
 
   return (
     <Link
-      href={`/token/${token.address}`}
+      href={`/coin/${token.address}`}
       className={cn(
         "flex flex-col bg-card border rounded-sm cursor-pointer group relative card-lift",
         isHot

@@ -131,7 +131,7 @@ export default function AppInterface({ tokenAddress: routeAddress }: AppInterfac
     setSelectedTokenId(address);
     setActiveTab("trade");
     // Navigate to canonical SEO-friendly path
-    setLocation(`/token/${address}`);
+    setLocation(`/coin/${address}`);
   };
 
   const TAB_TRIGGER = "rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent px-5 py-2.5 text-sm text-muted-foreground hover:text-foreground transition-all duration-150 data-[state=active]:shadow-none";
@@ -1838,7 +1838,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         description={`Trade ${displayName} ($${displaySymbol}) on Pumpi — real-time chart, trade history, and one-click buy/sell on Solana.`}
         image={displayImageUrl}
         type="article"
-        url={`${typeof window !== "undefined" ? window.location.origin : ""}/token/${token.address}`}
+        url={`${typeof window !== "undefined" ? window.location.origin : ""}/coin/${token.address}`}
         keywords={`${displaySymbol}, ${displayName}, solana memecoin, trade ${displaySymbol}`}
       />
 
