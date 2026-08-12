@@ -318,7 +318,6 @@ function Section({ n, id, title, children }: { n: number; id: string; title: str
         <span className="text-[44px] font-black leading-none text-white/[0.18] select-none tabular-nums block mb-2">
           {String(n).padStart(2, "0")}
         </span>
-        <p className="text-[10px] font-mono text-muted-foreground/50 tracking-widest uppercase mb-1.5">Section {n}</p>
         <h2 className="text-[19px] font-bold text-foreground">{title}</h2>
       </div>
       <div className="space-y-4 text-[14px] leading-relaxed text-foreground/80 [&_strong]:text-foreground/95 [&_a]:text-primary [&_a:hover]:underline [&_ul]:space-y-2.5 [&_li]:relative [&_li]:pl-4 [&_li]:before:absolute [&_li]:before:left-0 [&_li]:before:top-[0.52em] [&_li]:before:w-[5px] [&_li]:before:h-[5px] [&_li]:before:rounded-full [&_li]:before:bg-white/25">
