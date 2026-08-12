@@ -1826,7 +1826,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     /* Full-bleed two-column layout — mirrors pump.fun */
     <div className="relative flex flex-col md:flex-row w-full animate-slideDown md:h-[calc(100dvh-96px)] min-w-[320px] md:min-w-[680px]">
       <SEO
-        title={`${displayName} ($${displaySymbol})`}
+        fullTitle={`${displayName} ($${displaySymbol}) | Pumpi`}
         description={`Trade ${displayName} ($${displaySymbol}) on Pumpi — real-time chart, trade history, and one-click buy/sell on Solana.`}
         image={displayImageUrl}
         type="article"
