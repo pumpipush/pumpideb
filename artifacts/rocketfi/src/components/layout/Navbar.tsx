@@ -6,21 +6,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Wallet, UserCircle, Copy, LogOut, ExternalLink, ChevronDown, Pencil } from "lucide-react";
+import { Search, UserCircle, Copy, LogOut, ExternalLink, ChevronDown, Pencil, Plus, LogIn } from "lucide-react";
 import { useWallet } from "@/contexts/WalletContext";
 import { useGetProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
 import { formatAddress, diceBearUrl } from "@/lib/utils";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { openSearch } from "@/components/shared/SearchDialog";
 import { useState } from "react";
-import { WalletSelectModal } from "@/components/shared/WalletSelectModal";
 import { useToast } from "@/hooks/use-toast";
 import { copyToClipboard } from "@/components/shared/CopyToast";
 import { ProfileEditModal } from "@/components/shared/ProfileEditModal";
 
 function WalletButton() {
   const { wallet, walletName, disconnect } = useWallet();
-  const [walletModal, setWalletModal] = useState(false);
+  const [, navigate] = useLocation();
   const [editOpen, setEditOpen] = useState(false);
   const { toast } = useToast();
 
@@ -38,28 +37,22 @@ function WalletButton() {
       <>
         {/* Mobile: icon only */}
         <button
-          onClick={() => setWalletModal(true)}
+          onClick={() => navigate("/signin")}
           className="md:hidden flex items-center justify-center h-8 w-8 rounded-[8px] border border-primary/50 text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
-          aria-label="Connect Wallet"
+          aria-label="Sign In"
         >
-          <Wallet className="h-4 w-4" />
+          <LogIn className="h-4 w-4" />
         </button>
 
         {/* Desktop: text button */}
         <Button
           size="sm"
-          onClick={() => setWalletModal(true)}
+          onClick={() => navigate("/signin")}
           className="hidden md:flex items-center gap-1.5 h-8 text-xs font-semibold rounded-[8px] bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-150 shrink-0"
         >
-          <Wallet className="h-3.5 w-3.5" />
-          Connect Wallet
+          <Plus className="h-3.5 w-3.5" />
+          Sign In
         </Button>
-
-        <WalletSelectModal
-          open={walletModal}
-          onOpenChange={setWalletModal}
-          onSuccess={() => toast({ title: "Wallet connected", description: "You're ready to trade on Solana." })}
-        />
       </>
     );
   }
