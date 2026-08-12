@@ -57,6 +57,13 @@
       "when": 1786450000000,
       "tag": "0007_add_username_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786508000000,
+      "tag": "0008_add_social_auth",
+      "breakpoints": true
     }
   ]
 }

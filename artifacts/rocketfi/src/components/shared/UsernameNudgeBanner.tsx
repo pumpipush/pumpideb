@@ -1,9 +1,9 @@
 /**
  * UsernameNudgeBanner — one-time prompt to set a real username.
  *
- * Shown after wallet connection when the profile username is still the
- * auto-generated default (starts with "user_"). Dismissed via an ×
- * button and the dismiss state is persisted to localStorage per wallet.
+ * Shown after wallet connection OR social sign-in when the profile username is
+ * still the auto-generated default (starts with "user_"). Dismissed via an ×
+ * button and the dismiss state is persisted to localStorage per address.
  *
  * Rendered at the top of the main content area in AppShell so it pushes
  * content down naturally without overlapping it.
@@ -11,49 +11,51 @@
 
 import { useState, useEffect } from "react";
 import { useWallet } from "@/contexts/WalletContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useGetProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { X, Sparkles } from "lucide-react";
 
-function dismissKey(wallet: string) {
-  return `pumpi_username_nudge_dismissed_${wallet}`;
+function dismissKey(address: string) {
+  return `pumpi_username_nudge_dismissed_${address}`;
 }
 
 export function UsernameNudgeBanner() {
   const { wallet } = useWallet();
+  const { socialUser } = useAuth();
   const [, setLocation] = useLocation();
   const [dismissed, setDismissed] = useState(false);
 
-  const { data: profile } = useGetProfile(wallet ?? "", {
+  // Use wallet address first, fall back to social user's UUID address
+  const effectiveAddress = wallet ?? socialUser?.address ?? null;
+
+  const { data: profile } = useGetProfile(effectiveAddress ?? "", {
     query: {
-      enabled: !!wallet,
+      enabled: !!effectiveAddress,
       retry: false,
-      queryKey: getGetProfileQueryKey(wallet ?? ""),
+      queryKey: getGetProfileQueryKey(effectiveAddress ?? ""),
     },
   });
 
-  // Re-check localStorage whenever the wallet changes
+  // Re-check localStorage whenever the effective address changes
   useEffect(() => {
-    if (!wallet) {
-      setDismissed(false);
-      return;
-    }
-    setDismissed(localStorage.getItem(dismissKey(wallet)) === "1");
-  }, [wallet]);
+    if (!effectiveAddress) { setDismissed(false); return; }
+    setDismissed(localStorage.getItem(dismissKey(effectiveAddress)) === "1");
+  }, [effectiveAddress]);
 
-  // Nothing to show: no wallet, dismissed, or already has a custom username
-  if (!wallet) return null;
+  // Nothing to show if nobody is signed in, already dismissed, or username is custom
+  if (!effectiveAddress) return null;
   if (dismissed) return null;
   if (!profile) return null;
   if (!profile.username?.startsWith("user_")) return null;
 
   function handleDismiss() {
-    if (wallet) localStorage.setItem(dismissKey(wallet), "1");
+    if (effectiveAddress) localStorage.setItem(dismissKey(effectiveAddress), "1");
     setDismissed(true);
   }
 
   function handleSetUsername() {
-    setLocation(`/profile/${wallet}?editUsername=1`);
+    setLocation(`/profile/${effectiveAddress}?editUsername=1`);
   }
 
   return (

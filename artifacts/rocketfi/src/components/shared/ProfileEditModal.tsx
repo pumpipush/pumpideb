@@ -12,6 +12,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useWallet } from "@/contexts/WalletContext";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   useGetProfile,
   getGetProfileQueryKey,
@@ -74,15 +75,19 @@ interface ProfileEditModalProps {
 
 export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }: ProfileEditModalProps) {
   const { wallet, signMessage } = useWallet();
+  const { socialUser, authHeaders } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
-  const { data: profile, isLoading: profileLoading } = useGetProfile(wallet ?? "", {
-    query: { enabled: !!wallet, retry: false, queryKey: getGetProfileQueryKey(wallet ?? "") },
+  // Social user (Google/email) can edit their profile without a wallet
+  const effectiveAddress = wallet ?? socialUser?.address ?? "";
+
+  const { data: profile, isLoading: profileLoading } = useGetProfile(effectiveAddress, {
+    query: { enabled: !!effectiveAddress, retry: false, queryKey: getGetProfileQueryKey(effectiveAddress) },
   });
 
-  const address = profile?.address ?? wallet ?? "";
+  const address = profile?.address ?? effectiveAddress;
 
   // ── Form state ──────────────────────────────────────────────────────────────
   const [form, setForm] = useState<{
@@ -106,11 +111,11 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
       setForm(null);
       return;
     }
-    if (!wallet) return;
+    if (!effectiveAddress) return;
     if (profileLoading) return; // query still in flight — keep form null (spinner shown)
 
-    // Query settled (profile row exists or wallet has no row yet)
-    const addr = profile?.address ?? wallet;
+    // Query settled (profile row exists or address has no row yet)
+    const addr = profile?.address ?? effectiveAddress;
     const uname = profile?.username ?? "";
     const autoName = uname.startsWith("user_")
       ? generateUsername(addr)
@@ -128,10 +133,10 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
     if (focusUsername) {
       setTimeout(() => usernameInputRef.current?.focus(), 50);
     }
-    // Only re-init when the modal first opens or profile identity changes.
+    // Only re-init when the modal first opens or identity changes.
     // Intentionally omit `profile` fields from deps so typing doesn't reset the form.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, wallet, profileLoading]);
+  }, [open, effectiveAddress, profileLoading]);
 
   const close = () => {
     onOpenChange(false);
@@ -168,38 +173,48 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
 
   // ── Save ────────────────────────────────────────────────────────────────────
   const saveProfile = async () => {
-    if (!form || !wallet || !address) return;
+    if (!form || !address) return;
     setSaving(true);
     try {
-      const challengeRes = await fetch("/api/profiles/challenge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "update", address }),
-      });
-      if (!challengeRes.ok) throw new Error("Failed to obtain signing challenge");
-      const { nonce } = await challengeRes.json() as { nonce: string };
+      let patchHeaders: Record<string, string> = { "Content-Type": "application/json" };
+      let patchBody: Record<string, string | undefined>;
 
-      const message = `RocketFi:update:${address}:${nonce}`;
-      const messageBytes = new TextEncoder().encode(message);
-      const sigBytes = await signMessage(messageBytes);
-      if (!(sigBytes instanceof Uint8Array) || sigBytes.length !== 64) {
-        throw new Error("Wallet returned an invalid signature — please try again");
+      const profileFields = {
+        username:      form.username || undefined,
+        bio:           form.bio || undefined,
+        twitterHandle: form.twitterHandle.replace(/^@+/, "").trim() || undefined,
+        websiteUrl:    sanitizeUrl(form.websiteUrl),
+        avatarUrl:     form.avatarUrl || undefined,
+      };
+
+      if (wallet) {
+        // ── Wallet path: sign a challenge ──────────────────────────────────
+        const challengeRes = await fetch("/api/profiles/challenge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "update", address }),
+        });
+        if (!challengeRes.ok) throw new Error("Failed to obtain signing challenge");
+        const { nonce } = await challengeRes.json() as { nonce: string };
+
+        const message = `RocketFi:update:${address}:${nonce}`;
+        const messageBytes = new TextEncoder().encode(message);
+        const sigBytes = await signMessage(messageBytes);
+        if (!(sigBytes instanceof Uint8Array) || sigBytes.length !== 64) {
+          throw new Error("Wallet returned an invalid signature — please try again");
+        }
+        const signature = bs58Encode(sigBytes);
+        patchBody = { walletAddress: wallet, signature, message, ...profileFields };
+      } else {
+        // ── Social auth path: JWT Bearer token ────────────────────────────
+        patchHeaders = { ...patchHeaders, ...authHeaders() };
+        patchBody = profileFields;
       }
-      const signature = bs58Encode(sigBytes);
 
       const res = await fetch(`/api/profiles/${address}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          walletAddress: wallet,
-          signature,
-          message,
-          username: form.username || undefined,
-          bio: form.bio || undefined,
-          twitterHandle: form.twitterHandle.replace(/^@+/, "").trim() || undefined,
-          websiteUrl: sanitizeUrl(form.websiteUrl),
-          avatarUrl: form.avatarUrl || undefined,
-        }),
+        headers: patchHeaders,
+        body: JSON.stringify(patchBody),
       });
 
       if (!res.ok) {
@@ -211,8 +226,8 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
       const newUsername = saved.username ?? (profile?.username ?? "");
 
       // Invalidate all profile-related queries so callers re-fetch
-      await queryClient.invalidateQueries({ queryKey: getGetProfileQueryKey(wallet) });
-      if (profile?.username && profile.username !== wallet) {
+      await queryClient.invalidateQueries({ queryKey: getGetProfileQueryKey(address) });
+      if (profile?.username && profile.username !== address) {
         await queryClient.invalidateQueries({ queryKey: getGetProfileQueryKey(profile.username) });
       }
 
@@ -233,7 +248,7 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
     }
   };
 
-  if (!open || !wallet) return null;
+  if (!open || !effectiveAddress) return null;
 
   // Show a loading shell while the profile query is still in flight
   if (!form) {

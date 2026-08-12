@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Search, UserCircle, Copy, LogOut, ExternalLink, ChevronDown, Pencil, Plus, LogIn } from "lucide-react";
 import { useWallet } from "@/contexts/WalletContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useGetProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
 import { formatAddress, diceBearUrl } from "@/lib/utils";
 import { Link, useLocation } from "wouter";
@@ -19,12 +20,14 @@ import { ProfileEditModal } from "@/components/shared/ProfileEditModal";
 
 function WalletButton() {
   const { wallet, walletName, disconnect } = useWallet();
+  const { socialUser, signOut } = useAuth();
   const [, navigate] = useLocation();
   const [editOpen, setEditOpen] = useState(false);
   const { toast } = useToast();
 
   async function handleLogout() {
-    await disconnect();
+    if (wallet) await disconnect();
+    if (socialUser) signOut();
     toast({ title: "Logged out", description: "See you next time." });
   }
 
@@ -32,7 +35,8 @@ function WalletButton() {
     query: { enabled: !!wallet, retry: false, queryKey: getGetProfileQueryKey(wallet ?? "") },
   });
 
-  if (!wallet) {
+  // Not signed in at all — show Sign In button
+  if (!wallet && !socialUser) {
     return (
       <>
         {/* Mobile: icon only */}
@@ -57,8 +61,11 @@ function WalletButton() {
     );
   }
 
-  const profileSlug = profile?.username ?? wallet;
-  const displayName = profile?.username ?? formatAddress(wallet);
+  // Resolve display info — wallet profile takes priority over social user
+  const profileSlug = profile?.username ?? (socialUser ? `/profile/${socialUser.address}` : wallet ?? "");
+  const displayName = profile?.username ?? socialUser?.username ?? (wallet ? formatAddress(wallet) : "");
+  const avatarUrl   = profile?.avatarUrl ?? socialUser?.avatarUrl ?? (wallet ? diceBearUrl(wallet) : null);
+  const subLine     = walletName ?? socialUser?.email ?? (wallet ? formatAddress(wallet) : "");
 
   return (
     <>
@@ -68,17 +75,17 @@ function WalletButton() {
           {/* Avatar */}
           <div className="h-7 w-7 rounded-full overflow-hidden border border-border/80 shrink-0">
             <img
-              src={profile?.avatarUrl || diceBearUrl(wallet)}
+              src={avatarUrl ?? diceBearUrl(wallet ?? socialUser?.address ?? "")}
               alt={displayName}
               className="w-full h-full object-cover"
-              style={{ imageRendering: profile?.avatarUrl ? "auto" : "pixelated" }}
+              style={{ imageRendering: avatarUrl ? "auto" : "pixelated" }}
             />
           </div>
-          {/* Name + address — desktop */}
+          {/* Name + subline — desktop */}
           <div className="hidden sm:flex flex-col items-start leading-none">
             <span className="text-[12px] font-semibold text-foreground">{displayName}</span>
             <span className="text-[10px] font-mono text-muted-foreground/70 mt-0.5">
-              {walletName ? walletName : formatAddress(wallet)}
+              {subLine}
             </span>
           </div>
           <ChevronDown className="w-3 h-3 text-muted-foreground/60 group-data-[state=open]:rotate-180 transition-transform duration-200 hidden sm:block" />
@@ -94,17 +101,17 @@ function WalletButton() {
         <div className="flex items-center gap-3 px-4 py-3.5 bg-card/60">
           <div className="h-10 w-10 rounded-full overflow-hidden border-2 border-border shrink-0">
             <img
-              src={profile?.avatarUrl || diceBearUrl(wallet)}
+              src={avatarUrl ?? diceBearUrl(wallet ?? socialUser?.address ?? "")}
               alt={displayName}
               className="w-full h-full object-cover"
-              style={{ imageRendering: profile?.avatarUrl ? "auto" : "pixelated" }}
+              style={{ imageRendering: avatarUrl ? "auto" : "pixelated" }}
             />
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground truncate">{displayName}</p>
             <div className="flex items-center gap-1.5 mt-0.5">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-              <p className="text-[11px] font-mono text-muted-foreground truncate">{formatAddress(wallet)}</p>
+              <p className="text-[11px] font-mono text-muted-foreground truncate">{subLine}</p>
             </div>
           </div>
         </div>
@@ -134,30 +141,31 @@ function WalletButton() {
             </div>
           </DropdownMenuItem>
 
-          <DropdownMenuItem
-            onSelect={() => copyToClipboard(wallet, "Address copied")}
-            className="rounded-lg px-3 py-2.5 cursor-pointer gap-3 focus:bg-white/5"
-          >
-            <Copy className="w-4 h-4 text-muted-foreground shrink-0" />
-            <div>
-              <p className="text-[13px] font-medium text-foreground">Copy Address</p>
-              <p className="text-[11px] text-muted-foreground font-mono">{formatAddress(wallet)}</p>
-            </div>
-          </DropdownMenuItem>
+          {/* Wallet-specific actions — only when wallet is connected */}
+          {wallet && (
+            <>
+              <DropdownMenuItem
+                onSelect={() => copyToClipboard(wallet, "Address copied")}
+                className="rounded-lg px-3 py-2.5 cursor-pointer gap-3 focus:bg-white/5"
+              >
+                <Copy className="w-4 h-4 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-[13px] font-medium text-foreground">Copy Address</p>
+                  <p className="text-[11px] text-muted-foreground font-mono">{formatAddress(wallet)}</p>
+                </div>
+              </DropdownMenuItem>
 
-          <DropdownMenuItem asChild className="rounded-lg px-3 py-2.5 cursor-pointer gap-3 focus:bg-white/5">
-            <a
-              href={`https://solscan.io/account/${wallet}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0" />
-              <div>
-                <p className="text-[13px] font-medium text-foreground">View on Solscan</p>
-                <p className="text-[11px] text-muted-foreground">Check on-chain activity</p>
-              </div>
-            </a>
-          </DropdownMenuItem>
+              <DropdownMenuItem asChild className="rounded-lg px-3 py-2.5 cursor-pointer gap-3 focus:bg-white/5">
+                <a href={`https://solscan.io/account/${wallet}`} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <div>
+                    <p className="text-[13px] font-medium text-foreground">View on Solscan</p>
+                    <p className="text-[11px] text-muted-foreground">Check on-chain activity</p>
+                  </div>
+                </a>
+              </DropdownMenuItem>
+            </>
+          )}
         </div>
 
         <DropdownMenuSeparator className="my-0" />
@@ -170,7 +178,9 @@ function WalletButton() {
             <LogOut className="w-4 h-4 shrink-0" />
             <div>
               <p className="text-[13px] font-medium">Log out</p>
-              <p className="text-[11px] opacity-60">Disconnect your wallet</p>
+              <p className="text-[11px] opacity-60">
+                {wallet && socialUser ? "Disconnect wallet & sign out" : wallet ? "Disconnect wallet" : "Sign out"}
+              </p>
             </div>
           </DropdownMenuItem>
         </div>

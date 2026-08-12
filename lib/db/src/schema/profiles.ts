@@ -11,6 +11,10 @@ export const profilesTable = pgTable("profiles", {
   websiteUrl: text("website_url"),
   followersCount: integer("followers_count").notNull().default(0),
   followingCount: integer("following_count").notNull().default(0),
+  // Social auth columns (nullable for wallet-only users)
+  email: text("email").unique(),
+  googleId: text("google_id").unique(),
+  authType: text("auth_type").notNull().default("wallet"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

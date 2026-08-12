@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { copyToClipboard } from "@/components/shared/CopyToast";
 import { useWallet } from "@/contexts/WalletContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatAddress, formatMC, formatEth, formatSol, timeAgo, cn, diceBearUrl } from "@/lib/utils";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Link } from "wouter";
@@ -112,6 +113,7 @@ export default function ProfilePage() {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const { wallet } = useWallet();
+  const { socialUser } = useAuth();
 
   // slug can be a username or a wallet address (32-44 base58 chars)
   const looksLikeAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(slug);
@@ -126,9 +128,12 @@ export default function ProfilePage() {
     query: { enabled: !!slug, retry: false, queryKey: getGetProfileQueryKey(slug) },
   });
 
-  // Resolved wallet address — from profile if loaded, or directly if slug is an address
+  // Resolved address — from profile if loaded, or directly if slug is an address
   const address = profile?.address ?? (looksLikeAddress ? slug : "");
-  const isOwner = !!wallet && !!address && wallet.toLowerCase() === address.toLowerCase();
+  // Owner: either the connected wallet matches, OR the social user's UUID matches
+  const isOwner =
+    (!!wallet && !!address && wallet.toLowerCase() === address.toLowerCase()) ||
+    (!!socialUser && !!address && socialUser.address === address);
 
   // ── Auto-open edit modal when coming from the username nudge banner ────────
   const autoOpenedRef = useRef(false);

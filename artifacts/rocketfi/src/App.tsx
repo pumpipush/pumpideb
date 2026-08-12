@@ -1,20 +1,22 @@
 import { HelmetProvider } from 'react-helmet-async';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
-import { Route, Switch, Router as WouterRouter, useLocation, useSearch, useParams } from 'wouter';
+import { Route, Switch, Redirect, Router as WouterRouter, useLocation, useSearch, useParams } from 'wouter';
 import { useEffect, useRef } from 'react';
 import NotFound from '@/pages/not-found';
 import Dashboard from '@/pages/Dashboard';
 import AppInterface from '@/pages/AppInterface';
 import ProfilePage from '@/pages/Profile';
+import PrivacyPolicy from '@/pages/PrivacyPolicy';
+import DisclaimerPage from '@/pages/Disclaimer';
 import { Sidebar, BottomNav } from '@/components/layout/Sidebar';
 import { Navbar } from '@/components/layout/Navbar';
 import { WalletProvider } from '@/contexts/WalletContext';
+import { AuthProvider } from '@/contexts/AuthContext';
 import { SearchDialog } from '@/components/shared/SearchDialog';
 import { CopyToastProvider } from '@/components/shared/CopyToast';
 import { AuthModal } from '@/components/shared/AuthModal';
 import { UsernameNudgeBanner } from '@/components/shared/UsernameNudgeBanner';
-import { Redirect } from 'wouter';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,6 +32,12 @@ function TokenPage() {
   const params = useParams<{ address: string }>();
   return <AppInterface tokenAddress={params.address} />;
 }
+
+function LegacyTokenRedirect() {
+  const params = useParams<{ address: string }>();
+  return <Redirect to={`/coin/${params.address}`} />;
+}
+
 function AppShell() {
   const [location, navigate] = useLocation();
   const search = useSearch();
@@ -65,6 +73,8 @@ function AppShell() {
             {/* signin/signup show the explore page behind the auth modal */}
             <Route path="/signin"><Dashboard /></Route>
             <Route path="/signup"><Dashboard /></Route>
+            <Route path="/privacy" component={PrivacyPolicy} />
+            <Route path="/disclaimer" component={DisclaimerPage} />
             <Route component={NotFound} />
           </Switch>
         </main>
@@ -87,9 +97,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
         <WalletProvider>
-          <AppShell />
-          <SearchDialog />
-          <CopyToastProvider />
+          <AuthProvider>
+            <AppShell />
+            <SearchDialog />
+            <CopyToastProvider />
+          </AuthProvider>
         </WalletProvider>
       </WouterRouter>
       <Toaster />
@@ -112,8 +124,4 @@ function AppRoute() {
   return <AppInterface />;
 }
 
-/** Redirect old /token/:address links to the canonical /coin/:address path. */
-function LegacyTokenRedirect() {
-  const params = useParams<{ address: string }>();
-  return <Redirect to={`/coin/${params.address}`} />;
-}
+

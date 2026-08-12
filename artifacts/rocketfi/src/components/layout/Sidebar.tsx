@@ -97,6 +97,16 @@ export function Sidebar() {
         <Link href="/app" className="block w-full">
           <LaunchTokenButton />
         </Link>
+        {/* Legal footer */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <Link href="/privacy" className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+            Privacy
+          </Link>
+          <span className="text-[11px] text-muted-foreground/25">·</span>
+          <Link href="/disclaimer" className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+            Disclaimer
+          </Link>
+        </div>
       </div>
     </div>
   );

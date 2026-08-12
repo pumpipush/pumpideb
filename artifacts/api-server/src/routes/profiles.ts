@@ -39,6 +39,7 @@ import {
   issueNonce,
   verifyWalletSignatureWithNonce,
 } from "../lib/wallet-auth.js";
+import { extractBearer, verifyToken } from "../lib/auth-jwt.js";
 
 const router: IRouter = Router();
 
@@ -209,6 +210,55 @@ router.patch("/profiles/:address", async (req, res): Promise<void> => {
   }
 
   const { address } = paramsParsed.data;
+
+  // ── Auth path A: JWT Bearer token (social/email users) ──────────────────────
+  const bearerToken = extractBearer(req.headers.authorization);
+  if (bearerToken) {
+    const payload = verifyToken(bearerToken);
+    if (!payload) {
+      res.status(401).json({ error: "Invalid or expired token" });
+      return;
+    }
+    if (payload.sub !== address) {
+      res.status(403).json({ error: "Token does not match profile address" });
+      return;
+    }
+
+    const bodyParsed = UpdateProfileBody.safeParse(req.body);
+    if (!bodyParsed.success) {
+      res.status(400).json({ error: bodyParsed.error.message });
+      return;
+    }
+
+    const updateData = bodyParsed.data;
+    const resolvedUsername = updateData.username ?? `user_${address.slice(-6).toLowerCase()}`;
+
+    let updated: typeof profilesTable.$inferSelect | undefined;
+    try {
+      [updated] = await db
+        .insert(profilesTable)
+        .values({ address, username: resolvedUsername, ...updateData })
+        .onConflictDoUpdate({
+          target: profilesTable.address,
+          set: { ...updateData, updatedAt: new Date() },
+        })
+        .returning();
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code === "23505") {
+        res.status(409).json({ error: "Username is already taken" });
+        return;
+      }
+      throw err;
+    }
+
+    if (!updated) { res.status(500).json({ error: "Profile update failed" }); return; }
+    const jwtResponse = UpdateProfileResponse.safeParse(updated);
+    if (!jwtResponse.success) { res.status(500).json({ error: "Response parse error" }); return; }
+    res.json(jwtResponse.data);
+    return;
+  }
+
+  // ── Auth path B: Wallet signature (on-chain wallet users) ───────────────────
 
   // 2. Require wallet authentication
   const authFields = parseWalletAuthFields(req.body);
