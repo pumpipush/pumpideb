@@ -3275,7 +3275,7 @@ function TradePanelForm({
           <div className="flex items-baseline gap-1.5">
             {/* $ prefix — USD buy mode only */}
             {tradeMode === "buy" && inputCurrency === "USD" && (
-              <span className="text-3xl font-bold text-muted-foreground/40 select-none">$</span>
+              <span className="text-3xl font-medium text-muted-foreground/40 select-none">$</span>
             )}
             {/* Auto-sizing transparent input */}
             <input
