@@ -592,6 +592,33 @@ async function enrichPumpSwapPrices(): Promise<void> {
   }
 }
 
+// ── LaunchLab chain-update guard (pure — exported for testing) ────────────────
+
+/**
+ * Compute the name/symbol update dict for `enrichLabTokensFromChain`.
+ *
+ * Rules (identical to the `computeEnrichmentUpdate` guard for the main loop):
+ *   - Only write `name`   when current name   IS a placeholder AND resolved name   is NOT.
+ *   - Only write `symbol` when current symbol IS a placeholder AND resolved symbol is NOT.
+ *   - Always write `metadataUri` when we newly know it (resolved.uri) and the token
+ *     didn't have one yet — this is a content field, not identity, so no placeholder check.
+ *
+ * Exported so tests can verify the guard without hitting the DB or RPC layer.
+ */
+export function buildLabChainUpdate(
+  token:    Pick<TokenRow, "name" | "symbol" | "metadataUri">,
+  resolved: { name: string; symbol: string; uri: string },
+): Record<string, string | null> {
+  const update: Record<string, string | null> = {};
+  if (isPlaceholderName(token.name)   && !isPlaceholderName(resolved.name))
+    update["name"]   = resolved.name;
+  if (isPlaceholderSymbol(token.symbol) && !isPlaceholderSymbol(resolved.symbol))
+    update["symbol"] = resolved.symbol;
+  if (resolved.uri && !token.metadataUri)
+    update["metadataUri"] = resolved.uri;
+  return update;
+}
+
 // ── LaunchLab on-chain identity recovery ───────────────────────────────────────
 //
 // Some LaunchLab tokens arrive with name="<addr8>…" and symbol="???" because
@@ -836,19 +863,7 @@ async function enrichLabTokensFromChain(): Promise<void> {
       if (!resolved) continue;
 
       // ── Step 4: build the update — only overwrite placeholders ────────────────
-      const update: Record<string, string | null> = {};
-
-      if (isPlaceholderName(token.name) && !isPlaceholderName(resolved.name)) {
-        update["name"] = resolved.name;
-      }
-      if (isPlaceholderSymbol(token.symbol) && !isPlaceholderSymbol(resolved.symbol)) {
-        update["symbol"] = resolved.symbol;
-      }
-
-      // Also store the metadataUri if we now know it and it wasn't saved before
-      if (resolved.uri && !token.metadataUri) {
-        update["metadataUri"] = resolved.uri;
-      }
+      const update: Record<string, string | null> = buildLabChainUpdate(token, resolved);
 
       // Attempt to pull image / description / socials from the URI
       if (resolved.uri && !token.imageUrl) {

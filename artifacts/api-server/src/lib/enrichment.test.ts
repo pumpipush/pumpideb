@@ -14,6 +14,7 @@ import {
   isPlaceholderName,
   isPlaceholderSymbol,
   computeEnrichmentUpdate,
+  buildLabChainUpdate,
   ENRICHABLE_PLATFORMS_EXPORT,
 } from "./enrichment";
 
@@ -257,5 +258,79 @@ describe("identity batch ordering invariant (newest-first)", () => {
     for (let i = 20; i < 25; i++) {
       expect(selected).not.toContain(`token-${i}`);
     }
+  });
+});
+
+// ── buildLabChainUpdate — placeholder-to-placeholder guard ────────────────────
+//
+// Tests the pure function that drives enrichLabTokensFromChain name/symbol
+// updates.  Key invariant: a placeholder in the resolved data must NEVER
+// overwrite the placeholder already in the DB — that would be a no-op at best
+// and confusing at worst (a different addr8 prefix than the current one).
+
+describe("buildLabChainUpdate", () => {
+  const ph = { name: "A6BE4K8L…", symbol: "???", metadataUri: null };
+
+  it("writes name and symbol when both resolve to real (non-placeholder) values", () => {
+    const update = buildLabChainUpdate(ph, { name: "Sun Cat", symbol: "SCAT", uri: "https://uri.example.com" });
+    expect(update["name"]).toBe("Sun Cat");
+    expect(update["symbol"]).toBe("SCAT");
+  });
+
+  it("never overwrites a placeholder name with another placeholder name", () => {
+    // resolved.name ends with "…" — should be treated as another placeholder
+    const update = buildLabChainUpdate(ph, { name: "DEADBEEF…", symbol: "REAL", uri: "" });
+    expect(update).not.toHaveProperty("name");
+    expect(update["symbol"]).toBe("REAL");
+  });
+
+  it("never overwrites a placeholder symbol with '???'", () => {
+    const update = buildLabChainUpdate(ph, { name: "RealName", symbol: "???", uri: "" });
+    expect(update["name"]).toBe("RealName");
+    expect(update).not.toHaveProperty("symbol");
+  });
+
+  it("returns no name/symbol update when both resolved values are placeholders", () => {
+    const update = buildLabChainUpdate(ph, { name: "ABCD1234…", symbol: "???", uri: "" });
+    expect(update).not.toHaveProperty("name");
+    expect(update).not.toHaveProperty("symbol");
+  });
+
+  it("does not write name when current name is already real (not a placeholder)", () => {
+    const realName = { name: "Moon Cat", symbol: "???", metadataUri: null };
+    const update = buildLabChainUpdate(realName, { name: "Other Name", symbol: "MCAT", uri: "" });
+    expect(update).not.toHaveProperty("name");
+    expect(update["symbol"]).toBe("MCAT");
+  });
+
+  it("does not write symbol when current symbol is already real", () => {
+    const realSym = { name: "A6BE4K8L…", symbol: "REAL", metadataUri: null };
+    const update = buildLabChainUpdate(realSym, { name: "Real Name", symbol: "OTHER", uri: "" });
+    expect(update["name"]).toBe("Real Name");
+    expect(update).not.toHaveProperty("symbol");
+  });
+
+  it("stores metadataUri when the token has none and resolved.uri is non-empty", () => {
+    const update = buildLabChainUpdate(ph, { name: "Name", symbol: "SYM", uri: "https://arweave.net/abc" });
+    expect(update["metadataUri"]).toBe("https://arweave.net/abc");
+  });
+
+  it("does not overwrite an existing metadataUri", () => {
+    const existing = { name: "A6BE4K8L…", symbol: "???", metadataUri: "https://existing.example.com" };
+    const update = buildLabChainUpdate(existing, { name: "Name", symbol: "SYM", uri: "https://new.example.com" });
+    expect(update).not.toHaveProperty("metadataUri");
+  });
+
+  it("does not set metadataUri when resolved.uri is empty", () => {
+    const update = buildLabChainUpdate(ph, { name: "Name", symbol: "SYM", uri: "" });
+    expect(update).not.toHaveProperty("metadataUri");
+  });
+
+  it("handles ASCII ellipsis placeholder (letsbonk format) correctly", () => {
+    const letsbonk = { name: "GKsjnMMi...", symbol: "???", metadataUri: null };
+    // resolved name also looks like a letsbonk placeholder — must not be written
+    const update = buildLabChainUpdate(letsbonk, { name: "ABCD1234...", symbol: "REAL", uri: "" });
+    expect(update).not.toHaveProperty("name");
+    expect(update["symbol"]).toBe("REAL");
   });
 });
