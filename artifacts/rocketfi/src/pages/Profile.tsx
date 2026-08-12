@@ -424,7 +424,7 @@ export default function ProfilePage() {
                 {history.map((trade) => (
                   <Link
                     key={trade.id}
-                    href={`/app?token=${trade.tokenAddress}`}
+                    href={`/token/${trade.tokenAddress}`}
                     className="flex items-center justify-between py-3 hover:bg-white/[0.02] transition-colors cursor-pointer group"
                   >
                     <div className="flex items-center gap-3">
@@ -562,7 +562,7 @@ export default function ProfilePage() {
                       <div
                         key={token.mint}
                         className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-3 border-b border-border/10 last:border-0 items-center hover:bg-white/[0.02] transition-colors cursor-pointer"
-                        onClick={() => token.inDb && setLocation(`/app?token=${token.mint}`)}
+                        onClick={() => token.inDb && setLocation(`/token/${token.mint}`)}
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           {token.imageUrl ? (

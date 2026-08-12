@@ -75,12 +75,19 @@ import { useLocation, useSearch } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 
 
-export default function AppInterface() {
+interface AppInterfaceProps {
+  /** When rendered under /token/:address, pass the address from route params.
+   *  Falls back to the legacy ?token= query param for backward compatibility. */
+  tokenAddress?: string;
+}
+
+export default function AppInterface({ tokenAddress: routeAddress }: AppInterfaceProps = {}) {
   const [, setLocation] = useLocation();
-  // Use reactive wouter search so query-string changes (e.g. ?token=abc) always trigger re-render
+  // Use reactive wouter search so query-string changes (e.g. ?tab=portfolio) always trigger re-render
   const search = useSearch();
   const _params  = new URLSearchParams(search);
-  const tokenParam = _params.get("token");
+  // Route param (/token/:address) takes priority; legacy ?token= is handled by AppRoute redirect
+  const tokenParam = routeAddress ?? _params.get("token");
   const tabParam   = _params.get("tab"); // "portfolio" makes My Tokens deep-linkable
 
   const { wallet } = useWallet();
@@ -117,13 +124,14 @@ export default function AppInterface() {
     setActiveTab(tab);
     if (tab === "portfolio") setLocation("/app?tab=portfolio");
     else if (tab === "launch") setLocation("/app");
-    // "trade" is token-scoped — URL already carries ?token=
+    // "trade" is token-scoped — URL already set to /token/:address
   };
 
   const selectToken = (address: string) => {
     setSelectedTokenId(address);
     setActiveTab("trade");
-    setLocation(`/app?token=${address}`);
+    // Navigate to canonical SEO-friendly path
+    setLocation(`/token/${address}`);
   };
 
   const TAB_TRIGGER = "rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent px-5 py-2.5 text-sm text-muted-foreground hover:text-foreground transition-all duration-150 data-[state=active]:shadow-none";
@@ -1830,7 +1838,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         description={`Trade ${displayName} ($${displaySymbol}) on Pumpi — real-time chart, trade history, and one-click buy/sell on Solana.`}
         image={displayImageUrl}
         type="article"
-        url={`${typeof window !== "undefined" ? window.location.origin : ""}/app?token=${token.address}`}
+        url={`${typeof window !== "undefined" ? window.location.origin : ""}/token/${token.address}`}
         keywords={`${displaySymbol}, ${displayName}, solana memecoin, trade ${displaySymbol}`}
       />
 

@@ -180,7 +180,7 @@ export function SearchDialog() {
 
   /** Navigate to a platform token (already in our DB) */
   const goPlatform = useCallback(
-    (token: PlatformToken) => go(`/app?token=${token.address}`),
+    (token: PlatformToken) => go(`/token/${token.address}`),
     [go]
   );
 
@@ -194,7 +194,7 @@ export function SearchDialog() {
         logoURI:  token.logoURI,
         decimals: token.decimals,
       });
-      go(`/app?token=${token.address}`);
+      go(`/token/${token.address}`);
     },
     [go]
   );
@@ -234,7 +234,7 @@ export function SearchDialog() {
           onKeyDown={(e) => {
             if (e.key === "Enter" && isAddress) {
               e.preventDefault();
-              go(`/app?token=${query.trim()}`);
+              go(`/token/${query.trim()}`);
             }
           }}
           placeholder="Search name, symbol, or paste address…"
@@ -278,7 +278,7 @@ export function SearchDialog() {
                 </div>
                 <button
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-sm hover:bg-white/[0.05] transition-colors group text-left"
-                  onClick={() => go(`/app?token=${query.trim()}`)}
+                  onClick={() => go(`/token/${query.trim()}`)}
                 >
                   <div className="h-9 w-9 rounded flex items-center justify-center shrink-0"
                     style={{ background: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.25)" }}>
@@ -422,7 +422,7 @@ export function SearchDialog() {
                     <button
                       key={token.id}
                       className="w-full flex items-center gap-3 px-3 py-2.5 rounded-sm hover:bg-white/[0.05] transition-colors group text-left"
-                      onClick={() => go(`/app?token=${token.address}`)}
+                      onClick={() => go(`/token/${token.address}`)}
                     >
                       <div className="text-[10px] font-mono text-muted-foreground/70 w-4 text-right shrink-0">{i + 1}</div>
                       <TokenAvatar symbol={token.symbol} imageUrl={token.imageUrl} size={36} />

@@ -622,6 +622,41 @@ router.patch("/tokens/:address", async (req, res): Promise<void> => {
   res.json(UpdateTokenResponse.parse(formatToken(token)));
 });
 
+// GET /sitemap.xml — dynamically generated sitemap containing top/trending token pages.
+// Intended to be fetched by the web crawler after the static sitemap index references this URL.
+router.get("/sitemap.xml", async (_req, res): Promise<void> => {
+  try {
+    // Fetch the top 500 tokens by trade count as a reasonable "popular" proxy.
+    // Exclude placeholder symbols that are not real tokens.
+    const { rows } = await pool.query<{ address: string; updated_at: Date | null }>(
+      `SELECT address, updated_at
+       FROM   tokens
+       WHERE  symbol != '???'
+       ORDER  BY trade_count DESC, id DESC
+       LIMIT  500`
+    );
+
+    const SITE = "https://pumpi.app";
+
+    const urls = rows
+      .map((r) => {
+        const lastmod = r.updated_at
+          ? r.updated_at.toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0];
+        return `  <url>\n    <loc>${SITE}/token/${r.address}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>hourly</changefreq>\n    <priority>0.8</priority>\n  </url>`;
+      })
+      .join("\n");
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`;
+
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.send(xml);
+  } catch (err) {
+    res.status(500).send("<!-- sitemap generation error -->");
+  }
+});
+
 function formatToken(t: typeof tokensTable.$inferSelect | Record<string, unknown>, pctChange24h?: number, trades1h?: number) {
   const row = t as Record<string, unknown>;
   return {

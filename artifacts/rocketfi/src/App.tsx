@@ -1,7 +1,7 @@
 import { HelmetProvider } from 'react-helmet-async';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
-import { Route, Switch, Router as WouterRouter, useLocation, useSearch } from 'wouter';
+import { Route, Switch, Router as WouterRouter, useLocation, useSearch, useParams } from 'wouter';
 import { useEffect, useRef } from 'react';
 import NotFound from '@/pages/not-found';
 import Dashboard from '@/pages/Dashboard';
@@ -25,6 +25,11 @@ const queryClient = new QueryClient({
   },
 });
 
+/** Renders a token page at /token/:address — path-based URL for SEO. */
+function TokenPage() {
+  const params = useParams<{ address: string }>();
+  return <AppInterface tokenAddress={params.address} />;
+}
 function AppShell() {
   const [location, navigate] = useLocation();
   const search = useSearch();
@@ -50,7 +55,10 @@ function AppShell() {
             <Route path="/" component={Dashboard} />
             <Route path="/explore"><Redirect to="/" /></Route>
             <Route path="/dashboard"><Redirect to="/" /></Route>
-            <Route path="/app" component={AppInterface} />
+            {/* Legacy /app route — redirects to /token/:address when ?token= is present */}
+            <Route path="/app" component={AppRoute} />
+            {/* Canonical SEO-friendly token pages */}
+            <Route path="/token/:address" component={TokenPage} />
             <Route path="/profile/:slug" component={ProfilePage} />
             {/* signin/signup show the explore page behind the auth modal */}
             <Route path="/signin"><Dashboard /></Route>
@@ -89,3 +97,15 @@ function App() {
 }
 
 export default App;
+
+/**
+ * Thin shim for the legacy /app route.
+ * If a ?token= query param is present, redirect to the canonical /token/:address path.
+ * Otherwise render AppInterface normally (launch / portfolio tabs).
+ */
+function AppRoute() {
+  const search = useSearch();
+  const tokenParam = new URLSearchParams(search).get('token');
+  if (tokenParam) return <Redirect to={`/token/${tokenParam}`} />;
+  return <AppInterface />;
+}
