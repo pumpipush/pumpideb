@@ -3256,13 +3256,6 @@ function TradePanelForm({
           className={`relative flex-1 py-2 text-sm font-bold transition-colors duration-150 rounded-[8px] z-10 ${tradeMode === "sell" ? "text-white" : "text-muted-foreground hover:text-foreground"}`}
           onClick={() => setTradeMode("sell")}
         >Sell</button>
-        {/* DEX badge — shown for graduated tokens to signal Jupiter routing is active */}
-        {isGraduated && (
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide uppercase"
-            style={{ background: "rgba(139,92,246,0.18)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.35)" }}>
-            <Zap className="w-2.5 h-2.5" />DEX
-          </div>
-        )}
       </div>
 
       <div className="px-4 pt-2 pb-4 space-y-3">
@@ -3912,11 +3905,6 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl font-bold text-foreground leading-tight truncate">{token.name}</h1>
               <span className="font-mono text-sm text-primary shrink-0">${token.symbol}</span>
-              {/* DEX badge */}
-              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wide uppercase shrink-0"
-                style={{ background: "rgba(139,92,246,0.18)", color: "#a78bfa", border: "1px solid rgba(139,92,246,0.35)" }}>
-                <Zap className="w-2.5 h-2.5" />DEX · Jupiter
-              </span>
             </div>
             {refPrice != null && (
               <p className="text-sm font-mono mt-1" style={{ color: "#94a3b8" }}>
