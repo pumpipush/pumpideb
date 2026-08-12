@@ -31,11 +31,6 @@ export default function PrivacyPolicy() {
       <div className="min-h-screen bg-background text-foreground">
         <div className="max-w-3xl mx-auto px-5 py-10 md:py-14">
 
-          {/* Back */}
-          <Link href="/" className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors mb-10 group">
-            <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
-            Back to Pumpi
-          </Link>
 
           {/* Header */}
           <div className="mb-10">
