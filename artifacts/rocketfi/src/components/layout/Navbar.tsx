@@ -208,10 +208,10 @@ export function Navbar() {
       >
         <Search className="h-3.5 w-3.5 text-muted-foreground/90 shrink-0 group-hover:text-primary transition-colors" />
         <span className="flex-1 text-xs text-muted-foreground/75 truncate">Search coins…</span>
-        <div className="flex items-center gap-0.5 shrink-0">
-          <kbd className="h-5 px-1 border border-white/20 rounded text-[10px] font-mono text-muted-foreground/70 bg-muted/40">⌘</kbd>
-          <kbd className="h-5 px-1 border border-white/20 rounded text-[10px] font-mono text-muted-foreground/70 bg-muted/40">K</kbd>
-        </div>
+        <span className="inline-flex items-center gap-[3px] shrink-0">
+          <kbd className="inline-flex items-center justify-center h-[17px] min-w-[17px] px-[5px] rounded-[3px] text-[10px] font-semibold font-mono leading-none text-zinc-400 bg-zinc-700/80 border border-zinc-600/60 border-b-zinc-500/80 shadow-[0_1.5px_0_rgba(0,0,0,0.6)]" style={{borderBottomWidth: '2px'}}>⌘</kbd>
+          <kbd className="inline-flex items-center justify-center h-[17px] min-w-[17px] px-[5px] rounded-[3px] text-[10px] font-semibold font-mono leading-none text-zinc-400 bg-zinc-700/80 border border-zinc-600/60 border-b-zinc-500/80 shadow-[0_1.5px_0_rgba(0,0,0,0.6)]" style={{borderBottomWidth: '2px'}}>K</kbd>
+        </span>
       </button>
 
       {/* Right side: search icon (mobile) + wallet */}
