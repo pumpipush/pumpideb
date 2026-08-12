@@ -156,32 +156,57 @@ export async function buildJupiterSwapTx(
 }
 
 /**
- * Wait for a Jupiter swap to reach "confirmed" commitment on-chain.
+ * Wait for a swap to reach "confirmed" commitment on-chain.
  *
- * Uses the blockhash-strategy: the RPC can precisely detect expiry (blockhash
- * slot window passed) vs genuine network errors, and terminates without an
- * open-ended poll.
+ * Uses the blockhash-strategy so the RPC can precisely detect expiry vs
+ * genuine failure, and terminates without an open-ended poll.
  *
- * Throws on ALL non-success outcomes:
- *  - On-chain instruction failure  → "Jupiter swap failed on-chain: …"
- *  - Blockhash expired / timeout   → TransactionExpiredBlockheightExceededError
+ * After a "block height exceeded" timeout we perform one extra
+ * `getSignatureStatuses` call with `searchTransactionHistory: true`.
+ * This handles a common split-brain: the wallet submits through its own
+ * RPC (Phantom, Backpack…) and the tx lands, but our Alchemy confirmation
+ * poll runs on a different node and misses it before the window closes.
+ *
+ * Throws on ALL genuine non-success outcomes:
+ *  - On-chain instruction failure  → "Swap failed on-chain: …"
+ *  - Tx genuinely not included     → "Transaction timed out …"
  *  - Network / RPC error           → RPC error
- *
- * Callers must propagate errors so the toast shows "Failed", never "Confirmed",
- * for an unresolved submission.
  */
 export async function waitForJupiterTxConfirmation(
   signature:            string,
   blockhash:            string,
   lastValidBlockHeight: number,
 ): Promise<void> {
-  const conn   = new Connection(getRpcUrl(), "confirmed");
-  const result = await conn.confirmTransaction(
-    { signature, blockhash, lastValidBlockHeight },
-    "confirmed",
-  );
-  if (result.value.err) {
-    throw new Error(`Jupiter swap failed on-chain: ${JSON.stringify(result.value.err)}`);
+  const conn = new Connection(getRpcUrl(), "confirmed");
+
+  try {
+    const result = await conn.confirmTransaction(
+      { signature, blockhash, lastValidBlockHeight },
+      "confirmed",
+    );
+    if (result.value.err) {
+      throw new Error(`Swap failed on-chain: ${JSON.stringify(result.value.err)}`);
+    }
+  } catch (err: unknown) {
+    // confirmTransaction throws TransactionExpiredBlockheightExceededError when the
+    // blockhash window closes. But that just means the *poll* gave up — the tx may
+    // have landed just before the window closed. Verify with a direct status lookup.
+    if (err instanceof Error && /block.?height exceeded|blockhash not found/i.test(err.message)) {
+      const { value: statuses } = await conn.getSignatureStatuses(
+        [signature],
+        { searchTransactionHistory: true },
+      );
+      const status = statuses[0];
+      if (status !== null && status !== undefined) {
+        if (status.err) {
+          throw new Error(`Swap failed on-chain: ${JSON.stringify(status.err)}`);
+        }
+        // Tx IS on-chain — confirmTransaction just gave up too early. Success.
+        return;
+      }
+      // status is null → tx was never seen by the network. Re-throw timeout.
+    }
+    throw err;
   }
 }
 

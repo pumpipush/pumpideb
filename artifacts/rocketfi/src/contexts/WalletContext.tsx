@@ -58,6 +58,17 @@ interface WalletContextValue {
    */
   signTransaction: (transaction: Transaction) => Promise<Transaction>;
   /**
+   * Sign a VersionedTransaction WITHOUT sending it.
+   *
+   * Use for pump.fun / pumpportal trades where we want to submit the transaction
+   * ourselves via a reliable RPC (Alchemy) with retries, rather than delegating
+   * submission to the wallet's own default endpoint.
+   *
+   * Returns the same VersionedTransaction with the user's signature filled in.
+   * Throws if no wallet is connected or the wallet doesn't support signTransaction.
+   */
+  signVersionedTransaction: (transaction: VersionedTransaction) => Promise<VersionedTransaction>;
+  /**
    * Sign a Transaction or VersionedTransaction and send it via the wallet's RPC
    * node in one step. The transaction must have blockhash + feePayer set.
    *
@@ -82,6 +93,7 @@ const WalletContext = createContext<WalletContextValue>({
   disconnect: async () => {},
   openWalletModal: () => {},
   signTransaction: async () => { throw new Error("WalletContext not mounted"); },
+  signVersionedTransaction: async () => { throw new Error("WalletContext not mounted"); },
   signAndSendTransaction: async () => { throw new Error("WalletContext not mounted"); },
   signMessage: async () => { throw new Error("WalletContext not mounted"); },
 });
@@ -228,6 +240,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
+   * Sign a VersionedTransaction without sending it.
+   * Phantom, Backpack, and Solflare all support signTransaction for VersionedTransaction;
+   * they detect the type at runtime and handle it correctly.
+   */
+  const signVersionedTransaction = useCallback(async (transaction: VersionedTransaction): Promise<VersionedTransaction> => {
+    const provider = providerRef.current;
+    if (!provider) throw new Error("No wallet connected. Please connect your wallet first.");
+    if (typeof provider.signTransaction !== "function") {
+      throw new Error("Your wallet does not support signTransaction. Please update your wallet extension.");
+    }
+    // provider.signTransaction accepts VersionedTransaction at runtime even though the
+    // TypeScript overload resolves to Transaction. Cast to bypass the type mismatch.
+    return provider.signTransaction(transaction as unknown as Transaction) as unknown as Promise<VersionedTransaction>;
+  }, []);
+
+  /**
    * Sign and broadcast a transaction in one step via the wallet's RPC node.
    * Delegates to provider.signAndSendTransaction — supported by Phantom,
    * Backpack, and Solflare. The transaction must have blockhash + feePayer set.
@@ -272,6 +300,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       disconnect,
       openWalletModal,
       signTransaction,
+      signVersionedTransaction,
       signAndSendTransaction,
       signMessage,
     }}>

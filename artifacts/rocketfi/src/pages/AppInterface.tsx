@@ -67,6 +67,7 @@ import {
   type ExternalSolanaToken,
 } from "@/lib/external-tokens";
 import { computeSellPresetAmount } from "@/lib/tradePresets";
+import { getConnection } from "@/lib/solanaConnection";
 import { SEO } from "@/components/seo/SEO";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { formatSol, formatTokenAmount, formatAtomicTokenAmount, atomicToDisplayTokens, computeHoldingRow } from "@/lib/utils";
@@ -987,7 +988,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestLiveTradeId]);
 
-  const { openWalletModal, signAndSendTransaction } = useWallet();
+  const { openWalletModal, signAndSendTransaction, signVersionedTransaction } = useWallet();
   const [tradeMode, setTradeMode] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
   /** True while a trade is in-flight (signing + broadcast + on-chain confirmation). */
@@ -1659,10 +1660,24 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           ? await buildPumpFunBuyTxViaPortal(wallet, token.address, numAmount, slippagePct, priorityFeeSOL)
           : await buildPumpFunSellTxViaPortal(wallet, token.address, numAmount, slippagePct, priorityFeeSOL);
 
-      // Wallet signs and broadcasts. Throws on user rejection or preflight failure.
-      const txSignature = await signAndSendTransaction(portalTx);
+      // Sign via the wallet (shows Phantom popup), then submit through our Alchemy RPC.
+      // Using sign-then-send (instead of signAndSendTransaction) lets us control the
+      // submission endpoint: Alchemy has dedicated stake-weighted connections to validators
+      // and retries stalled transactions, unlike the wallet's default free RPC endpoint.
+      const signedPortalTx  = await signVersionedTransaction(portalTx);
+      const conn            = getConnection();
+      // sendRawTransaction returns the base58 signature immediately on broadcast.
+      // skipPreflight=false so the RPC checks the tx locally before forwarding.
+      // maxRetries=5 tells the RPC to re-submit on its own if the tx isn't yet included.
+      const txSignature = await conn.sendRawTransaction(signedPortalTx.serialize(), {
+        skipPreflight:       false,
+        preflightCommitment: "confirmed",
+        maxRetries:          5,
+      });
 
-      // Wait for on-chain confirmation via the blockhash strategy (same as Jupiter path).
+      // Confirm via blockhash strategy. After a timeout the function checks
+      // getSignatureStatuses so a tx that landed just before the window closed
+      // is correctly reported as success rather than "timed out".
       await waitForJupiterTxConfirmation(txSignature, blockhash, lastValidBlockHeight);
 
       // ── Refetch from server (indexer is the authoritative source) ─────────────
