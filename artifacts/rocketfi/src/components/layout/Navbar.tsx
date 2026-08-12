@@ -208,7 +208,9 @@ export function Navbar() {
       >
         <Search className="h-3.5 w-3.5 text-muted-foreground/90 shrink-0 group-hover:text-primary transition-colors" />
         <span className="flex-1 text-xs text-muted-foreground/75 truncate">Search coins…</span>
-        <span className="inline-flex items-center gap-px shrink-0 text-[11px] font-mono font-medium text-muted-foreground/50">⌘K</span>
+        <span className="inline-flex items-center gap-1 shrink-0 text-[11px] font-mono font-medium text-muted-foreground/50">
+          <span>⌘</span><span>K</span>
+        </span>
       </button>
 
       {/* Right side: search icon (mobile) + wallet */}
