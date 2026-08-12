@@ -8,8 +8,8 @@ import { ArrowLeft, TriangleAlert } from "lucide-react";
  *  all existing users are re-prompted at least once after the versioning system is introduced. */
 export const DISCLAIMER_VERSION = "2";
 
-const LAST_UPDATED = "August 12, 2025";
-const EFFECTIVE_DATE = "August 12, 2025";
+const LAST_UPDATED = "August 12, 2026";
+const EFFECTIVE_DATE = "August 12, 2026";
 const VERSION = "1.0";
 const CONTACT_EMAIL = "legal@pumpi.io";
 const SITE_URL = "https://pumpi.io";
