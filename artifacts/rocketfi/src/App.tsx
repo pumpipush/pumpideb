@@ -49,11 +49,10 @@ function AppShell() {
   const isSignUp = location === '/signup';
   const authOpen = isSignIn || isSignUp;
 
-  // Scroll main content area to top on every route/query change.
-  // useLayoutEffect fires synchronously before paint, preventing
-  // the browser scroll-restoration from overriding us.
+  // Scroll to top on every route change.
+  // window is the real scroll container (main has no fixed height ancestor).
   useLayoutEffect(() => {
-    if (mainRef.current) mainRef.current.scrollTop = 0;
+    window.scrollTo(0, 0);
   }, [location]);
 
   return (
