@@ -33,11 +33,6 @@ const TOC = [
 ];
 
 export default function Disclaimer() {
-  useEffect(() => {
-    const main = document.querySelector('main');
-    if (main) main.scrollTop = 0;
-  }, []);
-
   return (
     <>
       <SEO title="Disclaimer" description="Important risk disclosures and disclaimers for using Pumpi." />

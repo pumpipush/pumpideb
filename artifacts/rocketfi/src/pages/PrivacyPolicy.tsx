@@ -25,11 +25,6 @@ const TOC = [
 ];
 
 export default function PrivacyPolicy() {
-  useEffect(() => {
-    const main = document.querySelector('main');
-    if (main) main.scrollTop = 0;
-  }, []);
-
   return (
     <>
       <SEO title="Privacy Policy" description="How Pumpi collects, uses, and protects your information." />

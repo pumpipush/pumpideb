@@ -2,7 +2,7 @@ import { HelmetProvider } from 'react-helmet-async';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { Route, Switch, Redirect, Router as WouterRouter, useLocation, useSearch, useParams } from 'wouter';
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import NotFound from '@/pages/not-found';
 import Dashboard from '@/pages/Dashboard';
 import AppInterface from '@/pages/AppInterface';
@@ -49,10 +49,12 @@ function AppShell() {
   const isSignUp = location === '/signup';
   const authOpen = isSignIn || isSignUp;
 
-  // Scroll main content area to top on every route/query change
-  useEffect(() => {
-    mainRef.current?.scrollTo({ top: 0, behavior: 'instant' });
-  }, [location, search]);
+  // Scroll main content area to top on every route/query change.
+  // useLayoutEffect fires synchronously before paint, preventing
+  // the browser scroll-restoration from overriding us.
+  useLayoutEffect(() => {
+    if (mainRef.current) mainRef.current.scrollTop = 0;
+  }, [location]);
 
   return (
     <div className="flex min-h-[100dvh] w-full overflow-x-hidden">
