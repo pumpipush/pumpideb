@@ -35,6 +35,7 @@ import {
   bestSolanaPair,
   type DexScreenerPair,
 } from "./dexscreener";
+import { decodeLabCreateParamsRaw } from "./adapters/raydium-launchlab";
 
 const POLL_INTERVAL_MS       = 30_000;
 const IDENTITY_BATCH_SIZE    = 20;  // max tokens per identity tick
@@ -591,6 +592,329 @@ async function enrichPumpSwapPrices(): Promise<void> {
   }
 }
 
+// ── LaunchLab on-chain identity recovery ───────────────────────────────────────
+//
+// Some LaunchLab tokens arrive with name="<addr8>…" and symbol="???" because
+// the Borsh decode of the createLaunchpad instruction failed at ingest time.
+// The existing enrichment loop already retries them via Raydium /mint/ids and
+// metadataUri, but very fresh tokens (< 10 minutes old) aren't in those
+// registries yet.  This pass goes directly to the chain:
+//
+//   1. getSignaturesForAddress(mint, limit=20)  → newest-first list of sigs
+//   2. The LAST entry is the oldest tx — almost always the createLaunchpad tx
+//   3. getTransaction(oldestSig) → full tx data
+//   4. decodeLabCreateParamsRaw() with expanded offset set → name/symbol/uri
+//   5. If decode succeeds, update DB + emit SSE snapshot
+//   6. If decode still fails, fall back to metadataUri (same as main loop)
+//
+// Rate-limit budget: max 5 tokens per tick (2 RPC calls each = 10 calls/30 s).
+
+const LL_CHAIN_ENRICH_BATCH = 5;
+const LL_CHAIN_ENRICH_INTERVAL_MS = 60_000; // runs every 60 s (separate timer)
+
+const LAUNCHLAB_PROGRAM_ID = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj";
+
+// ── Minimal Solana HTTP RPC helper (same endpoints as launchlabBackfill.ts) ────
+
+function _llRpcUrl(): string {
+  const key = process.env["ALCHEMY_API_KEY"];
+  return key
+    ? `https://solana-mainnet.g.alchemy.com/v2/${key}`
+    : "https://solana-rpc.publicnode.com";
+}
+
+const _LL_FALLBACK_RPCS = [
+  "https://solana-rpc.publicnode.com",
+  "https://api.mainnet-beta.solana.com",
+];
+
+async function _llRpcPost(body: unknown, timeoutMs = 20_000): Promise<unknown> {
+  const urls = [_llRpcUrl(), ..._LL_FALLBACK_RPCS.filter(u => u !== _llRpcUrl())];
+  let lastErr: unknown;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json", "User-Agent": "RocketFi/1.0" },
+        body:    JSON.stringify(body),
+        signal:  AbortSignal.timeout(timeoutMs),
+      });
+      if (!res.ok) { lastErr = new Error(`RPC ${res.status}`); continue; }
+      const json = await res.json() as { error?: { code?: number } };
+      const code = (json.error as { code?: number } | undefined)?.code;
+      if (code === -32005 || code === 429) { lastErr = new Error(`rate-limited`); continue; }
+      return json;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr ?? new Error("all RPC endpoints failed");
+}
+
+/** Base58 decoder (duplicated here to avoid circular dep on adapters/). */
+const _BS58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function _bs58Decode(s: string): Uint8Array {
+  let n = 0n;
+  for (const c of s) {
+    const i = _BS58.indexOf(c);
+    if (i < 0) throw new Error(`bad base58: ${c}`);
+    n = n * 58n + BigInt(i);
+  }
+  const bytes: number[] = [];
+  while (n > 0n) { bytes.unshift(Number(n & 0xffn)); n >>= 8n; }
+  let leading = 0;
+  for (const c of s) { if (c !== "1") break; leading++; }
+  return new Uint8Array([...new Array<number>(leading).fill(0), ...bytes]);
+}
+
+interface _SigEntry { signature: string; err: unknown }
+interface _RpcTxResult { result?: Record<string, unknown> | null }
+
+async function _getSignaturesForMint(
+  mint:    string,
+  limit:   number,
+  before?: string,
+): Promise<_SigEntry[]> {
+  const params: [string, Record<string, unknown>] = [
+    mint,
+    { limit, commitment: "confirmed", ...(before ? { before } : {}) },
+  ];
+  const resp = (await _llRpcPost({
+    jsonrpc: "2.0", id: 1,
+    method:  "getSignaturesForAddress",
+    params,
+  })) as { result?: _SigEntry[] };
+  return resp.result ?? [];
+}
+
+async function _getTransaction(sig: string): Promise<Record<string, unknown> | null> {
+  const resp = (await _llRpcPost({
+    jsonrpc: "2.0", id: 1,
+    method:  "getTransaction",
+    params:  [sig, { encoding: "json", maxSupportedTransactionVersion: 0 }],
+  })) as _RpcTxResult;
+  return resp.result ?? null;
+}
+
+/**
+ * Attempt to extract decoded create params from a raw transaction object.
+ * ONLY decodes when the transaction logs confirm it is a createLaunchpad
+ * instruction — prevents trade instruction bytes being misread as names.
+ */
+function _decodeFromTx(tx: Record<string, unknown>): { name: string; symbol: string; uri: string } | null {
+  const meta = tx["meta"] as Record<string, unknown> | null;
+  if (!meta || meta["err"]) return null;
+
+  // Guard: only try the decoder on createLaunchpad transactions.
+  // Trade instruction bytes at the same offsets can look like valid strings,
+  // so skipping this check risks writing garbage names to the DB.
+  const logMessages = ((meta["logMessages"] ?? (tx["meta"] as Record<string,unknown>)?.["logMessages"]) as string[]) ?? [];
+  if (!logMessages.some(l => /Instruction:\s*createLaunchpad/i.test(l))) return null;
+
+  const message = ((tx["transaction"] as Record<string,unknown>)?.["message"] as Record<string,unknown>) ?? {};
+  const keys    = (message["accountKeys"] as Array<{ pubkey?: string } | string>) ?? [];
+  const instrs  = (message["instructions"] as Array<{ programIdIndex: number; data: string }>) ?? [];
+
+  const progIdx = keys.findIndex(k =>
+    (typeof k === "string" ? k : (k as { pubkey?: string }).pubkey) === LAUNCHLAB_PROGRAM_ID,
+  );
+  if (progIdx < 0) return null;
+
+  const instr = instrs.find(i => i.programIdIndex === progIdx);
+  if (!instr?.data) return null;
+
+  try {
+    const raw = _bs58Decode(instr.data);
+    return decodeLabCreateParamsRaw(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Paginate getSignaturesForAddress on the mint address from newest to oldest
+ * until we find a confirmed createLaunchpad transaction (bounded by RPC budget).
+ *
+ * The creation tx is always the OLDEST tx on a mint, so we paginate backward
+ * in time.  In the last (oldest) page the creation sig is the final entry.
+ * We validate each candidate with getTransaction + log check before decoding.
+ *
+ * Budget: ≤ MAX_SIG_PAGES × getSignaturesForAddress + ≤ MAX_TX_ATTEMPTS
+ *         getTransaction calls per token.
+ */
+const SIG_PAGE_SIZE  = 1000; // Solana RPC max per call
+const MAX_SIG_PAGES  = 5;    // covers up to 5 000 txs per mint
+const MAX_TX_ATTEMPTS = 3;   // getTransaction attempts per final page
+
+async function _findLabCreateTx(mint: string): Promise<Record<string, unknown> | null> {
+  let cursor: string | undefined;
+  let finalPage: string[] = []; // valid sigs in the deepest page reached
+
+  for (let page = 0; page < MAX_SIG_PAGES; page++) {
+    let sigs: _SigEntry[];
+    try {
+      sigs = await _getSignaturesForMint(mint, SIG_PAGE_SIZE, cursor);
+    } catch {
+      break;
+    }
+    if (sigs.length === 0) break;
+
+    const validSigs = sigs.filter(s => !s.err).map(s => s.signature);
+    finalPage = validSigs;
+
+    if (sigs.length < SIG_PAGE_SIZE) {
+      // Last page — the creation tx is among the oldest sigs here (at the end).
+      break;
+    }
+
+    // Full page → more history exists; paginate further back.
+    cursor = sigs[sigs.length - 1]?.signature;
+  }
+
+  // In the deepest page, the creation tx is the OLDEST (last in the array).
+  // Try up to MAX_TX_ATTEMPTS sigs from the oldest end.
+  const candidates = [...finalPage].reverse().slice(0, MAX_TX_ATTEMPTS);
+  for (const sig of candidates) {
+    try {
+      const tx = await _getTransaction(sig);
+      if (!tx) continue;
+      // _decodeFromTx checks createLaunchpad log internally; null = not a create tx.
+      const decoded = _decodeFromTx(tx);
+      if (decoded) return tx; // confirmed createLaunchpad with decodable params
+    } catch { continue; }
+  }
+
+  return null;
+}
+
+async function enrichLabTokensFromChain(): Promise<void> {
+  // Find LaunchLab tokens that still have a placeholder identity.
+  // ORDER BY RANDOM() so every unresolved token gets a fair chance across ticks
+  // — if we always picked the newest 5 and those repeatedly fail RPC, older
+  // tokens would be permanently starved.
+  const tokens = await db
+    .select({
+      address:     tokensTable.address,
+      name:        tokensTable.name,
+      symbol:      tokensTable.symbol,
+      imageUrl:    tokensTable.imageUrl,
+      description: tokensTable.description,
+      twitterUrl:  tokensTable.twitterUrl,
+      telegramUrl: tokensTable.telegramUrl,
+      websiteUrl:  tokensTable.websiteUrl,
+      platform:    tokensTable.platform,
+      metadataUri: tokensTable.metadataUri,
+    })
+    .from(tokensTable)
+    .where(
+      and(
+        eq(tokensTable.platform, "raydium_launchlab"),
+        or(
+          like(tokensTable.name,   "%…"),
+          like(tokensTable.name,   "%..."),
+          like(tokensTable.symbol, "???"),
+        ),
+      ),
+    )
+    .orderBy(sql`RANDOM()`) // fair rotation — prevents starvation of older tokens
+    .limit(LL_CHAIN_ENRICH_BATCH);
+
+  if (tokens.length === 0) return;
+
+  log.info({ count: tokens.length }, "enrichment: launchlab on-chain identity recovery pass");
+
+  for (const token of tokens) {
+    try {
+      // ── Step 1: paginate to the creation tx (createLaunchpad validated) ──────
+      const createTx = await _findLabCreateTx(token.address);
+
+      let resolved: { name: string; symbol: string; uri: string } | null = null;
+      if (createTx) {
+        // ── Step 2: Borsh decode with expanded offsets ────────────────────────
+        // _decodeFromTx already checked the createLaunchpad log guard above;
+        // decodeLabCreateParamsRaw handles the actual byte parsing.
+        resolved = _decodeFromTx(createTx);
+      }
+
+      // ── Step 3: fall back to metadataUri if on-chain decode still fails ──────
+      if (!resolved && token.metadataUri) {
+        const uriMeta = await fetchSafeUriMeta(token.metadataUri);
+        if (uriMeta?.name && uriMeta?.symbol &&
+            !isPlaceholderName(uriMeta.name) && !isPlaceholderSymbol(uriMeta.symbol)) {
+          resolved = {
+            name:   uriMeta.name,
+            symbol: uriMeta.symbol,
+            uri:    token.metadataUri,
+          };
+        }
+      }
+
+      if (!resolved) continue;
+
+      // ── Step 4: build the update — only overwrite placeholders ────────────────
+      const update: Record<string, string | null> = {};
+
+      if (isPlaceholderName(token.name) && !isPlaceholderName(resolved.name)) {
+        update["name"] = resolved.name;
+      }
+      if (isPlaceholderSymbol(token.symbol) && !isPlaceholderSymbol(resolved.symbol)) {
+        update["symbol"] = resolved.symbol;
+      }
+
+      // Also store the metadataUri if we now know it and it wasn't saved before
+      if (resolved.uri && !token.metadataUri) {
+        update["metadataUri"] = resolved.uri;
+      }
+
+      // Attempt to pull image / description / socials from the URI
+      if (resolved.uri && !token.imageUrl) {
+        try {
+          const uriMeta = await fetchSafeUriMeta(resolved.uri);
+          if (uriMeta?.imageUrl    && !token.imageUrl)    update["imageUrl"]    = uriMeta.imageUrl;
+          if (uriMeta?.description && !token.description) update["description"] = uriMeta.description;
+          if (uriMeta?.twitterUrl  && !token.twitterUrl)  update["twitterUrl"]  = uriMeta.twitterUrl;
+          if (uriMeta?.telegramUrl && !token.telegramUrl) update["telegramUrl"] = uriMeta.telegramUrl;
+          if (uriMeta?.websiteUrl  && !token.websiteUrl)  update["websiteUrl"]  = uriMeta.websiteUrl;
+        } catch { /* non-critical — metadata URI fetch is best-effort */ }
+      }
+
+      if (Object.keys(update).length === 0) continue;
+
+      const [updated] = await db
+        .update(tokensTable)
+        .set(update)
+        .where(eq(tokensTable.address, token.address))
+        .returning();
+
+      log.info(
+        { address: token.address, ...update },
+        "enrichment: launchlab on-chain identity resolved",
+      );
+
+      // ── Step 5: push live SSE update ─────────────────────────────────────────
+      if (updated) {
+        emitSnapshot({
+          type: "snapshot",
+          token: {
+            address:              updated.address,
+            name:                 updated.name,
+            symbol:               updated.symbol,
+            imageUrl:             updated.imageUrl,
+            priceEth:             updated.priceEth,
+            marketCapEth:         updated.marketCapEth,
+            volumeEth:            updated.volumeEth,
+            virtualEthReserves:   updated.virtualEthReserves,
+            virtualTokenReserves: updated.virtualTokenReserves,
+            tradeCount:           Number(updated.tradeCount),
+            platform:             updated.platform,
+            chain:                updated.chain,
+          },
+        });
+      }
+    } catch (err) {
+      log.warn({ address: token.address, err }, "enrichment: launchlab chain recovery failed for token");
+    }
+  }
+}
+
 // ── Entry point ────────────────────────────────────────────────────────────────
 
 export function startEnrichmentLoop(): void {
@@ -603,6 +927,13 @@ export function startEnrichmentLoop(): void {
   // Refresh PumpSwap token prices from DexScreener
   void enrichPumpSwapPrices();
   setInterval(() => void enrichPumpSwapPrices(), PUMPSWAP_ENRICH_INTERVAL_MS);
+  // Resolve LaunchLab tokens that still have '???' identity by re-reading the
+  // creation transaction directly from the Solana RPC with an expanded offset set.
+  // Runs 10 s after startup (adapters need a moment to settle) then every 60 s.
+  setTimeout(() => {
+    void enrichLabTokensFromChain();
+    setInterval(() => void enrichLabTokensFromChain(), LL_CHAIN_ENRICH_INTERVAL_MS);
+  }, 10_000);
   // First tick slightly delayed so adapters can connect and insert initial records
   setTimeout(() => {
     void enrichTick();

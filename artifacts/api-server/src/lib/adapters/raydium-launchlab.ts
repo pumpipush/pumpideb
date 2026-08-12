@@ -689,3 +689,40 @@ export async function startRaydiumLaunchLabAdapter(): Promise<void> {
   const indexer = new RaydiumLaunchLabIndexer();
   indexer.start();
 }
+
+// ── Exported decode utility ────────────────────────────────────────────────────
+
+/**
+ * Attempt to decode name / symbol / uri from raw LaunchLab createLaunchpad
+ * instruction bytes.  Tries an expanded set of starting offsets so tokens that
+ * landed with placeholder "???" (failed with the original 40/8/72 set) can be
+ * resolved in the background enrichment pass.
+ *
+ * Exported so the enrichment module can call it without re-implementing Borsh
+ * parsing.
+ */
+export function decodeLabCreateParamsRaw(
+  raw: Uint8Array,
+): { name: string; symbol: string; uri: string } | null {
+  // Expanded offset list: original [40, 8, 72] plus additional candidates
+  // that cover less-common IDL param orderings observed in the wild.
+  for (const startOff of [40, 8, 72, 0, 16, 24, 48, 56, 64, 80, 96, 104, 112]) {
+    if (startOff + 8 > raw.length) continue;
+    try {
+      let off = startOff;
+      const [name,   off1] = readBorshStr(raw, off); off = off1;
+      const [symbol, off2] = readBorshStr(raw, off); off = off2;
+      const [uri]          = readBorshStr(raw, off);
+
+      const n = name.trim();
+      const s = symbol.trim();
+      if (!n || !s) continue;
+      if (n.length > 64 || s.length > 16) continue;
+      if (/[\x00-\x08\x0B\x0E-\x1F\x7F\uFFFD]/.test(n) ||
+          /[\x00-\x08\x0B\x0E-\x1F\x7F\uFFFD]/.test(s)) continue;
+
+      return { name: n, symbol: s, uri: uri.trim() };
+    } catch { continue; }
+  }
+  return null;
+}
