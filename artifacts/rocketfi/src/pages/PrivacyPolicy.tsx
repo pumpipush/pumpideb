@@ -3,8 +3,8 @@ import { Link } from "wouter";
 import { ArrowLeft, Shield } from "lucide-react";
 
 const LAST_UPDATED = "August 12, 2025";
-const CONTACT_EMAIL = "privacy@pumpi.app";
-const SITE_URL = "https://pumpi.app";
+const CONTACT_EMAIL = "privacy@pumpi.io";
+const SITE_URL = "https://pumpi.io";
 
 export default function PrivacyPolicy() {
   return (

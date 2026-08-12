@@ -636,7 +636,7 @@ router.get("/sitemap.xml", async (_req, res): Promise<void> => {
        LIMIT  500`
     );
 
-    const SITE = "https://pumpi.app";
+    const SITE = "https://pumpi.io";
 
     const urls = rows
       .map((r) => {
