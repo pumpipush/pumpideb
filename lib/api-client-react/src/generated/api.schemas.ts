@@ -154,6 +154,8 @@ export interface Profile {
   websiteUrl?: string | null;
   followersCount: number;
   followingCount: number;
+  /** @nullable */
+  linkedWallet?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -64,6 +64,20 @@
       "when": 1786508000000,
       "tag": "0008_add_social_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786560000000,
+      "tag": "0009_add_linked_wallet",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786562000000,
+      "tag": "0010_unique_linked_wallet",
+      "breakpoints": true
     }
   ]
 }

@@ -25,6 +25,7 @@ export interface SocialUser {
   avatarUrl: string | null;
   email: string | null;
   authType: "google" | "email";
+  linkedWallet: string | null;
 }
 
 interface AuthContextValue {
@@ -40,6 +41,19 @@ interface AuthContextValue {
   signOut: () => void;
   /** Returns Authorization header object for API calls */
   authHeaders: () => Record<string, string>;
+  /**
+   * Issue a server nonce the wallet must sign before linking.
+   * Returns { nonce, message } — client signs `message` with the wallet, then
+   * passes the result to linkWallet().
+   */
+  getWalletLinkChallenge: (walletAddress: string) => Promise<{ nonce: string; message: string }>;
+  /**
+   * Persist a linked wallet after the user has signed the challenge.
+   * Requires proof-of-ownership: walletAddress + Ed25519 signature + original message.
+   */
+  linkWallet: (walletAddress: string, signature: string, message: string) => Promise<void>;
+  /** Remove the linked wallet from this social account */
+  unlinkWallet: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -50,6 +64,9 @@ const AuthContext = createContext<AuthContextValue>({
   verifyEmailOTP: async () => {},
   signOut: () => {},
   authHeaders: () => ({}),
+  getWalletLinkChallenge: async () => ({ nonce: "", message: "" }),
+  linkWallet: async () => {},
+  unlinkWallet: async () => {},
 });
 
 const STORAGE_KEY = "pumpi_auth_token";
@@ -83,26 +100,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         const p = data.profile;
         setSocialUser({
-          address:  p.address,
-          username: p.username,
-          avatarUrl: p.avatarUrl ?? null,
-          email:    p.email ?? null,
-          authType: data.authType,
+          address:      p.address,
+          username:     p.username,
+          avatarUrl:    p.avatarUrl ?? null,
+          email:        p.email ?? null,
+          authType:     data.authType,
+          linkedWallet: p.linkedWallet ?? null,
         });
       })
       .catch(() => clearToken())
       .finally(() => setIsLoading(false));
   }, []);
 
-  const handleAuthResponse = (data: { token: string; profile: { address: string; username: string; avatarUrl?: string | null; email?: string | null }; authType?: string }) => {
+  const handleAuthResponse = (data: {
+    token: string;
+    profile: {
+      address: string;
+      username: string;
+      avatarUrl?: string | null;
+      email?: string | null;
+      linkedWallet?: string | null;
+    };
+    authType?: string;
+  }) => {
     storeToken(data.token);
     const p = data.profile;
     setSocialUser({
-      address:  p.address,
-      username: p.username,
-      avatarUrl: p.avatarUrl ?? null,
-      email:    p.email ?? null,
-      authType: (data.authType ?? "google") as "google" | "email",
+      address:      p.address,
+      username:     p.username,
+      avatarUrl:    p.avatarUrl ?? null,
+      email:        p.email ?? null,
+      authType:     (data.authType ?? "google") as "google" | "email",
+      linkedWallet: p.linkedWallet ?? null,
     });
   };
 
@@ -153,9 +182,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetch(apiUrl("/auth/logout"), { method: "POST" }).catch(() => {});
   }, []);
 
+  const getWalletLinkChallenge = useCallback(async (walletAddress: string): Promise<{ nonce: string; message: string }> => {
+    const headers = authHeaders();
+    if (!headers.Authorization) throw new Error("Not signed in");
+    const r = await fetch(apiUrl(`/auth/wallet/link/challenge?wallet=${encodeURIComponent(walletAddress)}`), {
+      headers,
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({})) as { error?: string };
+      throw new Error(err.error ?? "Failed to get wallet link challenge");
+    }
+    return r.json() as Promise<{ nonce: string; message: string }>;
+  }, [authHeaders]);
+
+  const linkWallet = useCallback(async (walletAddress: string, signature: string, message: string) => {
+    const headers = authHeaders();
+    if (!headers.Authorization) throw new Error("Not signed in");
+    const r = await fetch(apiUrl("/auth/wallet/link"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({ walletAddress, signature, message }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({})) as { error?: string };
+      throw new Error(err.error ?? "Failed to link wallet");
+    }
+    const data = await r.json() as { profile: { linkedWallet?: string | null } };
+    setSocialUser((u) => u ? { ...u, linkedWallet: data.profile.linkedWallet ?? null } : u);
+  }, [authHeaders]);
+
+  const unlinkWallet = useCallback(async () => {
+    const headers = authHeaders();
+    if (!headers.Authorization) throw new Error("Not signed in");
+    const r = await fetch(apiUrl("/auth/wallet/link"), {
+      method: "DELETE",
+      headers,
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({})) as { error?: string };
+      throw new Error(err.error ?? "Failed to unlink wallet");
+    }
+    setSocialUser((u) => u ? { ...u, linkedWallet: null } : u);
+  }, [authHeaders]);
+
   return (
     <AuthContext.Provider
-      value={{ socialUser, isLoading, signInWithGoogle, sendEmailOTP, verifyEmailOTP, signOut, authHeaders }}
+      value={{
+        socialUser,
+        isLoading,
+        signInWithGoogle,
+        sendEmailOTP,
+        verifyEmailOTP,
+        signOut,
+        authHeaders,
+        getWalletLinkChallenge,
+        linkWallet,
+        unlinkWallet,
+      }}
     >
       {children}
     </AuthContext.Provider>

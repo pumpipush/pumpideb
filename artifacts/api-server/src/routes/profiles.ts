@@ -73,9 +73,12 @@ router.get("/profiles/:address", async (req, res): Promise<void> => {
     return;
   }
 
-  // Solana addresses are base58, always 32-44 characters.
-  // Usernames are typically shorter and may contain underscores.
-  const looksLikeAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(identifier);
+  // Solana addresses: base58, always 32-44 characters (no hyphens).
+  // Social user addresses: UUID format (lowercase hex with hyphens).
+  // Usernames: everything else.
+  const looksLikeAddress =
+    /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(identifier) ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
 
   const [profile] = await db
     .select()

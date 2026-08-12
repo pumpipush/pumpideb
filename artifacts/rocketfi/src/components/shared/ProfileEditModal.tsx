@@ -30,6 +30,8 @@ import {
   Check,
   Loader2,
   Globe,
+  Wallet,
+  Unlink,
 } from "lucide-react";
 
 // ─── X icon (Twitter/X) ───────────────────────────────────────────────────────
@@ -74,14 +76,17 @@ interface ProfileEditModalProps {
 }
 
 export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }: ProfileEditModalProps) {
-  const { wallet, signMessage } = useWallet();
-  const { socialUser, authHeaders } = useAuth();
+  const { wallet, signMessage, openWalletModal } = useWallet();
+  const { socialUser, authHeaders, getWalletLinkChallenge, linkWallet, unlinkWallet } = useAuth();
   const { toast } = useToast();
+  const [walletLinking, setWalletLinking] = useState(false);
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
-  // Social user (Google/email) can edit their profile without a wallet
-  const effectiveAddress = wallet ?? socialUser?.address ?? "";
+  // Social users always use their social profile address.
+  // The wallet is used only as a signer for wallet-linking — it never becomes
+  // the profile identity when a social user is active.
+  const effectiveAddress = socialUser?.address ?? wallet ?? "";
 
   const { data: profile, isLoading: profileLoading } = useGetProfile(effectiveAddress, {
     query: { enabled: !!effectiveAddress, retry: false, queryKey: getGetProfileQueryKey(effectiveAddress) },
@@ -187,8 +192,8 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
         avatarUrl:     form.avatarUrl || undefined,
       };
 
-      if (wallet) {
-        // ── Wallet path: sign a challenge ──────────────────────────────────
+      if (wallet && !socialUser) {
+        // ── Wallet-only path: sign a challenge (no social session) ─────────
         const challengeRes = await fetch("/api/profiles/challenge", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -207,6 +212,9 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
         patchBody = { walletAddress: wallet, signature, message, ...profileFields };
       } else {
         // ── Social auth path: JWT Bearer token ────────────────────────────
+        // Used for both: social-only users AND social users who also have a
+        // wallet connected (wallet is only used for linking, not for signing
+        // profile edits while a social session is active).
         patchHeaders = { ...patchHeaders, ...authHeaders() };
         patchBody = profileFields;
       }
@@ -394,6 +402,95 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
             />
           </div>
         </div>
+
+        {/* Linked Wallet — only shown for social (Google/email) users */}
+        {socialUser && (
+          <div className="mb-6 p-3 rounded-sm border border-border/50 bg-background/50">
+            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mb-2">
+              <Wallet className="w-3 h-3" /> Linked Wallet
+            </label>
+            {socialUser.linkedWallet ? (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-foreground font-mono truncate">
+                  {socialUser.linkedWallet.slice(0, 6)}…{socialUser.linkedWallet.slice(-4)}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs text-muted-foreground hover:text-destructive rounded-sm shrink-0"
+                  disabled={walletLinking}
+                  onClick={async () => {
+                    setWalletLinking(true);
+                    try {
+                      await unlinkWallet();
+                      toast({ title: "Wallet unlinked", description: "Your wallet has been removed from your profile." });
+                    } catch (e) {
+                      const msg = e instanceof Error ? e.message : "Failed to unlink";
+                      toast({ title: "Unlink failed", description: msg, variant: "destructive" });
+                    } finally {
+                      setWalletLinking(false);
+                    }
+                  }}
+                >
+                  {walletLinking
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <><Unlink className="w-3 h-3 mr-1" /> Disconnect</>}
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-muted-foreground">No wallet linked</span>
+                {wallet ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs rounded-sm shrink-0"
+                    disabled={walletLinking}
+                    onClick={async () => {
+                      if (!wallet) return;
+                      setWalletLinking(true);
+                      try {
+                        // 1. Get a server-issued challenge nonce
+                        const { message: challengeMsg } = await getWalletLinkChallenge(wallet);
+                        // 2. Sign the challenge with the connected wallet (proves ownership)
+                        const msgBytes = new TextEncoder().encode(challengeMsg);
+                        const sigRaw = await signMessage(msgBytes);
+                        if (!(sigRaw instanceof Uint8Array) || sigRaw.length !== 64) {
+                          throw new Error("Wallet returned an invalid signature — please try again");
+                        }
+                        const signature = bs58Encode(sigRaw);
+                        // 3. Submit to server for verification and persistence
+                        await linkWallet(wallet, signature, challengeMsg);
+                        toast({ title: "Wallet linked", description: "Your wallet is now linked to your profile." });
+                      } catch (e) {
+                        const msg = e instanceof Error ? e.message : "Failed to link wallet";
+                        toast({ title: "Link failed", description: msg, variant: "destructive" });
+                      } finally {
+                        setWalletLinking(false);
+                      }
+                    }}
+                  >
+                    {walletLinking
+                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                      : <><Wallet className="w-3 h-3 mr-1" /> Link connected wallet</>}
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs rounded-sm shrink-0"
+                    onClick={openWalletModal}
+                  >
+                    <Wallet className="w-3 h-3 mr-1" /> Connect wallet
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex items-center gap-2">

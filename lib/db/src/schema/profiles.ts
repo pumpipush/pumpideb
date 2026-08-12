@@ -15,6 +15,8 @@ export const profilesTable = pgTable("profiles", {
   email: text("email").unique(),
   googleId: text("google_id").unique(),
   authType: text("auth_type").notNull().default("wallet"),
+  // Linked wallet: social users can permanently associate a Solana wallet address
+  linkedWallet: text("linked_wallet").unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
