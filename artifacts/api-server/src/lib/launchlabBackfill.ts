@@ -38,6 +38,8 @@ const BACKFILL_SIG_LIMIT    = 1000;  // signatures per page (max Solana allows)
 const BATCH_SIZE            = 10;    // getTransaction calls per HTTP request
 const BATCH_DELAY_MS        = 250;   // ms between batches (rate-limit protection)
 const BACKFILL_INTERVAL_MS  = 10 * 60_000; // re-run every 10 min
+const BATCH_MAX_RETRIES     = 3;           // max retry attempts per batch on RPC failure
+const BATCH_RETRY_BASE_MS   = 2_000;       // base wait: 2 s → 4 s → 8 s (exponential)
 
 // Deep backfill: stop paging if we go past this timestamp (LaunchLab didn't exist before this).
 // Raydium LaunchLab launched on Solana mainnet in late 2024.
@@ -224,11 +226,35 @@ async function processSignaturePage(sigs: SigEntry[]): Promise<{ inserted: numbe
     const batch     = sigs.slice(i, i + BATCH_SIZE);
     const batchSigs = batch.map(s => s.signature);
 
-    let txs: Array<Record<string, unknown> | null>;
-    try {
-      txs = await batchGetTransactions(batchSigs);
-    } catch (err) {
-      log.warn({ err, offset: i }, "launchlab-backfill: batch fetch failed, skipping");
+    let txs: Array<Record<string, unknown> | null> = [];
+    let fetchSucceeded = false;
+    let lastFetchErr: unknown;
+    for (let attempt = 0; attempt <= BATCH_MAX_RETRIES; attempt++) {
+      try {
+        txs = await batchGetTransactions(batchSigs);
+        fetchSucceeded = true;
+        break;
+      } catch (err) {
+        lastFetchErr = err;
+        const waitMs = BATCH_RETRY_BASE_MS * Math.pow(2, attempt);
+        log.warn(
+          { err, offset: i, attempt, waitMs, firstSig: batchSigs[0], lastSig: batchSigs[batchSigs.length - 1] },
+          `launchlab-backfill: batch fetch failed (attempt ${attempt + 1}/${BATCH_MAX_RETRIES + 1}), retrying in ${waitMs}ms`,
+        );
+        if (attempt < BATCH_MAX_RETRIES) await delay(waitMs);
+      }
+    }
+    if (!fetchSucceeded) {
+      log.error(
+        {
+          err:      lastFetchErr,
+          offset:   i,
+          firstSig: batchSigs[0],
+          lastSig:  batchSigs[batchSigs.length - 1],
+          count:    batchSigs.length,
+        },
+        "launchlab-backfill: batch fetch exhausted all retries — skipped signature range; re-trigger backfill to recover",
+      );
       await delay(BATCH_DELAY_MS * 2);
       continue;
     }
