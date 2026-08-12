@@ -30,15 +30,58 @@ export const PUMP_FUN_PROGRAM_ID = new PublicKey(
   "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
 );
 
-/** pump.fun global state (known fixed address) */
+/**
+ * pump.fun global state PDA.
+ * Derivation: sha256("global" || [255] || program_id || "ProgramDerivedAddress")
+ * Verified by computing the PDA and matching against a real on-chain transaction.
+ */
 const PUMP_FUN_GLOBAL = new PublicKey(
-  "4wTV1YmiEkRvAtNtsSGPtUrqRYQMe5zznTJ67bBb2GQZ"
+  "4wTV1YmiEkRvAtNtsSGPtUrqRYQMe5SKy2uB4Jjaxnjf"
 );
 
-/** pump.fun protocol fee recipient — receives ~1% of every trade */
-const PUMP_PROTOCOL_FEE_RECIPIENT = new PublicKey(
+/**
+ * Fallback fee recipient (original value).
+ * Only used if the live global-state fetch fails.
+ * The authoritative value is read from the global account at trade time.
+ */
+const PUMP_PROTOCOL_FEE_RECIPIENT_FALLBACK = new PublicKey(
   "CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM"
 );
+
+// ── Global-state cache ────────────────────────────────────────────────────────
+
+interface PumpGlobalState {
+  feeRecipient: PublicKey;
+  /** Timestamp (ms) when this was fetched — invalidate after 5 minutes */
+  fetchedAt: number;
+}
+let _cachedGlobal: PumpGlobalState | null = null;
+
+/**
+ * Read the pump.fun global state account and return the live fee recipient.
+ * Caches the result for 5 minutes so repeated trades don't hammer the RPC.
+ * Falls back to the hardcoded address if the account can't be fetched.
+ */
+async function getPumpFeeRecipient(conn: Connection): Promise<PublicKey> {
+  const now = Date.now();
+  if (_cachedGlobal && now - _cachedGlobal.fetchedAt < 5 * 60_000) {
+    return _cachedGlobal.feeRecipient;
+  }
+
+  try {
+    const info = await conn.getAccountInfo(PUMP_FUN_GLOBAL, "confirmed");
+    if (!info || info.data.length < 73) {
+      throw new Error("Global state account missing or too short");
+    }
+    // Layout: 8 discriminator + 1 initialized + 32 authority + 32 fee_recipient
+    const feeRecipient = new PublicKey(info.data.slice(41, 73));
+    _cachedGlobal = { feeRecipient, fetchedAt: now };
+    return feeRecipient;
+  } catch (err) {
+    console.warn("[pumpfun-swap] Could not fetch global state; using fallback fee recipient.", err);
+    return PUMP_PROTOCOL_FEE_RECIPIENT_FALLBACK;
+  }
+}
 
 /**
  * Anchor event authority PDA for the pump.fun program.
@@ -196,21 +239,26 @@ export async function buildPumpFunBuyTx(params: BuildPumpSwapTxParams): Promise<
     encodeU64LE(solLimitLamports),
   ));
 
+  const conn = new Connection(getRpcUrl(), "confirmed");
+  // Read fee recipient from chain — pump.fun has updated this address before.
+  // Using the live value prevents ConstraintAddress failures after future updates.
+  const feeRecipient = await getPumpFeeRecipient(conn);
+
   const buyIx = new TransactionInstruction({
     programId: PUMP_FUN_PROGRAM_ID,
     keys: [
-      { pubkey: PUMP_FUN_GLOBAL,                isSigner: false, isWritable: false },
-      { pubkey: PUMP_PROTOCOL_FEE_RECIPIENT,    isSigner: false, isWritable: true  },
-      { pubkey: mint,                           isSigner: false, isWritable: false },
-      { pubkey: bondingCurve,                   isSigner: false, isWritable: true  },
-      { pubkey: associatedBondingCurve,         isSigner: false, isWritable: true  },
-      { pubkey: associatedUser,                 isSigner: false, isWritable: true  },
-      { pubkey: user,                           isSigner: true,  isWritable: true  },
-      { pubkey: SystemProgram.programId,        isSigner: false, isWritable: false },
-      { pubkey: TOKEN_PROGRAM_ID,               isSigner: false, isWritable: false },
-      { pubkey: SYSVAR_RENT_PUBKEY,             isSigner: false, isWritable: false },
-      { pubkey: PUMP_EVENT_AUTHORITY,           isSigner: false, isWritable: false },
-      { pubkey: PUMP_FUN_PROGRAM_ID,            isSigner: false, isWritable: false },
+      { pubkey: PUMP_FUN_GLOBAL,       isSigner: false, isWritable: false },
+      { pubkey: feeRecipient,          isSigner: false, isWritable: true  },
+      { pubkey: mint,                  isSigner: false, isWritable: false },
+      { pubkey: bondingCurve,          isSigner: false, isWritable: true  },
+      { pubkey: associatedBondingCurve,isSigner: false, isWritable: true  },
+      { pubkey: associatedUser,        isSigner: false, isWritable: true  },
+      { pubkey: user,                  isSigner: true,  isWritable: true  },
+      { pubkey: SystemProgram.programId,isSigner: false, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID,      isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_RENT_PUBKEY,    isSigner: false, isWritable: false },
+      { pubkey: PUMP_EVENT_AUTHORITY,  isSigner: false, isWritable: false },
+      { pubkey: PUMP_FUN_PROGRAM_ID,   isSigner: false, isWritable: false },
     ],
     data,
   });
@@ -227,7 +275,6 @@ export async function buildPumpFunBuyTx(params: BuildPumpSwapTxParams): Promise<
   _addPlatformFeeIx(tx, user, solEstimateLamports);
 
   tx.feePayer = user;
-  const conn = new Connection(getRpcUrl(), "confirmed");
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
   tx.recentBlockhash = blockhash;
 
@@ -250,7 +297,7 @@ export async function buildPumpFunSellTx(params: BuildPumpSwapTxParams): Promise
   const user   = new PublicKey(userStr);
   const bondingCurve           = getPumpBondingCurve(mint);
   const associatedBondingCurve = getATA(bondingCurve, mint);
-  const associatedUser          = getATA(user, mint);
+  const associatedUser         = getATA(user, mint);
 
   const data = Buffer.from(concat(
     SELL_DISCRIMINATOR,
@@ -258,21 +305,24 @@ export async function buildPumpFunSellTx(params: BuildPumpSwapTxParams): Promise
     encodeU64LE(solLimitLamports),
   ));
 
+  const conn = new Connection(getRpcUrl(), "confirmed");
+  const feeRecipient = await getPumpFeeRecipient(conn);
+
   const sellIx = new TransactionInstruction({
     programId: PUMP_FUN_PROGRAM_ID,
     keys: [
-      { pubkey: PUMP_FUN_GLOBAL,                isSigner: false, isWritable: false },
-      { pubkey: PUMP_PROTOCOL_FEE_RECIPIENT,    isSigner: false, isWritable: true  },
-      { pubkey: mint,                           isSigner: false, isWritable: false },
-      { pubkey: bondingCurve,                   isSigner: false, isWritable: true  },
-      { pubkey: associatedBondingCurve,         isSigner: false, isWritable: true  },
-      { pubkey: associatedUser,                 isSigner: false, isWritable: true  },
-      { pubkey: user,                           isSigner: true,  isWritable: true  },
-      { pubkey: SystemProgram.programId,        isSigner: false, isWritable: false },
-      { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID,    isSigner: false, isWritable: false },
-      { pubkey: TOKEN_PROGRAM_ID,               isSigner: false, isWritable: false },
-      { pubkey: PUMP_EVENT_AUTHORITY,           isSigner: false, isWritable: false },
-      { pubkey: PUMP_FUN_PROGRAM_ID,            isSigner: false, isWritable: false },
+      { pubkey: PUMP_FUN_GLOBAL,        isSigner: false, isWritable: false },
+      { pubkey: feeRecipient,           isSigner: false, isWritable: true  },
+      { pubkey: mint,                   isSigner: false, isWritable: false },
+      { pubkey: bondingCurve,           isSigner: false, isWritable: true  },
+      { pubkey: associatedBondingCurve, isSigner: false, isWritable: true  },
+      { pubkey: associatedUser,         isSigner: false, isWritable: true  },
+      { pubkey: user,                   isSigner: true,  isWritable: true  },
+      { pubkey: SystemProgram.programId,isSigner: false, isWritable: false },
+      { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID,       isSigner: false, isWritable: false },
+      { pubkey: PUMP_EVENT_AUTHORITY,   isSigner: false, isWritable: false },
+      { pubkey: PUMP_FUN_PROGRAM_ID,    isSigner: false, isWritable: false },
     ],
     data,
   });
@@ -289,7 +339,6 @@ export async function buildPumpFunSellTx(params: BuildPumpSwapTxParams): Promise
   _addPlatformFeeIx(tx, user, solEstimateLamports);
 
   tx.feePayer = user;
-  const conn = new Connection(getRpcUrl(), "confirmed");
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
   tx.recentBlockhash = blockhash;
 

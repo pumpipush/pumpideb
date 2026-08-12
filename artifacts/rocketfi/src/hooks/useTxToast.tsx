@@ -73,10 +73,26 @@ export function useTxToast() {
 
       return signature || null;
     } catch (err) {
-      const msg =
-        err instanceof Error
-          ? err.message.slice(0, 120)
-          : "Something went wrong. Please try again.";
+      // Wallet providers (Phantom, Backpack, Solflare) bury the real program
+      // error in err.data — e.g. { data: { message, logs: [...] } }.
+      // Prefer that over the generic top-level message ("Internal error").
+      let msg = "Something went wrong. Please try again.";
+      if (err instanceof Error) {
+        msg = err.message;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const errData = (err as any).data;
+        if (errData?.message && typeof errData.message === "string") {
+          msg = errData.message;
+        } else if (Array.isArray(errData?.logs) && errData.logs.length > 0) {
+          const logs: string[] = errData.logs;
+          const detail =
+            logs.find(l => /AnchorError|Error:|failed:|Program log:/i.test(l)) ??
+            logs.at(-1);
+          if (detail) msg = detail;
+        }
+        console.error("[useTxToast] tx failed:", err);
+        msg = msg.slice(0, 160);
+      }
 
       update({
         id,
