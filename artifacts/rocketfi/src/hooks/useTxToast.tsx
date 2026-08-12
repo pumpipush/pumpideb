@@ -3,24 +3,22 @@
  *
  * Usage:
  *   const { submitTx } = useTxToast();
- *   // Real on-chain swap (task #103+):
  *   await submitTx(sendOnChainTx(), "Buy");
- *   // Simulated trade — pass "" as the resolved value:
- *   await submitTx(doMockTrade(), "Buy");
  *
  * Behaviour:
- * - Shows "Pending…" immediately.
- * - On success:
- *   - Real signature (non-empty, non-0x, ≥60 chars) → "Confirmed ✓" with Solscan link.
- *   - Empty / simulated → "Order Filled (Simulated)" without any explorer link.
- * - On rejection → "Failed" with error message.
- *
- * Returns the signature string (possibly ""), or null on failure.
+ * - Shows "Pending…" immediately (no auto-dismiss while waiting).
+ * - On success: "Confirmed ✓" with Solscan link — auto-dismisses after 6 s.
+ * - On failure: "Failed" with error message — auto-dismisses after 8 s.
+ * - The X button always works immediately.
  */
 
 import { toast } from "@/hooks/use-toast";
 
 const SOLSCAN_TX = "https://solscan.io/tx/";
+
+/** Auto-dismiss delays in ms */
+const DISMISS_SUCCESS_MS = 6_000;
+const DISMISS_FAILURE_MS = 8_000;
 
 /** A real Solana transaction signature is base58, 87-88 chars, no 0x prefix. */
 function isRealSignature(sig: string): boolean {
@@ -34,7 +32,7 @@ export function useTxToast() {
   ): Promise<string | null> => {
     const title = label ?? "Trade";
 
-    const { id, update } = toast({
+    const { id, update, dismiss } = toast({
       title: `${title} Pending…`,
       description: "Waiting for Solana network confirmation",
     });
@@ -43,7 +41,6 @@ export function useTxToast() {
       const signature = await txPromise;
 
       if (isRealSignature(signature)) {
-        // Real on-chain confirmation — show Solscan link
         update({
           id,
           title: `${title} Confirmed ✓`,
@@ -58,19 +55,17 @@ export function useTxToast() {
             </a>
           ),
           open: true,
-          onOpenChange: () => {},
         });
       } else {
-        // Simulated trade — no on-chain signature yet
         update({
           id,
           title: `${title} Order Filled`,
           description: "Trade recorded. On-chain execution enabled in the next update.",
           open: true,
-          onOpenChange: () => {},
         });
       }
 
+      setTimeout(dismiss, DISMISS_SUCCESS_MS);
       return signature || null;
     } catch (err) {
       // Wallet providers (Phantom, Backpack, Solflare) bury the real program
@@ -92,8 +87,6 @@ export function useTxToast() {
         }
         console.error("[useTxToast] tx failed:", err);
         // Replace the raw "block height exceeded" RPC error with a user-friendly hint.
-        // This happens when the transaction didn't land on-chain before the blockhash
-        // expired (~60 s). The trade was NOT executed — it's safe to retry.
         if (/block height exceeded|blockheight exceeded/i.test(msg)) {
           msg = "Transaction timed out — it was not executed. Please try again (network was congested).";
         }
@@ -106,9 +99,9 @@ export function useTxToast() {
         description: msg,
         variant: "destructive",
         open: true,
-        onOpenChange: () => {},
       });
 
+      setTimeout(dismiss, DISMISS_FAILURE_MS);
       return null;
     }
   };

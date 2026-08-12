@@ -2,7 +2,9 @@ import * as React from 'react';
 import type { ToastActionElement, ToastProps } from '@/components/ui/toast';
 
 const TOAST_LIMIT = 1;
-const TOAST_REMOVE_DELAY = 1000000;
+// Delay between a toast being dismissed (open=false) and being removed from the
+// DOM entirely — gives the exit animation time to finish.
+const TOAST_REMOVE_DELAY = 800;
 
 type ToasterToast = ToastProps & {
   id: string;
