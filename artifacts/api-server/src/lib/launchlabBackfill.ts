@@ -197,14 +197,57 @@ async function getSignaturesForAddress(
 
 async function batchGetTransactions(
   sigs: string[],
+  opts: { throwOnNullResults?: boolean } = {},
 ): Promise<Array<Record<string, unknown> | null>> {
   const payload = sigs.map((sig, i) => ({
     jsonrpc: "2.0", id: i + 1,
     method:  "getTransaction",
-    params:  [sig, { encoding: "json", maxSupportedTransactionVersion: 0 }],
+    params:  [sig, { encoding: "json", maxSupportedTransactionVersion: 0, commitment: "confirmed" }],
   }));
-  const resp = (await rpcPost(payload)) as Array<{ result?: Record<string, unknown> | null }>;
-  return Array.isArray(resp) ? resp.map(r => r.result ?? null) : [];
+  const resp = await rpcPost(payload);
+
+  // A top-level RPC error body (not an array) means the entire batch failed.
+  // Throw so the retry loop in processSignaturePage catches it and retries.
+  if (!Array.isArray(resp)) {
+    throw new Error(
+      `batchGetTransactions: expected JSON-RPC batch array, got ${typeof resp} — possible RPC error body`,
+    );
+  }
+
+  // Length mismatch means the endpoint returned a truncated or partial response.
+  if (resp.length !== sigs.length) {
+    throw new Error(
+      `batchGetTransactions: response length ${resp.length} does not match request length ${sigs.length}`,
+    );
+  }
+
+  // Per-item RPC errors (e.g. "Transaction version unsupported", rate-limit).
+  // Any error in the batch means we cannot trust the full result set; throw so
+  // the retry loop handles all items uniformly rather than silently dropping them.
+  const errorItems = (resp as Array<{ error?: unknown }>).filter(r => r.error != null);
+  if (errorItems.length > 0) {
+    throw new Error(
+      `batchGetTransactions: ${errorItems.length}/${sigs.length} items returned per-item RPC errors`,
+    );
+  }
+
+  const results = (resp as Array<{ result?: Record<string, unknown> | null }>)
+    .map(r => r.result ?? null);
+
+  // In strict mode (hot backfill): a null result for a known-confirmed signature means
+  // the RPC couldn't serve it right now (commitment lag, node cache miss, etc.).
+  // Throw so the retry loop retries the batch rather than silently skipping the sig.
+  // Regular/deep backfills leave this off because old txs can legitimately be null.
+  if (opts.throwOnNullResults) {
+    const nullCount = results.filter(r => r === null).length;
+    if (nullCount > 0) {
+      throw new Error(
+        `batchGetTransactions: ${nullCount}/${sigs.length} results were null (transactions temporarily unavailable at confirmed)`,
+      );
+    }
+  }
+
+  return results;
 }
 
 // ── Delay helper ──────────────────────────────────────────────────────────────
@@ -218,9 +261,13 @@ const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
  * inserts missing tokens, and kicks off async URI metadata fetch.
  * Returns { inserted, skipped }.
  */
-async function processSignaturePage(sigs: SigEntry[]): Promise<{ inserted: number; skipped: number }> {
-  let inserted = 0;
-  let skipped  = 0;
+async function processSignaturePage(
+  sigs: SigEntry[],
+  opts: { strict?: boolean } = {},
+): Promise<{ inserted: number; skipped: number; batchFailures: number }> {
+  let inserted      = 0;
+  let skipped       = 0;
+  let batchFailures = 0;
 
   for (let i = 0; i < sigs.length; i += BATCH_SIZE) {
     const batch     = sigs.slice(i, i + BATCH_SIZE);
@@ -231,7 +278,11 @@ async function processSignaturePage(sigs: SigEntry[]): Promise<{ inserted: numbe
     let lastFetchErr: unknown;
     for (let attempt = 0; attempt <= BATCH_MAX_RETRIES; attempt++) {
       try {
-        txs = await batchGetTransactions(batchSigs);
+        // In strict mode (hot backfill): null results are retried — a null result
+        // for a confirmed sig is a temporary RPC unavailability, not a real miss.
+        // In non-strict mode (regular/deep backfill): nulls are silently skipped
+        // since old txs may genuinely be absent from the node's history.
+        txs = await batchGetTransactions(batchSigs, { throwOnNullResults: opts.strict });
         fetchSucceeded = true;
         break;
       } catch (err) {
@@ -255,6 +306,7 @@ async function processSignaturePage(sigs: SigEntry[]): Promise<{ inserted: numbe
         },
         "launchlab-backfill: batch fetch exhausted all retries — skipped signature range; re-trigger backfill to recover",
       );
+      batchFailures++;
       await delay(BATCH_DELAY_MS * 2);
       continue;
     }
@@ -323,7 +375,165 @@ async function processSignaturePage(sigs: SigEntry[]): Promise<{ inserted: numbe
     if (i + BATCH_SIZE < sigs.length) await delay(BATCH_DELAY_MS);
   }
 
-  return { inserted, skipped };
+  return { inserted, skipped, batchFailures };
+}
+
+// ── Hot backfill (watermark-based, runs every 60 s) ───────────────────────────
+
+/**
+ * Watermark: newest program signature successfully processed in the last run.
+ * Used as the exclusive upper bound for the next run so no creates are skipped
+ * regardless of how many trades share the signature stream between polls.
+ */
+let _hotBackfillWatermark: string | undefined = undefined;
+/** Serialization guard — prevents concurrent runs from racing on the watermark. */
+let _hotBackfillRunning = false;
+
+/**
+ * Gap-safe create-detection pass.
+ *
+ * Algorithm:
+ *   1. Fetch the 200 newest program signatures (page 0).
+ *   2. If the prior watermark appears in this page, collect only the slice
+ *      before it (strictly newer).
+ *   3. If the watermark is NOT in the page (outage gap > 200 sigs), paginate
+ *      backward with `before` cursor — up to 4 additional pages (1000 sigs
+ *      total) — collecting every page until the watermark is found.
+ *   4. Process all collected signatures via processSignaturePage.
+ *   5. Advance the watermark to the newest sig in page 0 ONLY after all pages
+ *      have been successfully processed.  On any error the watermark stays at
+ *      its previous value so the next run retries from the same point.
+ *
+ * Runs are serialized: if a prior run is still in progress (slow RPC) the new
+ * invocation is dropped rather than racing on the watermark state.
+ */
+export async function hotBackfillLaunchLabTokens(): Promise<void> {
+  if (_hotBackfillRunning) return; // serialize — skip if already in progress
+  _hotBackfillRunning = true;
+  try {
+    // Page 0 — newest 200 signatures
+    const firstPage = (await getSignaturesForAddress(200)).filter(s => !s.err);
+    if (firstPage.length === 0) return;
+
+    // This will become the new watermark once processing succeeds.
+    const newWatermark = firstPage[0]?.signature;
+
+    // ── First run: no watermark yet ──────────────────────────────────────────
+    if (!_hotBackfillWatermark) {
+      // strict: true — null results for recently confirmed sigs must be retried;
+      // watermark only advances to newest sig when every batch succeeds.
+      const { batchFailures } = await processSignaturePage(firstPage, { strict: true });
+      if (batchFailures === 0) {
+        // All sigs fetched: advance watermark to the newest sig we processed.
+        if (newWatermark) _hotBackfillWatermark = newWatermark;
+      } else {
+        // Partial failure: anchor the watermark strictly OLDER than the oldest
+        // sig we attempted.  This is necessary because subsequent runs use an
+        // exclusive bound (slice(0, wmIdx)), so a watermark equal to oldestAttempted
+        // would exclude that sig from retries.  By placing the anchor one step
+        // further back, wmIdx points to the anchor and slice(0, wmIdx) correctly
+        // includes oldestAttempted in the retry window.
+        const oldestAttempted = firstPage[firstPage.length - 1]?.signature;
+        if (oldestAttempted) {
+          try {
+            // Fetch exactly one sig older than the oldest we attempted.
+            const olderPage = (await getSignaturesForAddress(1, oldestAttempted))
+              .filter(s => !s.err);
+            if (olderPage.length > 0 && olderPage[0]) {
+              _hotBackfillWatermark = olderPage[0].signature;
+            }
+            // If nothing older exists (program is brand-new), leave watermark
+            // unset — the next invocation retries as another first run.
+          } catch { /* leave watermark unset; next run retries as first-run */ }
+        }
+      }
+      return;
+    }
+
+    // ── Subsequent runs: collect sigs newer than watermark ───────────────────
+    const sigsToProcess: SigEntry[] = [];
+    let foundWatermark = false;
+
+    // Check page 0 first
+    const wmIdxFirst = firstPage.findIndex(s => s.signature === _hotBackfillWatermark);
+    if (wmIdxFirst >= 0) {
+      sigsToProcess.push(...firstPage.slice(0, wmIdxFirst));
+      foundWatermark = true;
+    } else {
+      sigsToProcess.push(...firstPage);
+    }
+
+    // If watermark not in page 0, paginate backward (older) until found.
+    // Safety cap: 4 additional pages (1000 sigs total).  If watermark still not
+    // found after 5 pages, the gap is too large for this safety net — the regular
+    // 10-minute backfill is the recovery path.  Do NOT advance the watermark so
+    // the next run retries from the same point without permanently skipping sigs.
+    if (!foundWatermark) {
+      let cursor = firstPage[firstPage.length - 1]?.signature;
+      for (let page = 0; page < 4 && cursor && !foundWatermark; page++) {
+        const nextPage = (await getSignaturesForAddress(200, cursor)).filter(s => !s.err);
+        if (nextPage.length === 0) break;
+
+        const wmIdx = nextPage.findIndex(s => s.signature === _hotBackfillWatermark);
+        if (wmIdx >= 0) {
+          sigsToProcess.push(...nextPage.slice(0, wmIdx));
+          foundWatermark = true;
+        } else {
+          sigsToProcess.push(...nextPage);
+        }
+        cursor = nextPage[nextPage.length - 1]?.signature;
+        if (nextPage.length < 200) break; // exhausted program history
+      }
+    }
+
+    if (!foundWatermark) {
+      // Gap exceeds 5 pages: process the newest 1000 sigs as a best-effort pass
+      // (catches creates in the visible window) but leave the watermark unchanged
+      // so the next run re-scans from the same point rather than permanently
+      // skipping the invisible part of the gap.
+      log.warn(
+        { watermark: _hotBackfillWatermark, sigsCollected: sigsToProcess.length },
+        "launchlab-hot-backfill: watermark not found in 5 pages — processing visible window but NOT advancing watermark (regular backfill covers the full gap)",
+      );
+      // strict: true so null results don't silently skip creates in this window.
+      // Watermark is NOT advanced regardless of outcome (next run retries from here).
+      if (sigsToProcess.length > 0) await processSignaturePage(sigsToProcess, { strict: true });
+      return; // watermark intentionally NOT advanced
+    }
+
+    // ── Process sigs newer than watermark ────────────────────────────────────
+    // strict: true — null results for confirmed sigs are retried rather than
+    // silently skipped; watermark only advances when every sig is confirmed fetched.
+    if (sigsToProcess.length === 0) return; // no new sigs since last watermark
+
+    const { inserted, batchFailures } = await processSignaturePage(sigsToProcess, { strict: true });
+
+    if (batchFailures > 0) {
+      // Partial RPC failure: some sigs were not fetched. Do NOT advance the
+      // watermark — the next run will retry the full range from the same point.
+      log.warn(
+        { batchFailures, sigsAttempted: sigsToProcess.length },
+        "launchlab-hot-backfill: batch fetch failures — watermark NOT advanced (will retry next run)",
+      );
+      return;
+    }
+
+    if (inserted > 0) {
+      log.info(
+        { inserted, processed: sigsToProcess.length },
+        "launchlab-hot-backfill: inserted missed creates",
+      );
+    }
+
+    // ── Advance watermark ONLY after all sigs processed without batch failures ─
+    if (newWatermark) _hotBackfillWatermark = newWatermark;
+
+  } catch (err) {
+    log.warn({ err }, "launchlab-hot-backfill: error (non-fatal, watermark unchanged)");
+    // Watermark intentionally NOT advanced — next run retries from same point.
+  } finally {
+    _hotBackfillRunning = false;
+  }
 }
 
 // ── Regular backfill (last 1000 sigs) ─────────────────────────────────────────
@@ -464,8 +674,13 @@ export function startLaunchLabBackfill(): void {
   // This pages through ALL historical LaunchLab transactions, not just the last 1000.
   setTimeout(() => void deepBackfillLaunchLabTokens(), 15_000);
 
-  // Regular backfill: run immediately (30 s delay) then every 10 min
+  // Hot backfill: last 30 sigs every 60 s — catches WS-missed creates within ~1 minute.
+  // Starts after 20 s to let the WebSocket adapter settle first.
+  setTimeout(() => void hotBackfillLaunchLabTokens(), 20_000);
+  setInterval(() => void hotBackfillLaunchLabTokens(), 60_000);
+
+  // Regular backfill: run at 60 s delay then every 10 min
   // Catches tokens created since the last startup or missed during an offline window.
-  setTimeout(() => void backfillLaunchLabTokens(), 30_000);
+  setTimeout(() => void backfillLaunchLabTokens(), 60_000);
   setInterval(() => void backfillLaunchLabTokens(), BACKFILL_INTERVAL_MS);
 }

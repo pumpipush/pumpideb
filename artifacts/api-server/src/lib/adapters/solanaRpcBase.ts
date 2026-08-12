@@ -154,6 +154,24 @@ export abstract class SolanaRpcIndexer {
   protected abstract onEvent(event: LogEvent): Promise<void>;
 
   /**
+   * Called every time an established WebSocket connection (one that successfully
+   * opened) drops.  Fires before the reconnect is attempted, so subclasses can
+   * start an HTTP polling fallback promptly rather than waiting for the slow
+   * all-endpoints-exhausted path.
+   * Default: no-op.
+   */
+  protected onWssDisconnected(): void { /* no-op */ }
+
+  /**
+   * Called on every valid WS event that passes shouldProcess(), unconditionally —
+   * regardless of whether onAllRpcsExhausted() has fired.  Subclasses use this to
+   * cancel any disconnect-triggered fallback polling the moment the WSS delivers
+   * events again, without relying on the _fallbackActive flag.
+   * Default: no-op.
+   */
+  protected onEventReceived(): void { /* no-op */ }
+
+  /**
    * Called once after a full round-trip through every WSS URL with zero events
    * (i.e. all Solana RPC endpoints appear silent / unreachable).
    * Subclasses can override to activate a last-resort fallback data source.
@@ -246,9 +264,12 @@ export abstract class SolanaRpcIndexer {
   }
 
   protected async getTransaction(signature: string): Promise<RpcTx | null> {
+    // Use "confirmed" commitment to match the logsSubscribe level — the tx is
+    // already confirmed when the WS fires, so the RPC can return it immediately
+    // without waiting for "finalized" (which adds 5–13 s on many endpoints).
     return this.rpcCall<RpcTx>("getTransaction", [
       signature,
-      { encoding: "json", maxSupportedTransactionVersion: 0 },
+      { encoding: "json", maxSupportedTransactionVersion: 0, commitment: "confirmed" },
     ]);
   }
 
@@ -405,6 +426,9 @@ export abstract class SolanaRpcIndexer {
         clearTimeout(this._watchdogTimer);
         this._watchdogTimer = null;
       }
+      // Unconditional hook — fires regardless of _fallbackActive so subclasses can
+      // cancel disconnect-triggered fallbacks as soon as the WSS delivers events.
+      this.onEventReceived();
       // If a fallback is active and the chain RPC delivers events again, deactivate it.
       if (this._fallbackActive) {
         this._fallbackActive = false;
@@ -445,6 +469,10 @@ export abstract class SolanaRpcIndexer {
       // The watchdog was never installed, so rotate the endpoint here.
       if (!openFired) {
         this._rotateEndpoint(wssUrl, "pre-open connection failure");
+      } else {
+        // Notify subclasses that an established connection dropped — they can
+        // start an HTTP fallback without waiting for the slow all-exhausted path.
+        this.onWssDisconnected();
       }
 
       this.log.warn({ retryMs: this.delay }, `${this.constructor.name}: disconnected — reconnecting`);

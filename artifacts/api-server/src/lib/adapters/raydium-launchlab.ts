@@ -10,8 +10,13 @@
  *      "Program data: <base64>" log entry (same discriminator as pump.fun TradeEvent).
  *      Broadcasts SSE price update immediately — zero extra RPC calls.
  *      Background getTransaction fills in trader address + persists full trade to DB.
- *   4. CREATE PATH: getTransaction is unavoidable (name/symbol live in instruction data).
- *      Creates are ~100/day so this is acceptable.
+ *   4. CREATE PATH: getTransaction with commitment:"confirmed" (same level as WS
+ *      subscription) so the tx is already available — typical round-trip <300 ms.
+ *      LaunchLab does NOT emit an Anchor CreateEvent log, so the full tx is needed
+ *      for the name/symbol/mint.
+ *   5. WSS FALLBACK: when all WebSocket RPC endpoints go silent, activates a
+ *      30-second hotBackfill poll (getSignaturesForAddress, last 30 sigs) so new
+ *      tokens appear within ~30 s even while the WSS is dead.
  *
  * TradeEvent layout (147 bytes, Anchor/Borsh):
  *   discriminator (8)   — bddb7fd34ee661ee (same namespace as pump.fun)
@@ -39,6 +44,7 @@ import {
 } from "./solanaRpcBase";
 import { bs58Decode, decodeLabCreateParamsRaw } from "./launchlabDecode";
 export { decodeLabCreateParamsRaw } from "./launchlabDecode";
+import { hotBackfillLaunchLabTokens } from "../launchlabBackfill";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -140,6 +146,17 @@ function parseTradeEventFromLogs(
 // ── Indexer ───────────────────────────────────────────────────────────────────
 
 class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
+  /**
+   * Active interval when the WSS is believed to be dead.
+   * Started 30 s after the first WSS disconnect; cleared on recovery.
+   */
+  private _pollFallbackTimer:   ReturnType<typeof setInterval> | null = null;
+  /**
+   * Pending timer: gives the WSS 30 s to reconnect before starting the poll.
+   * Cancelled by onEventReceived() if any WS event arrives before the 30 s elapses.
+   */
+  private _pollFallbackPending: ReturnType<typeof setTimeout>  | null = null;
+
   constructor() {
     super({
       programId:   LAUNCHLAB_PROGRAM,
@@ -148,6 +165,66 @@ class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
       // so we tolerate longer silences before concluding the connection is dead.
       watchdogMs: 300_000,
     });
+  }
+
+  private _startPollFallback(): void {
+    if (this._pollFallbackTimer) return; // already active
+    this.log.warn(
+      "raydium_launchlab: activating HTTP hot-backfill poll (30 s interval) for missed creates",
+    );
+    void hotBackfillLaunchLabTokens().catch(() => {}); // immediate first pass
+    this._pollFallbackTimer = setInterval(() => {
+      void hotBackfillLaunchLabTokens().catch(() => {});
+    }, 30_000);
+  }
+
+  private _stopPollFallback(): void {
+    if (this._pollFallbackPending !== null) {
+      clearTimeout(this._pollFallbackPending);
+      this._pollFallbackPending = null;
+    }
+    if (this._pollFallbackTimer !== null) {
+      clearInterval(this._pollFallbackTimer);
+      this._pollFallbackTimer = null;
+      this.log.info("raydium_launchlab: WSS recovered — HTTP poll fallback deactivated");
+    }
+  }
+
+  /**
+   * Cancels the pending 30 s start timer AND any active poll interval the moment
+   * the WSS delivers any valid event.  This is the primary recovery path —
+   * onRpcRecovered() only fires when _fallbackActive is true (all-RPC-exhausted).
+   */
+  protected override onEventReceived(): void {
+    this._stopPollFallback();
+  }
+
+  /**
+   * Fires as soon as an established WSS connection drops.  Waits 30 s before
+   * starting the poll fallback so brief reconnects don't trigger it; if the WSS
+   * comes back and delivers events within that window, onEventReceived() cancels
+   * the pending start.
+   */
+  protected override onWssDisconnected(): void {
+    if (this._pollFallbackTimer || this._pollFallbackPending) return;
+    this._pollFallbackPending = setTimeout(() => {
+      this._pollFallbackPending = null;
+      this._startPollFallback();
+    }, 30_000);
+  }
+
+  /**
+   * Activated when every WSS endpoint completes a full silent rotation (last
+   * resort — normally onWssDisconnected fires first and starts the poll much
+   * sooner).
+   */
+  protected override onAllRpcsExhausted(): void {
+    this._startPollFallback();
+  }
+
+  /** Deactivates the HTTP poll fallback the moment the WSS delivers events again. */
+  protected override onRpcRecovered(): void {
+    this._stopPollFallback();
   }
 
   /**
