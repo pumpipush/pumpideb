@@ -45,6 +45,8 @@ import {
   uploadToPumpFunIpfs,
   buildPumpFunCreateTx,
   simulatePumpFunCreate,
+  buildPumpFunBuyTxViaPortal,
+  buildPumpFunSellTxViaPortal,
   PUMP_FUN_LAUNCH_COST_SOL,
 } from "@/lib/pumpfunLauncher";
 import {
@@ -1635,97 +1637,28 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         return llSig;
       }
 
-      // pump.fun: 6 decimal places → 1 display token = 1,000,000 token atoms
-      const ATOMS_PER_TOKEN = 1_000_000;
+      // ── Build via pumpportal.fun — always uses the current account layout ────────
+      // Pump.fun upgraded their program in 2025 (added creatorVault account to buy/sell).
+      // Our hand-built builder was missing it → Phantom preflight → "Internal error".
+      // Pumpportal.fun tracks program updates and always returns a correct transaction.
+      //
+      // amount conventions:
+      //   buy  → numAmount is SOL to spend (denominatedInSol: true)
+      //   sell → numAmount is display-unit tokens to sell (denominatedInSol: false)
+      const slippagePct    = safeBps / 100;
+      // Convert micro-lamports/CU to total SOL (assuming 200K CU per swap)
+      const priorityFeeSOL = priorityFee > 0 ? (priorityFee * 200_000) / 1e15 : 0;
 
-      // ── Parse reserves (server-native units) ──────────────────────────────────
-      // virtualEthReserves   = decimal SOL string  (e.g. "30.000000")
-      // virtualTokenReserves = atom integer string (e.g. "1073000191045000")
-      const vSolSol  = parseFloat(token.virtualEthReserves ?? "0");
-      const vSolLam  = BigInt(Math.round(vSolSol * 1e9));
-      const vTokAtom = BigInt((token.virtualTokenReserves ?? "0").replace(/\..*/, ""));
-
-      if (vSolLam === 0n || vTokAtom === 0n) throw new Error("Invalid reserves — cannot price trade");
-
-      const k = vSolLam * vTokAtom; // constant-product invariant (lamports × atoms)
-
-      let ethAmtLam:    bigint;  // SOL lamports involved (in for buy, out estimate for sell)
-      let tokenAmtAtom: bigint;  // token atoms involved (out for buy, in for sell)
-      let newVSolLam:   bigint;
-      let newVTokAtom:  bigint;
-      // Instruction limit params (set below per trade direction)
-      let solLimitLamports: bigint;
-
-      if (tradeMode === "buy") {
-        ethAmtLam    = BigInt(Math.round(numAmount * 1e9));  // SOL user spends → lamports
-        newVSolLam   = vSolLam + ethAmtLam;
-        newVTokAtom  = k / newVSolLam;
-        tokenAmtAtom = vTokAtom - newVTokAtom;              // atoms received at spot
-
-        if (tokenAmtAtom <= 0n) throw new Error("Insufficient token reserves");
-
-        // ── Slippage pre-check (client-side) ─────────────────────────────────
-        // Spot quote: quotedAtoms = ethAmtLam × vTokAtom / vSolLam (linear approx)
-        // The CP curve gives fewer atoms (impact > 0 means price moved against user).
-        const quotedAtoms = (ethAmtLam * vTokAtom) / vSolLam;
-        const impact = Number(quotedAtoms - tokenAmtAtom) / Number(quotedAtoms);
-        if (impact > safeBps / 10_000) {
-          throw new Error(
-            `Slippage exceeded — price moved ${(impact * 100).toFixed(2)}%, tolerance is ${(safeBps / 100).toFixed(1)}%`
-          );
-        }
-
-        // maxSolCost = solIn × (1 + slippage/10000): allows execution if price
-        // rose by up to slippage% between quote and on-chain settlement.
-        solLimitLamports = ethAmtLam * BigInt(10_000 + safeBps) / 10_000n;
-      } else {
-        // ── Sell: display tokens → atoms; reverse CP curve for SOL out ─────────
-        tokenAmtAtom = BigInt(Math.round(numAmount * ATOMS_PER_TOKEN));
-        newVTokAtom  = vTokAtom + tokenAmtAtom;
-        newVSolLam   = k / newVTokAtom;
-        const solOutLam = vSolLam - newVSolLam;              // lamports user receives
-
-        if (solOutLam <= 0n) throw new Error("Insufficient SOL reserves");
-
-        // ── Slippage pre-check (client-side) ─────────────────────────────────
-        const quotedSolLam = (tokenAmtAtom * vSolLam) / vTokAtom;
-        const impact = Number(quotedSolLam - solOutLam) / Number(quotedSolLam);
-        if (impact > safeBps / 10_000) {
-          throw new Error(
-            `Slippage exceeded — price moved ${(impact * 100).toFixed(2)}%, tolerance is ${(safeBps / 100).toFixed(1)}%`
-          );
-        }
-
-        ethAmtLam = solOutLam;
-        // minSolOutput = solOut × (1 - slippage/10000): revert if price drops more.
-        solLimitLamports = solOutLam * BigInt(10_000 - safeBps) / 10_000n;
-      }
-
-      // ── Build and broadcast on-chain transaction ──────────────────────────────
-      const swapParams = {
-        mint:                     token.address,
-        user:                     wallet,
-        tokenAtoms:               tokenAmtAtom,
-        solLimitLamports,
-        priorityFeeMicroLamports: priorityFee,
-        solEstimateLamports:      ethAmtLam,
-      };
-
-      const { transaction: tx, blockhash, lastValidBlockHeight } =
+      const { transaction: portalTx, blockhash, lastValidBlockHeight } =
         tradeMode === "buy"
-          ? await buildPumpFunBuyTx(swapParams)
-          : await buildPumpFunSellTx(swapParams);
+          ? await buildPumpFunBuyTxViaPortal(wallet, token.address, numAmount, slippagePct, priorityFeeSOL)
+          : await buildPumpFunSellTxViaPortal(wallet, token.address, numAmount, slippagePct, priorityFeeSOL);
 
-      // Wallet signs and broadcasts to the network. Throws on user rejection
-      // or preflight failure; returns the base58 tx signature on submission.
-      const txSignature = await signAndSendTransaction(tx);
+      // Wallet signs and broadcasts. Throws on user rejection or preflight failure.
+      const txSignature = await signAndSendTransaction(portalTx);
 
-      // ── Wait for on-chain confirmation ────────────────────────────────────────
-      // We MUST confirm before treating the trade as settled. A broadcast
-      // signature is NOT a guarantee — the tx can expire or fail on-chain.
-      // waitForTxConfirmation throws if the tx fails on-chain (e.g. slippage
-      // check reverted), times out gracefully otherwise.
-      await waitForTxConfirmation(txSignature, blockhash, lastValidBlockHeight);
+      // Wait for on-chain confirmation via the blockhash strategy (same as Jupiter path).
+      await waitForJupiterTxConfirmation(txSignature, blockhash, lastValidBlockHeight);
 
       // ── Refetch from server (indexer is the authoritative source) ─────────────
       // The pump_fun adapter has already seen the on-chain TradeEvent by now and

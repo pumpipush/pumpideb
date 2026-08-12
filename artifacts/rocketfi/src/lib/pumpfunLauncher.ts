@@ -188,6 +188,115 @@ export async function buildPumpFunCreateTx(
   };
 }
 
+// ── Trade transactions via pumpportal ─────────────────────────────────────────
+//
+// Pump.fun updated their on-chain program in 2025 to add a creatorVault account
+// to buy/sell instructions. Our hand-built pumpfun-swap.ts builder is missing
+// it, which causes Phantom's preflight simulation to return "Internal error".
+// Delegating transaction construction to pumpportal.fun (same approach as create)
+// ensures we always match the current account layout without manual maintenance.
+
+export interface PumpPortalTradeTxResult {
+  transaction:          VersionedTransaction;
+  blockhash:            string;
+  lastValidBlockHeight: number;
+}
+
+/**
+ * Build a pump.fun bonding-curve BUY transaction via pumpportal.fun.
+ *
+ * @param walletAddress  Signer's base58 public key
+ * @param mintAddress    Token mint address
+ * @param solAmount      SOL to spend (display units, e.g. 3 for 3 SOL)
+ * @param slippagePct    Slippage tolerance in percent (e.g. 1 for 1%)
+ * @param priorityFeeSOL Priority fee in SOL (e.g. 0.001)
+ */
+export async function buildPumpFunBuyTxViaPortal(
+  walletAddress:  string,
+  mintAddress:    string,
+  solAmount:      number,
+  slippagePct:    number,
+  priorityFeeSOL: number,
+): Promise<PumpPortalTradeTxResult> {
+  const res = await fetch("https://pumpportal.fun/api/trade-local", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      publicKey:        walletAddress,
+      action:           "buy",
+      mint:             mintAddress,
+      denominatedInSol: "true",
+      amount:           solAmount,
+      slippage:         slippagePct,
+      priorityFee:      priorityFeeSOL,
+      pool:             "pump",
+    }),
+    signal: AbortSignal.timeout(20_000),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => `HTTP ${res.status}`);
+    throw new Error(`Failed to build buy transaction: ${text}`);
+  }
+
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const tx    = VersionedTransaction.deserialize(bytes);
+
+  // Refresh blockhash — pumpportal's blockhash may be stale by wallet approval time
+  const conn = getConnection();
+  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+  tx.message.recentBlockhash = blockhash;
+
+  return { transaction: tx, blockhash, lastValidBlockHeight };
+}
+
+/**
+ * Build a pump.fun bonding-curve SELL transaction via pumpportal.fun.
+ *
+ * @param walletAddress  Signer's base58 public key
+ * @param mintAddress    Token mint address
+ * @param tokenAmount    Token amount to sell (display units, not atoms)
+ * @param slippagePct    Slippage tolerance in percent (e.g. 1 for 1%)
+ * @param priorityFeeSOL Priority fee in SOL (e.g. 0.001)
+ */
+export async function buildPumpFunSellTxViaPortal(
+  walletAddress:  string,
+  mintAddress:    string,
+  tokenAmount:    number,
+  slippagePct:    number,
+  priorityFeeSOL: number,
+): Promise<PumpPortalTradeTxResult> {
+  const res = await fetch("https://pumpportal.fun/api/trade-local", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      publicKey:        walletAddress,
+      action:           "sell",
+      mint:             mintAddress,
+      denominatedInSol: "false",   // amount is in tokens, not SOL
+      amount:           tokenAmount,
+      slippage:         slippagePct,
+      priorityFee:      priorityFeeSOL,
+      pool:             "pump",
+    }),
+    signal: AbortSignal.timeout(20_000),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => `HTTP ${res.status}`);
+    throw new Error(`Failed to build sell transaction: ${text}`);
+  }
+
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const tx    = VersionedTransaction.deserialize(bytes);
+
+  const conn = getConnection();
+  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+  tx.message.recentBlockhash = blockhash;
+
+  return { transaction: tx, blockhash, lastValidBlockHeight };
+}
+
 // ── Simulation ────────────────────────────────────────────────────────────────
 
 /**
