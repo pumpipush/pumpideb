@@ -319,15 +319,15 @@ function Section({ n, id, title, children }: { n: number; id: string; title: str
   return (
     <div id={id} className="py-10">
       <div className="flex items-start gap-5 mb-6">
-        <span className="text-[52px] font-black leading-none text-white/[0.04] select-none tabular-nums shrink-0 -mt-2">
+        <span className="text-[52px] font-black leading-none text-white/[0.12] select-none tabular-nums shrink-0 -mt-2">
           {String(n).padStart(2, "0")}
         </span>
         <div>
-          <p className="text-[10px] font-mono text-muted-foreground/40 tracking-widest uppercase mb-1">Section {n}</p>
+          <p className="text-[10px] font-mono text-muted-foreground/50 tracking-widest uppercase mb-1">Section {n}</p>
           <h2 className="text-[18px] font-bold text-foreground">{title}</h2>
         </div>
       </div>
-      <div className="space-y-4 text-[14px] leading-relaxed text-foreground/80 [&_strong]:text-foreground/95 [&_a]:text-primary [&_a:hover]:underline [&_ul]:space-y-2 [&_li]:flex [&_li]:gap-2 [&_li]:before:content-['—'] [&_li]:before:text-white/20 [&_li]:before:shrink-0">
+      <div className="space-y-4 text-[14px] leading-relaxed text-foreground/80 [&_strong]:text-foreground/95 [&_a]:text-primary [&_a:hover]:underline [&_ul]:space-y-2.5 [&_li]:relative [&_li]:pl-4 [&_li]:before:absolute [&_li]:before:left-0 [&_li]:before:top-[0.52em] [&_li]:before:w-[5px] [&_li]:before:h-[5px] [&_li]:before:rounded-full [&_li]:before:bg-white/25">
         {children}
       </div>
     </div>
