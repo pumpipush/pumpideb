@@ -3203,6 +3203,68 @@ function TradePanelForm({
   const swapSettings = useSwapSettings();
   const solPrice = useSolPrice();
 
+  // ── USD / SOL input currency toggle (buy mode only) ──────────────────────
+  const [inputCurrency, setInputCurrency] = useState<"USD" | "SOL">("USD");
+  // rawInput = what the user actually typed (in inputCurrency units)
+  // parent's `amount` is always kept in SOL (buy) or token units (sell)
+  const [rawInput, setRawInput] = useState("");
+
+  // Clear rawInput whenever parent resets amount (e.g. after a successful trade)
+  useEffect(() => { if (!amount) setRawInput(""); }, [amount]);
+  // Reset when switching buy ↔ sell
+  useEffect(() => { setRawInput(""); }, [tradeMode]);
+
+  // parent `amount` = SOL (buy) or token-units (sell) — never raw USD
+  const handleRawChange = (v: string) => {
+    setRawInput(v);
+    const n = parseFloat(v);
+    if (!v || !isFinite(n) || n <= 0) { setAmount(""); return; }
+    if (tradeMode === "sell") { setAmount(v); return; }
+    if (inputCurrency === "USD") {
+      // guard: if solPrice not loaded yet, leave amount empty — prevents "25 SOL" mistake
+      setAmount(solPrice ? String(n / solPrice) : "");
+    } else {
+      setAmount(v);
+    }
+  };
+
+  const handleBuyPreset = (usd: number) => {
+    if (inputCurrency === "USD") {
+      setRawInput(String(usd));
+      setAmount(solPrice ? String(usd / solPrice) : "");
+    } else {
+      const sol = solPrice ? (usd / solPrice).toFixed(4) : "";
+      setRawInput(sol);
+      setAmount(sol);
+    }
+  };
+
+  // Toggle display only — parent `amount` (SOL) stays unchanged, rawInput re-expresses it
+  const toggleCurrency = () => {
+    const solAmt = parseFloat(amount); // parent always holds SOL for buy
+    if (inputCurrency === "USD") {
+      // switch to SOL display
+      setRawInput(isFinite(solAmt) && solAmt > 0 ? solAmt.toFixed(4) : "");
+      setInputCurrency("SOL");
+    } else {
+      // switch to USD display
+      setRawInput(isFinite(solAmt) && solAmt > 0 && solPrice
+        ? (solAmt * solPrice).toFixed(2) : "");
+      setInputCurrency("USD");
+    }
+    // parent `amount` (SOL) does not change on toggle — only rawInput re-displays it
+  };
+
+  // Derived from parent's SOL amount for accuracy (not rawInput)
+  const equivLabel = (() => {
+    if (tradeMode !== "buy") return null;
+    const sol = parseFloat(amount);
+    if (!isFinite(sol) || sol <= 0 || !solPrice) return null;
+    return inputCurrency === "USD"
+      ? `≈ ${sol.toFixed(4)} SOL`
+      : `≈ ${formatUSD(sol * solPrice)}`;
+  })();
+
   return (
     <>
       {/* Mode tabs — sliding pill */}
@@ -3227,8 +3289,8 @@ function TradePanelForm({
         )}
       </div>
 
-      <div className="p-3 space-y-3">
-        {/* Settings row — slippage + priority fee summary with popover trigger */}
+      <div className="px-4 pt-2 pb-4 space-y-3">
+        {/* Settings row */}
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-muted-foreground tabular-nums">
             Slippage&nbsp;<span className="text-foreground/70 font-mono">{formatSlippage(swapSettings.slippageBps)}</span>
@@ -3238,83 +3300,106 @@ function TradePanelForm({
           <SwapSettingsPopover />
         </div>
 
-        {/* SOL balance — shown in buy mode when wallet is connected */}
-        {tradeMode === "buy" && wallet && solBalance !== null && solBalance !== undefined && (
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="text-muted-foreground">Balance</span>
-            <span className="font-mono text-foreground/80">
-              {solBalance.toFixed(4)} SOL
-              {solPrice && <span className="text-muted-foreground ml-1.5">{formatUSD(solBalance * solPrice)}</span>}
-            </span>
+        {/* ── Main amount display — pump.fun style ─────────────────────────── */}
+        <div className="flex flex-col items-center py-3 gap-1.5">
+          {/* Amount row: [$] [number] [CURRENCY ≡] — baseline aligned */}
+          <div className="flex items-baseline gap-1.5">
+            {/* $ prefix — USD buy mode only */}
+            {tradeMode === "buy" && inputCurrency === "USD" && (
+              <span className="text-3xl font-bold text-muted-foreground/40 select-none">$</span>
+            )}
+            {/* Auto-sizing transparent input */}
+            <input
+              type="number"
+              inputMode="decimal"
+              placeholder="0"
+              className="text-4xl font-bold bg-transparent border-none outline-none text-foreground text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              style={{ width: rawInput ? `${Math.max(1.5, rawInput.replace(".", "").length + (rawInput.includes(".") ? 0.5 : 0) + 0.3)}ch` : "1.5ch" }}
+              value={rawInput}
+              onChange={e => handleRawChange(e.target.value)}
+            />
+            {/* Currency badge — clickable toggle (buy) or static label (sell) */}
+            {tradeMode === "buy" ? (
+              <button
+                onClick={toggleCurrency}
+                className="flex items-center gap-0.5 text-[11px] font-semibold text-muted-foreground/50 hover:text-muted-foreground/80 transition-colors pb-0.5"
+                title="Switch between SOL and USD"
+              >
+                {inputCurrency} <ArrowRightLeft className="w-2.5 h-2.5 ml-0.5" />
+              </button>
+            ) : (
+              <span className="flex items-center gap-0.5 text-[11px] font-semibold text-muted-foreground/50 pb-0.5">
+                {token.symbol} <ArrowRightLeft className="w-2.5 h-2.5 ml-0.5" />
+              </span>
+            )}
+          </div>
+          {/* Equiv conversion hint */}
+          {equivLabel && (
+            <span className="text-[11px] text-muted-foreground/40 font-mono">{equivLabel}</span>
+          )}
+        </div>
+
+        {/* Sell: percentage presets */}
+        {tradeMode === "sell" && (
+          <div className="flex gap-1.5">
+            {[{ label: "25%", pct: 0.25 }, { label: "50%", pct: 0.5 }, { label: "100%", pct: 1 }].map(({ label, pct }) => (
+              <button
+                key={label}
+                disabled={!wallet || !!balanceLoading}
+                className="flex-1 py-1.5 text-xs font-semibold text-muted-foreground rounded-md bg-muted/60 border border-border/40 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed hover:enabled:bg-white/10 hover:enabled:text-foreground active:enabled:scale-95"
+                onClick={() => {
+                  if (atomicBalance != null && !balanceLoading) {
+                    const v = computeSellPresetAmount(BigInt(atomicBalance), pct, tokenDecimals);
+                    setRawInput(v); setAmount(v);
+                  }
+                }}
+              >{label}</button>
+            ))}
           </div>
         )}
 
-        {/* Token balance — shown in sell mode when wallet is connected */}
+        {/* Buy: dollar presets */}
+        {tradeMode === "buy" && (
+          <div className="flex gap-1.5">
+            {[{ label: "$25", usd: 25 }, { label: "$100", usd: 100 }, { label: "$250", usd: 250 }].map(({ label, usd }) => (
+              <button
+                key={label}
+                className="flex-1 py-1.5 text-xs font-semibold text-muted-foreground rounded-md bg-muted/60 border border-border/40 transition-all duration-150 hover:bg-white/10 hover:text-foreground active:scale-95"
+                onClick={() => handleBuyPreset(usd)}
+              >{label}</button>
+            ))}
+          </div>
+        )}
+
+        {/* Balance row */}
+        {tradeMode === "buy" && wallet && solBalance !== null && solBalance !== undefined && (
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>Balance</span>
+            <span className="font-mono">
+              {solBalance.toFixed(4)} SOL
+              {solPrice && <span className="opacity-50 ml-1">({formatUSD(solBalance * solPrice)})</span>}
+            </span>
+          </div>
+        )}
         {tradeMode === "sell" && wallet && (
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="text-muted-foreground">Balance</span>
-            <span className={`font-mono transition-opacity duration-200 ${balanceLoading ? "opacity-40" : "text-foreground/80"}`}>
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>{token.symbol} balance</span>
+            <span className={`font-mono transition-opacity duration-200 ${balanceLoading ? "opacity-40" : ""}`}>
               {tokenBalance == null
-                ? <span className="text-muted-foreground/50">–</span>
+                ? "–"
                 : tokenBalance === 0
-                  ? <span className="text-muted-foreground/50">0 {token.symbol}</span>
-                  : <>{tokenBalance >= 1
-                      ? tokenBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })
-                      : tokenBalance.toPrecision(4)
-                    } {token.symbol}</>
+                  ? "0"
+                  : tokenBalance >= 1
+                    ? tokenBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                    : tokenBalance.toPrecision(4)
               }
             </span>
           </div>
         )}
 
-        {/* Preset amounts */}
-        <div className="flex gap-2">
-          {tradeMode === "buy"
-            ? [{ label: "$25", val: "0.008" }, { label: "$100", val: "0.033" }, { label: "$250", val: "0.083" }].map(({ label, val }) => (
-              <button
-                key={label}
-                className="flex-1 py-1.5 bg-muted/60 rounded text-xs font-bold text-muted-foreground hover:bg-white/10 hover:text-foreground border border-border/40 transition-all duration-150 active:scale-95"
-                onClick={() => setAmount(val)}
-              >{label}</button>
-            ))
-            : [{ label: "25%", pct: 0.25 }, { label: "50%", pct: 0.5 }, { label: "100%", pct: 1 }].map(({ label, pct }) => (
-              <button
-                key={label}
-                disabled={!wallet || !!balanceLoading}
-                title={!wallet ? "Connect wallet to use presets" : balanceLoading ? "Updating balance…" : undefined}
-                className="flex-1 py-1.5 bg-muted/60 rounded text-xs font-bold text-muted-foreground border border-border/40 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed hover:enabled:bg-white/10 hover:enabled:text-foreground active:enabled:scale-95"
-                onClick={() => {
-                  // Guard: atomicBalance must belong to the currently-selected token.
-                  // balanceLoading=true means the previous token's atomicBalance is still
-                  // in state — the button is disabled in that case, but defend here too.
-                  if (atomicBalance != null && !balanceLoading) {
-                    // Use exact atomic balance via BigInt — never rounds up, never
-                    // exceeds holdings regardless of token decimals or magnitude.
-                    setAmount(computeSellPresetAmount(BigInt(atomicBalance), pct, tokenDecimals));
-                  }
-                }}
-              >{label}</button>
-            ))
-          }
-        </div>
-
-        {/* Amount input */}
-        <div className="relative">
-          <Input
-            type="number"
-            placeholder="0.0"
-            className="w-full pl-3 pr-14 h-12 bg-background border-border/50 rounded-sm font-mono text-xl text-foreground focus-visible:ring-primary transition-all duration-200 focus-visible:shadow-[0_0_0_3px_hsl(142_100%_45%/0.15)]"
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-          />
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-            <span className="font-bold text-muted-foreground font-mono text-sm">{tradeMode === "buy" ? "SOL" : token.symbol}</span>
-          </div>
-        </div>
-
-        {/* Jupiter quote preview — only shown for graduated/DEX tokens when amount is set */}
+        {/* Jupiter quote preview — graduated/DEX tokens only */}
         {isGraduated && amount && parseFloat(amount) > 0 && (
-          <div className="flex items-center justify-between rounded px-2.5 py-1.5 text-[11px]"
+          <div className="flex items-center justify-between rounded-md px-2.5 py-1.5 text-[11px]"
             style={{ background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.18)" }}>
             {jupiterQuoteLoading ? (
               <span className="flex items-center gap-1.5" style={{ color: "#94a3b8" }}>
@@ -3322,7 +3407,7 @@ function TradePanelForm({
                 Fetching best price…
               </span>
             ) : jupiterQuoteError ? (
-              <span style={{ color: "#f87171" }}>⚠ {jupiterQuoteError}</span>
+              <span style={{ color: "#94a3b8" }}>Preview unavailable — live quote fetched at trade time</span>
             ) : jupiterQuote ? (
               <>
                 <span style={{ color: "#94a3b8" }}>
@@ -3342,7 +3427,7 @@ function TradePanelForm({
           </div>
         )}
 
-        {/* Trade button — changes appearance when wallet not connected */}
+        {/* Action button */}
         {!wallet ? (
           <button
             onClick={handleTrade}
@@ -3350,6 +3435,21 @@ function TradePanelForm({
           >
             <Wallet className="h-4 w-4" />
             Connect Wallet to Trade
+          </button>
+        ) : !amount || parseFloat(amount) <= 0 ? (
+          <button
+            disabled
+            className="w-full h-11 text-sm font-semibold rounded-[8px] bg-muted/60 text-muted-foreground/50 cursor-not-allowed"
+          >
+            Enter an amount
+          </button>
+        ) : tradeMode === "sell" && (tokenBalance === 0 || tokenBalance == null) ? (
+          <button
+            disabled
+            className={`w-full h-11 text-sm font-bold rounded-[8px] cursor-not-allowed opacity-60 text-white`}
+            style={{ background: "hsl(0 84% 60%)" }}
+          >
+            Insufficient {token.symbol}
           </button>
         ) : (
           <Button
@@ -3359,7 +3459,7 @@ function TradePanelForm({
           >
             {isPending
               ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /></span>
-              : "Place Trade"}
+              : tradeMode === "buy" ? "Place Buy" : "Place Sell"}
           </Button>
         )}
       </div>
