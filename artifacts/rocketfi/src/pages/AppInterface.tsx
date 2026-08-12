@@ -3282,7 +3282,7 @@ function TradePanelForm({
               type="number"
               inputMode="decimal"
               placeholder="0"
-              className="text-4xl font-bold bg-transparent border-none outline-none text-foreground text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              className="text-4xl font-medium bg-transparent border-none outline-none text-foreground text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               style={{ width: rawInput ? `${Math.max(1.5, rawInput.replace(".", "").length + (rawInput.includes(".") ? 0.5 : 0) + 0.3)}ch` : "1.5ch" }}
               value={rawInput}
               onChange={e => handleRawChange(e.target.value)}
