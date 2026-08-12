@@ -2,7 +2,7 @@
 <!--
   Sitemap index for pumpi.app
   - Static pages are listed below.
-  - Individual token pages (/token/<address>) are served dynamically from the API:
+  - Individual coin pages (/coin/<address>) are served dynamically from the API:
       https://pumpi.app/api/sitemap.xml
     Submit both sitemaps to Google Search Console.
 -->

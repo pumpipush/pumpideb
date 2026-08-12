@@ -76,7 +76,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 
 interface AppInterfaceProps {
-  /** When rendered under /token/:address, pass the address from route params.
+  /** When rendered under /coin/:address, pass the address from route params.
    *  Falls back to the legacy ?token= query param for backward compatibility. */
   tokenAddress?: string;
 }
@@ -86,7 +86,7 @@ export default function AppInterface({ tokenAddress: routeAddress }: AppInterfac
   // Use reactive wouter search so query-string changes (e.g. ?tab=portfolio) always trigger re-render
   const search = useSearch();
   const _params  = new URLSearchParams(search);
-  // Route param (/token/:address) takes priority; legacy ?token= is handled by AppRoute redirect
+  // Route param (/coin/:address) takes priority; legacy ?token= is handled by AppRoute redirect
   const tokenParam = routeAddress ?? _params.get("token");
   const tabParam   = _params.get("tab"); // "portfolio" makes My Tokens deep-linkable
 
@@ -124,7 +124,7 @@ export default function AppInterface({ tokenAddress: routeAddress }: AppInterfac
     setActiveTab(tab);
     if (tab === "portfolio") setLocation("/app?tab=portfolio");
     else if (tab === "launch") setLocation("/app");
-    // "trade" is token-scoped — URL already set to /token/:address
+    // "trade" is token-scoped — URL already set to /coin/:address
   };
 
   const selectToken = (address: string) => {
