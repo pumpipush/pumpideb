@@ -3408,9 +3408,9 @@ function TradePanelForm({
         ) : !amount || parseFloat(amount) <= 0 ? (
           <button
             disabled
-            className="w-full h-11 text-sm font-semibold rounded-[8px] bg-muted/60 text-muted-foreground/50 cursor-not-allowed"
+            className={`w-full h-11 text-sm font-bold rounded-[8px] cursor-not-allowed opacity-40 text-white ${tradeMode === "buy" ? "bg-[#16a34a]" : "bg-destructive"}`}
           >
-            Enter an amount
+            {tradeMode === "buy" ? "Place Buy" : "Place Sell"}
           </button>
         ) : tradeMode === "sell" && (tokenBalance === 0 || tokenBalance == null) ? (
           <button
