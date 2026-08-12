@@ -3420,7 +3420,15 @@ function TradePanelForm({
           >
             {tradeMode === "buy" ? "Place Buy" : "Place Sell"}
           </button>
-        ) : tradeMode === "buy" && solBalance != null && parseFloat(amount) > solBalance ? (
+        ) : tradeMode === "buy" && solBalance != null && solBalance < 0.002 ? (
+          <button
+            disabled
+            className="w-full h-11 text-sm font-bold rounded-[8px] cursor-not-allowed opacity-60 text-white"
+            style={{ background: "hsl(0 84% 60%)" }}
+          >
+            Insufficient SOL for fees
+          </button>
+        ) : tradeMode === "buy" && solBalance != null && parseFloat(amount) + 0.002 > solBalance ? (
           <button
             disabled
             className="w-full h-11 text-sm font-bold rounded-[8px] cursor-not-allowed opacity-60 text-white"
