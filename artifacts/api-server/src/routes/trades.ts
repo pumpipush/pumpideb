@@ -149,10 +149,16 @@ router.get("/tokens/:address/stream", async (req: Request, res: Response) => {
 
   // Immediately push the current token state so the UI populates without
   // waiting for the next trade event to arrive.
-  const [tokenRow] = await db
-    .select()
-    .from(tokensTable)
-    .where(eq(tokensTable.address, address));
+  let tokenRow: typeof tokensTable.$inferSelect | undefined;
+  try {
+    [tokenRow] = await db
+      .select()
+      .from(tokensTable)
+      .where(eq(tokensTable.address, address));
+  } catch (err) {
+    // DB failure after headers/SSE stream opened: log and continue without snapshot.
+    console.error("[SSE] Failed to fetch initial token snapshot:", err);
+  }
 
   // On-demand PumpSwap tracking.
   //

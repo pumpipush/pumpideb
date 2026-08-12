@@ -46,7 +46,7 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
   const [error, setError]         = useState<string | null>(null);
   const [moreWallets, setMoreWallets] = useState(false);
   const gsiContainerRef           = useRef<HTMLDivElement>(null);
-  const gsiInitialized            = useRef(false);
+  const gsiScriptAdded            = useRef(false); // guards script injection only (not button render)
 
   const recentWallet = localStorage.getItem(LAST_WALLET_KEY);
 
@@ -70,10 +70,13 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
   }, [signInWithGoogle]);
 
   useEffect(() => {
-    if (!open || !GOOGLE_CLIENT_ID || gsiInitialized.current) return;
+    if (!open || !GOOGLE_CLIENT_ID) return;
 
-    const initGSI = () => {
+    // Re-render the button every time the modal opens so it always appears
+    // in the (possibly new) DOM container.
+    const renderGSIButton = () => {
       if (!window.google || !gsiContainerRef.current) return;
+      gsiContainerRef.current.innerHTML = ""; // clear stale button from previous open
       window.google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: (r: { credential: string }) => handleGoogleCredential(r.credential),
@@ -86,22 +89,23 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
         size: "large",
         text: "continue_with",
       });
-      gsiInitialized.current = true;
     };
 
     if (window.google) {
-      initGSI();
-    } else {
+      renderGSIButton();
+    } else if (!gsiScriptAdded.current) {
+      // Inject the GSI script only once; renderGSIButton will be called via onload.
+      gsiScriptAdded.current = true;
       const existing = document.querySelector('script[src*="accounts.google.com/gsi"]');
       if (!existing) {
         const s = document.createElement("script");
         s.src = "https://accounts.google.com/gsi/client";
         s.async = true;
         s.defer = true;
-        s.onload = initGSI;
+        s.onload = renderGSIButton;
         document.head.appendChild(s);
       } else {
-        existing.addEventListener("load", initGSI);
+        existing.addEventListener("load", renderGSIButton);
       }
     }
   }, [open, handleGoogleCredential]);

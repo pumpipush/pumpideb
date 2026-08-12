@@ -198,12 +198,14 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const [desc,         setDesc]         = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile,    setImageFile]    = useState<File | null>(null);
-  const imageInputRef  = useRef<HTMLInputElement>(null);
+  const imageInputRef    = useRef<HTMLInputElement>(null);
+  const imagePreviewUrl  = useRef<string | null>(null); // tracks blob URL for cleanup
   // Tracks the post-launch redirect timer so it can be cancelled on unmount.
-  const launchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const launchTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
     if (launchTimerRef.current) clearTimeout(launchTimerRef.current);
+    if (imagePreviewUrl.current) URL.revokeObjectURL(imagePreviewUrl.current);
   }, []);
 
   // Platform selector
@@ -238,8 +240,11 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       toast({ title: "File too large", description: "Image must be under 5 MB.", variant: "destructive" });
       return;
     }
+    if (imagePreviewUrl.current) URL.revokeObjectURL(imagePreviewUrl.current);
+    const url = URL.createObjectURL(file);
+    imagePreviewUrl.current = url;
     setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
+    setImagePreview(url);
   };
 
   // ── Platform-specific launch ──────────────────────────────────────────────────
@@ -1032,7 +1037,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       try {
         const numAmount = parseFloat(amount);
         // isFinite guard: parseFloat("Infinity") passes isNaN but BigInt(Infinity) throws RangeError
-        if (!isFinite(numAmount) || isNaN(numAmount) || numAmount <= 0) return;
+        if (!isFinite(numAmount) || isNaN(numAmount) || numAmount <= 0) {
+          setJupiterQuoteLoading(false);
+          return;
+        }
 
         // Use the token's actual decimal count (default 6 — pump.fun / PumpSwap / LaunchLab all use 6)
         const tokenAtoms = Math.pow(10, token?.decimals ?? 6);
@@ -1067,7 +1075,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       clearInterval(refreshTimer);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token?.graduated, token?.platform, token?.address, amount, tradeMode]);
+  }, [token?.graduated, token?.platform, token?.address, token?.decimals, amount, tradeMode]);
 
   // New chart state
   const [chartTf, setChartTf] = useState<ChartTimeframe>("1m");

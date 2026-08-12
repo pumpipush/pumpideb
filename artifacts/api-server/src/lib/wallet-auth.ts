@@ -146,6 +146,14 @@ interface NonceEntry {
 
 const nonceStore = new Map<string, NonceEntry>();
 
+// Prune expired nonces periodically so the Map doesn't grow unboundedly.
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of nonceStore) {
+    if (now > entry.expiresAt) nonceStore.delete(key);
+  }
+}, 60_000).unref();
+
 /** Issue a fresh single-use nonce tied to one action + wallet address. */
 export function issueNonce(action: "create" | "update", address: string): string {
   const nonce = randomUUID();

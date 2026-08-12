@@ -52,6 +52,35 @@ setInterval(() => {
   }
 }, 60_000).unref();
 
+// ── OTP rate limiting ─────────────────────────────────────────────────────
+// Prevents email-send spam and brute-force attempts against the 6-digit code.
+const otpSendLimiter   = new Map<string, { count: number; resetAt: number }>();
+const otpVerifyLimiter = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(
+  store: Map<string, { count: number; resetAt: number }>,
+  key: string,
+  max: number,
+  windowMs: number,
+): boolean {
+  const now   = Date.now();
+  const entry = store.get(key);
+  if (!entry || now > entry.resetAt) {
+    store.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (entry.count >= max) return false;
+  entry.count++;
+  return true;
+}
+
+// Prune limiter maps every 30 min so they don't grow unboundedly.
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of otpSendLimiter)   { if (now > v.resetAt) otpSendLimiter.delete(k);   }
+  for (const [k, v] of otpVerifyLimiter) { if (now > v.resetAt) otpVerifyLimiter.delete(k); }
+}, 30 * 60_000).unref();
+
 const router = Router();
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -161,6 +190,10 @@ router.post("/auth/email/send", async (req, res) => {
   if (!email || !email.includes("@")) {
     return void res.status(400).json({ error: "valid email required" });
   }
+  // Max 3 sends per email per 15 minutes
+  if (!checkRateLimit(otpSendLimiter, email.toLowerCase(), 3, 15 * 60_000)) {
+    return void res.status(429).json({ error: "Too many attempts. Please wait 15 minutes before requesting another code." });
+  }
   const code = generateOTP(email.toLowerCase());
   try {
     await sendOTPEmail(email.toLowerCase(), code);
@@ -175,6 +208,11 @@ router.post("/auth/email/send", async (req, res) => {
 router.post("/auth/email/verify", async (req, res) => {
   const { email, code } = req.body as { email?: string; code?: string };
   if (!email || !code) return void res.status(400).json({ error: "email and code required" });
+
+  // Max 10 verify attempts per email per 15 minutes (brute-force guard)
+  if (!checkRateLimit(otpVerifyLimiter, email.toLowerCase(), 10, 15 * 60_000)) {
+    return void res.status(429).json({ error: "Too many verification attempts. Please request a new code." });
+  }
 
   const ok = verifyOTP(email.toLowerCase(), code);
   if (!ok) return void res.status(401).json({ error: "Invalid or expired code" });
