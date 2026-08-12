@@ -21,7 +21,6 @@ function LaunchTokenButton() {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <Rocket className="h-4 w-4" />
       Create New Coin
     </Button>
   );
