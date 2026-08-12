@@ -18,6 +18,7 @@ import { SearchDialog } from '@/components/shared/SearchDialog';
 import { CopyToastProvider } from '@/components/shared/CopyToast';
 import { AuthModal } from '@/components/shared/AuthModal';
 import { UsernameNudgeBanner } from '@/components/shared/UsernameNudgeBanner';
+import { SiteFooter } from '@/components/layout/SiteFooter';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -79,6 +80,7 @@ function AppShell() {
             <Route path="/terms" component={TermsOfService} />
             <Route component={NotFound} />
           </Switch>
+          <SiteFooter />
         </main>
       </div>
       <BottomNav />

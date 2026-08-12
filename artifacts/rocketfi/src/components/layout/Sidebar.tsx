@@ -97,20 +97,6 @@ export function Sidebar() {
         <Link href="/app" className="block w-full">
           <LaunchTokenButton />
         </Link>
-        {/* Legal footer */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <Link href="/privacy" className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors">
-            Privacy
-          </Link>
-          <span className="text-[11px] text-muted-foreground/40">·</span>
-          <Link href="/disclaimer" className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors">
-            Disclaimer
-          </Link>
-          <span className="text-[11px] text-muted-foreground/40">·</span>
-          <Link href="/terms" className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors">
-            Terms
-          </Link>
-        </div>
       </div>
     </div>
   );
@@ -126,20 +112,6 @@ export function BottomNav() {
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border/60 flex flex-col safe-area-pb">
-      {/* Legal link row */}
-      <div className="flex items-center justify-center gap-3 pt-1.5 pb-0.5">
-        <Link href="/privacy" className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors">
-          Privacy
-        </Link>
-        <span className="text-[11px] text-muted-foreground/40">·</span>
-        <Link href="/disclaimer" className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors">
-          Disclaimer
-        </Link>
-        <span className="text-[11px] text-muted-foreground/40">·</span>
-        <Link href="/terms" className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors">
-          Terms
-        </Link>
-      </div>
 
       {/* Nav icons row */}
       <div className="flex items-stretch h-16">
