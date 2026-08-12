@@ -953,7 +953,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const solPrice = useSolPrice();
   const { solBalance, refresh: refreshSolBalance } = useSolBalance(wallet);
   // SPL token balance for the currently-viewed token — drives sell preset buttons
-  const { tokenBalance, atomicBalance, refresh: refreshTokenBalance } = useTokenBalance(wallet, selectedAddress);
+  const { tokenBalance, atomicBalance, isLoading: balanceLoading, refresh: refreshTokenBalance } = useTokenBalance(wallet, selectedAddress);
 
   // Live SSE stream — real-time trade events
   const { liveTrades, liveToken, connected } = useTokenStream(selectedAddress);
@@ -2115,6 +2115,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               solBalance={solBalance}
               tokenBalance={tokenBalance}
               atomicBalance={atomicBalance}
+              balanceLoading={balanceLoading}
             />
           </div>
         </div>
@@ -3081,6 +3082,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             solBalance={solBalance}
             tokenBalance={tokenBalance}
             atomicBalance={atomicBalance}
+            balanceLoading={balanceLoading}
           />
         </div>
 
@@ -3145,12 +3147,18 @@ interface TradePanelFormProps {
    * arithmetic in sell presets to guarantee the amount never exceeds actual holdings.
    */
   atomicBalance?: string | null;
+  /**
+   * True while the RPC fetch for the current token's balance is in flight.
+   * When true the balance row shows the previous token's value dimmed, rather
+   * than flashing "–".
+   */
+  balanceLoading?: boolean;
 }
 
 function TradePanelForm({
   tradeMode, setTradeMode, amount, setAmount, token, wallet, handleTrade, isPending,
   isGraduated, jupiterQuote, jupiterQuoteLoading, jupiterQuoteError, tokenDecimals = 6,
-  solBalance, tokenBalance, atomicBalance,
+  solBalance, tokenBalance, atomicBalance, balanceLoading,
 }: TradePanelFormProps) {
   const swapSettings = useSwapSettings();
   const solPrice = useSolPrice();
@@ -3205,7 +3213,7 @@ function TradePanelForm({
         {tradeMode === "sell" && wallet && (
           <div className="flex items-center justify-between text-[11px]">
             <span className="text-muted-foreground">Balance</span>
-            <span className="font-mono text-foreground/80">
+            <span className={`font-mono transition-opacity duration-200 ${balanceLoading ? "opacity-40" : "text-foreground/80"}`}>
               {tokenBalance == null
                 ? <span className="text-muted-foreground/50">–</span>
                 : tokenBalance === 0
@@ -3232,16 +3240,18 @@ function TradePanelForm({
             : [{ label: "25%", pct: 0.25 }, { label: "50%", pct: 0.5 }, { label: "100%", pct: 1 }].map(({ label, pct }) => (
               <button
                 key={label}
-                disabled={!wallet}
-                title={!wallet ? "Connect wallet to use presets" : undefined}
+                disabled={!wallet || !!balanceLoading}
+                title={!wallet ? "Connect wallet to use presets" : balanceLoading ? "Updating balance…" : undefined}
                 className="flex-1 py-1.5 bg-muted/60 rounded text-xs font-bold text-muted-foreground border border-border/40 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed hover:enabled:bg-white/10 hover:enabled:text-foreground active:enabled:scale-95"
                 onClick={() => {
-                  if (atomicBalance != null) {
+                  // Guard: atomicBalance must belong to the currently-selected token.
+                  // balanceLoading=true means the previous token's atomicBalance is still
+                  // in state — the button is disabled in that case, but defend here too.
+                  if (atomicBalance != null && !balanceLoading) {
                     // Use exact atomic balance via BigInt — never rounds up, never
                     // exceeds holdings regardless of token decimals or magnitude.
                     setAmount(computeSellPresetAmount(BigInt(atomicBalance), pct, tokenDecimals));
                   }
-                  // Balance still loading: do nothing
                 }}
               >{label}</button>
             ))
@@ -3671,7 +3681,7 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
   const { openWalletModal, signAndSendTransaction } = useWallet();
   const { submitTx } = useTxToast();
   const { solBalance, refresh: refreshSolBalance } = useSolBalance(wallet);
-  const { tokenBalance, atomicBalance, refresh: refreshTokenBalance } = useTokenBalance(wallet, token.address);
+  const { tokenBalance, atomicBalance, isLoading: balanceLoading, refresh: refreshTokenBalance } = useTokenBalance(wallet, token.address);
   const [tradeMode, setTradeMode]           = useState<"buy" | "sell">("buy");
   const [amount, setAmount]                 = useState("");
   const [isTradePending, setIsTradePending] = useState(false);
@@ -3840,6 +3850,7 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
               solBalance={solBalance}
               tokenBalance={tokenBalance}
               atomicBalance={atomicBalance}
+              balanceLoading={balanceLoading}
             />
           </div>
         </div>

@@ -5,6 +5,9 @@
  *  - tokenBalance (number | null)   — display amount (float from uiAmountString), for UI only
  *  - atomicBalance (string | null)  — exact raw atomic amount string (tokenAmount.amount),
  *                                     suitable for BigInt conversion in sell-preset arithmetic
+ *  - isLoading (boolean)            — true while the first fetch for a new mint is in flight;
+ *                                     tokenBalance/atomicBalance still hold the PREVIOUS token's
+ *                                     value during this window so the UI never flashes "–"
  *  - refresh()                       — force a re-fetch after a trade settles
  *
  * Precision notes:
@@ -22,6 +25,12 @@
  *     settled trade calling refresh() after the user has navigated to a different
  *     token will trigger a fetch for the NEW token, and the epoch check still
  *     ensures stale responses for the old token cannot update state.
+ *
+ * Flash-free token switching:
+ *  When the user switches tokens, tokenBalance/atomicBalance intentionally KEEP
+ *  their previous values while isLoading=true.  The UI should dim/grey the balance
+ *  row during this window rather than showing "–".  Once the RPC responds (typically
+ *  <500 ms) the values are replaced and isLoading resets to false.
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -39,6 +48,13 @@ export interface TokenBalanceResult {
    * null while loading or when the wallet/mint is not set.
    */
   atomicBalance: string | null;
+  /**
+   * True while the first fetch for the current mint is in flight.
+   * tokenBalance/atomicBalance still hold the PREVIOUS token's value during
+   * this window — callers should dim/disable the balance UI rather than
+   * waiting for null to indicate loading.
+   */
+  isLoading: boolean;
   refresh: () => void;
 }
 
@@ -48,6 +64,7 @@ export function useTokenBalance(
 ): TokenBalanceResult {
   const [tokenBalance,  setTokenBalance]  = useState<number | null>(null);
   const [atomicBalance, setAtomicBalance] = useState<string | null>(null);
+  const [isLoading,     setIsLoading]     = useState(false);
 
   const timerRef            = useRef<ReturnType<typeof setInterval> | null>(null);
   /** Monotonically-incrementing epoch — incremented on any wallet/mint change, including clears. */
@@ -62,7 +79,12 @@ export function useTokenBalance(
     walletAddr: string,
     mint:       string,
     epoch:      number,
+    isFirstFetch: boolean,
   ) => {
+    if (isFirstFetch && epoch === epochRef.current) {
+      setIsLoading(true);
+    }
+
     try {
       const conn     = getConnection();
       const mintPk   = new PublicKey(mint);
@@ -80,6 +102,7 @@ export function useTokenBalance(
       if (accounts.length === 0) {
         setTokenBalance(0);
         setAtomicBalance("0");
+        setIsLoading(false);
         return;
       }
 
@@ -104,8 +127,12 @@ export function useTokenBalance(
 
       setTokenBalance(totalDisplay);
       setAtomicBalance(totalAtomic.toString());
+      setIsLoading(false);
     } catch {
       // Silently ignore RPC errors — state stays at previous value (null on first fetch)
+      if (epoch === epochRef.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -120,8 +147,10 @@ export function useTokenBalance(
     epochRef.current += 1;
 
     if (!wallet || !mintAddress) {
+      // No wallet/token — reset fully
       setTokenBalance(null);
       setAtomicBalance(null);
+      setIsLoading(false);
       refreshWithEpochRef.current = () => {};
       return;
     }
@@ -131,15 +160,15 @@ export function useTokenBalance(
     const snapMint   = mintAddress;
 
     // Pin the refresh function to this exact wallet+mint+epoch
-    refreshWithEpochRef.current = () => fetchBalance(snapWallet, snapMint, epoch);
+    refreshWithEpochRef.current = () => fetchBalance(snapWallet, snapMint, epoch, false);
 
-    // Show null (loading) immediately while the first fetch is in flight
-    setTokenBalance(null);
-    setAtomicBalance(null);
-    fetchBalance(snapWallet, snapMint, epoch);
+    // Intentionally do NOT reset tokenBalance/atomicBalance to null here.
+    // They keep their previous value while isLoading=true, preventing the "–" flash.
+    // The UI should dim the balance row (via isLoading) instead.
+    fetchBalance(snapWallet, snapMint, epoch, true);
 
     timerRef.current = setInterval(
-      () => fetchBalance(snapWallet, snapMint, epoch),
+      () => fetchBalance(snapWallet, snapMint, epoch, false),
       POLL_INTERVAL_MS,
     );
 
@@ -149,5 +178,5 @@ export function useTokenBalance(
     };
   }, [wallet, mintAddress, fetchBalance]);
 
-  return { tokenBalance, atomicBalance, refresh };
+  return { tokenBalance, atomicBalance, isLoading, refresh };
 }
