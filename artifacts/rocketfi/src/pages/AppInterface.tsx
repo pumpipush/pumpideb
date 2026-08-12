@@ -1667,12 +1667,15 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       const signedPortalTx  = await signVersionedTransaction(portalTx);
       const conn            = getConnection();
       // sendRawTransaction returns the base58 signature immediately on broadcast.
-      // skipPreflight=false so the RPC checks the tx locally before forwarding.
-      // maxRetries=5 tells the RPC to re-submit on its own if the tx isn't yet included.
+      // skipPreflight=true: skip the local simulation step so a price move between
+      // "pumpportal built the tx" and "user approved in wallet" (~7-13 s) doesn't
+      // cause a false SlippageExceeded error in simulation. The on-chain program
+      // still enforces slippage — if the price moved too far the tx fails on-chain
+      // and we report it via waitForJupiterTxConfirmation.
+      // maxRetries=5 tells the RPC to re-submit on its own if the tx isn't included yet.
       const txSignature = await conn.sendRawTransaction(signedPortalTx.serialize(), {
-        skipPreflight:       false,
-        preflightCommitment: "confirmed",
-        maxRetries:          5,
+        skipPreflight: true,
+        maxRetries:    5,
       });
 
       // Confirm via blockhash strategy. After a timeout the function checks

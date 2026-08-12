@@ -25,6 +25,37 @@ function isRealSignature(sig: string): boolean {
   return sig.length >= 60 && !sig.startsWith("0x") && !sig.startsWith("sim_");
 }
 
+/**
+ * Map raw RPC/program errors to readable messages.
+ *
+ * Covers the most common failures a pump.fun / pumpportal trader will see:
+ *  - 0x1772 (6002) — SlippageExceeded: price moved past the encoded tolerance
+ *  - 0x1771 (6001) — NotEnoughSOL: wallet balance too low
+ *  - 0x1770 (6000) — NotEnoughTokens: token balance too low for sell
+ *  - block height exceeded — tx not included before blockhash expired
+ *  - Simulation failed — preflight caught a bad tx before broadcast
+ */
+function friendlyTxError(raw: string): string {
+  if (/block.?height exceeded|blockheight exceeded/i.test(raw)) {
+    return "Transaction timed out — it was not executed. Please try again (network was congested).";
+  }
+  if (/0x1772|custom program error.*6002/i.test(raw)) {
+    return "Slippage exceeded — price moved too fast. Try increasing your slippage tolerance in settings and retry.";
+  }
+  if (/0x1771|custom program error.*6001/i.test(raw)) {
+    return "Not enough SOL in your wallet to cover this trade plus fees.";
+  }
+  if (/0x1770|custom program error.*6000/i.test(raw)) {
+    return "Not enough tokens in your wallet for this sell.";
+  }
+  if (/simulation failed/i.test(raw)) {
+    // Strip the verbose preamble and keep only the useful inner message
+    const inner = raw.replace(/^.*simulation failed[^:]*:\s*/i, "");
+    return `Simulation failed: ${inner}` ;
+  }
+  return raw;
+}
+
 export function useTxToast() {
   const submitTx = async (
     txPromise: Promise<string>,
@@ -86,10 +117,7 @@ export function useTxToast() {
           if (detail) msg = detail;
         }
         console.error("[useTxToast] tx failed:", err);
-        // Replace the raw "block height exceeded" RPC error with a user-friendly hint.
-        if (/block height exceeded|blockheight exceeded/i.test(msg)) {
-          msg = "Transaction timed out — it was not executed. Please try again (network was congested).";
-        }
+        msg = friendlyTxError(msg);
         msg = msg.slice(0, 200);
       }
 
