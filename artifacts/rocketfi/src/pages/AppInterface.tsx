@@ -3412,10 +3412,21 @@ function TradePanelForm({
           >
             {tradeMode === "buy" ? "Place Buy" : "Place Sell"}
           </button>
-        ) : tradeMode === "sell" && (tokenBalance === 0 || tokenBalance == null) ? (
+        ) : tradeMode === "buy" && solBalance != null && parseFloat(amount) > solBalance ? (
           <button
             disabled
-            className={`w-full h-11 text-sm font-bold rounded-[8px] cursor-not-allowed opacity-60 text-white`}
+            className="w-full h-11 text-sm font-bold rounded-[8px] cursor-not-allowed opacity-60 text-white"
+            style={{ background: "hsl(0 84% 60%)" }}
+          >
+            Insufficient SOL
+          </button>
+        ) : tradeMode === "sell" && (
+          tokenBalance === 0 || tokenBalance == null ||
+          (parseFloat(amount) > 0 && tokenBalance != null && parseFloat(amount) > tokenBalance)
+        ) ? (
+          <button
+            disabled
+            className="w-full h-11 text-sm font-bold rounded-[8px] cursor-not-allowed opacity-60 text-white"
             style={{ background: "hsl(0 84% 60%)" }}
           >
             Insufficient {token.symbol}
