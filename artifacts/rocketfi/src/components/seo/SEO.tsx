@@ -39,7 +39,7 @@ export function SEO({
   const computedTitle = fullTitle
     ? fullTitle
     : title
-    ? `${title} | ${SITE_NAME}`
+    ? `${SITE_NAME} — ${title}`
     : DEFAULT_TITLE;
 
   const computedImage = image ?? DEFAULT_IMAGE;

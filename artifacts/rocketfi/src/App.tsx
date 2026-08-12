@@ -48,10 +48,11 @@ function AppShell() {
           <UsernameNudgeBanner />
           <Switch>
             <Route path="/" component={Dashboard} />
+            <Route path="/explore"><Redirect to="/" /></Route>
             <Route path="/dashboard"><Redirect to="/" /></Route>
             <Route path="/app" component={AppInterface} />
             <Route path="/profile/:slug" component={ProfilePage} />
-            {/* signin/signup show the dashboard behind the auth modal */}
+            {/* signin/signup show the explore page behind the auth modal */}
             <Route path="/signin"><Dashboard /></Route>
             <Route path="/signup"><Dashboard /></Route>
             <Route component={NotFound} />
