@@ -1004,9 +1004,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // ── Jupiter quote auto-fetch for graduated tokens ─────────────────────────
   // Fetches a preview quote on amount / mode change (debounced 400ms) and then
   // auto-refreshes every 15 s so the displayed estimate stays fresh.
-  // Only runs when the token is graduated (= on Raydium/PumpSwap via Jupiter).
+  // Runs for graduated tokens AND pumpswap tokens (always on-DEX, graduated flag may lag).
   useEffect(() => {
-    if (!token?.graduated || !amount || parseFloat(amount) <= 0) {
+    const needsJupiter = token?.graduated || token?.platform === "pumpswap";
+    if (!needsJupiter || !amount || parseFloat(amount) <= 0) {
       setJupiterQuote(null);
       setJupiterQuoteError(null);
       setJupiterQuoteLoading(false);
@@ -1058,7 +1059,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       clearInterval(refreshTimer);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token?.graduated, token?.address, amount, tradeMode]);
+  }, [token?.graduated, token?.platform, token?.address, amount, tradeMode]);
 
   // New chart state
   const [chartTf, setChartTf] = useState<ChartTimeframe>("1m");
@@ -1530,8 +1531,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       // Declared early so both the Jupiter path and the pump.fun path can use it.
       const safeBps = slippageBps;
 
-      if (token.graduated) {
-        // ── Jupiter swap path for graduated tokens ───────────────────────────
+      // pumpswap tokens are always on-DEX (no bonding curve) even if the graduated
+      // flag wasn't set; treat them the same as graduated pump_fun tokens.
+      if (token.graduated || token.platform === "pumpswap") {
+        // ── Jupiter swap path for graduated / DEX tokens ─────────────────────
         // Token has left the bonding curve and is now tradeable on Raydium/PumpSwap.
         // Jupiter aggregator auto-routes to the best available pool.
         const numAmt = parseFloat(amount);
@@ -2105,7 +2108,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               wallet={wallet}
               handleTrade={handleTrade}
               isPending={isTradePending}
-              isGraduated={!!token?.graduated}
+              isGraduated={!!(token?.graduated || token?.platform === "pumpswap")}
               jupiterQuote={jupiterQuote}
               jupiterQuoteLoading={jupiterQuoteLoading}
               jupiterQuoteError={jupiterQuoteError}
@@ -3071,7 +3074,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             wallet={wallet}
             handleTrade={handleTrade}
             isPending={isTradePending}
-            isGraduated={!!token?.graduated}
+            isGraduated={!!(token?.graduated || token?.platform === "pumpswap")}
             jupiterQuote={jupiterQuote}
             jupiterQuoteLoading={jupiterQuoteLoading}
             jupiterQuoteError={jupiterQuoteError}
