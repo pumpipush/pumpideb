@@ -4,6 +4,7 @@ import {
   RequestUploadUrlResponse,
 } from '@workspace/api-zod';
 import { Router, type IRouter, type Request, type Response } from 'express';
+import { asyncWrap } from '../lib/asyncHandler.js';
 
 import { ObjectPermission } from '../lib/objectAcl';
 import {
@@ -58,7 +59,7 @@ function checkRateLimit(ip: string): boolean {
  */
 router.post(
   '/storage/uploads/request-url',
-  async (req: Request, res: Response) => {
+  asyncWrap(async (req: Request, res: Response) => {
     // Rate limiting — use socket IP only; do NOT trust X-Forwarded-For
     const ip = req.socket.remoteAddress ?? 'unknown';
     if (!checkRateLimit(ip)) {
@@ -101,7 +102,7 @@ router.post(
       req.log.error({ err: error }, 'Error generating upload URL');
       res.status(500).json({ error: 'Failed to generate upload URL' });
     }
-  },
+  }),
 );
 
 /**
@@ -118,7 +119,7 @@ router.post(
  */
 router.post(
   '/storage/uploads/confirm',
-  async (req: Request, res: Response) => {
+  asyncWrap(async (req: Request, res: Response) => {
     const { objectPath } = req.body as { objectPath?: unknown };
 
     if (typeof objectPath !== 'string' || !objectPath.startsWith('/objects/')) {
@@ -175,7 +176,7 @@ router.post(
       req.log.error({ err: error }, 'Error confirming upload');
       res.status(500).json({ error: 'Failed to confirm upload' });
     }
-  },
+  }),
 );
 
 /**
@@ -186,7 +187,7 @@ router.post(
  */
 router.get(
   '/storage/public-objects/*filePath',
-  async (req: Request, res: Response) => {
+  asyncWrap(async (req: Request, res: Response) => {
     try {
       const raw = req.params.filePath;
       const filePath = Array.isArray(raw) ? raw.join('/') : raw;
@@ -213,7 +214,7 @@ router.get(
       req.log.error({ err: error }, 'Error serving public object');
       res.status(500).json({ error: 'Failed to serve public object' });
     }
-  },
+  }),
 );
 
 /**
@@ -228,7 +229,7 @@ router.get(
  *   - Content-Type: the verified image MIME type stored at confirm time
  *   - X-Content-Type-Options: nosniff   (prevents browser content-sniffing)
  */
-router.get('/storage/objects/*path', async (req: Request, res: Response) => {
+router.get('/storage/objects/*path', asyncWrap(async (req: Request, res: Response) => {
   try {
     const raw = req.params.path;
     const wildcardPath = Array.isArray(raw) ? raw.join('/') : raw;
@@ -283,6 +284,6 @@ router.get('/storage/objects/*path', async (req: Request, res: Response) => {
     req.log.error({ err: error }, 'Error serving object');
     res.status(500).json({ error: 'Failed to serve object' });
   }
-});
+}));
 
 export default router;

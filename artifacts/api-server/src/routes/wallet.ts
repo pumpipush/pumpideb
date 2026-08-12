@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, tokensTable } from "@workspace/db";
 import { inArray } from "drizzle-orm";
+import { asyncWrap } from "../lib/asyncHandler.js";
 import { PUBLICNODE_HTTP, FALLBACK_HTTP_RPCS } from "../lib/adapters/solanaRpcBase";
 
 const router: IRouter = Router();
@@ -31,7 +32,7 @@ const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
 // ── GET /api/wallet/:address/portfolio ─────────────────────────────────────────
 // Returns the wallet's SOL balance + SPL token holdings enriched from our DB.
-router.get("/wallet/:address/portfolio", async (req, res) => {
+router.get("/wallet/:address/portfolio", asyncWrap(async (req, res) => {
   const { address } = req.params;
 
   if (!address || address.length < 32) {
@@ -130,9 +131,10 @@ router.get("/wallet/:address/portfolio", async (req, res) => {
 
     res.json({ solBalance, tokens });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    res.status(500).json({ error: msg });
+    // Log the detail server-side but never expose it to the caller.
+    console.error("[portfolio] fetch failed:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
-});
+}));
 
 export default router;

@@ -17,6 +17,7 @@ import { profilesTable } from "@workspace/db/schema";
 import { signToken, verifyToken, extractBearer } from "../lib/auth-jwt";
 import { generateOTP, verifyOTP, sendOTPEmail } from "../lib/email-otp";
 import nacl from "tweetnacl";
+import { asyncWrap } from "../lib/asyncHandler.js";
 
 // ── Base58 decoder (Solana alphabet) ──────────────────────────────────────
 const BS58_ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -114,7 +115,7 @@ async function uniqueUsername(base: string): Promise<string> {
 
 // ── POST /api/auth/google ──────────────────────────────────────────────────
 
-router.post("/auth/google", async (req, res) => {
+router.post("/auth/google", asyncWrap(async (req, res) => {
   const { credential } = req.body as { credential?: string };
   if (!credential) return void res.status(400).json({ error: "credential required" });
   if (!GOOGLE_CLIENT_ID) return void res.status(503).json({ error: "Google auth not configured" });
@@ -181,11 +182,11 @@ router.post("/auth/google", async (req, res) => {
 
   const token = signToken({ sub: profile.address, authType: "google" });
   return void res.json({ token, profile });
-});
+}));
 
 // ── POST /api/auth/email/send ──────────────────────────────────────────────
 
-router.post("/auth/email/send", async (req, res) => {
+router.post("/auth/email/send", asyncWrap(async (req, res) => {
   const { email } = req.body as { email?: string };
   if (!email || !email.includes("@")) {
     return void res.status(400).json({ error: "valid email required" });
@@ -195,17 +196,13 @@ router.post("/auth/email/send", async (req, res) => {
     return void res.status(429).json({ error: "Too many attempts. Please wait 15 minutes before requesting another code." });
   }
   const code = generateOTP(email.toLowerCase());
-  try {
-    await sendOTPEmail(email.toLowerCase(), code);
-    return void res.json({ ok: true });
-  } catch (err) {
-    return void res.status(500).json({ error: "Failed to send email", detail: String(err) });
-  }
-});
+  await sendOTPEmail(email.toLowerCase(), code);
+  return void res.json({ ok: true });
+}));
 
 // ── POST /api/auth/email/verify ────────────────────────────────────────────
 
-router.post("/auth/email/verify", async (req, res) => {
+router.post("/auth/email/verify", asyncWrap(async (req, res) => {
   const { email, code } = req.body as { email?: string; code?: string };
   if (!email || !code) return void res.status(400).json({ error: "email and code required" });
 
@@ -237,11 +234,11 @@ router.post("/auth/email/verify", async (req, res) => {
 
   const token = signToken({ sub: profile.address, authType: "email" });
   return void res.json({ token, profile });
-});
+}));
 
 // ── GET /api/auth/me ───────────────────────────────────────────────────────
 
-router.get("/auth/me", async (req, res) => {
+router.get("/auth/me", asyncWrap(async (req, res) => {
   const token = extractBearer(req.headers.authorization);
   if (!token) return void res.status(401).json({ error: "No token" });
 
@@ -257,7 +254,7 @@ router.get("/auth/me", async (req, res) => {
   if (!profiles[0]) return void res.status(404).json({ error: "Profile not found" });
 
   return void res.json({ profile: profiles[0], authType: payload.authType });
-});
+}));
 
 // ── GET /api/auth/wallet/link/challenge ────────────────────────────────────
 // Issue a single-use nonce the client must sign with the target wallet before
@@ -265,7 +262,7 @@ router.get("/auth/me", async (req, res) => {
 // Query: ?wallet=<base58 Solana address>
 // Requires: Authorization: Bearer <social-user JWT>
 
-router.get("/auth/wallet/link/challenge", async (req, res) => {
+router.get("/auth/wallet/link/challenge", asyncWrap(async (req, res) => {
   const token = extractBearer(req.headers.authorization);
   if (!token) return void res.status(401).json({ error: "No token" });
 
@@ -288,7 +285,7 @@ router.get("/auth/wallet/link/challenge", async (req, res) => {
   });
 
   return void res.json({ nonce, message: `RocketFi:linkwallet:${walletAddress}:${nonce}` });
-});
+}));
 
 // ── POST /api/auth/wallet/link ─────────────────────────────────────────────
 // Link a Solana wallet to the authenticated social user's profile.
@@ -296,7 +293,7 @@ router.get("/auth/wallet/link/challenge", async (req, res) => {
 // Body: { walletAddress, signature, message }
 // Requires: Authorization: Bearer <social-user JWT>
 
-router.post("/auth/wallet/link", async (req, res) => {
+router.post("/auth/wallet/link", asyncWrap(async (req, res) => {
   const token = extractBearer(req.headers.authorization);
   if (!token) return void res.status(401).json({ error: "No token" });
 
@@ -382,14 +379,14 @@ router.post("/auth/wallet/link", async (req, res) => {
 
   if (!updated[0]) return void res.status(404).json({ error: "Profile not found" });
   return void res.json({ ok: true, profile: updated[0] });
-});
+}));
 
 // ── DELETE /api/auth/wallet/link ───────────────────────────────────────────
 // Remove the linked wallet from the authenticated social user's profile.
 // No wallet signature required — the JWT proves the user controls the social account.
 // Requires: Authorization: Bearer <social-user JWT>
 
-router.delete("/auth/wallet/link", async (req, res) => {
+router.delete("/auth/wallet/link", asyncWrap(async (req, res) => {
   const token = extractBearer(req.headers.authorization);
   if (!token) return void res.status(401).json({ error: "No token" });
 
@@ -407,7 +404,7 @@ router.delete("/auth/wallet/link", async (req, res) => {
 
   if (!updated[0]) return void res.status(404).json({ error: "Profile not found" });
   return void res.json({ ok: true, profile: updated[0] });
-});
+}));
 
 // ── POST /api/auth/logout ──────────────────────────────────────────────────
 

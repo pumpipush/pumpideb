@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { Router } from "express";
 import { URL } from "url";
 import { ObjectStorageService } from "../lib/objectStorage";
+import { asyncWrap } from "../lib/asyncHandler.js";
 
 const router = Router();
 const storageService = new ObjectStorageService();
@@ -103,7 +104,7 @@ function isAllowedUrl(raw: string): boolean {
 const _ipfsRateMap = new Map<string, number>();
 const IPFS_RATE_MS = 10_000;
 
-router.post("/pump-ipfs-upload", async (req, res) => {
+router.post("/pump-ipfs-upload", asyncWrap(async (req, res) => {
   const ip = req.socket.remoteAddress ?? "unknown";
   const now = Date.now();
   const last = _ipfsRateMap.get(ip) ?? 0;
@@ -182,12 +183,12 @@ router.post("/pump-ipfs-upload", async (req, res) => {
     const metadataUri = `${baseUrl}/api/storage/public-objects/${metaSubPath}`;
     return res.json({ metadataUri });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return res.status(502).json({ error: `Metadata upload failed: ${msg}` });
+    console.error("[proxy] pump-ipfs-upload failed:", err);
+    return res.status(502).json({ error: "Metadata upload failed" });
   }
-});
+}));
 
-router.get("/proxy-image", async (req, res) => {
+router.get("/proxy-image", asyncWrap(async (req, res) => {
   const url = req.query.url as string;
   if (!url) return res.status(400).send("Missing url");
   if (!isAllowedUrl(url)) return res.status(403).send("Domain not allowed");
@@ -214,6 +215,6 @@ router.get("/proxy-image", async (req, res) => {
   } catch {
     return res.status(502).send("Failed to fetch image");
   }
-});
+}));
 
 export default router;

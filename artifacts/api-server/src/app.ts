@@ -32,4 +32,8 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 app.use("/api", router);
 
+// ── Global error handler ──────────────────────────────────────────────────
+import { globalErrorHandler } from "./lib/errorHandler.js";
+app.use(globalErrorHandler);
+
 export default app;

@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { asyncWrap } from "../lib/asyncHandler.js";
 import { desc, sql, gte } from "drizzle-orm";
 import { db, tokensTable, tradesTable } from "@workspace/db";
 import {
@@ -10,7 +11,7 @@ import {
 const router: IRouter = Router();
 
 // GET /stats
-router.get("/stats", async (_req, res): Promise<void> => {
+router.get("/stats", asyncWrap(async (_req, res) => {
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   const [totalStats] = await db
@@ -53,10 +54,10 @@ router.get("/stats", async (_req, res): Promise<void> => {
   };
 
   res.json(GetPlatformStatsResponse.parse(stats));
-});
+}));
 
 // GET /stats/recent-activity
-router.get("/stats/recent-activity", async (req, res): Promise<void> => {
+router.get("/stats/recent-activity", asyncWrap(async (req, res) => {
   const parsed = GetRecentActivityQueryParams.safeParse(req.query);
   const limit = parsed.success ? Number(parsed.data.limit ?? 20) : 20;
 
@@ -87,6 +88,6 @@ router.get("/stats/recent-activity", async (req, res): Promise<void> => {
   }));
 
   res.json(GetRecentActivityResponse.parse(safe));
-});
+}));
 
 export default router;

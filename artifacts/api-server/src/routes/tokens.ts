@@ -16,6 +16,7 @@ import {
 } from "@workspace/api-zod";
 import { searchJupiterTokens } from "../lib/jupiter-tokens";
 import { verifyWalletSignature, isValidIndexerSecret, parseWalletAuthFields } from "../lib/wallet-auth";
+import { asyncWrap } from "../lib/asyncHandler.js";
 
 const router: IRouter = Router();
 
@@ -105,7 +106,7 @@ async function fetch24hPctChanges(addresses: string[]): Promise<Map<string, numb
 }
 
 // GET /tokens
-router.get("/tokens", async (req, res): Promise<void> => {
+router.get("/tokens", asyncWrap(async (req, res) => {
   const parsed = ListTokensQueryParams.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -329,7 +330,7 @@ router.get("/tokens", async (req, res): Promise<void> => {
   res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
   res.setHeader("X-Cache", "MISS");
   res.json(payload);
-});
+}));
 
 // POST /tokens
 // Requires a wallet signature to prove the caller owns the creator wallet.
@@ -337,7 +338,7 @@ router.get("/tokens", async (req, res): Promise<void> => {
 // and send { walletAddress, signature, message } alongside the token fields.
 // creatorAddress is derived server-side from the verified walletAddress — the
 // creatorAddress field in the body is ignored and overwritten.
-router.post("/tokens", async (req, res): Promise<void> => {
+router.post("/tokens", asyncWrap(async (req, res) => {
   // 1. Parse and verify wallet auth fields
   const authFields = parseWalletAuthFields(req.body);
   if (!authFields) {
@@ -387,12 +388,12 @@ router.post("/tokens", async (req, res): Promise<void> => {
     .returning();
 
   res.status(201).json(CreateTokenResponse.parse(formatToken(token)));
-});
+}));
 
 // GET /tokens/search — combined platform + Solana-wide search
 // Returns { platformTokens, solanaTokens } so the client can show two sections.
 // Must be registered before /:address so "search" is not treated as an address.
-router.get("/tokens/search", async (req, res): Promise<void> => {
+router.get("/tokens/search", asyncWrap(async (req, res) => {
   const q = String(req.query["q"] ?? "").trim();
   if (!q) {
     res.json({ platformTokens: [], solanaTokens: [] });
@@ -426,10 +427,10 @@ router.get("/tokens/search", async (req, res): Promise<void> => {
   }));
 
   res.json({ platformTokens, solanaTokens });
-});
+}));
 
 // GET /tokens/trending
-router.get("/tokens/trending", async (req, res): Promise<void> => {
+router.get("/tokens/trending", asyncWrap(async (req, res) => {
   const parsed = GetTrendingTokensQueryParams.safeParse(req.query);
   const limit = parsed.success ? Number(parsed.data.limit ?? 10) : 10;
 
@@ -503,10 +504,10 @@ router.get("/tokens/trending", async (req, res): Promise<void> => {
   }));
 
   res.json(GetTrendingTokensResponse.parse(tokens.map(t => formatToken(t, undefined, t.trades1h))));
-});
+}));
 
 // GET /tokens/:address
-router.get("/tokens/:address", async (req, res): Promise<void> => {
+router.get("/tokens/:address", asyncWrap(async (req, res) => {
   const params = GetTokenParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -524,7 +525,7 @@ router.get("/tokens/:address", async (req, res): Promise<void> => {
   }
 
   res.json(GetTokenResponse.parse(formatToken(token)));
-});
+}));
 
 // PATCH /tokens/:address
 // Two authentication paths are accepted:
@@ -533,7 +534,7 @@ router.get("/tokens/:address", async (req, res): Promise<void> => {
 //   B) Token creator: send { walletAddress, signature, message } where the
 //      signature covers "RocketFi:update:{tokenAddress}:{unixSeconds}" and
 //      walletAddress matches the token's stored creatorAddress.
-router.patch("/tokens/:address", async (req, res): Promise<void> => {
+router.patch("/tokens/:address", asyncWrap(async (req, res) => {
   const params = UpdateTokenParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -620,11 +621,11 @@ router.patch("/tokens/:address", async (req, res): Promise<void> => {
   }
 
   res.json(UpdateTokenResponse.parse(formatToken(token)));
-});
+}));
 
 // GET /sitemap.xml — dynamically generated sitemap containing top/trending token pages.
 // Intended to be fetched by the web crawler after the static sitemap index references this URL.
-router.get("/sitemap.xml", async (_req, res): Promise<void> => {
+router.get("/sitemap.xml", asyncWrap(async (_req, res) => {
   try {
     // Fetch the top 500 tokens by trade count as a reasonable "popular" proxy.
     // Exclude placeholder symbols that are not real tokens.
@@ -655,7 +656,7 @@ router.get("/sitemap.xml", async (_req, res): Promise<void> => {
   } catch (err) {
     res.status(500).send("<!-- sitemap generation error -->");
   }
-});
+}));
 
 function formatToken(t: typeof tokensTable.$inferSelect | Record<string, unknown>, pctChange24h?: number, trades1h?: number) {
   const row = t as Record<string, unknown>;

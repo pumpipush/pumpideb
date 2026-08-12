@@ -40,6 +40,7 @@ import {
   verifyWalletSignatureWithNonce,
 } from "../lib/wallet-auth.js";
 import { extractBearer, verifyToken } from "../lib/auth-jwt.js";
+import { asyncWrap } from "../lib/asyncHandler.js";
 
 const router: IRouter = Router();
 
@@ -66,7 +67,7 @@ router.post("/profiles/challenge", (req, res): void => {
 // :identifier can be a wallet address (32–44 base58 chars) OR a username.
 // Address lookup is exact; username lookup is case-insensitive.
 
-router.get("/profiles/:address", async (req, res): Promise<void> => {
+router.get("/profiles/:address", asyncWrap(async (req, res) => {
   const identifier = String(req.params.address ?? "").trim();
   if (!identifier) {
     res.status(400).json({ error: "Missing identifier" });
@@ -104,7 +105,7 @@ router.get("/profiles/:address", async (req, res): Promise<void> => {
     return;
   }
   res.json(response.data);
-});
+}));
 
 // ── POST /profiles ─────────────────────────────────────────────────────────────
 // Create a profile for the signing wallet.
@@ -115,7 +116,7 @@ router.get("/profiles/:address", async (req, res): Promise<void> => {
 // address is always derived from the verified walletAddress — any "address" field
 // in the body is ignored and overwritten before schema validation.
 
-router.post("/profiles", async (req, res): Promise<void> => {
+router.post("/profiles", asyncWrap(async (req, res) => {
   // 1. Require wallet authentication
   const authFields = parseWalletAuthFields(req.body);
   if (!authFields) {
@@ -190,7 +191,7 @@ router.post("/profiles", async (req, res): Promise<void> => {
   }
 
   res.status(inserted ? 201 : 200).json(response.data);
-});
+}));
 
 // ── PATCH /profiles/:address ───────────────────────────────────────────────────
 // Update (or create on first edit) the profile for the signing wallet.
@@ -204,7 +205,7 @@ router.post("/profiles", async (req, res): Promise<void> => {
 // Implemented as an upsert so the first authenticated PATCH also creates the
 // profile row, removing the need for a separate profile-creation step.
 
-router.patch("/profiles/:address", async (req, res): Promise<void> => {
+router.patch("/profiles/:address", asyncWrap(async (req, res) => {
   // 1. Parse and validate route param
   const paramsParsed = UpdateProfileParams.safeParse(req.params);
   if (!paramsParsed.success) {
@@ -336,6 +337,6 @@ router.patch("/profiles/:address", async (req, res): Promise<void> => {
   }
 
   res.json(response.data);
-});
+}));
 
 export default router;

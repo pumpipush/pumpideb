@@ -14,6 +14,7 @@ import { registerGraduatedMint } from "../lib/adapters/raydium-amm";
 import { fetchBirdeyeOHLCV, fetchBirdeyeTokenTrades, fetchBirdeyeTokenOverview, getSolPriceUsd, type BirdeyeOHLCVBar } from "../lib/birdeye.js";
 import { fetchDexScreenerTokens, bestSolanaPair, pairToSolPrice, pairToPriceHistory } from "../lib/dexscreener.js";
 import { fetchAndParseTrade } from "../lib/tradeVerifier.js";
+import { asyncWrap } from "../lib/asyncHandler.js";
 
 // Platforms that use Birdeye for OHLCV + price-history (no internal trade stream in prod yet)
 const DEX_PLATFORMS = new Set(["pumpswap", "raydium_launchlab"]);
@@ -130,7 +131,7 @@ const BIRDEYE_TF_SECS: Record<string, number> = {
 const router: IRouter = Router();
 
 // GET /tokens/:address/stream  — Server-Sent Events for live trade feed
-router.get("/tokens/:address/stream", async (req: Request, res: Response) => {
+router.get("/tokens/:address/stream", asyncWrap(async (req: Request, res: Response) => {
   const address = req.params.address as string;
   if (!address) {
     res.status(400).json({ error: "address required" });
@@ -229,7 +230,7 @@ router.get("/tokens/:address/stream", async (req: Request, res: Response) => {
     tradeEmitter.off(`trade:${address}`,    tradeHandler);
     tradeEmitter.off(`snapshot:${address}`, snapshotHandler);
   });
-});
+}));
 
 // ── OHLCV bucket sizes (seconds) — mirrors ohlcv.ts BUCKET_SECONDS ───────────
 const OHLCV_BUCKET_SECONDS: Record<string, number> = {
@@ -250,7 +251,7 @@ const OHLCV_BUCKET_SECONDS: Record<string, number> = {
 // DEX tokens (pumpswap, raydium_launchlab) always proxy to Birdeye — our
 // indexer intentionally captures only a sample of trades (30s throttle on
 // PumpSwap) so the internal DB does not represent full price history.
-router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
+router.get("/tokens/:address/ohlcv", asyncWrap(async (req, res) => {
   const address = req.params.address as string;
   if (!address) { res.status(400).json({ error: "address required" }); return; }
 
@@ -468,12 +469,12 @@ router.get("/tokens/:address/ohlcv", async (req, res): Promise<void> => {
   }
 
   res.json({ bars, maxTradeId });
-});
+}));
 
 // GET /tokens/:address/holders — net token balance per wallet across ALL trades in DB.
 // Client-side computation from the 100-row trade history only sees a fraction of
 // wallets for high-volume tokens; this endpoint has no row limit.
-router.get("/tokens/:address/holders", async (req, res): Promise<void> => {
+router.get("/tokens/:address/holders", asyncWrap(async (req, res) => {
   const address = req.params.address as string;
   if (!address) { res.status(400).json({ error: "address required" }); return; }
 
@@ -510,10 +511,10 @@ router.get("/tokens/:address/holders", async (req, res): Promise<void> => {
   }));
 
   res.json({ holders, count: holders.length });
-});
+}));
 
 // GET /wallet/:address/holdings — tokens held by a wallet (net balance > 0 across ALL trades)
-router.get("/wallet/:address/holdings", async (req, res): Promise<void> => {
+router.get("/wallet/:address/holdings", asyncWrap(async (req, res) => {
   const wallet = req.params.address as string;
   if (!wallet) { res.status(400).json({ error: "address required" }); return; }
 
@@ -579,13 +580,13 @@ router.get("/wallet/:address/holdings", async (req, res): Promise<void> => {
   }));
 
   res.json({ holdings, count: holdings.length });
-});
+}));
 
 // GET /tokens/:address/position?wallet=<address>
 // Per-wallet aggregate across ALL trades in DB — no 100-row cap.
 // Returns tokensBought/Sold (atomic), solSpent/Received (lamports), tradeCount, maxTradeId.
 // maxTradeId lets the client overlay only SSE trades with id > maxTradeId to avoid double-counting.
-router.get("/tokens/:address/position", async (req, res): Promise<void> => {
+router.get("/tokens/:address/position", asyncWrap(async (req, res) => {
   const tokenAddress = req.params.address as string;
   const wallet = req.query.wallet as string | undefined;
   if (!tokenAddress) { res.status(400).json({ error: "address required" }); return; }
@@ -632,10 +633,10 @@ router.get("/tokens/:address/position", async (req, res): Promise<void> => {
     tradeCount:   parseInt(r.trade_count,  10),
     maxTradeId:   parseInt(r.max_trade_id, 10),
   });
-});
+}));
 
 // GET /tokens/:address/stats  — 24-hour aggregated stats (SQL, no row-limit)
-router.get("/tokens/:address/stats", async (req, res): Promise<void> => {
+router.get("/tokens/:address/stats", asyncWrap(async (req, res) => {
   const address = req.params.address as string;
   if (!address) { res.status(400).json({ error: "address required" }); return; }
 
@@ -701,11 +702,11 @@ router.get("/tokens/:address/stats", async (req, res): Promise<void> => {
     txns24hBuy,
     txns24hSell,
   });
-});
+}));
 
 // GET /tokens/:address/price-history  — reference prices at 5m / 1h / 6h / 24h ago
 // Used by the frontend to compute % changes without relying on the 100-row history cap.
-router.get("/tokens/:address/price-history", async (req, res): Promise<void> => {
+router.get("/tokens/:address/price-history", asyncWrap(async (req, res) => {
   const address = req.params.address as string;
   if (!address) { res.status(400).json({ error: "address required" }); return; }
 
@@ -799,10 +800,10 @@ router.get("/tokens/:address/price-history", async (req, res): Promise<void> => 
   }
 
   res.json(internalResult);
-});
+}));
 
 // GET /tokens/:address/trades
-router.get("/tokens/:address/trades", async (req, res): Promise<void> => {
+router.get("/tokens/:address/trades", asyncWrap(async (req, res) => {
   const params = TradeHistoryParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -927,7 +928,7 @@ router.get("/tokens/:address/trades", async (req, res): Promise<void> => {
   }
 
   res.json(TradeHistoryResponse.parse(trades));
-});
+}));
 
 // POST /tokens/:address/trades
 //
@@ -946,7 +947,7 @@ router.get("/tokens/:address/trades", async (req, res): Promise<void> => {
 // Internal adapters (pumpfun.ts, pumpswap.ts, etc.) write directly to the DB
 // and never call this route. This endpoint exists for external callers who
 // want to register a trade they just submitted on-chain.
-router.post("/tokens/:address/trades", async (req, res): Promise<void> => {
+router.post("/tokens/:address/trades", asyncWrap(async (req, res) => {
   const params = RecordTradeParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -1071,11 +1072,11 @@ router.post("/tokens/:address/trades", async (req, res): Promise<void> => {
   }
 
   res.status(201).json(RecordTradeResponse.parse(trade));
-});
+}));
 
 // GET /tokens/:address/top-wallets — per-wallet P&L and trade stats across ALL trades in DB.
 // Returns top 50 wallets by net token balance with SOL in/out, avg entry, and trade counts.
-router.get("/tokens/:address/top-wallets", async (req, res): Promise<void> => {
+router.get("/tokens/:address/top-wallets", asyncWrap(async (req, res) => {
   const address = req.params.address as string;
   if (!address) { res.status(400).json({ error: "address required" }); return; }
 
@@ -1152,6 +1153,6 @@ router.get("/tokens/:address/top-wallets", async (req, res): Promise<void> => {
   }));
 
   res.json({ wallets, count: wallets.length });
-});
+}));
 
 export default router;
