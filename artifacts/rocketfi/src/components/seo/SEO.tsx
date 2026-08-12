@@ -42,7 +42,12 @@ export function SEO({
     ? `${SITE_NAME} — ${title}`
     : DEFAULT_TITLE;
 
-  const computedImage = image ?? DEFAULT_IMAGE;
+  // og:image / twitter:image must be absolute URLs — social crawlers reject root-relative paths.
+  const rawImage = image ?? DEFAULT_IMAGE;
+  const computedImage =
+    typeof window !== "undefined" && rawImage.startsWith("/")
+      ? `${window.location.origin}${rawImage}`
+      : rawImage;
 
   // Resolve canonical — prefer explicit prop, fall back to current href (client-only)
   const canonical =
