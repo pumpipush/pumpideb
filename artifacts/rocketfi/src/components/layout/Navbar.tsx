@@ -195,13 +195,7 @@ export function Navbar() {
 
       {/* Logo — mobile only (desktop logo lives in Sidebar) */}
       <Link href="/" className="md:hidden flex items-center gap-2 shrink-0 select-none">
-        <div className="h-7 w-7 rounded-sm bg-primary flex items-center justify-center shrink-0">
-          <svg viewBox="0 0 24 24" className="h-4 w-4 text-white fill-current">
-            <path d="M12 2.5c-1.5 3-4 4.5-4 8.5a4 4 0 008 0c0-4-2.5-5.5-4-8.5z"/>
-            <path d="M10 19h4v2.5a.5.5 0 01-.5.5h-3a.5.5 0 01-.5-.5V19z" opacity=".7"/>
-          </svg>
-        </div>
-        <span className="font-bold text-sm text-foreground tracking-tight">Pump<span style={{ color: "#4ade80" }}>i</span></span>
+        <img src="/pumpi-logo.png" alt="Pumpi" className="h-6 w-auto object-contain" />
       </Link>
 
       {/* Desktop: full search bar */}

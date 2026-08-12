@@ -38,9 +38,8 @@ export function Sidebar() {
   return (
     <div className="hidden md:flex fixed left-0 top-0 h-full w-[220px] border-r border-border bg-background flex-col z-50">
       <div className="p-4 flex flex-col gap-4">
-        <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight text-primary transition-all duration-150 cursor-pointer">
-          <Rocket className="h-5 w-5" />
-          <span>Pump<span style={{ color: "#4ade80" }} className="font-normal">i</span></span>
+        <Link href="/" className="flex items-center transition-all duration-150 cursor-pointer">
+          <img src="/pumpi-logo.png" alt="Pumpi" className="h-7 w-auto object-contain" />
         </Link>
         <div className="h-px w-full bg-border/50" />
       </div>
