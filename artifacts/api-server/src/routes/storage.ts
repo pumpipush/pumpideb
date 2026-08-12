@@ -6,6 +6,7 @@ import {
 import { Router, type IRouter, type Request, type Response } from 'express';
 import { asyncWrap } from '../lib/asyncHandler.js';
 
+import { extractBearer, verifyToken } from '../lib/auth-jwt';
 import { ObjectPermission } from '../lib/objectAcl';
 import {
   ObjectNotFoundError,
@@ -24,6 +25,47 @@ const ALLOWED_IMAGE_TYPES = new Set([
   'image/gif',
   'image/webp',
 ]);
+
+// ── Pending-upload registry ───────────────────────────────────────────────────
+// Records which authenticated user requested each object path so that the
+// confirm step can enforce same-user ownership.  Node.js is single-threaded,
+// so Map operations are atomic.  Entries are single-use (consumed on confirm)
+// and expire after 15 minutes to match the presigned URL TTL.
+const PENDING_UPLOAD_TTL_MS = 15 * 60 * 1_000; // 15 min
+
+interface PendingUploadEntry {
+  sub: string;       // authPayload.sub of the user who requested the URL
+  expiresAt: number; // ms epoch
+}
+
+const _pendingUploads = new Map<string, PendingUploadEntry>();
+
+// Prune expired entries periodically so the Map doesn't grow unboundedly.
+setInterval(() => {
+  const now = Date.now();
+  for (const [path, entry] of _pendingUploads) {
+    if (now > entry.expiresAt) _pendingUploads.delete(path);
+  }
+}, 60_000).unref();
+
+/** Record a pending upload; must be called immediately after the presigned URL is issued. */
+function registerPendingUpload(objectPath: string, sub: string): void {
+  _pendingUploads.set(objectPath, { sub, expiresAt: Date.now() + PENDING_UPLOAD_TTL_MS });
+}
+
+/**
+ * Atomically consume a pending-upload record.
+ * Returns true only if the record exists, has not expired, and the confirming
+ * user's `sub` matches.  The entry is always deleted on first call
+ * (single-use guarantee — prevents re-confirmation by another user).
+ */
+function consumePendingUpload(objectPath: string, sub: string): boolean {
+  const entry = _pendingUploads.get(objectPath);
+  _pendingUploads.delete(objectPath); // always remove — single-use
+  if (!entry) return false;
+  if (Date.now() > entry.expiresAt) return false;
+  return entry.sub === sub;
+}
 
 // ── Simple in-memory rate limiter ────────────────────────────────────────────
 // Max 10 upload URL requests per socket IP per minute.
@@ -50,6 +92,7 @@ function checkRateLimit(ip: string): boolean {
  *
  * Step 1 of the two-step upload flow: request a presigned GCS PUT URL.
  * Server-side guards:
+ *   - Requires a valid JWT (authenticated users only)
  *   - Rate limited to 10 requests per socket IP per minute (not spoofable via headers)
  *   - contentType must be an allowed image MIME type (no SVG)
  *   - Declared size must be ≤ 5 MB
@@ -60,6 +103,14 @@ function checkRateLimit(ip: string): boolean {
 router.post(
   '/storage/uploads/request-url',
   asyncWrap(async (req: Request, res: Response) => {
+    // Authentication — require a valid JWT
+    const token = extractBearer(req.headers.authorization);
+    const authPayload = token ? verifyToken(token) : null;
+    if (!authPayload) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
     // Rate limiting — use socket IP only; do NOT trust X-Forwarded-For
     const ip = req.socket.remoteAddress ?? 'unknown';
     if (!checkRateLimit(ip)) {
@@ -87,21 +138,20 @@ router.post(
       return;
     }
 
-    try {
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+    const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
 
-      res.json(
-        RequestUploadUrlResponse.parse({
-          uploadURL,
-          objectPath,
-          metadata: { name, size, contentType },
-        }),
-      );
-    } catch (error) {
-      req.log.error({ err: error }, 'Error generating upload URL');
-      res.status(500).json({ error: 'Failed to generate upload URL' });
-    }
+    // Bind this object path to the requesting user before returning the URL.
+    // The confirm step will verify and consume this record.
+    registerPendingUpload(objectPath, authPayload.sub);
+
+    res.json(
+      RequestUploadUrlResponse.parse({
+        uploadURL,
+        objectPath,
+        metadata: { name, size, contentType },
+      }),
+    );
   }),
 );
 
@@ -120,6 +170,14 @@ router.post(
 router.post(
   '/storage/uploads/confirm',
   asyncWrap(async (req: Request, res: Response) => {
+    // Authentication — require a valid JWT
+    const token = extractBearer(req.headers.authorization);
+    const authPayload = token ? verifyToken(token) : null;
+    if (!authPayload) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
     const { objectPath } = req.body as { objectPath?: unknown };
 
     if (typeof objectPath !== 'string' || !objectPath.startsWith('/objects/')) {
@@ -127,55 +185,58 @@ router.post(
       return;
     }
 
-    try {
-      const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+    const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
 
-      // Verify the object actually exists in GCS (upload must have succeeded)
-      const [exists] = await objectFile.exists();
-      if (!exists) {
-        res.status(404).json({ error: 'Upload not found — the file may not have been uploaded yet' });
-        return;
-      }
-
-      // Read actual GCS-stored metadata — not what the client claims
-      const [metadata] = await objectFile.getMetadata();
-
-      // Verify the ACTUAL stored content-type (set by the GCS client from the PUT headers)
-      // This catches attackers who PUT text/html but claim image/png in the request body.
-      const storedContentType = String(metadata.contentType ?? '');
-      if (!ALLOWED_IMAGE_TYPES.has(storedContentType)) {
-        // Delete the invalid object to prevent storage waste
-        await objectFile.delete().catch(() => {});
-        res.status(400).json({ error: 'Uploaded file is not an allowed image type (checked against GCS metadata)' });
-        return;
-      }
-
-      // Verify actual size ≤ 5 MB from GCS metadata (not client-declared)
-      const actualSize = Number(metadata.size ?? 0);
-      if (actualSize > MAX_IMAGE_BYTES) {
-        await objectFile.delete().catch(() => {});
-        res.status(400).json({ error: 'Uploaded file exceeds the 5 MB limit' });
-        return;
-      }
-
-      // Store the verified content-type alongside the ACL so the serve endpoint
-      // can set it explicitly (prevents content-sniffing attacks).
-      await objectFile.setMetadata({
-        metadata: {
-          'custom:aclPolicy': JSON.stringify({ owner: 'public', visibility: 'public' }),
-          'custom:verifiedContentType': storedContentType,
-        },
-      });
-
-      res.json({ objectPath, servingUrl: `/api/storage${objectPath}` });
-    } catch (error) {
-      if (error instanceof ObjectNotFoundError) {
-        res.status(404).json({ error: 'Object not found' });
-        return;
-      }
-      req.log.error({ err: error }, 'Error confirming upload');
-      res.status(500).json({ error: 'Failed to confirm upload' });
+    // Verify the object actually exists in GCS (upload must have succeeded)
+    const [exists] = await objectFile.exists();
+    if (!exists) {
+      res.status(404).json({ error: 'Upload not found — the file may not have been uploaded yet' });
+      return;
     }
+
+    // Read actual GCS-stored metadata — not what the client claims
+    const [metadata] = await objectFile.getMetadata();
+
+    // Verify the ACTUAL stored content-type (set by the GCS client from the PUT headers)
+    // This catches attackers who PUT text/html but claim image/png in the request body.
+    const storedContentType = String(metadata.contentType ?? '');
+    if (!ALLOWED_IMAGE_TYPES.has(storedContentType)) {
+      // Delete the invalid object to prevent storage waste
+      await objectFile.delete().catch(() => {});
+      res.status(400).json({ error: 'Uploaded file is not an allowed image type (checked against GCS metadata)' });
+      return;
+    }
+
+    // Verify actual size ≤ 5 MB from GCS metadata (not client-declared)
+    const actualSize = Number(metadata.size ?? 0);
+    if (actualSize > MAX_IMAGE_BYTES) {
+      await objectFile.delete().catch(() => {});
+      res.status(400).json({ error: 'Uploaded file exceeds the 5 MB limit' });
+      return;
+    }
+
+    // Enforce uploader ownership: consume the pending-upload record and verify
+    // the confirming user is the same one who requested the presigned URL.
+    // The record is always deleted on this call (single-use) — subsequent
+    // confirm attempts for the same path from any user will fail.
+    if (!consumePendingUpload(objectPath, authPayload.sub)) {
+      res.status(403).json({
+        error: 'Upload not authorized — the object path was not issued to your account or the request has expired',
+      });
+      return;
+    }
+
+    // Store the verified content-type alongside the ACL so the serve endpoint
+    // can set it explicitly (prevents content-sniffing attacks).
+    // Bind the object to the authenticated user who confirmed the upload.
+    await objectFile.setMetadata({
+      metadata: {
+        'custom:aclPolicy': JSON.stringify({ owner: authPayload.sub, visibility: 'public' }),
+        'custom:verifiedContentType': storedContentType,
+      },
+    });
+
+    res.json({ objectPath, servingUrl: `/api/storage${objectPath}` });
   }),
 );
 
@@ -188,31 +249,26 @@ router.post(
 router.get(
   '/storage/public-objects/*filePath',
   asyncWrap(async (req: Request, res: Response) => {
-    try {
-      const raw = req.params.filePath;
-      const filePath = Array.isArray(raw) ? raw.join('/') : raw;
-      const file = await objectStorageService.searchPublicObject(filePath);
-      if (!file) {
-        res.status(404).json({ error: 'File not found' });
-        return;
-      }
+    const raw = req.params.filePath;
+    const filePath = Array.isArray(raw) ? raw.join('/') : raw;
+    const file = await objectStorageService.searchPublicObject(filePath);
+    if (!file) {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
 
-      const response = await objectStorageService.downloadObject(file);
+    const response = await objectStorageService.downloadObject(file);
 
-      res.status(response.status);
-      response.headers.forEach((value, key) => res.setHeader(key, value));
+    res.status(response.status);
+    response.headers.forEach((value, key) => res.setHeader(key, value));
 
-      if (response.body) {
-        const nodeStream = Readable.fromWeb(
-          response.body as ReadableStream<Uint8Array>,
-        );
-        nodeStream.pipe(res);
-      } else {
-        res.end();
-      }
-    } catch (error) {
-      req.log.error({ err: error }, 'Error serving public object');
-      res.status(500).json({ error: 'Failed to serve public object' });
+    if (response.body) {
+      const nodeStream = Readable.fromWeb(
+        response.body as ReadableStream<Uint8Array>,
+      );
+      nodeStream.pipe(res);
+    } else {
+      res.end();
     }
   }),
 );
@@ -230,59 +286,49 @@ router.get(
  *   - X-Content-Type-Options: nosniff   (prevents browser content-sniffing)
  */
 router.get('/storage/objects/*path', asyncWrap(async (req: Request, res: Response) => {
-  try {
-    const raw = req.params.path;
-    const wildcardPath = Array.isArray(raw) ? raw.join('/') : raw;
-    const objectPath = `/objects/${wildcardPath}`;
-    const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+  const raw = req.params.path;
+  const wildcardPath = Array.isArray(raw) ? raw.join('/') : raw;
+  const objectPath = `/objects/${wildcardPath}`;
+  const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
 
-    // ACL check: only serve objects explicitly confirmed as public
-    const canAccess = await objectStorageService.canAccessObjectEntity({
-      objectFile,
-      requestedPermission: ObjectPermission.READ,
-    });
-    if (!canAccess) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
-    }
+  // ACL check: only serve objects explicitly confirmed as public
+  const canAccess = await objectStorageService.canAccessObjectEntity({
+    objectFile,
+    requestedPermission: ObjectPermission.READ,
+  });
+  if (!canAccess) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
 
-    // Read GCS metadata to get the server-verified content type
-    const [metadata] = await objectFile.getMetadata();
-    const verifiedContentType: string =
-      (metadata.metadata?.['custom:verifiedContentType'] as string | undefined) ??
-      String(metadata.contentType ?? 'application/octet-stream');
+  // Read GCS metadata to get the server-verified content type
+  const [metadata] = await objectFile.getMetadata();
+  const verifiedContentType: string =
+    (metadata.metadata?.['custom:verifiedContentType'] as string | undefined) ??
+    String(metadata.contentType ?? 'application/octet-stream');
 
-    // Double-check the verified type is still in the allowed set before serving
-    if (!ALLOWED_IMAGE_TYPES.has(verifiedContentType)) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
-    }
+  // Double-check the verified type is still in the allowed set before serving
+  if (!ALLOWED_IMAGE_TYPES.has(verifiedContentType)) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
 
-    const response = await objectStorageService.downloadObject(objectFile);
+  const response = await objectStorageService.downloadObject(objectFile);
 
-    res.status(response.status);
-    response.headers.forEach((value, key) => res.setHeader(key, value));
+  res.status(response.status);
+  response.headers.forEach((value, key) => res.setHeader(key, value));
 
-    // Override Content-Type with the server-verified value and prevent sniffing
-    res.setHeader('Content-Type', verifiedContentType);
-    res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Override Content-Type with the server-verified value and prevent sniffing
+  res.setHeader('Content-Type', verifiedContentType);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
 
-    if (response.body) {
-      const nodeStream = Readable.fromWeb(
-        response.body as ReadableStream<Uint8Array>,
-      );
-      nodeStream.pipe(res);
-    } else {
-      res.end();
-    }
-  } catch (error) {
-    if (error instanceof ObjectNotFoundError) {
-      req.log.warn({ err: error }, 'Object not found');
-      res.status(404).json({ error: 'Object not found' });
-      return;
-    }
-    req.log.error({ err: error }, 'Error serving object');
-    res.status(500).json({ error: 'Failed to serve object' });
+  if (response.body) {
+    const nodeStream = Readable.fromWeb(
+      response.body as ReadableStream<Uint8Array>,
+    );
+    nodeStream.pipe(res);
+  } else {
+    res.end();
   }
 }));
 
