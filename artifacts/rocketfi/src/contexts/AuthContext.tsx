@@ -27,7 +27,7 @@ export interface SocialUser {
   username: string;
   avatarUrl: string | null;
   email: string | null;
-  authType: "google" | "email";
+  authType: "google" | "email" | "wallet";
   linkedWallet: string | null;
 }
 
@@ -66,6 +66,15 @@ interface AuthContextValue {
   linkWallet: (walletAddress: string, signature: string, message: string) => Promise<void>;
   /** Remove the linked wallet from this social account */
   unlinkWallet: () => Promise<void>;
+  /**
+   * Authenticate a wallet-only user: fetches a challenge, signs it with the
+   * wallet's private key, and exchanges the signature for a JWT.
+   * signMessage must be the wallet adapter's `signMessage` method.
+   */
+  loginWithWallet: (
+    walletAddress: string,
+    signMessage: (msg: Uint8Array) => Promise<Uint8Array>,
+  ) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -80,6 +89,7 @@ const AuthContext = createContext<AuthContextValue>({
   getWalletLinkChallenge: async () => ({ nonce: "", message: "" }),
   linkWallet: async () => {},
   unlinkWallet: async () => {},
+  loginWithWallet: async () => {},
 });
 
 const STORAGE_KEY = "pumpi_auth_token";
@@ -117,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           username:     p.username,
           avatarUrl:    p.avatarUrl ?? null,
           email:        p.email ?? null,
-          authType:     data.authType,
+          authType:     data.authType as "google" | "email" | "wallet",
           linkedWallet: p.linkedWallet ?? null,
         });
       })
@@ -143,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username:     p.username,
       avatarUrl:    p.avatarUrl ?? null,
       email:        p.email ?? null,
-      authType:     (data.authType ?? "email") as "google" | "email",
+      authType:     (data.authType ?? "email") as "google" | "email" | "wallet",
       linkedWallet: p.linkedWallet ?? null,
     });
   };
@@ -282,6 +292,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSocialUser((u) => u ? { ...u, linkedWallet: null } : u);
   }, [authHeaders]);
 
+  // ── Wallet-only login ─────────────────────────────────────────────────────
+  // Fetches a one-time challenge, has the wallet sign it, then exchanges the
+  // signature for a JWT — giving wallet-only users the same auth capabilities
+  // (deposits, balance, etc.) as social users without requiring Google/email.
+  const loginWithWallet = useCallback(async (
+    walletAddress: string,
+    signMessage: (msg: Uint8Array) => Promise<Uint8Array>,
+  ) => {
+    // 1. Get challenge
+    const cr = await fetch(apiUrl(`/auth/wallet/login/challenge?wallet=${encodeURIComponent(walletAddress)}`));
+    if (!cr.ok) {
+      const e = await cr.json().catch(() => ({})) as { error?: string };
+      throw new Error(e.error ?? "Failed to get login challenge");
+    }
+    const { message } = await cr.json() as { nonce: string; message: string };
+
+    // 2. Sign with the wallet (Ed25519 over UTF-8 encoded message)
+    const sigBytes = await signMessage(new TextEncoder().encode(message));
+
+    // 3. Base58-encode the raw 64-byte signature (canonical: preserve leading zeros)
+    const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let n = 0n;
+    for (const byte of sigBytes) n = n * 256n + BigInt(byte);
+    const chars: string[] = [];
+    while (n > 0n) { chars.unshift(B58[Number(n % 58n)]); n /= 58n; }
+    let leading = 0;
+    for (const byte of sigBytes) { if (byte !== 0) break; leading++; }
+    const signature = "1".repeat(leading) + chars.join("");
+
+    // 4. Exchange for JWT
+    const lr = await fetch(apiUrl("/auth/wallet/login"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walletAddress, signature, message }),
+    });
+    if (!lr.ok) {
+      const e = await lr.json().catch(() => ({})) as { error?: string };
+      throw new Error(e.error ?? "Wallet login failed");
+    }
+    const data = await lr.json() as {
+      token: string;
+      profile: { address: string; username: string; avatarUrl?: string | null; email?: string | null; linkedWallet?: string | null };
+    };
+    storeToken(data.token);
+    const p = data.profile;
+    setSocialUser({
+      address:      p.address,
+      username:     p.username,
+      avatarUrl:    p.avatarUrl ?? null,
+      email:        p.email ?? null,
+      authType:     "wallet",
+      linkedWallet: p.linkedWallet ?? null,
+    });
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -296,6 +361,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         getWalletLinkChallenge,
         linkWallet,
         unlinkWallet,
+        loginWithWallet,
       }}
     >
       {children}

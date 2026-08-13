@@ -13,7 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { copyToClipboard } from "@/components/shared/CopyToast";
 import { useWallet } from "@/contexts/WalletContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { formatAddress, formatMC, formatSol, timeAgo, cn, diceBearUrl, resolveImageUrl } from "@/lib/utils";
+import { formatAddress, formatMC, formatSol, timeAgo, cn, diceBearUrl, resolveImageUrl, formatAtomicTokenAmount } from "@/lib/utils";
+import { useSolPrice } from "@/hooks/useSolPrice";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -138,6 +139,7 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<Tab>("activity");
   const [editOpen, setEditOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
+  const solPrice = useSolPrice();
 
   const { data: profile, isLoading, refetch } = useGetProfile(slug, {
     query: { enabled: !!slug, retry: false, queryKey: getGetProfileQueryKey(slug) },
@@ -478,50 +480,95 @@ export default function ProfilePage() {
               </div>
             ) : (
               <div className="flex flex-col divide-y divide-border/20">
-                {history.map((trade) => (
-                  <Link
-                    key={trade.id}
-                    href={`/coin/${trade.tokenAddress}`}
-                    className="flex items-center justify-between py-3 hover:bg-white/[0.02] transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={cn(
-                          "text-[10px] font-bold uppercase px-2 py-1 rounded-sm min-w-[40px] text-center shrink-0",
-                          trade.isBuy
-                            ? "bg-primary/15 text-primary"
-                            : "bg-destructive/15 text-destructive"
-                        )}
-                      >
-                        {trade.isBuy ? "BUY" : "SELL"}
-                      </span>
+                {history.map((trade) => {
+                  const solAmt   = parseFloat(trade.ethAmount) / 1e9;
+                  const usdAmt   = solPrice && solAmt ? solAmt * solPrice : null;
+                  const tokAmt   = formatAtomicTokenAmount(trade.tokenAmount, 6);
+                  const sign     = trade.isBuy ? "+" : "-";
+                  const imgSrc   = resolveImageUrl(trade.tokenImageUrl);
+                  const sym      = trade.tokenSymbol || trade.tokenName || "?";
+
+                  return (
+                    <div
+                      key={trade.id}
+                      className="flex items-center gap-3 py-3 hover:bg-white/[0.02] transition-colors group"
+                    >
                       {/* Token image */}
-                      {resolveImageUrl(trade.tokenImageUrl) ? (
-                        <img
-                          src={resolveImageUrl(trade.tokenImageUrl)!}
-                          alt={trade.tokenSymbol ?? ""}
-                          className="w-7 h-7 rounded-full object-cover shrink-0 border border-border/20"
-                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                        />
-                      ) : (
-                        <div className="w-7 h-7 rounded-full bg-white/[0.06] shrink-0 flex items-center justify-center text-[9px] font-bold text-muted-foreground border border-border/20">
-                          {(trade.tokenSymbol ?? "?").slice(0, 2).toUpperCase()}
+                      <Link href={`/coin/${trade.tokenAddress}`} className="shrink-0">
+                        {imgSrc ? (
+                          <img
+                            src={imgSrc}
+                            alt={sym}
+                            className="w-9 h-9 rounded-full object-cover border border-border/20"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full bg-white/[0.06] flex items-center justify-center text-[10px] font-bold text-muted-foreground border border-border/20">
+                            {sym.slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                      </Link>
+
+                      {/* Coin name + action */}
+                      <Link href={`/coin/${trade.tokenAddress}`} className="min-w-0 flex-1 group-hover:text-primary transition-colors">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-semibold text-foreground truncate leading-tight">
+                            {sym}
+                          </span>
+                          <span
+                            className={cn(
+                              "text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-[3px] shrink-0",
+                              trade.isBuy
+                                ? "bg-primary/15 text-primary"
+                                : "bg-destructive/15 text-destructive"
+                            )}
+                          >
+                            {trade.isBuy ? "BUY" : "SELL"}
+                          </span>
                         </div>
-                      )}
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-                          {trade.tokenSymbol ?? trade.tokenName ?? "Unknown"}
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {formatSol(trade.ethAmount)} SOL
                         </div>
-                        <div className="text-xs text-muted-foreground font-mono">
-                          {formatSol(trade.ethAmount)}
+                      </Link>
+
+                      {/* Token amount + USD — right-aligned */}
+                      <div className="text-right shrink-0">
+                        <div
+                          className={cn(
+                            "text-sm font-semibold tabular-nums leading-tight",
+                            trade.isBuy ? "text-primary" : "text-destructive"
+                          )}
+                        >
+                          {sign}{tokAmt} {sym}
+                        </div>
+                        <div className="text-xs text-muted-foreground tabular-nums mt-0.5">
+                          {usdAmt != null
+                            ? `$${usdAmt < 0.01 ? usdAmt.toFixed(4) : usdAmt.toFixed(2)}`
+                            : "—"}
                         </div>
                       </div>
+
+                      {/* Time + Solscan */}
+                      <div className="text-right shrink-0 pl-2 flex flex-col items-end gap-1">
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {timeAgo(String(trade.timestamp))}
+                        </span>
+                        {trade.txHash && (
+                          <a
+                            href={`https://solscan.io/tx/${trade.txHash}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                            title="View on Solscan"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
                     </div>
-                    <span className="text-xs text-muted-foreground font-mono tabular-nums">
-                      {timeAgo(String(trade.timestamp))}
-                    </span>
-                  </Link>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

@@ -1,9 +1,15 @@
 /**
  * DepositModal — Solana Pay deposit flow
  *
+ * Supports both social-auth users (JWT already present) and wallet-only users
+ * (no JWT). Wallet-only users are silently logged in via a one-tap Ed25519
+ * challenge/response before the QR code is generated.
+ *
  * Flow:
  *   1. User picks an amount (presets or custom)
- *   2. "Generate QR" → POST /api/deposits/create → Solana Pay URL
+ *   2. "Generate QR" →
+ *        • If JWT present: POST /api/deposits/create directly
+ *        • If wallet-only: wallet signs a login challenge → JWT issued → then create
  *   3. QR code shown; frontend polls GET /api/deposits/:reference/status every 3 s
  *   4. On confirmation: balance is credited, success screen shown
  */
@@ -19,11 +25,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
+import { useWallet } from "@/contexts/WalletContext";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowDownToLine } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-type Phase = "idle" | "creating" | "waiting" | "confirmed" | "expired" | "error";
+type Phase = "idle" | "signing" | "creating" | "waiting" | "confirmed" | "expired" | "error";
 
 interface DepositModalProps {
   open: boolean;
@@ -60,7 +67,8 @@ function ExpiryCountdown({ expiresAt }: { expiresAt: Date }) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export function DepositModal({ open, onOpenChange }: DepositModalProps) {
-  const { authHeaders } = useAuth();
+  const { authHeaders, loginWithWallet } = useAuth();
+  const { wallet, signMessage } = useWallet();
   const { toast } = useToast();
 
   const [preset, setPreset] = useState<number>(0.5);
@@ -74,11 +82,15 @@ export function DepositModal({ open, onOpenChange }: DepositModalProps) {
   const [balance, setBalance] = useState<string | null>(null);
 
   const pollId = useRef<ReturnType<typeof setInterval> | null>(null);
-  const jwtHeaders = authHeaders();
-  const hasJwt = !!jwtHeaders.Authorization;
 
   // Effective SOL amount chosen by the user
   const effectiveAmt = useCustom ? parseFloat(customAmt || "0") : preset;
+
+  // Can the user deposit?
+  const jwtHeaders = authHeaders();
+  const hasJwt    = !!jwtHeaders.Authorization;
+  // Wallet-only users can sign in via Ed25519 challenge
+  const canDeposit = hasJwt || !!wallet;
 
   const stopPolling = useCallback(() => {
     if (pollId.current) { clearInterval(pollId.current); pollId.current = null; }
@@ -87,18 +99,19 @@ export function DepositModal({ open, onOpenChange }: DepositModalProps) {
   // Cleanup on unmount
   useEffect(() => () => stopPolling(), [stopPolling]);
 
-  // Fetch in-app balance whenever the modal opens
+  // Fetch in-app balance whenever the modal opens (if JWT available)
   const fetchBalance = useCallback(async () => {
-    if (!hasJwt) return;
+    const hdrs = authHeaders();
+    if (!hdrs.Authorization) return;
     try {
-      const res = await fetch("/api/deposits/balance", { headers: jwtHeaders });
+      const res = await fetch("/api/deposits/balance", { headers: hdrs });
       if (res.ok) {
         const data = await res.json() as { solBalance: string };
         setBalance(data.solBalance);
       }
     } catch { /* ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasJwt]);
+  }, []);
 
   useEffect(() => {
     if (open) fetchBalance();
@@ -118,21 +131,14 @@ export function DepositModal({ open, onOpenChange }: DepositModalProps) {
     onOpenChange(v);
   };
 
-  // ── Create deposit session ─────────────────────────────────────────────────
-  const createDeposit = async () => {
-    if (!Number.isFinite(effectiveAmt) || effectiveAmt < 0.01) {
-      toast({ title: "Invalid amount", description: "Minimum deposit is 0.01 SOL", variant: "destructive" });
-      return;
-    }
-    if (!hasJwt) {
-      toast({ title: "Sign in required", description: "Please sign in with Google to deposit", variant: "destructive" });
-      return;
-    }
+  // ── Start the deposit QR flow ──────────────────────────────────────────────
+  // Accepts the JWT headers to use (already resolved by the time we POST).
+  const startDepositFlow = async (hdrs: Record<string, string>) => {
     setPhase("creating");
     try {
       const res = await fetch("/api/deposits/create", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...jwtHeaders },
+        headers: { "Content-Type": "application/json", ...hdrs },
         body: JSON.stringify({ amountSol: effectiveAmt }),
       });
       if (!res.ok) {
@@ -145,11 +151,11 @@ export function DepositModal({ open, onOpenChange }: DepositModalProps) {
       setExpiresAt(new Date(data.expiresAt));
       setPhase("waiting");
 
-      // ── Poll for confirmation ────────────────────────────────────────────
+      // ── Poll for confirmation ──────────────────────────────────────────────
       const ref = data.reference;
       pollId.current = setInterval(async () => {
         try {
-          const sr = await fetch(`/api/deposits/${ref}/status`, { headers: jwtHeaders });
+          const sr = await fetch(`/api/deposits/${ref}/status`, { headers: hdrs });
           if (!sr.ok) return;
           const sd = await sr.json() as { status: string; txSignature?: string };
 
@@ -178,6 +184,44 @@ export function DepositModal({ open, onOpenChange }: DepositModalProps) {
     }
   };
 
+  // ── Create deposit (with optional wallet login for wallet-only users) ──────
+  const createDeposit = async () => {
+    if (!Number.isFinite(effectiveAmt) || effectiveAmt < 0.01) {
+      toast({ title: "Invalid amount", description: "Minimum deposit is 0.01 SOL", variant: "destructive" });
+      return;
+    }
+    if (!canDeposit) {
+      toast({ title: "Wallet required", description: "Connect a wallet or sign in to deposit", variant: "destructive" });
+      return;
+    }
+
+    // If already has JWT, skip wallet login
+    const currentHeaders = authHeaders();
+    if (currentHeaders.Authorization) {
+      return startDepositFlow(currentHeaders);
+    }
+
+    // Wallet-only path: silently sign a login challenge, then proceed
+    if (!wallet || !signMessage) {
+      toast({ title: "Wallet not connected", description: "Please connect your wallet first", variant: "destructive" });
+      return;
+    }
+    setPhase("signing");
+    try {
+      await loginWithWallet(wallet, signMessage);
+      // After loginWithWallet, authHeaders() now returns a JWT
+      const updatedHeaders = authHeaders();
+      return startDepositFlow(updatedHeaders);
+    } catch (e) {
+      setPhase("error");
+      toast({
+        title: "Wallet sign-in failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
   // ── UI ─────────────────────────────────────────────────────────────────────
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -198,11 +242,18 @@ export function DepositModal({ open, onOpenChange }: DepositModalProps) {
         )}
 
         {/* ── Amount selection ── */}
-        {(phase === "idle" || phase === "creating" || phase === "error") && (
+        {(phase === "idle" || phase === "signing" || phase === "creating" || phase === "error") && (
           <div className="space-y-4">
-            {!hasJwt && (
+            {/* No JWT and no wallet — show connect prompt */}
+            {!canDeposit && (
               <p className="text-sm text-amber-500 bg-amber-500/10 rounded-md px-3 py-2 border border-amber-500/20">
-                Sign in with Google to enable deposits.
+                Connect a wallet or sign in to deposit.
+              </p>
+            )}
+            {/* Wallet-only user — inform them a one-tap signature is needed */}
+            {!hasJwt && !!wallet && (
+              <p className="text-sm text-muted-foreground bg-white/[0.04] rounded-md px-3 py-2 border border-border/30">
+                Your wallet will prompt for a quick signature to authorise the deposit — no transaction, no fee.
               </p>
             )}
             <div>
@@ -241,9 +292,18 @@ export function DepositModal({ open, onOpenChange }: DepositModalProps) {
             <Button
               className="w-full rounded-sm"
               onClick={createDeposit}
-              disabled={phase === "creating" || !hasJwt || !Number.isFinite(effectiveAmt) || effectiveAmt < 0.01}
+              disabled={
+                phase === "signing" ||
+                phase === "creating" ||
+                !canDeposit ||
+                !Number.isFinite(effectiveAmt) ||
+                effectiveAmt < 0.01
+              }
             >
-              {phase === "creating" ? "Generating…" : "Generate QR Code"}
+              {phase === "signing"  ? "Approve in wallet…" :
+               phase === "creating" ? "Generating…" :
+               (!hasJwt && !!wallet) ? "Sign & Generate QR" :
+               "Generate QR Code"}
             </Button>
           </div>
         )}

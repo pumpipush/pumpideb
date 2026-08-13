@@ -15,7 +15,7 @@ export interface SocialUserSnapshot {
   username: string;
   avatarUrl: string | null;
   email: string | null;
-  authType: "google" | "email";
+  authType: "google" | "email" | "wallet";
   linkedWallet: string | null;
 }
 

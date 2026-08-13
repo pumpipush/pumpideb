@@ -35,6 +35,71 @@ function bs58Decode(s: string): Uint8Array {
   return new Uint8Array([...new Array(leading).fill(0), ...bytes]);
 }
 
+// ── Bounded wallet-login nonce store ─────────────────────────────────────
+// Each unauthenticated GET /auth/wallet/login/challenge is a public endpoint.
+// To prevent heap exhaustion from distributed callers we:
+//   1. Keep at most MAX_WALLET_LOGIN_CHALLENGES entries globally.
+//   2. Allow only ONE outstanding challenge per wallet address; issuing a new
+//      challenge for the same wallet atomically revokes the old one.
+//   3. Prune expired entries before enforcing the global cap.
+
+const MAX_WALLET_LOGIN_CHALLENGES = 10_000;
+const WALLET_LOGIN_NONCE_TTL_MS   = 5 * 60_000; // 5 minutes
+
+interface WalletLoginNonce {
+  walletAddress: string;
+  expiresAt:     number; // ms epoch
+}
+// nonce → { walletAddress, expiresAt }
+const walletLoginNonces = new Map<string, WalletLoginNonce>();
+// walletAddress → current outstanding nonce (per-wallet deduplication)
+const walletLoginByAddress = new Map<string, string>();
+
+function pruneWalletLoginNonces(): void {
+  const now = Date.now();
+  for (const [nonce, entry] of walletLoginNonces) {
+    if (now > entry.expiresAt) {
+      walletLoginNonces.delete(nonce);
+      walletLoginByAddress.delete(entry.walletAddress);
+    }
+  }
+}
+
+/**
+ * Issue a new login challenge for `walletAddress`.
+ * Returns null when the global cap is still exceeded after pruning.
+ */
+function issueWalletLoginChallenge(walletAddress: string): string | null {
+  // Atomically revoke any existing challenge for this wallet (per-wallet dedup)
+  const prev = walletLoginByAddress.get(walletAddress);
+  if (prev) {
+    walletLoginNonces.delete(prev);
+    walletLoginByAddress.delete(walletAddress);
+  }
+
+  // Prune expired entries, then enforce global cap
+  pruneWalletLoginNonces();
+  if (walletLoginNonces.size >= MAX_WALLET_LOGIN_CHALLENGES) return null;
+
+  const nonce = randomUUID();
+  const expiresAt = Date.now() + WALLET_LOGIN_NONCE_TTL_MS;
+  walletLoginNonces.set(nonce, { walletAddress, expiresAt });
+  walletLoginByAddress.set(walletAddress, nonce);
+  return nonce;
+}
+
+/**
+ * Atomically consume a wallet-login nonce.
+ * Returns the walletAddress it was bound to, or null if invalid/expired/used.
+ */
+function consumeWalletLoginNonce(nonce: string): string | null {
+  const entry = walletLoginNonces.get(nonce);
+  walletLoginNonces.delete(nonce);
+  if (entry) walletLoginByAddress.delete(entry.walletAddress);
+  if (!entry || Date.now() > entry.expiresAt) return null;
+  return entry.walletAddress;
+}
+
 // ── Single-use wallet-link nonce store ────────────────────────────────────
 // Nonces are issued per (JWT profile address, wallet address) pair,
 // consumed on first use to prevent replay.
@@ -45,8 +110,9 @@ interface WalletLinkNonce {
 }
 const walletLinkNonces = new Map<string, WalletLinkNonce>();
 
-// Prune expired entries periodically so the Map doesn't grow unboundedly.
+// Prune wallet-link and wallet-login nonces periodically.
 setInterval(() => {
+  pruneWalletLoginNonces();
   const now = Date.now();
   for (const [key, entry] of walletLinkNonces) {
     if (now > entry.expiresAt) walletLinkNonces.delete(key);
@@ -110,7 +176,8 @@ async function uniqueUsername(base: string): Promise<string> {
       .limit(1);
     if (existing.length === 0) return candidate;
   }
-  return `user_${randomUUID().slice(0, 8)}`;
+  // Full UUID fallback — 128 bits of entropy makes collision essentially impossible
+  return `user_${randomUUID().replace(/-/g, "")}`;
 }
 
 // ── POST /api/auth/google ──────────────────────────────────────────────────
@@ -297,7 +364,128 @@ router.get("/auth/me", asyncWrap(async (req, res) => {
 
   if (!profiles[0]) return void res.status(404).json({ error: "Profile not found" });
 
-  return void res.json({ profile: profiles[0], authType: payload.authType });
+  // Return only safe serializable fields — solBalanceLamports is a BigInt
+  // and cannot be passed through Express's default JSON serializer.
+  const p = profiles[0];
+  return void res.json({
+    profile: {
+      address:      p.address,
+      username:     p.username,
+      avatarUrl:    p.avatarUrl    ?? null,
+      email:        p.email        ?? null,
+      linkedWallet: p.linkedWallet ?? null,
+    },
+    authType: payload.authType,
+  });
+}));
+
+// ── GET /api/auth/wallet/login/challenge ──────────────────────────────────
+// Issue a one-time challenge message for a wallet-only login.
+// No prior JWT required — this is how wallet-only users get their first JWT.
+// Query: ?wallet=<base58 Solana address>
+
+router.get("/auth/wallet/login/challenge", asyncWrap(async (req, res) => {
+  const walletAddress = typeof req.query.wallet === "string" ? req.query.wallet.trim() : "";
+  if (!walletAddress || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(walletAddress)) {
+    return void res.status(400).json({ error: "wallet query param must be a valid Solana address" });
+  }
+  const nonce = issueWalletLoginChallenge(walletAddress);
+  if (!nonce) {
+    // Global cap reached — caller should retry after a moment
+    return void res.status(503).json({ error: "Server busy, please retry" });
+  }
+  const message = `RocketFi:login:${walletAddress}:${nonce}`;
+  return void res.json({ nonce, message });
+}));
+
+// ── POST /api/auth/wallet/login ────────────────────────────────────────────
+// Verify an Ed25519 wallet signature over the login challenge,
+// then find-or-create a profile and issue a JWT.
+// Body: { walletAddress, signature, message }
+
+router.post("/auth/wallet/login", asyncWrap(async (req, res) => {
+  const body = req.body as { walletAddress?: string; signature?: string; message?: string };
+  const { walletAddress, signature, message } = body;
+
+  if (!walletAddress || !signature || !message) {
+    return void res.status(400).json({ error: "walletAddress, signature, and message are required" });
+  }
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(walletAddress)) {
+    return void res.status(400).json({ error: "Invalid Solana wallet address" });
+  }
+
+  // Validate message format: "RocketFi:login:<walletAddress>:<nonce>"
+  const parts = message.split(":");
+  if (parts.length !== 4 || parts[0] !== "RocketFi" || parts[1] !== "login" || parts[2] !== walletAddress) {
+    return void res.status(400).json({ error: "Malformed challenge message" });
+  }
+  const nonce = parts[3];
+
+  // Atomically consume the nonce — single-use guarantee
+  const boundAddress = consumeWalletLoginNonce(nonce);
+  if (!boundAddress || boundAddress !== walletAddress) {
+    return void res.status(401).json({ error: "Invalid, expired, or already-used challenge nonce" });
+  }
+
+  // Verify Ed25519 signature
+  let pubKeyBytes: Uint8Array, sigBytes: Uint8Array;
+  try {
+    pubKeyBytes = bs58Decode(walletAddress);
+    sigBytes    = bs58Decode(signature);
+  } catch (e) {
+    return void res.status(400).json({ error: `Invalid base58: ${(e as Error).message}` });
+  }
+  if (pubKeyBytes.length !== 32 || sigBytes.length !== 64) {
+    return void res.status(400).json({ error: "Invalid key or signature length" });
+  }
+  const msgBytes = new TextEncoder().encode(message);
+  if (!nacl.sign.detached.verify(msgBytes, sigBytes, pubKeyBytes)) {
+    return void res.status(401).json({ error: "Wallet signature verification failed" });
+  }
+
+  // Find or create the wallet profile
+  let profile = (await db
+    .select()
+    .from(profilesTable)
+    .where(eq(profilesTable.address, walletAddress))
+    .limit(1))[0];
+
+  if (!profile) {
+    // uniqueUsername does a DB-checked search with 10 retries + full-UUID fallback,
+    // so the chosen name is free at the time of the check.  The only remaining
+    // constraint that can fire on the INSERT is the address PK (handled below).
+    const username = await uniqueUsername(`wallet_${walletAddress.slice(0, 6)}`);
+    const rows = await db
+      .insert(profilesTable)
+      .values({ address: walletAddress, username, authType: "wallet" })
+      .onConflictDoNothing()   // address PK race — another request created it first
+      .returning();
+    profile = rows[0];
+    // Address PK race: re-select to find the row created by the concurrent request
+    if (!profile) {
+      profile = (await db
+        .select()
+        .from(profilesTable)
+        .where(eq(profilesTable.address, walletAddress))
+        .limit(1))[0];
+    }
+  }
+
+  if (!profile) {
+    return void res.status(500).json({ error: "Failed to find or create profile" });
+  }
+
+  const token = signToken({ sub: walletAddress, authType: "wallet" });
+  return void res.json({
+    token,
+    profile: {
+      address:      profile.address,
+      username:     profile.username,
+      avatarUrl:    profile.avatarUrl    ?? null,
+      email:        profile.email        ?? null,
+      linkedWallet: profile.linkedWallet ?? null,
+    },
+  });
 }));
 
 // ── GET /api/auth/wallet/link/challenge ────────────────────────────────────
