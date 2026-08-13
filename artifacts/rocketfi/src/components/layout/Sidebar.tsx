@@ -86,9 +86,7 @@ export function Sidebar() {
               className="w-4 h-4 rounded-full object-cover shrink-0"
               style={{ imageRendering: profile?.avatarUrl ? "auto" : "pixelated" }}
             />
-            <span className="flex-1 truncate">
-              {profile?.username ?? formatAddress(wallet)}
-            </span>
+            <span className="flex-1 truncate">Profile</span>
           </Link>
         )}
       </nav>
