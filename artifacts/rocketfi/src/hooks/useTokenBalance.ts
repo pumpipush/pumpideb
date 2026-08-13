@@ -37,7 +37,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { PublicKey } from "@solana/web3.js";
 import { getConnection } from "@/lib/solanaConnection";
 
-const POLL_INTERVAL_MS = 30_000;
+const POLL_INTERVAL_MS = 5_000;
 
 export interface TokenBalanceResult {
   /** Balance in display units (float); for UI display only. */
@@ -55,7 +55,14 @@ export interface TokenBalanceResult {
    * waiting for null to indicate loading.
    */
   isLoading: boolean;
+  /** Single immediate refresh — use after non-trade actions. */
   refresh: () => void;
+  /**
+   * Call this right after a trade broadcast.
+   * Fires an immediate refresh then retries at 2 s, 4 s, and 7 s intervals
+   * so RPC propagation delay doesn't leave the balance stuck at 0 for 30 s.
+   */
+  refreshAfterTrade: () => void;
 }
 
 export function useTokenBalance(
@@ -140,6 +147,18 @@ export function useTokenBalance(
     refreshWithEpochRef.current();
   }, []);
 
+  /** Retry delays (ms) after a trade broadcast — covers RPC propagation lag. */
+  const TRADE_RETRY_DELAYS = [2_000, 4_000, 7_000];
+
+  const refreshAfterTrade = useCallback(() => {
+    // Immediate fetch
+    refreshWithEpochRef.current();
+    // Scheduled retries — staggered so we catch the balance once it propagates
+    TRADE_RETRY_DELAYS.forEach(ms => {
+      setTimeout(() => refreshWithEpochRef.current(), ms);
+    });
+  }, []);
+
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
 
@@ -178,5 +197,5 @@ export function useTokenBalance(
     };
   }, [wallet, mintAddress, fetchBalance]);
 
-  return { tokenBalance, atomicBalance, isLoading, refresh };
+  return { tokenBalance, atomicBalance, isLoading, refresh, refreshAfterTrade };
 }

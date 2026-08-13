@@ -1048,7 +1048,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const solPrice = useSolPrice();
   const { solBalance, refresh: refreshSolBalance } = useSolBalance(wallet);
   // SPL token balance for the currently-viewed token — drives sell preset buttons
-  const { tokenBalance, atomicBalance, isLoading: balanceLoading, refresh: refreshTokenBalance } = useTokenBalance(wallet, selectedAddress);
+  const { tokenBalance, atomicBalance, isLoading: balanceLoading, refresh: refreshTokenBalance, refreshAfterTrade } = useTokenBalance(wallet, selectedAddress);
 
   // Live SSE stream — real-time trade events
   const { liveTrades, liveToken, connected } = useTokenStream(selectedAddress);
@@ -1675,10 +1675,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         setAmount("");
         refetchToken();
         refetchHistory();
+        // Retry balance several times to cover RPC propagation delay.
+        refreshAfterTrade();
 
         const jupBlockhash = jupTx.message.recentBlockhash;
         waitForJupiterTxConfirmation(jupSig, jupBlockhash, jupLastBlock)
-          .then(() => { refetchToken(); refetchHistory(); })
+          .then(() => { refetchToken(); refetchHistory(); refreshAfterTrade(); })
           .catch(err => console.warn("[jupiter] bg confirmation:", err));
 
         return jupSig;
@@ -1728,9 +1730,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         setAmount("");
         refetchToken();
         refetchHistory();
+        refreshAfterTrade();
 
         waitForTxConfirmation(llSig, llHash, llHeight)
-          .then(() => { refetchToken(); refetchHistory(); })
+          .then(() => { refetchToken(); refetchHistory(); refreshAfterTrade(); })
           .catch(err => console.warn("[launchlab] bg confirmation:", err));
 
         return llSig;
@@ -1784,9 +1787,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       setAmount("");
       refetchToken();
       refetchHistory();
+      refreshAfterTrade();
 
       waitForJupiterTxConfirmation(txSignature, blockhash, lastValidBlockHeight)
-        .then(() => { refetchToken(); refetchHistory(); })
+        .then(() => { refetchToken(); refetchHistory(); refreshAfterTrade(); })
         .catch(err => console.warn("[pumpfun] bg confirmation:", err));
 
       // Real Solana signature (≥60 chars) → useTxToast shows Solscan link.
@@ -1805,6 +1809,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     } finally {
       setIsTradePending(false);
       refreshSolBalance();
+      // refreshAfterTrade is already scheduled from within doTrade (optimistic + bg
+      // confirmation callbacks). Call it one more time here in case doTrade threw
+      // before reaching the optimistic-release block (e.g. wallet rejection on sell).
       refreshTokenBalance();
     }
   };
@@ -3847,7 +3854,7 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
   const { openWalletModal, signAndSendTransaction } = useWallet();
   const { submitTx } = useTxToast();
   const { solBalance, refresh: refreshSolBalance } = useSolBalance(wallet);
-  const { tokenBalance, atomicBalance, isLoading: balanceLoading, refresh: refreshTokenBalance } = useTokenBalance(wallet, token.address);
+  const { tokenBalance, atomicBalance, isLoading: balanceLoading, refresh: refreshTokenBalance, refreshAfterTrade: refreshTokenBalanceAfterTrade } = useTokenBalance(wallet, token.address);
   const [tradeMode, setTradeMode]           = useState<"buy" | "sell">("buy");
   const [amount, setAmount]                 = useState("");
   const [isTradePending, setIsTradePending] = useState(false);
@@ -3935,7 +3942,9 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
 
       // Optimistic release — spinner clears as soon as the broadcast succeeds.
       setAmount("");
+      refreshTokenBalanceAfterTrade();
       waitForJupiterTxConfirmation(txSignature, transaction.message.recentBlockhash, lastValidBlockHeight)
+        .then(() => refreshTokenBalanceAfterTrade())
         .catch(err => console.warn("[external-jupiter] bg confirmation:", err));
 
       return txSignature;
