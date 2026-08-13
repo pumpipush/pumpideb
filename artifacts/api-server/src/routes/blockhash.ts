@@ -17,11 +17,13 @@ import { Router, type Request, type Response } from "express";
 
 const router = Router();
 
-// ── RPC endpoint (same priority as the adapters: Alchemy → fallback) ─────────
-const ALCHEMY_KEY = process.env["ALCHEMY_API_KEY"];
-const RPC_URL = ALCHEMY_KEY
-  ? `https://solana-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`
-  : "https://solana-rpc.publicnode.com";
+// ── RPC endpoint — always use free public RPCs to avoid burning Alchemy CUs ──
+// getLatestBlockhash is cheap to call on free RPCs and doesn't need Alchemy's
+// premium reliability. Alchemy is reserved only for the WebSocket logsSubscribe.
+const RPC_URLS = [
+  "https://solana-rpc.publicnode.com",
+  "https://api.mainnet-beta.solana.com",
+];
 
 // ── In-memory cache ───────────────────────────────────────────────────────────
 
@@ -46,24 +48,33 @@ async function getOrFetchBlockhash(): Promise<BlockhashEntry> {
 
   _inflight = (async () => {
     // Raw JSON-RPC call — no @solana/web3.js needed server-side
-    const rpcRes = await fetch(RPC_URL, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        jsonrpc: "2.0",
-        id:      1,
-        method:  "getLatestBlockhash",
-        params:  [{ commitment: "confirmed" }],
-      }),
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (!rpcRes.ok) throw new Error(`RPC HTTP ${rpcRes.status}`);
-    const json = await rpcRes.json() as {
-      result: { value: { blockhash: string; lastValidBlockHeight: number } };
-      error?: { message: string };
-    };
-    if (json.error) throw new Error(json.error.message);
-    const { blockhash, lastValidBlockHeight } = json.result.value;
+    let blockhash: string | undefined;
+    let lastValidBlockHeight: number | undefined;
+    for (const url of RPC_URLS) {
+      try {
+        const rpcRes = await fetch(url, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({
+            jsonrpc: "2.0",
+            id:      1,
+            method:  "getLatestBlockhash",
+            params:  [{ commitment: "confirmed" }],
+          }),
+          signal: AbortSignal.timeout(5_000),
+        });
+        if (!rpcRes.ok) continue;
+        const json = await rpcRes.json() as {
+          result: { value: { blockhash: string; lastValidBlockHeight: number } };
+          error?: { message: string };
+        };
+        if (json.error) continue;
+        blockhash           = json.result.value.blockhash;
+        lastValidBlockHeight = json.result.value.lastValidBlockHeight;
+        break;
+      } catch { continue; }
+    }
+    if (!blockhash || lastValidBlockHeight === undefined) throw new Error("All RPC endpoints failed for getLatestBlockhash");
     const entry: BlockhashEntry = { blockhash, lastValidBlockHeight, fetchedAt: Date.now() };
     _cache    = entry;
     _inflight = null;

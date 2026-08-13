@@ -67,20 +67,17 @@ const SKIP_MINTS = new Set([
 
 // ── HTTP RPC ───────────────────────────────────────────────────────────────────
 
-function httpRpcUrl(): string {
-  const key = process.env["ALCHEMY_API_KEY"];
-  return key
-    ? `https://solana-mainnet.g.alchemy.com/v2/${key}`
-    : "https://solana-rpc.publicnode.com";
-}
-
-const FALLBACK_HTTP_RPCS = [
+// Always use free public RPCs for HTTP calls — Alchemy is reserved only for
+// the WebSocket logsSubscribe connection (high reliability needed there).
+// getSignaturesForAddress and getTransaction here are batch/backfill calls
+// that free RPCs handle well at our rate (≤5 pages per token).
+const FREE_HTTP_RPCS = [
   "https://solana-rpc.publicnode.com",
   "https://api.mainnet-beta.solana.com",
 ];
 
 async function rpcPost(body: unknown, timeoutMs = 30_000): Promise<unknown> {
-  const urlsToTry = [httpRpcUrl(), ...FALLBACK_HTTP_RPCS.filter(u => u !== httpRpcUrl())];
+  const urlsToTry = FREE_HTTP_RPCS;
   let lastErr: unknown;
   for (const url of urlsToTry) {
     try {

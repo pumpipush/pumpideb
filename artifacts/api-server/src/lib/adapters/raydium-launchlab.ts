@@ -185,9 +185,8 @@ class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
     if (cached) return cached;
 
     try {
-      const rpcUrl = process.env["ALCHEMY_API_KEY"]
-        ? `https://solana-mainnet.g.alchemy.com/v2/${process.env["ALCHEMY_API_KEY"]}`
-        : "https://solana-rpc.publicnode.com";
+      // Always use free public RPCs for HTTP calls — never Alchemy (costs CUs).
+      const rpcUrl = "https://solana-rpc.publicnode.com";
 
       const resp = await fetch(rpcUrl, {
         method:  "POST",

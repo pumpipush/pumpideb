@@ -150,8 +150,10 @@ export abstract class SolanaRpcIndexer {
     // Round-robin WSS pool: Alchemy (if key set) → caller-supplied → PublicNode, then free fallbacks
     const primary = opts.wssUrl ?? alchemyWss() ?? PUBLICNODE_WSS;
     this._wssUrls = [primary, ...FALLBACK_WSS_RPCS.filter(u => u !== primary)];
-    // HTTP: Alchemy → caller-supplied → PublicNode
-    this.httpUrl   = opts.httpUrl ?? alchemyHttp() ?? PUBLICNODE_HTTP;
+    // HTTP: always PublicNode (free) — Alchemy is reserved for WSS only.
+    // HTTP calls (getAccountInfo, getSignaturesForAddress, etc.) don't need
+    // Alchemy's premium reliability and would drain CUs at indexer volume.
+    this.httpUrl   = opts.httpUrl ?? PUBLICNODE_HTTP;
     this.log       = rootLogger.child({ adapter: opts.adapterName });
   }
 

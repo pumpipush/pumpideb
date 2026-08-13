@@ -737,22 +737,17 @@ const LL_CHAIN_ENRICH_INTERVAL_MS = 60_000; // runs every 60 s (separate timer)
 
 const LAUNCHLAB_PROGRAM_ID = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj";
 
-// ── Minimal Solana HTTP RPC helper (same endpoints as launchlabBackfill.ts) ────
+// ── Minimal Solana HTTP RPC helper (always free public RPCs — never Alchemy) ──
+// Alchemy is expensive at LaunchLab volume; PublicNode + Solana Foundation are
+// sufficient for the small batch sizes used here (≤5 tokens per 60 s tick).
 
-function _llRpcUrl(): string {
-  const key = process.env["ALCHEMY_API_KEY"];
-  return key
-    ? `https://solana-mainnet.g.alchemy.com/v2/${key}`
-    : "https://solana-rpc.publicnode.com";
-}
-
-const _LL_FALLBACK_RPCS = [
+const _LL_FREE_RPCS = [
   "https://solana-rpc.publicnode.com",
   "https://api.mainnet-beta.solana.com",
 ];
 
 async function _llRpcPost(body: unknown, timeoutMs = 20_000): Promise<unknown> {
-  const urls = [_llRpcUrl(), ..._LL_FALLBACK_RPCS.filter(u => u !== _llRpcUrl())];
+  const urls = _LL_FREE_RPCS;
   let lastErr: unknown;
   for (const url of urls) {
     try {

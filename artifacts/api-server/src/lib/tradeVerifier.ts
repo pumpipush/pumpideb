@@ -195,9 +195,9 @@ export async function fetchAndParseTrade(
     ],
   });
 
-  // Alchemy first (if ALCHEMY_API_KEY is set), then free public fallbacks.
-  const primary = getPrimaryHttpRpc();
-  const endpoints: string[] = [primary, ...FALLBACK_HTTP_RPCS.filter(u => u !== primary)];
+  // Always use free public RPCs — Alchemy is reserved for WebSocket only.
+  // tradeVerifier is called once per user withdrawal; free RPCs handle this fine.
+  const endpoints: string[] = [...FALLBACK_HTTP_RPCS];
 
   for (const url of endpoints) {
     try {
