@@ -1582,13 +1582,18 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
         const jupSig = await signAndSendTransaction(jupTx);
 
-        // Extract blockhash from the VersionedTransaction (both v0 + legacy have .recentBlockhash)
-        const jupBlockhash = jupTx.message.recentBlockhash;
-        await waitForJupiterTxConfirmation(jupSig, jupBlockhash, jupLastBlock);
-
+        // ── Optimistic release — same pattern as pump.fun path ────────────────
+        // The tx is broadcast; release the spinner immediately so the user isn't
+        // blocked for 30-90 s waiting for on-chain confirmation.
+        // Confirm in the background and trigger a second refetch once settled.
         setAmount("");
         refetchToken();
         refetchHistory();
+
+        const jupBlockhash = jupTx.message.recentBlockhash;
+        waitForJupiterTxConfirmation(jupSig, jupBlockhash, jupLastBlock)
+          .then(() => { refetchToken(); refetchHistory(); })
+          .catch(err => console.warn("[jupiter] bg confirmation:", err));
 
         return jupSig;
       }
@@ -1631,10 +1636,15 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           llHeight = res.lastValidBlockHeight;
         }
 
-        await waitForTxConfirmation(llSig, llHash, llHeight);
+        // Optimistic release — broadcast succeeded; clear spinner immediately.
         setAmount("");
         refetchToken();
         refetchHistory();
+
+        waitForTxConfirmation(llSig, llHash, llHeight)
+          .then(() => { refetchToken(); refetchHistory(); })
+          .catch(err => console.warn("[launchlab] bg confirmation:", err));
+
         return llSig;
       }
 
@@ -3823,8 +3833,12 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
       );
       const { transaction, lastValidBlockHeight } = await buildJupiterSwapTx(freshQuote, wallet);
       const txSignature = await signAndSendTransaction(transaction);
-      await waitForJupiterTxConfirmation(txSignature, transaction.message.recentBlockhash, lastValidBlockHeight);
+
+      // Optimistic release — spinner clears as soon as the broadcast succeeds.
       setAmount("");
+      waitForJupiterTxConfirmation(txSignature, transaction.message.recentBlockhash, lastValidBlockHeight)
+        .catch(err => console.warn("[external-jupiter] bg confirmation:", err));
+
       return txSignature;
     };
 
