@@ -21,10 +21,15 @@ function TelegramIcon() {
 export function SiteFooter() {
   return (
     <footer className="border-t border-border/40 px-5 py-4 mt-8 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-      {/* Copyright */}
-      <span className="text-[12px] text-muted-foreground/60 shrink-0">
-        © {YEAR} Pumpi. All rights reserved.
-      </span>
+      {/* Copyright + version */}
+      <div className="flex items-center gap-2 shrink-0">
+        <span className="text-[12px] text-muted-foreground/60">
+          © {YEAR} Pumpi. All rights reserved.
+        </span>
+        <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary/70 border border-primary/20 leading-none">
+          v1.0 beta
+        </span>
+      </div>
 
       {/* Legal links */}
       <div className="flex items-center gap-3 flex-wrap">
