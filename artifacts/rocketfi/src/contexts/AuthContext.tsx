@@ -142,17 +142,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Google OAuth ──────────────────────────────────────────────────────────
   const handleGoogleToken = useCallback(async (accessToken: string) => {
-    const r = await fetch(apiUrl("/auth/google"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ access_token: accessToken }),
-    });
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      throw new Error((err as { error?: string }).error ?? "Google sign-in failed");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000); // 15 s timeout
+    try {
+      const r = await fetch(apiUrl("/auth/google"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ access_token: accessToken }),
+        signal: controller.signal,
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? "Google sign-in failed");
+      }
+      const data = await r.json();
+      handleAuthResponse({ ...data, authType: "google" });
+    } catch (e) {
+      if ((e as Error).name === "AbortError") throw new Error("Google sign-in timed out — please try again");
+      throw e;
+    } finally {
+      clearTimeout(timer);
     }
-    const data = await r.json();
-    handleAuthResponse({ ...data, authType: "google" });
   }, []);
 
   // ── Email OTP ──────────────────────────────────────────────────────────────
