@@ -6,6 +6,7 @@ import {
   Profile,
 } from "@workspace/api-client-react";
 import { ProfileEditModal } from "@/components/shared/ProfileEditModal";
+import { DepositModal } from "@/components/shared/DepositModal";
 import { generateUsername } from "@/lib/username";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -32,6 +33,7 @@ import {
   Coins,
   ExternalLink,
   AlertCircle,
+  ArrowDownToLine,
 } from "lucide-react";
 
 
@@ -121,6 +123,7 @@ export default function ProfilePage() {
 
   const [activeTab, setActiveTab] = useState<Tab>("activity");
   const [editOpen, setEditOpen] = useState(false);
+  const [depositOpen, setDepositOpen] = useState(false);
 
   const { data: profile, isLoading, refetch } = useGetProfile(slug, {
     query: { enabled: !!slug, retry: false, queryKey: getGetProfileQueryKey(slug) },
@@ -317,6 +320,16 @@ export default function ProfilePage() {
             >
               <Share2 className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
+            {isOwner && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs rounded-sm"
+                onClick={() => setDepositOpen(true)}
+              >
+                <ArrowDownToLine className="w-3 h-3 mr-1.5" /> Deposit
+              </Button>
+            )}
             {isOwner && (
               <Button
                 size="sm"
@@ -639,6 +652,9 @@ export default function ProfilePage() {
       </div>
 
       </>} {/* end {profile && <>} */}
+
+      {/* ══ Deposit Modal ══ */}
+      <DepositModal open={depositOpen} onOpenChange={setDepositOpen} />
 
       {/* ══ Edit Profile Modal ══ */}
       <ProfileEditModal

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, bigint } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -17,6 +17,8 @@ export const profilesTable = pgTable("profiles", {
   authType: text("auth_type").notNull().default("wallet"),
   // Linked wallet: social users can permanently associate a Solana wallet address
   linkedWallet: text("linked_wallet").unique(),
+  /** In-app SOL balance funded via Solana Pay deposits (stored in lamports). */
+  solBalanceLamports: bigint("sol_balance_lamports", { mode: "bigint" }).notNull().default(0n),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

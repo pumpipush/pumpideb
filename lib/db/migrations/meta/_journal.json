@@ -78,6 +78,13 @@
       "when": 1786562000000,
       "tag": "0010_unique_linked_wallet",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786755000000,
+      "tag": "0012_add_deposits_and_balance",
+      "breakpoints": true
     }
   ]
 }
