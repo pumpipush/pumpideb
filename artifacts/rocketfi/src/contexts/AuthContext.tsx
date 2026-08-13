@@ -21,7 +21,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useLoginWithOAuth } from "@privy-io/react-auth";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -87,12 +87,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Privy hooks (AuthProvider is inside PrivyProvider in App.tsx)
   const {
-    login: privyLogin,
     logout: privyLogout,
     authenticated,
     user: privyUser,
     getAccessToken,
   } = usePrivy();
+
+  // useLoginWithOAuth lets us skip Privy's own UI and jump straight to
+  // Google's account-picker popup — one click, no intermediate modal.
+  const { initOAuth } = useLoginWithOAuth({
+    onComplete: () => {
+      // Exchange is handled by the authenticated/privyUser effect below.
+    },
+    onError: (err) => {
+      console.error("[auth] Google OAuth error:", err);
+    },
+  });
 
   // Tracks which Privy user ID we've already exchanged for our JWT so we
   // don't hit the backend on every re-render or token refresh.
@@ -196,12 +206,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  // ── Google via Privy ───────────────────────────────────────────────────────
-  // Privy is configured with loginMethods: ['google'] in PrivyProvider,
-  // so calling login() without arguments shows only Google as an option.
+  // ── Google via Privy (direct OAuth — no intermediate Privy UI) ────────────
   const loginWithGoogle = useCallback(() => {
-    privyLogin();
-  }, [privyLogin]);
+    initOAuth({ provider: "google" });
+  }, [initOAuth]);
 
   // ── Email OTP ──────────────────────────────────────────────────────────────
   const sendEmailOTP = useCallback(async (email: string) => {
