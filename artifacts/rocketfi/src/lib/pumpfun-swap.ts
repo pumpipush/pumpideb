@@ -346,19 +346,18 @@ export async function buildPumpFunSellTx(params: BuildPumpSwapTxParams): Promise
 }
 
 /**
- * Wait for a submitted transaction to reach "confirmed" commitment.
+ * Wait for a transaction to reach "confirmed" status.
  *
- * Uses the blockhash-strategy overload so the RPC can precisely detect expiry
- * (blockhash slot window passed) versus genuine network errors, and terminate
- * without an open-ended poll.
- *
- * Throws for ALL non-success outcomes — the caller must propagate this error so
- * the trade toast shows "Failed", never "Confirmed", on an unresolved submission.
- *
- * Failure modes:
- *  - On-chain instruction failure  → throws Error("Transaction failed on-chain: …")
- *  - Blockhash expired / timeout   → rethrows the RPC error (tx cannot land)
- *  - Network / RPC error           → rethrows so status is not treated as confirmed
+ * Strategy:
+ *  1. Race conn.confirmTransaction() (blockhash strategy) against a 40 s timeout.
+ *     Free RPCs often hang here even after the tx has already landed -- their
+ *     WebSocket subscription silently drops without notifying the client.
+ *  2. On timeout (or any network error), fall back to polling getSignatureStatus
+ *     every 3 s for up to 30 s. This catches the common "already confirmed but
+ *     confirmTransaction never resolved" scenario.
+ *  3. If the poll loop finds the tx confirmed/finalized, return success.
+ *  4. Only throw a true error on (a) on-chain instruction failure or
+ *     (b) all fallback polls exhausted without seeing confirmation.
  */
 export async function waitForTxConfirmation(
   signature: string,
@@ -366,18 +365,77 @@ export async function waitForTxConfirmation(
   lastValidBlockHeight: number,
 ): Promise<void> {
   const conn = new Connection(getRpcUrl(), "confirmed");
-  // confirmTransaction with the blockhash strategy throws TransactionExpiredBlockheightExceededError
-  // when the tx can no longer land, and resolves with { value: { err } } on on-chain failure.
-  const result = await conn.confirmTransaction(
-    { signature, blockhash, lastValidBlockHeight },
-    "confirmed",
-  );
-  if (result.value.err) {
-    // The tx landed but pump.fun's program rejected it (e.g. slippage check failed)
-    throw new Error(
-      `Transaction failed on-chain: ${JSON.stringify(result.value.err)}`
+
+  // Phase 1: confirmTransaction with 40 s timeout.
+  // Free RPCs frequently drop the WebSocket subscription that powers this call,
+  // leaving it hanging indefinitely even though the tx confirmed minutes ago.
+  const PRIMARY_TIMEOUT_MS = 40_000;
+
+  let phase1Err: unknown = null;
+  try {
+    const confirmPromise = conn.confirmTransaction(
+      { signature, blockhash, lastValidBlockHeight },
+      "confirmed",
     );
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), PRIMARY_TIMEOUT_MS),
+    );
+
+    const result = await Promise.race([confirmPromise, timeoutPromise]);
+
+    if (result !== null) {
+      // confirmTransaction finished within the timeout window.
+      if (result.value.err) {
+        throw new Error(
+          `Transaction failed on-chain: ${JSON.stringify(result.value.err)}`,
+        );
+      }
+      return; // confirmed
+    }
+    // result === null means we timed out; fall through to polling
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.startsWith("Transaction failed on-chain")) throw err;
+    if (/BlockheightExceeded|expired/i.test(msg)) throw err;
+    phase1Err = err;
   }
+
+  // Phase 2: polling fallback via getSignatureStatus.
+  // Reliably detects a confirmed tx that confirmTransaction missed.
+  const POLL_INTERVAL_MS = 3_000;
+  const POLL_ATTEMPTS    = 10;
+
+  for (let i = 0; i < POLL_ATTEMPTS; i++) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    try {
+      const { value } = await conn.getSignatureStatus(signature, {
+        searchTransactionHistory: true,
+      });
+      if (value) {
+        if (value.err) {
+          throw new Error(
+            `Transaction failed on-chain: ${JSON.stringify(value.err)}`,
+          );
+        }
+        if (
+          value.confirmationStatus === "confirmed" ||
+          value.confirmationStatus === "finalized"
+        ) {
+          return; // confirmed via polling
+        }
+      }
+    } catch (pollErr) {
+      const msg = pollErr instanceof Error ? pollErr.message : String(pollErr);
+      if (msg.startsWith("Transaction failed on-chain")) throw pollErr;
+      // Network error during poll -- keep trying
+    }
+  }
+
+  // Both phases exhausted without confirmation.
+  const cause = phase1Err instanceof Error ? ` (${(phase1Err as Error).message})` : "";
+  throw new Error(
+    `Confirmation timeout${cause}. The transaction may have already succeeded -- check your wallet history before retrying.`,
+  );
 }
 
 /** Append the platform referral fee transfer instruction if configured */
