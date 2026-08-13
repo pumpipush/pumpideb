@@ -156,57 +156,6 @@ export async function uploadToRaydiumIpfs(
   });
 }
 
-async function _tryRaydiumUpload(params: RaydiumUploadParams): Promise<string> {
-  // 1. Upload image
-  const imgForm = new FormData();
-  imgForm.append("file", params.image, params.image.name);
-
-  const imgRes = await fetch("https://launch-mint-v1.raydium.io/upload", {
-    method: "POST",
-    body:   imgForm,
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!imgRes.ok) throw new Error(`Raydium image upload: ${imgRes.status}`);
-  const imgJson = await imgRes.json() as { uri?: string; url?: string };
-  const imageUri = imgJson.uri ?? imgJson.url;
-  if (!imageUri) throw new Error("Raydium image upload: missing uri in response");
-
-  // 2. Upload metadata JSON
-  const metadata: Record<string, string> = {
-    name:        params.name,
-    symbol:      params.symbol,
-    description: params.description,
-    image:       imageUri,
-  };
-  if (params.twitter)  metadata.twitter      = params.twitter;
-  if (params.telegram) metadata.telegram     = params.telegram;
-  if (params.website)  { metadata.website = params.website; metadata.external_url = params.website; }
-
-  const metaBlob = new Blob([JSON.stringify(metadata)], { type: "application/json" });
-  const metaForm = new FormData();
-  metaForm.append("file", metaBlob, "metadata.json");
-
-  const metaRes = await fetch("https://launch-mint-v1.raydium.io/upload", {
-    method: "POST",
-    body:   metaForm,
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!metaRes.ok) throw new Error(`Raydium metadata upload: ${metaRes.status}`);
-  const metaJson = await metaRes.json() as { uri?: string; url?: string };
-  const uri = metaJson.uri ?? metaJson.url;
-  if (!uri) throw new Error("Raydium metadata upload: missing uri in response");
-
-  // Validate URI shapes before using them on-chain (#138)
-  _validateUploadUri(imageUri, "Raydium image upload");
-  _validateUploadUri(uri, "Raydium metadata upload");
-
-  // Best-effort check: fetch the metadata and verify required fields are present.
-  // Fails-open on timeout/network errors (IPFS propagation can be slow).
-  // Fails-closed only when the server responds with clearly malformed JSON.
-  await _verifyMetadataReadable(uri);
-
-  return uri;
-}
 
 // ── SDK module cache ──────────────────────────────────────────────────────────
 
@@ -243,62 +192,6 @@ export function preloadRaydiumSdk(): void {
   import("@raydium-io/raydium-sdk-v2")
     .then((mod) => { _cachedSdk = mod; })
     .catch(() => { /* ignore — buildRaydiumLaunchTx will retry */ });
-}
-
-// ── Metadata upload validation ─────────────────────────────────────────────────
-
-/**
- * Validates the URI shape returned by an upload endpoint. (#138)
- * Throws early with a clear message rather than letting the on-chain
- * instruction fail with a cryptic AnchorError later.
- */
-function _validateUploadUri(uri: string, label: string): void {
-  if (!uri || typeof uri !== "string") {
-    throw new Error(`${label}: server mengembalikan URI kosong`);
-  }
-  try {
-    const url = new URL(uri);
-    if (!["https:", "http:", "ipfs:"].includes(url.protocol)) {
-      throw new Error(`protokol tidak dikenal: ${url.protocol}`);
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(`${label}: URI tidak valid — "${uri.slice(0, 80)}" (${msg})`);
-  }
-}
-
-/**
- * Best-effort verification that the metadata URI returns parseable JSON
- * with the required name/symbol fields. (#138)
- *
- * Uses a short timeout and fails-open on network errors (IPFS propagation
- * can take a few seconds). Throws only when the server responds but the
- * content is actively malformed — so we surface a clear error before
- * calling createLaunchpad() with broken metadata.
- */
-async function _verifyMetadataReadable(uri: string): Promise<void> {
-  try {
-    // _tryRaydiumUpload always yields HTTPS URLs from Raydium's CDN;
-    // no ipfs:// resolution needed here.
-    const res = await fetch(uri, {
-      signal:  AbortSignal.timeout(8_000),
-      headers: { "User-Agent": "RocketFi/1.0" },
-    });
-    if (!res.ok) return; // propagation delay — fail-open
-    const json = await res.json() as Record<string, unknown>;
-    // Fail-closed only when the content is reachable but missing required fields
-    if (typeof json.name !== "string" || !json.name.trim()) {
-      throw new Error("Metadata tidak valid: field 'name' kosong atau tidak ada");
-    }
-    if (typeof json.symbol !== "string" || !json.symbol.trim()) {
-      throw new Error("Metadata tidak valid: field 'symbol' kosong atau tidak ada");
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    // Re-throw explicit validation failures; swallow network / timeout errors
-    if (msg.startsWith("Metadata tidak valid")) throw err;
-    // IPFS propagation or network timeout — proceed and let the program decide
-  }
 }
 
 // ── Transaction Builder ───────────────────────────────────────────────────────

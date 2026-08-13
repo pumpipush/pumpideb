@@ -405,7 +405,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
       setLaunchStep("done");
       setMintAddress(newMint);
-      launchTimerRef.current = setTimeout(() => onLaunch(newMint), 3000);
+      // Raydium indexer is slower than pump.fun — use 6 s so the token is in our
+      // DB before we redirect the user to the token page.
+      launchTimerRef.current = setTimeout(() => onLaunch(newMint), 6000);
 
     } catch (err: unknown) {
       setLaunchStep("error");
@@ -415,7 +417,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       } else if (/upload|ipfs|fetch/i.test(raw)) {
         setLaunchError(`Metadata upload failed: ${raw}. Check your internet connection and try again.`);
       } else if (/simulat/i.test(raw)) {
-        setLaunchError(`Simulation failed: ${raw}\n\nMake sure your SOL balance is sufficient (min ~${RAYDIUM_LAUNCH_COST_SOL} SOL).`);
+        const totalNeeded = (RAYDIUM_LAUNCH_COST_SOL + parseFloat(initialBuySOL || "0")).toFixed(3);
+        setLaunchError(`Simulation failed: ${raw}\n\nMake sure your SOL balance is sufficient (min ~${totalNeeded} SOL: ${RAYDIUM_LAUNCH_COST_SOL} launch fee + ${initialBuySOL} initial buy).`);
       } else if (/timeout|not confirmed|Blockhash/i.test(raw)) {
         setLaunchError("Confirmation timeout. The transaction may have already succeeded — check your wallet before retrying.");
       } else if (/SDK tidak|config|launchpad/i.test(raw)) {
@@ -764,7 +767,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                   {mintAddress}
                 </div>
                 <p className="text-[12px]" style={{ color: "#64748b" }}>
-                  Mengarahkan ke halaman token dalam 3 detik…
+                  Mengarahkan ke halaman token dalam {platform === "raydium" ? "6" : "3"} detik…
                 </p>
               </div>
             )}
@@ -919,11 +922,15 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   }, [search]);
   const { data: searchResults } = useListTokens({ search: debouncedSearch }, { query: { enabled: debouncedSearch.length > 1, queryKey: getListTokensQueryKey({ search: debouncedSearch }) } });
   
-  const { data: token, refetch: refetchToken, isLoading: loadingToken, isError: tokenError } = useGetToken(selectedAddress || "", { 
-    query: { 
+  const { data: token, refetch: refetchToken, isLoading: loadingToken, isError: tokenError } = useGetToken(selectedAddress || "", {
+    query: {
       enabled: !!selectedAddress,
-      queryKey: ["getToken", selectedAddress]
-    } 
+      queryKey: ["getToken", selectedAddress],
+      // Retry generously (2 s apart) so newly-launched tokens not yet indexed
+      // are found automatically without a manual page refresh.
+      retry: 5,
+      retryDelay: 2000,
+    },
   });
 
   // Derived early so useMemo below (ChartSection) can use it safely.
