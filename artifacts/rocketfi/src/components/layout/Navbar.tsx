@@ -62,7 +62,7 @@ function WalletButton() {
   }
 
   // Resolve display info — wallet profile takes priority over social user
-  const profileSlug = profile?.username ?? (socialUser ? `/profile/${socialUser.address}` : wallet ?? "");
+  const profileSlug = profile?.username ?? (socialUser ? socialUser.address : wallet ?? "");
   const displayName = profile?.username ?? socialUser?.username ?? (wallet ? formatAddress(wallet) : "");
   const avatarUrl   = profile?.avatarUrl ?? socialUser?.avatarUrl ?? (wallet ? diceBearUrl(wallet) : null);
   const subLine     = walletName ?? socialUser?.email ?? (wallet ? formatAddress(wallet) : "");
