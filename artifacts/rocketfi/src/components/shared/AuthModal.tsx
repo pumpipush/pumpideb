@@ -219,6 +219,7 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                   {GOOGLE_CLIENT_ID && (
                     <GoogleSignInButton
                       loading={loading === "google"}
+                      onLoading={(v) => setLoading(v ? "google" : null)}
                       onSuccess={handleGoogleSuccess}
                       onError={(msg) => setError(msg)}
                     />
