@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { PumpApiAdapter, PUMPAPI_WATCHDOG_MS } from "./pumpfun";
+import { PumpApiAdapter, PUMPAPI_WATCHDOG_MS, PUMPAPI_DATA_STALE_MS } from "./pumpfun";
 
 // ── Mock WebSocket ─────────────────────────────────────────────────────────────
 
@@ -55,8 +55,12 @@ class MockWebSocket extends EventTarget {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-/** Create an adapter with a mock WS factory and a given watchdog window. */
-function makeAdapter(watchdogMs: number, onDisconnected?: () => void): {
+/** Create an adapter with a mock WS factory and configurable watchdog windows. */
+function makeAdapter(
+  watchdogMs:    number,
+  onDisconnected?: () => void,
+  dataStaleMs?:  number,
+): {
   adapter:   PumpApiAdapter;
   getLastWs: () => MockWebSocket | null;
 } {
@@ -65,7 +69,7 @@ function makeAdapter(watchdogMs: number, onDisconnected?: () => void): {
     lastWs = new MockWebSocket(url);
     return lastWs as unknown as WebSocket;
   };
-  const adapter = new PumpApiAdapter({ watchdogMs, wsFactory, onDisconnected });
+  const adapter = new PumpApiAdapter({ watchdogMs, wsFactory, onDisconnected, dataStaleMs });
   return { adapter, getLastWs: () => lastWs };
 }
 
@@ -168,6 +172,12 @@ describe("PumpApiAdapter watchdog", () => {
     expect(ws.closed).toBe(true);
   });
 
+  it("exports PUMPAPI_DATA_STALE_MS as a value larger than PUMPAPI_WATCHDOG_MS", () => {
+    // Data-stale window must be longer so the raw-silence watchdog fires first
+    // if the connection goes fully silent, without data-stale racing ahead.
+    expect(PUMPAPI_DATA_STALE_MS).toBeGreaterThan(PUMPAPI_WATCHDOG_MS);
+  });
+
   it("resets watchdog on reconnect after a disconnect", async () => {
     const WATCHDOG = 200;
     const { adapter, getLastWs } = makeAdapter(WATCHDOG);
@@ -194,5 +204,218 @@ describe("PumpApiAdapter watchdog", () => {
     expect(ws2.closed).toBe(true);
 
     adapter.stop();
+  });
+});
+
+// ── Data-staleness watchdog tests ──────────────────────────────────────────────
+
+describe("PumpApiAdapter data-staleness watchdog", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * Core scenario: connection alive (keepalive pongs arrive), but no real trade
+   * events. The raw watchdog stays reset; the data-staleness watchdog fires.
+   */
+  it("fires when keepalive pongs arrive but no real trade events do", async () => {
+    const WATCHDOG    = 10_000; // large — raw watchdog should NOT fire
+    const DATA_STALE  = 300;    // short for fast test
+    const { adapter, getLastWs } = makeAdapter(WATCHDOG, undefined, DATA_STALE);
+
+    adapter.start();
+    await Promise.resolve();
+
+    const ws = getLastWs()!;
+    expect(ws.closed).toBe(false);
+
+    // Simulate keepalive pong responses — these should reset the raw watchdog
+    // but NOT the data-staleness watchdog.
+    for (let i = 0; i < 3; i++) {
+      vi.advanceTimersByTime(DATA_STALE / 4);
+      ws.receive({ method: "pong" }); // raw-message → resets raw watchdog only
+    }
+
+    // Still within data-stale window after pongs — connection should be alive.
+    expect(ws.closed).toBe(false);
+
+    // Advance past the data-stale deadline without any trade events.
+    vi.advanceTimersByTime(DATA_STALE + 50);
+    expect(ws.closed).toBe(true);
+
+    adapter.stop();
+  });
+
+  it("does NOT fire when real pump trade events arrive within the window", async () => {
+    const WATCHDOG   = 10_000;
+    const DATA_STALE = 300;
+    const { adapter, getLastWs } = makeAdapter(WATCHDOG, undefined, DATA_STALE);
+
+    adapter.start();
+    await Promise.resolve();
+
+    const ws = getLastWs()!;
+
+    // Advance close to the data-stale deadline.
+    vi.advanceTimersByTime(DATA_STALE - 50);
+    expect(ws.closed).toBe(false);
+
+    // Send a real pump buy event — should reset the data-staleness watchdog.
+    ws.receive({
+      action:    "buy",
+      pool:      "pump",
+      signature: "aaa111",
+      mint:      "MINT1111",
+      tokenAmount: 1000,
+      quoteAmount: 0.5,
+    });
+
+    // Past the ORIGINAL deadline, but within the reset window — should still be open.
+    vi.advanceTimersByTime(100);
+    expect(ws.closed).toBe(false);
+
+    // Advance past the reset deadline — now it should fire.
+    vi.advanceTimersByTime(DATA_STALE + 50);
+    expect(ws.closed).toBe(true);
+
+    adapter.stop();
+  });
+
+  it("resets on pump-amm trade events too (not just pump bonding-curve)", async () => {
+    const WATCHDOG   = 10_000;
+    const DATA_STALE = 300;
+    const { adapter, getLastWs } = makeAdapter(WATCHDOG, undefined, DATA_STALE);
+
+    adapter.start();
+    await Promise.resolve();
+
+    const ws = getLastWs()!;
+
+    vi.advanceTimersByTime(DATA_STALE - 50);
+
+    // PumpSwap (pump-amm) trade — should also reset the data-staleness watchdog.
+    ws.receive({
+      action:    "sell",
+      pool:      "pump-amm",
+      signature: "bbb222",
+      mint:      "MINT2222",
+      tokenAmount: 500,
+      quoteAmount: 0.25,
+    });
+
+    vi.advanceTimersByTime(100);
+    expect(ws.closed).toBe(false); // reset held
+
+    vi.advanceTimersByTime(DATA_STALE + 50);
+    expect(ws.closed).toBe(true);
+
+    adapter.stop();
+  });
+
+  it("does NOT reset on raydium-launchpad or other pool events", async () => {
+    const WATCHDOG   = 10_000;
+    const DATA_STALE = 300;
+    const { adapter, getLastWs } = makeAdapter(WATCHDOG, undefined, DATA_STALE);
+
+    adapter.start();
+    await Promise.resolve();
+
+    const ws = getLastWs()!;
+
+    // Keep sending non-pump events — these should not reset the data-stale timer.
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(DATA_STALE / 5);
+      ws.receive({ action: "buy", pool: "raydium-launchpad", signature: `sig${i}`, mint: `MINT${i}` });
+    }
+
+    // Past the data-stale deadline — should have fired despite messages arriving.
+    vi.advanceTimersByTime(DATA_STALE);
+    expect(ws.closed).toBe(true);
+
+    adapter.stop();
+  });
+
+  it("resets on pump create events (not only buy/sell)", async () => {
+    const WATCHDOG   = 10_000;
+    const DATA_STALE = 300;
+    const { adapter, getLastWs } = makeAdapter(WATCHDOG, undefined, DATA_STALE);
+
+    adapter.start();
+    await Promise.resolve();
+
+    const ws = getLastWs()!;
+
+    vi.advanceTimersByTime(DATA_STALE - 50);
+    expect(ws.closed).toBe(false);
+
+    // A pump `create` event — should reset the data-staleness watchdog.
+    ws.receive({
+      action:    "create",
+      pool:      "pump",
+      signature: "ccc333",
+      mint:      "MINT3333",
+      name:      "TestToken",
+      symbol:    "TEST",
+    });
+
+    vi.advanceTimersByTime(100);
+    expect(ws.closed).toBe(false); // reset held
+
+    vi.advanceTimersByTime(DATA_STALE + 50);
+    expect(ws.closed).toBe(true);
+
+    adapter.stop();
+  });
+
+  it("does NOT reset on unknown/metadata actions from pump or pump-amm pools", async () => {
+    // This is the regression test for the exact failure mode: pumpapi.io emits
+    // unknown control/metadata events on a pump pool while actual trade forwarding
+    // is stalled. The data-stale watchdog must NOT reset in this case.
+    const WATCHDOG   = 10_000;
+    const DATA_STALE = 300;
+    const { adapter, getLastWs } = makeAdapter(WATCHDOG, undefined, DATA_STALE);
+
+    adapter.start();
+    await Promise.resolve();
+
+    const ws = getLastWs()!;
+
+    // Repeatedly send unknown actions from valid pools — these must not reset the timer.
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(DATA_STALE / 5);
+      ws.receive({ action: "metadata",  pool: "pump",     signature: `s${i}a`, mint: `M${i}` });
+      ws.receive({ action: "heartbeat", pool: "pump-amm", signature: `s${i}b`, mint: `M${i}` });
+      ws.receive({ action: "unknown",   pool: "pump",     signature: `s${i}c`, mint: `M${i}` });
+    }
+
+    // Past the data-stale deadline — must have fired despite messages arriving.
+    vi.advanceTimersByTime(DATA_STALE);
+    expect(ws.closed).toBe(true);
+
+    adapter.stop();
+  });
+
+  it("clears the data-stale timer on stop() — no spurious close after stop", async () => {
+    const WATCHDOG   = 10_000;
+    const DATA_STALE = 400;
+    const { adapter, getLastWs } = makeAdapter(WATCHDOG, undefined, DATA_STALE);
+
+    adapter.start();
+    await Promise.resolve();
+
+    const ws = getLastWs()!;
+
+    // Stop before the data-stale timer fires.
+    adapter.stop();
+
+    // Advance well past the data-stale window — no unexpected reconnect.
+    vi.advanceTimersByTime(DATA_STALE * 3);
+
+    // WS is closed by stop() itself; no additional close from data-stale watchdog.
+    expect(ws.closed).toBe(true);
   });
 });

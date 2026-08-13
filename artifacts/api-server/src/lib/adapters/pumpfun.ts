@@ -953,42 +953,70 @@ export interface PumpApiEvent {
  */
 export const PUMPAPI_WATCHDOG_MS = 60_000;
 
+/**
+ * How long (ms) with no REAL TRADE OR CREATE events before the data-staleness
+ * watchdog force-closes the connection.  This is longer than PUMPAPI_WATCHDOG_MS
+ * and only resets on pump / pump-amm trade events — not keepalive pongs.
+ *
+ * Catches the failure mode where pumpapi.io is alive (pings succeed, raw watchdog
+ * resets) but their internal routing has stopped forwarding trade data, causing
+ * prices to silently go stale.
+ *
+ * At peak hours pump.fun averages 5–10 trades/second; even at 1 tx/min the 120 s
+ * window is generous enough to avoid false positives during low-volume periods.
+ */
+export const PUMPAPI_DATA_STALE_MS = 120_000;
+
 export class PumpApiAdapter {
   private _ws:     WebSocket | null = null;
   private _active  = false;
   private _delay   = 5_000;
   private readonly _maxDelay = 120_000;
-  private _keepaliveTimer: ReturnType<typeof setInterval> | null = null;
-  private _watchdogTimer:  ReturnType<typeof setTimeout>  | null = null;
+  private _keepaliveTimer:   ReturnType<typeof setInterval> | null = null;
+  private _watchdogTimer:    ReturnType<typeof setTimeout>  | null = null;
+  private _dataStaleTimer:   ReturnType<typeof setTimeout>  | null = null;
 
   /** Optional callbacks for health-based fallback coordination. */
   private readonly _onConnected?:    () => void;
   private readonly _onDisconnected?: () => void;
 
   /**
-   * Configurable watchdog window — defaults to PUMPAPI_WATCHDOG_MS.
+   * Raw-silence watchdog window — defaults to PUMPAPI_WATCHDOG_MS.
+   * Resets on ANY incoming WebSocket message (including keepalive pongs).
    * Exposed via constructor options so tests can pass a short value.
    */
   private readonly _watchdogMs: number;
 
   /**
+   * Data-staleness watchdog window — defaults to PUMPAPI_DATA_STALE_MS.
+   * Resets ONLY on real trade/create events (pool=pump or pump-amm).
+   * Fires when pumpapi.io is alive (pings succeed) but stops forwarding data.
+   * Exposed via constructor options so tests can pass a short value.
+   */
+  private readonly _dataStaleMs: number;
+
+  /**
    * Injectable WebSocket factory — defaults to `(url) => new WebSocket(url)`.
    * Tests pass a mock factory to avoid real network connections.
+   * This is a test-injection point; do not remove it.
    */
   private readonly _wsFactory: (url: string) => WebSocket;
 
   constructor(opts?: {
     onConnected?:    () => void;
     onDisconnected?: () => void;
-    /** Override watchdog window (ms). Default: PUMPAPI_WATCHDOG_MS (60 000). */
-    watchdogMs?: number;
+    /** Override raw-silence watchdog window (ms). Default: PUMPAPI_WATCHDOG_MS (60 000). */
+    watchdogMs?:  number;
+    /** Override data-staleness watchdog window (ms). Default: PUMPAPI_DATA_STALE_MS (120 000). */
+    dataStaleMs?: number;
     /** Override WebSocket constructor for testing. */
-    wsFactory?: (url: string) => WebSocket;
+    wsFactory?:   (url: string) => WebSocket;
   }) {
     this._onConnected    = opts?.onConnected;
     this._onDisconnected = opts?.onDisconnected;
-    this._watchdogMs     = opts?.watchdogMs ?? PUMPAPI_WATCHDOG_MS;
-    this._wsFactory      = opts?.wsFactory  ?? ((url) => new WebSocket(url));
+    this._watchdogMs     = opts?.watchdogMs  ?? PUMPAPI_WATCHDOG_MS;
+    this._dataStaleMs    = opts?.dataStaleMs ?? PUMPAPI_DATA_STALE_MS;
+    this._wsFactory      = opts?.wsFactory   ?? ((url) => new WebSocket(url));
   }
 
   /**
@@ -1026,6 +1054,7 @@ export class PumpApiAdapter {
     this._active = false;
     pumpApiLog.info("pumpapi: stopping stream");
     this._clearWatchdog();
+    this._clearDataStaleWatchdog();
     if (this._keepaliveTimer !== null) {
       clearInterval(this._keepaliveTimer);
       this._keepaliveTimer = null;
@@ -1039,10 +1068,9 @@ export class PumpApiAdapter {
   // ── Watchdog helpers ────────────────────────────────────────────────────────
 
   /**
-   * Arm (or re-arm) the watchdog timer for a specific WebSocket connection.
-   * Call this on open AND on every incoming message so it continuously resets.
-   * If the watchdog fires it force-closes `ws`; the close handler then handles
-   * reconnect and the `_onDisconnected` callback.
+   * Arm (or re-arm) the RAW-SILENCE watchdog for a specific WebSocket connection.
+   * Resets on ANY incoming WebSocket message — including keepalive pongs.
+   * Fires after _watchdogMs of total silence (first line of defence).
    */
   private _armWatchdog(ws: WebSocket): void {
     if (this._watchdogTimer !== null) {
@@ -1065,6 +1093,33 @@ export class PumpApiAdapter {
     }
   }
 
+  /**
+   * Arm (or re-arm) the DATA-STALENESS watchdog for a specific WebSocket connection.
+   * Resets ONLY when a real trade or create event arrives (pool=pump or pump-amm).
+   * Keepalive pongs do NOT reset this timer — so a connection that answers pings
+   * but stops forwarding trade data will still be detected and recycled.
+   */
+  private _armDataStaleWatchdog(ws: WebSocket): void {
+    if (this._dataStaleTimer !== null) {
+      clearTimeout(this._dataStaleTimer);
+    }
+    this._dataStaleTimer = setTimeout(() => {
+      this._dataStaleTimer = null;
+      pumpApiLog.warn(
+        { dataStaleMs: this._dataStaleMs },
+        "pumpapi: data-staleness watchdog fired — no trade events received; forcing reconnect"
+      );
+      ws.close(); // triggers close handler → _onDisconnected → reconnect loop
+    }, this._dataStaleMs);
+  }
+
+  private _clearDataStaleWatchdog(): void {
+    if (this._dataStaleTimer !== null) {
+      clearTimeout(this._dataStaleTimer);
+      this._dataStaleTimer = null;
+    }
+  }
+
   private _connect(): void {
     if (!this._active) return;
     try {
@@ -1083,10 +1138,13 @@ export class PumpApiAdapter {
           }
         }, 20_000);
 
-        // Watchdog: arm immediately on open. Any incoming message resets it.
-        // If no message arrives within _watchdogMs the connection is considered
-        // stalled and is force-closed to trigger the reconnect loop.
+        // Raw-silence watchdog: arm on open; resets on every message.
+        // Fires after _watchdogMs with zero bytes received (dead connection).
         this._armWatchdog(ws);
+
+        // Data-staleness watchdog: arm on open; resets ONLY on real trade/create events.
+        // Fires after _dataStaleMs if pings succeed but data stops (routing failure).
+        this._armDataStaleWatchdog(ws);
       });
 
       ws.addEventListener("message", (rawEvent) => {
@@ -1108,6 +1166,19 @@ export class PumpApiAdapter {
         // raydium-launchpad, meteora-*, etc. are handled by their own adapters.
         if (pool !== "pump" && pool !== "pump-amm") return;
         if (!signature || !mint) return;
+
+        // Reset the data-staleness watchdog ONLY for actions that actually
+        // represent real price-moving data (create / buy / sell).  Unknown or
+        // metadata-only actions from these pools do NOT reset it, so a pumpapi.io
+        // routing failure that keeps emitting non-trade messages is still caught.
+        //
+        // Placed BEFORE dedup: a duplicate event still proves data is flowing.
+        const isRealDataAction =
+          (pool === "pump"     && (action === "create" || action === "buy" || action === "sell")) ||
+          (pool === "pump-amm" && (action === "buy"    || action === "sell"));
+        if (isRealDataAction) {
+          this._armDataStaleWatchdog(ws);
+        }
 
         // Dedup by (signature + action) — allows the same tx to emit both a
         // "create" and a "buy" event (initial buy at launch) without dropping one.
@@ -1138,8 +1209,9 @@ export class PumpApiAdapter {
       });
 
       ws.addEventListener("close", () => {
-        // Always clear timers regardless of whether the close was intentional.
+        // Always clear all timers regardless of whether the close was intentional.
         this._clearWatchdog();
+        this._clearDataStaleWatchdog();
         if (this._keepaliveTimer !== null) {
           clearInterval(this._keepaliveTimer);
           this._keepaliveTimer = null;
