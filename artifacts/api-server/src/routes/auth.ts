@@ -124,24 +124,29 @@ router.post("/auth/google", asyncWrap(async (req, res) => {
     return void res.status(400).json({ error: "credential or access_token required" });
   }
 
-  let googleId: string, email: string, name: string, picture: string;
+  let googleId: string, email: string, name: string, picture: string, emailVerified: boolean;
 
   if (access_token) {
     // Verify via Google's userinfo endpoint — no client secret needed on the server
-    let info: Record<string, string>;
+    let info: Record<string, unknown>;
     try {
       const r = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo`, {
         headers: { Authorization: `Bearer ${access_token}` },
       });
       if (!r.ok) throw new Error(`Google userinfo ${r.status}`);
-      info = await r.json() as Record<string, string>;
+      info = await r.json() as Record<string, unknown>;
     } catch (err: unknown) {
       return void res.status(401).json({ error: "invalid Google access_token", detail: String(err) });
     }
-    googleId = info.sub ?? "";
-    email    = info.email ?? "";
-    name     = info.name  ?? email.split("@")[0] ?? "user";
-    picture  = info.picture ?? "";
+    googleId      = String(info.sub ?? "");
+    // Always normalise to lowercase — OTP-registered emails are stored lowercase;
+    // without this, a capitalisation difference from Google would bypass the byEmail
+    // merge and silently create a duplicate account.
+    email         = (String(info.email ?? "")).toLowerCase();
+    name          = String(info.name  ?? "") || email.split("@")[0] || "user";
+    picture       = String(info.picture ?? "");
+    // Only use the email for merging if Google has confirmed ownership.
+    emailVerified = info.email_verified === true || info.email_verified === "true";
     if (!googleId) return void res.status(401).json({ error: "could not retrieve Google user ID" });
   } else {
     // Legacy: verify ID token
@@ -153,10 +158,12 @@ router.post("/auth/google", asyncWrap(async (req, res) => {
       });
       const payload = ticket.getPayload();
       if (!payload) throw new Error("empty payload");
-      googleId = payload.sub;
-      email    = payload.email ?? "";
-      name     = payload.name  ?? email.split("@")[0] ?? "user";
-      picture  = payload.picture ?? "";
+      googleId      = payload.sub;
+      // Same lowercase normalisation for the ID-token path.
+      email         = (payload.email ?? "").toLowerCase();
+      name          = payload.name  ?? email.split("@")[0] ?? "user";
+      picture       = payload.picture ?? "";
+      emailVerified = payload.email_verified ?? false;
     } catch (err: unknown) {
       return void res.status(401).json({ error: "invalid Google token", detail: String(err) });
     }
@@ -170,15 +177,21 @@ router.post("/auth/google", asyncWrap(async (req, res) => {
     .limit(1);
 
   let profile = existing[0];
+  // Track whether this request resulted in a brand-new account so the client
+  // can surface appropriate onboarding messaging.
+  let isNewAccount = false;
 
   if (!profile) {
-    // Also check by email in case user signed up via email first
-    const byEmail = email
+    // Also check by email in case user signed up via email first.
+    // We only trust the email for merging when Google has verified it (emailVerified),
+    // otherwise an attacker who controls an unverified Google address could hijack
+    // an existing account.
+    const byEmail = (email && emailVerified)
       ? await db.select().from(profilesTable).where(eq(profilesTable.email, email)).limit(1)
       : [];
 
     if (byEmail[0]) {
-      // Link Google to existing email profile
+      // Link Google to existing email profile — preserve the existing avatar.
       profile = (
         await db
           .update(profilesTable)
@@ -188,6 +201,7 @@ router.post("/auth/google", asyncWrap(async (req, res) => {
       )[0];
     } else {
       // Create new profile
+      isNewAccount   = true;
       const address  = randomUUID();
       const username = await uniqueUsername(name);
       profile = (
@@ -207,7 +221,7 @@ router.post("/auth/google", asyncWrap(async (req, res) => {
   }
 
   const token = signToken({ sub: profile.address, authType: "google" });
-  return void res.json({ token, profile });
+  return void res.json({ token, profile, isNewAccount });
 }));
 
 // ── POST /api/auth/email/send ──────────────────────────────────────────────
