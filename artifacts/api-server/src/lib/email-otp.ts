@@ -20,8 +20,16 @@ export function verifyOTP(email: string, code: string): boolean {
 export async function sendOTPEmail(to: string, code: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    // Dev mode: log to console so the flow can be tested without Resend
-    console.log(`[email-otp] ⚡ OTP for ${to}: ${code}`);
+    if (process.env.NODE_ENV === "production") {
+      // In production, failing to send the OTP is better than silently logging it.
+      // The user will see a generic error; set RESEND_API_KEY to fix.
+      throw new Error(
+        "Email delivery is not configured. Set RESEND_API_KEY to enable OTP sign-in."
+      );
+    }
+    // Dev mode: print to stdout so the flow can be tested without a Resend account.
+    // NEVER logs in production (thrown above).
+    console.log(`[email-otp DEV] OTP for ${to}: ${code}`);
     return;
   }
   const res = await fetch("https://api.resend.com/emails", {

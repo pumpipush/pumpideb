@@ -10,25 +10,48 @@ import {
   setObjectAclPolicy,
 } from './objectAcl';
 
+// ── GCS client configuration ──────────────────────────────────────────────────
+//
+// Two auth modes are supported:
+//
+//  1. VPS / standard GCS  — set GOOGLE_APPLICATION_CREDENTIALS to the path of a
+//     service account JSON key file. The @google-cloud/storage client picks it up
+//     automatically via Application Default Credentials (ADC).
+//     Also set GCS_PROJECT_ID to your GCP project ID.
+//
+//  2. Replit hosted        — no env vars needed. The Replit sidecar at
+//     http://127.0.0.1:1106 vends short-lived tokens that the storage client
+//     exchanges for GCS credentials transparently.
+//
+// Which mode is active is determined by whether GOOGLE_APPLICATION_CREDENTIALS is set.
+
 const REPLIT_SIDECAR_ENDPOINT = 'http://127.0.0.1:1106';
 
-export const objectStorageClient = new Storage({
-  credentials: {
-    audience: 'replit',
-    subject_token_type: 'access_token',
-    token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
-    type: 'external_account',
-    credential_source: {
-      url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
-      format: {
-        type: 'json',
-        subject_token_field_name: 'access_token',
+const isStandardGcs = Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+
+export const objectStorageClient = isStandardGcs
+  ? // Standard GCS auth — uses GOOGLE_APPLICATION_CREDENTIALS automatically
+    new Storage({
+      projectId: process.env.GCS_PROJECT_ID ?? '',
+    })
+  : // Replit-hosted auth — sidecar vends short-lived tokens
+    new Storage({
+      credentials: {
+        audience: 'replit',
+        subject_token_type: 'access_token',
+        token_url: `${REPLIT_SIDECAR_ENDPOINT}/token`,
+        type: 'external_account',
+        credential_source: {
+          url: `${REPLIT_SIDECAR_ENDPOINT}/credential`,
+          format: {
+            type: 'json',
+            subject_token_field_name: 'access_token',
+          },
+        },
+        universe_domain: 'googleapis.com',
       },
-    },
-    universe_domain: 'googleapis.com',
-  },
-  projectId: '',
-});
+      projectId: '',
+    });
 
 export class ObjectNotFoundError extends Error {
   constructor() {

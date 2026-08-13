@@ -363,6 +363,8 @@ export async function waitForTxConfirmation(
   signature: string,
   blockhash: string,
   lastValidBlockHeight: number,
+  /** Optional callback fired with a human-readable progress string at each stage. */
+  onProgress?: (message: string) => void,
 ): Promise<void> {
   const conn = new Connection(getRpcUrl(), "confirmed");
 
@@ -370,6 +372,8 @@ export async function waitForTxConfirmation(
   // Free RPCs frequently drop the WebSocket subscription that powers this call,
   // leaving it hanging indefinitely even though the tx confirmed minutes ago.
   const PRIMARY_TIMEOUT_MS = 40_000;
+
+  onProgress?.("Waiting for network confirmation…");
 
   let phase1Err: unknown = null;
   try {
@@ -406,6 +410,7 @@ export async function waitForTxConfirmation(
   const POLL_ATTEMPTS    = 10;
 
   for (let i = 0; i < POLL_ATTEMPTS; i++) {
+    onProgress?.(`Still confirming — checking transaction status (attempt ${i + 1}/${POLL_ATTEMPTS})…`);
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     try {
       const { value } = await conn.getSignatureStatus(signature, {
@@ -421,6 +426,7 @@ export async function waitForTxConfirmation(
           value.confirmationStatus === "confirmed" ||
           value.confirmationStatus === "finalized"
         ) {
+          onProgress?.("Confirmed!");
           return; // confirmed via polling
         }
       }

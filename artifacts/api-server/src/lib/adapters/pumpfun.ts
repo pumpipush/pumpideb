@@ -15,7 +15,7 @@
  * FALLBACK PATH: If log parsing fails (e.g. different instruction structure),
  * falls back to getTransaction + parseSwap / decodePumpCreate.
  *
- * No env vars required — uses PublicNode free WebSocket RPC.
+ * RPC: Alchemy when ALCHEMY_API_KEY is set (primary), PublicNode free as fallback.
  */
 
 import { eq, sql, and, isNull, gt } from "drizzle-orm";

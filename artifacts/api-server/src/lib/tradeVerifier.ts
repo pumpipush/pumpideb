@@ -35,7 +35,7 @@
  *   rpc_error    (503) — all RPCs unreachable / returned malformed data
  */
 
-import { PUBLICNODE_HTTP, FALLBACK_HTTP_RPCS } from "./adapters/solanaRpcBase.js";
+import { getPrimaryHttpRpc, FALLBACK_HTTP_RPCS } from "./adapters/solanaRpcBase.js";
 
 // ── pump.fun Anchor event constants ───────────────────────────────────────────
 
@@ -195,7 +195,9 @@ export async function fetchAndParseTrade(
     ],
   });
 
-  const endpoints: string[] = [PUBLICNODE_HTTP, ...FALLBACK_HTTP_RPCS];
+  // Alchemy first (if ALCHEMY_API_KEY is set), then free public fallbacks.
+  const primary = getPrimaryHttpRpc();
+  const endpoints: string[] = [primary, ...FALLBACK_HTTP_RPCS.filter(u => u !== primary)];
 
   for (const url of endpoints) {
     try {

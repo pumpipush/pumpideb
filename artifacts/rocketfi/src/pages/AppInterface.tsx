@@ -230,6 +230,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const [mintAddress,     setMintAddress]     = useState<string | null>(null);
   // Sub-label shown under the "building" step while the Raydium SDK is downloading
   const [buildingSubLabel, setBuildingSubLabel] = useState<string | null>(null);
+  // Progress detail shown under the "confirming" step — updated live by waitForTxConfirmation
+  const [confirmingDetail, setConfirmingDetail] = useState<string | null>(null);
 
   const { toast } = useToast();
   const { openWalletModal, signAndSendTransaction } = useWallet();
@@ -319,7 +321,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
       // Step 4: Wait for on-chain confirmation
       setLaunchStep("confirming");
-      await waitForTxConfirmation(sig, blockhash, lastValidBlockHeight);
+      setConfirmingDetail(null);
+      await waitForTxConfirmation(sig, blockhash, lastValidBlockHeight, setConfirmingDetail);
 
       setLaunchStep("done");
       setMintAddress(newMint);
@@ -392,7 +395,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         if (i > 0) {
           // Wait for prior tx to confirm before the next wallet approval
           setLaunchStep("confirming");
-          await waitForTxConfirmation(lastSig, blockhash, lastValidBlockHeight);
+          setConfirmingDetail(null);
+          await waitForTxConfirmation(lastSig, blockhash, lastValidBlockHeight, setConfirmingDetail);
           setLaunchStep("signing");
         }
         // Wallet adds its signature and broadcasts
@@ -401,7 +405,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
       // Step 4: Wait for final transaction confirmation
       setLaunchStep("confirming");
-      await waitForTxConfirmation(lastSig, blockhash, lastValidBlockHeight);
+      setConfirmingDetail(null);
+      await waitForTxConfirmation(lastSig, blockhash, lastValidBlockHeight, setConfirmingDetail);
 
       setLaunchStep("done");
       setMintAddress(newMint);
@@ -433,6 +438,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     setLaunchStep("idle");
     setLaunchError(null);
     setBuildingSubLabel(null);
+    setConfirmingDetail(null);
   };
 
   const isLaunching = launchStep !== "idle" && launchStep !== "done" && launchStep !== "error";
@@ -731,7 +737,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 {LAUNCH_STEPS.map((step, idx) => {
                   const isDone   = idx < currentStepIdx;
                   const isActive = idx === currentStepIdx;
-                  const subLabel = isActive && step.key === "building" ? buildingSubLabel : null;
+                  const subLabel = isActive && step.key === "building"   ? buildingSubLabel
+                               : isActive && step.key === "confirming" ? confirmingDetail
+                               : null;
                   return (
                     <div key={step.key} className="flex items-start gap-3">
                       <StepIcon step={step.key} active={isActive} done={isDone} />

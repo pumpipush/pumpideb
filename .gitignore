@@ -1,6 +1,4 @@
-# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
-
-# compiled output
+# ── Build output ─────────────────────────────────────────────────────────────
 dist
 tmp
 out-tsc
@@ -8,10 +6,42 @@ out-tsc
 .expo
 .expo-shared
 
-# dependencies
+# ── Dependencies ──────────────────────────────────────────────────────────────
 node_modules
 
-# IDEs and editors
+# ── Environment & Secrets ─────────────────────────────────────────────────────
+# Never commit real env files — use .env.example as a template
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
+.env.*.local
+
+# GCS service account keys (VPS deployment)
+secrets/
+*.json.key
+service-account*.json
+
+# ── Replit internal (not useful outside Replit) ───────────────────────────────
+.cache/
+.local/
+.config/
+
+# Agent memory — internal AI assistant notes, not relevant to the codebase
+.agents/
+
+# ── Runtime state files ───────────────────────────────────────────────────────
+# These are created at runtime and should never be committed
+artifacts/.launchlab-deep-backfill-done
+*.pid
+*.seed
+
+# ── User-uploaded screenshots / attached files ────────────────────────────────
+# These are temporary files uploaded during development sessions
+attached_assets/
+
+# ── IDEs and editors ─────────────────────────────────────────────────────────
 /.idea
 .project
 .classpath
@@ -19,31 +49,18 @@ node_modules
 *.launch
 .settings/
 *.sublime-workspace
-
-# IDE - VSCode
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
 
-# misc
-/.sass-cache
-/connect.lock
-/coverage
-/libpeerconnection.log
-npm-debug.log
-yarn-error.log
-testem.log
-/typings
-
-# System Files
+# ── macOS / Windows ───────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 
-.cursor/rules/nx-rules.mdc
-.github/instructions/nx.instructions.md
-
-# Replit
-.cache/
-.local/
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log
+yarn-error.log
+/coverage

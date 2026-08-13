@@ -1,6 +1,17 @@
 import jwt from "jsonwebtoken";
 
-const SECRET = process.env.SESSION_SECRET ?? "dev-secret-change-me";
+const rawSecret = process.env.SESSION_SECRET;
+
+// Fail fast in production rather than silently signing tokens with a publicly
+// known fallback key — any attacker could forge valid JWTs.
+if (!rawSecret && process.env.NODE_ENV === "production") {
+  throw new Error(
+    "[auth-jwt] SESSION_SECRET environment variable is required in production. " +
+    "Set it to a long random string (e.g. openssl rand -hex 64)."
+  );
+}
+
+const SECRET = rawSecret ?? "dev-secret-change-me";
 const EXPIRES_IN = "7d";
 
 export interface AuthPayload {

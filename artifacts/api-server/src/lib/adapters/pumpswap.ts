@@ -40,14 +40,14 @@ class PumpSwapIndexer extends SolanaRpcIndexer {
    * Rate limiter — PumpSwap generates 100-200 events/second.
    * Each getTransaction = 100 Compute Units on Alchemy.
    *
-   * Alchemy free tier: 30M CU/month → budget ≈ 300K calls/month ≈ 10K/day ≈ 1 call/8.6s.
-   * We use 30s to leave headroom for pump.fun + Raydium calls.
+   * Free tier  (no key): 30M  CU/month → ≈1 call/30s to stay under budget.
+   * Premium    (key set): 300M+ CU/month → 2s interval is safe and keeps
+   *   prices near real-time (≈30 trades/minute per token captured).
    *
-   * At 1 call/30s we capture ~2 trades/minute per token — enough to keep
-   * prices accurate.  Adjust down if you upgrade to a paid Alchemy plan.
+   * Interval is chosen automatically based on whether ALCHEMY_API_KEY is set.
    */
   private _lastTradePassMs = 0;
-  private readonly _tradeIntervalMs = 30_000;
+  private readonly _tradeIntervalMs = process.env["ALCHEMY_API_KEY"] ? 2_000 : 30_000;
 
   constructor() {
     super({ programId: PUMPSWAP_PROGRAM, adapterName: PLATFORM });

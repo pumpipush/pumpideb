@@ -1,7 +1,10 @@
 /**
  * SolanaRpcIndexer — shared WebSocket base for subscribing to Solana program logs.
  *
- * Uses PublicNode's free public RPC by default (wss://solana-rpc.publicnode.com).
+ * RPC priority order (both WSS and HTTP):
+ *   1. Alchemy  — used when ALCHEMY_API_KEY is set (primary, high rate limits)
+ *   2. PublicNode / Solana Foundation / Ankr — free public fallbacks
+ *
  * Handles:
  *   - logsSubscribe to a given program ID
  *   - Filtering failed transactions (err !== null)
@@ -26,6 +29,16 @@ function alchemyWss():  string | null {
 function alchemyHttp(): string | null {
   const key = process.env["ALCHEMY_API_KEY"];
   return key ? `https://solana-mainnet.g.alchemy.com/v2/${key}` : null;
+}
+
+/**
+ * Returns the primary HTTP RPC URL:
+ *   Alchemy (if ALCHEMY_API_KEY set) → PublicNode free fallback.
+ * Exported so consumers outside this module can build their endpoint lists
+ * with the same priority ordering.
+ */
+export function getPrimaryHttpRpc(): string {
+  return alchemyHttp() ?? PUBLICNODE_HTTP;
 }
 
 /** Free public Solana WebSocket RPC endpoints — rotated on silent-drop reconnects. */
