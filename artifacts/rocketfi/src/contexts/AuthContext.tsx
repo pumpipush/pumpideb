@@ -1,6 +1,10 @@
 /**
  * AuthContext — manages social / email authentication (separate from wallet).
  *
+ * Google login is handled via Privy (privy.io). After Privy authenticates the
+ * user, this context exchanges the Privy access token for our own JWT via
+ * POST /api/auth/privy, then stores the JWT in localStorage as before.
+ *
  * A user can be in any of these states:
  *   - Not signed in (socialUser = null, wallet = null)
  *   - Signed in via Google/email (socialUser set, wallet may be null)
@@ -13,9 +17,11 @@ import {
   useContext,
   useState,
   useEffect,
+  useRef,
   useCallback,
   type ReactNode,
 } from "react";
+import { usePrivy } from "@privy-io/react-auth";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -31,8 +37,8 @@ export interface SocialUser {
 interface AuthContextValue {
   socialUser: SocialUser | null;
   isLoading: boolean;
-  /** Sign in with Google credential (ID token from GSI) */
-  signInWithGoogle: (credential: string) => Promise<void>;
+  /** Trigger Privy Google login overlay */
+  loginWithGoogle: () => void;
   /** Send 6-digit OTP to email */
   sendEmailOTP: (email: string) => Promise<void>;
   /** Verify OTP and sign in */
@@ -59,7 +65,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue>({
   socialUser: null,
   isLoading: true,
-  signInWithGoogle: async () => {},
+  loginWithGoogle: () => {},
   sendEmailOTP: async () => {},
   verifyEmailOTP: async () => {},
   signOut: () => {},
@@ -77,7 +83,20 @@ function apiUrl(path: string) {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [socialUser, setSocialUser] = useState<SocialUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading]   = useState(true);
+
+  // Privy hooks (AuthProvider is inside PrivyProvider in App.tsx)
+  const {
+    login: privyLogin,
+    logout: privyLogout,
+    authenticated,
+    user: privyUser,
+    getAccessToken,
+  } = usePrivy();
+
+  // Tracks which Privy user ID we've already exchanged for our JWT so we
+  // don't hit the backend on every re-render or token refresh.
+  const privyExchangedRef = useRef<string | null>(null);
 
   const storeToken = (token: string) => localStorage.setItem(STORAGE_KEY, token);
   const getToken   = ()             => localStorage.getItem(STORAGE_KEY);
@@ -112,6 +131,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setIsLoading(false));
   }, []);
 
+  // ── Privy → our JWT bridge ─────────────────────────────────────────────────
+  // When Privy authenticates a user (e.g. after Google login) and we don't
+  // already have our own session, exchange the Privy access token for our JWT.
+  useEffect(() => {
+    if (isLoading) return;                                  // wait for session restore
+    if (!authenticated || !privyUser) {
+      privyExchangedRef.current = null;                     // reset on logout
+      return;
+    }
+    if (socialUser) {
+      privyExchangedRef.current = privyUser.id;             // already have a session
+      return;
+    }
+    if (privyExchangedRef.current === privyUser.id) return; // already exchanged
+
+    privyExchangedRef.current = privyUser.id;
+
+    (async () => {
+      try {
+        const token = await getAccessToken();
+        if (!token) return;
+        const r = await fetch(apiUrl("/auth/privy"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          console.error("[auth] Privy exchange failed:", err);
+          privyExchangedRef.current = null;
+          return;
+        }
+        const data = await r.json();
+        handleAuthResponse({ ...data, authType: "google" });
+      } catch (e) {
+        console.error("[auth] Privy token exchange error:", e);
+        privyExchangedRef.current = null;
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authenticated, privyUser, socialUser, isLoading]);
+
   const handleAuthResponse = (data: {
     token: string;
     profile: {
@@ -135,20 +196,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const signInWithGoogle = useCallback(async (credential: string) => {
-    const r = await fetch(apiUrl("/auth/google"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ credential }),
-    });
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      throw new Error(err.error ?? "Google sign-in failed");
-    }
-    const data = await r.json();
-    handleAuthResponse({ ...data, authType: "google" });
-  }, []);
+  // ── Google via Privy ───────────────────────────────────────────────────────
+  const loginWithGoogle = useCallback(() => {
+    privyLogin({ loginMethods: ["google"] } as Parameters<typeof privyLogin>[0]);
+  }, [privyLogin]);
 
+  // ── Email OTP ──────────────────────────────────────────────────────────────
   const sendEmailOTP = useCallback(async (email: string) => {
     const r = await fetch(apiUrl("/auth/email/send"), {
       method: "POST",
@@ -175,13 +228,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     handleAuthResponse({ ...data, authType: "email" });
   }, []);
 
+  // ── Sign out ───────────────────────────────────────────────────────────────
   const signOut = useCallback(() => {
     clearToken();
     setSocialUser(null);
+    privyExchangedRef.current = null;
+    // Sign out from Privy (clears their session cookie / storage)
+    privyLogout().catch(() => {});
     // Fire-and-forget server logout
     fetch(apiUrl("/auth/logout"), { method: "POST" }).catch(() => {});
-  }, []);
+  }, [privyLogout]);
 
+  // ── Wallet linking ─────────────────────────────────────────────────────────
   const getWalletLinkChallenge = useCallback(async (walletAddress: string): Promise<{ nonce: string; message: string }> => {
     const headers = authHeaders();
     if (!headers.Authorization) throw new Error("Not signed in");
@@ -230,7 +288,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         socialUser,
         isLoading,
-        signInWithGoogle,
+        loginWithGoogle,
         sendEmailOTP,
         verifyEmailOTP,
         signOut,

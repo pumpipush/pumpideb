@@ -1,6 +1,7 @@
 /**
  * auth.ts — social & email authentication endpoints.
  *
+ * POST /api/auth/privy          Verify Privy access token (Google via Privy) → create/find profile → return JWT
  * POST /api/auth/google         Verify Google ID token → create/find profile → return JWT
  * POST /api/auth/email/send     Send 6-digit OTP to email
  * POST /api/auth/email/verify   Verify OTP → create/find profile → return JWT
@@ -10,6 +11,7 @@
 
 import { Router } from "express";
 import { OAuth2Client } from "google-auth-library";
+import { PrivyClient } from "@privy-io/server-auth";
 import { randomUUID } from "crypto";
 import { eq, or } from "drizzle-orm";
 import { db } from "@workspace/db";
@@ -89,6 +91,12 @@ const router = Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? "";
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID || undefined);
 
+// ── Privy client (lazy — only initialised if env vars are present) ─────────
+const privyClient =
+  process.env.PRIVY_APP_ID && process.env.PRIVY_APP_SECRET
+    ? new PrivyClient(process.env.PRIVY_APP_ID, process.env.PRIVY_APP_SECRET)
+    : null;
+
 function slugifyName(raw: string): string {
   return raw
     .toLowerCase()
@@ -112,6 +120,98 @@ async function uniqueUsername(base: string): Promise<string> {
   }
   return `user_${randomUUID().slice(0, 8)}`;
 }
+
+// ── POST /api/auth/privy ───────────────────────────────────────────────────
+// Verifies a Privy access token, finds or creates the user profile, and
+// returns our own JWT — keeping the rest of the auth system unchanged.
+
+router.post("/auth/privy", asyncWrap(async (req, res) => {
+  if (!privyClient) {
+    return void res.status(503).json({ error: "Privy auth not configured — PRIVY_APP_ID / PRIVY_APP_SECRET missing" });
+  }
+
+  const { token: privyToken } = req.body as { token?: string };
+  if (!privyToken) return void res.status(400).json({ error: "token required" });
+
+  // 1. Verify the Privy access token
+  let userId: string;
+  try {
+    const claims = await privyClient.verifyAuthToken(privyToken);
+    userId = claims.userId;
+  } catch (err) {
+    return void res.status(401).json({ error: "invalid Privy token", detail: String(err) });
+  }
+
+  // 2. Fetch full user record from Privy to extract Google account details
+  const privyUser = await privyClient.getUser(userId);
+  const googleAccount = privyUser.linkedAccounts.find(
+    (a): a is typeof a & { type: "google_oauth"; subject: string } => a.type === "google_oauth",
+  );
+  const emailAccount = privyUser.linkedAccounts.find(
+    (a): a is typeof a & { type: "email"; address: string } => a.type === "email",
+  );
+
+  const googleId  = (googleAccount as { subject?: string } | undefined)?.subject ?? null;
+  const email     = (googleAccount as { email?: string } | undefined)?.email
+                 ?? (emailAccount as { address?: string } | undefined)?.address
+                 ?? null;
+  const name      = (googleAccount as { name?: string } | undefined)?.name
+                 ?? email?.split("@")[0]
+                 ?? "user";
+  const picture   = (googleAccount as { picture?: string } | undefined)?.picture ?? null;
+
+  // 3. Find or create profile — same pattern as /api/auth/google
+  let profile;
+
+  if (googleId) {
+    const existing = await db
+      .select()
+      .from(profilesTable)
+      .where(eq(profilesTable.googleId, googleId))
+      .limit(1);
+    profile = existing[0];
+  }
+
+  if (!profile && email) {
+    const byEmail = await db
+      .select()
+      .from(profilesTable)
+      .where(eq(profilesTable.email, email.toLowerCase()))
+      .limit(1);
+
+    if (byEmail[0]) {
+      // Link Google to existing email-only profile
+      profile = (
+        await db
+          .update(profilesTable)
+          .set({ googleId: googleId ?? undefined, avatarUrl: byEmail[0].avatarUrl || picture || null })
+          .where(eq(profilesTable.address, byEmail[0].address))
+          .returning()
+      )[0];
+    }
+  }
+
+  if (!profile) {
+    const address  = randomUUID();
+    const username = await uniqueUsername(name);
+    profile = (
+      await db
+        .insert(profilesTable)
+        .values({
+          address,
+          username,
+          email:     email ? email.toLowerCase() : null,
+          googleId:  googleId ?? null,
+          avatarUrl: picture ?? null,
+          authType:  "google",
+        })
+        .returning()
+    )[0];
+  }
+
+  const jwt = signToken({ sub: profile.address, authType: "google" });
+  return void res.json({ token: jwt, profile });
+}));
 
 // ── POST /api/auth/google ──────────────────────────────────────────────────
 

@@ -27,3 +27,5 @@ channel = "stable-25_05"
 [userenv.shared]
 VITE_PUMP_FEE_RECIPIENT = "JBCqngc3TYcz3Rtv5Md3CZyw8X6AxLik7gswCCttRS5E"
 VITE_PLATFORM_FEE_RECIPIENT = "JBCqngc3TYcz3Rtv5Md3CZyw8X6AxLik7gswCCttRS5E"
+VITE_PRIVY_APP_ID = "cmsrnx7sf00op0cldlq18prrn"
+PRIVY_APP_ID = "cmsrnx7sf00op0cldlq18prrn"

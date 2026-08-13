@@ -2,24 +2,20 @@
  * AuthModal — pump.fun-style unified sign-in modal.
  *
  * Sign-in options:
- *   1. Google (via Google Identity Services)
- *   2. Apple / GitHub / X  (UI shown, marked "coming soon")
- *   3. Email OTP (fully functional — code sent via Resend or logged to console in dev)
- *   4. Connect wallet directly (Solflare, Phantom, more)
+ *   1. Google via Privy (privy.io handles the OAuth flow)
+ *   2. Email OTP (fully functional — code sent via Resend or logged to console in dev)
+ *   3. Connect wallet directly (all installed wallets detected automatically)
  *
  * Users who sign in via Google/email can browse and create a profile without
  * ever connecting a wallet. Wallet is only required for on-chain actions (trading).
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { X, ArrowRight, Loader2 } from "lucide-react";
-import { SiApple, SiGithub, SiX } from "react-icons/si";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWallet } from "@/contexts/WalletContext";
 import { isWalletInstalled, isMobile, WALLET_DESCRIPTORS } from "@/lib/solana";
-import { cn } from "@/lib/utils";
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 const LAST_WALLET_KEY = "pumpi_last_wallet";
 
 /* ── types ──────────────────────────────────────────────────────────────── */
@@ -35,88 +31,29 @@ type Step = "main" | "otp";
 /* ── component ───────────────────────────────────────────────────────────── */
 
 export function AuthModal({ open, onOpenChange }: AuthModalProps) {
-  const { signInWithGoogle, sendEmailOTP, verifyEmailOTP } = useAuth();
+  const { loginWithGoogle, sendEmailOTP, verifyEmailOTP, socialUser } = useAuth();
   const { connectWallet } = useWallet();
 
-  const [step, setStep]           = useState<Step>("main");
-  const [email, setEmail]         = useState("");
-  const [otp, setOtp]             = useState("");
-  const [loading, setLoading]     = useState<string | null>(null); // which button is loading
-  const [error, setError]         = useState<string | null>(null);
+  const [step, setStep]       = useState<Step>("main");
+  const [email, setEmail]     = useState("");
+  const [otp, setOtp]         = useState("");
+  const [loading, setLoading] = useState<string | null>(null);
+  const [error, setError]     = useState<string | null>(null);
   const mobile = isMobile();
-  const gsiContainerRef           = useRef<HTMLDivElement>(null);
-  const gsiScriptAdded            = useRef(false); // guards script injection only (not button render)
 
   const recentWallet = localStorage.getItem(LAST_WALLET_KEY);
 
   function close() { onOpenChange(false); }
   function reset() { setStep("main"); setEmail(""); setOtp(""); setError(null); setLoading(null); }
 
-  // ── Google Identity Services ──────────────────────────────────────────────
-
-  const handleGoogleCredential = useCallback(async (credential: string) => {
-    setLoading("google");
-    setError(null);
-    try {
-      await signInWithGoogle(credential);
+  // Auto-close when Privy auth completes and AuthContext sets socialUser
+  useEffect(() => {
+    if (socialUser && open) {
       reset();
       close();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Google sign-in failed");
-    } finally {
-      setLoading(null);
     }
-  }, [signInWithGoogle]);
-
-  useEffect(() => {
-    if (!open || !GOOGLE_CLIENT_ID) return;
-
-    // Re-render the button every time the modal opens so it always appears
-    // in the (possibly new) DOM container.
-    const renderGSIButton = () => {
-      if (!window.google || !gsiContainerRef.current) return;
-      gsiContainerRef.current.innerHTML = ""; // clear stale button from previous open
-      window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: (r: { credential: string }) => handleGoogleCredential(r.credential),
-        ux_mode: "popup",
-        auto_select: false,
-      });
-      window.google.accounts.id.renderButton(gsiContainerRef.current, {
-        type: "standard",
-        theme: "outline",
-        size: "large",
-        text: "continue_with",
-      });
-    };
-
-    if (window.google) {
-      renderGSIButton();
-    } else if (!gsiScriptAdded.current) {
-      // Inject the GSI script only once; renderGSIButton will be called via onload.
-      gsiScriptAdded.current = true;
-      const existing = document.querySelector('script[src*="accounts.google.com/gsi"]');
-      if (!existing) {
-        const s = document.createElement("script");
-        s.src = "https://accounts.google.com/gsi/client";
-        s.async = true;
-        s.defer = true;
-        s.onload = renderGSIButton;
-        document.head.appendChild(s);
-      } else {
-        existing.addEventListener("load", renderGSIButton);
-      }
-    }
-  }, [open, handleGoogleCredential]);
-
-  const handleGoogleClick = () => {
-    if (!GOOGLE_CLIENT_ID) {
-      setError("Google sign-in is not configured yet.");
-      return;
-    }
-    const inner = gsiContainerRef.current?.querySelector("div[role='button']") as HTMLElement | null;
-    inner?.click();
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socialUser, open]);
 
   // ── Email OTP ─────────────────────────────────────────────────────────────
 
@@ -152,7 +89,6 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
   const handleWalletConnect = async (descriptorName: string) => {
     const descriptor = WALLET_DESCRIPTORS.find(d => d.name === descriptorName);
     if (!descriptor) return;
-    // On mobile: redirect to wallet deep link so the wallet app can open the dApp.
     if (mobile) {
       const dappUrl = encodeURIComponent(window.location.href);
       window.location.href = descriptor.deepLinkBase
@@ -176,7 +112,6 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
 
   if (!open) return null;
 
-  // Show all wallets — installed ones detected automatically
   const allWallets = WALLET_DESCRIPTORS;
 
   return (
@@ -200,13 +135,6 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
               <X className="w-3.5 h-3.5" />
             </button>
 
-            {/* ── Hidden GSI container (invisible, used for click forwarding) ── */}
-            <div
-              ref={gsiContainerRef}
-              className="absolute opacity-0 pointer-events-none top-0 left-0"
-              aria-hidden
-            />
-
             <div className="px-5 pt-6 pb-5 flex flex-col gap-4">
 
               {/* Header */}
@@ -226,25 +154,18 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
 
               {step === "main" ? (
                 <>
-                  {/* ── Google ── */}
+                  {/* ── Google via Privy ── */}
                   <button
-                    onClick={handleGoogleClick}
-                    disabled={loading === "google"}
-                    className="w-full h-11 rounded-xl bg-white hover:bg-white/90 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 font-medium text-[13.5px] text-[#1f1f1f] shadow-sm disabled:opacity-60"
+                    onClick={() => loginWithGoogle()}
+                    className="w-full h-11 rounded-xl bg-white hover:bg-white/90 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 font-medium text-[13.5px] text-[#1f1f1f] shadow-sm"
                   >
-                    {loading === "google" ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
-                    ) : (
-                      <img
-                        src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-                        alt="Google"
-                        className="w-4.5 h-4.5"
-                        style={{ width: 18, height: 18 }}
-                      />
-                    )}
+                    <img
+                      src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                      alt="Google"
+                      className="w-4 h-4"
+                    />
                     Continue with Google
                   </button>
-
 
                   {/* ── Email ── */}
                   <div className="relative flex items-center">
@@ -274,13 +195,13 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                     <div className="flex-1 h-px bg-white/[0.07]" />
                   </div>
 
-                  {/* ── Wallet list — all wallets, installed ones detected automatically ── */}
+                  {/* ── Wallet list — installed ones detected automatically ── */}
                   <div className="flex flex-col gap-1">
                     {allWallets.map((d) => {
-                      const isRecent    = recentWallet === d.name;
-                      const isLoading   = loading === `wallet_${d.name}`;
-                      const installed   = mobile || isWalletInstalled(d);
-                      const imgSrc      = `/wallets/${d.name.toLowerCase()}.jpeg`;
+                      const isRecent  = recentWallet === d.name;
+                      const isLoading = loading === `wallet_${d.name}`;
+                      const installed = mobile || isWalletInstalled(d);
+                      const imgSrc    = `/wallets/${d.name.toLowerCase()}.jpeg`;
                       return (
                         <button
                           key={d.name}
@@ -332,17 +253,19 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
 
                   <button
                     onClick={handleOTPVerify}
-                    disabled={loading === "otp" || otp.length < 6}
-                    className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-[13.5px] font-semibold flex items-center justify-center gap-2 hover:bg-primary/90 active:scale-[0.98] transition-all disabled:opacity-50"
+                    disabled={otp.length < 6 || loading === "otp"}
+                    className="w-full h-11 rounded-xl bg-primary hover:bg-primary/90 active:scale-[0.98] disabled:opacity-40 transition-all flex items-center justify-center gap-2 text-[13.5px] font-semibold text-black"
                   >
-                    {loading === "otp" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Verify Code"}
+                    {loading === "otp"
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : "Verify code"}
                   </button>
 
                   <button
                     onClick={() => { setStep("main"); setOtp(""); setError(null); }}
-                    className="text-[12px] text-white/30 hover:text-white/60 transition-colors text-center"
+                    className="text-[12px] text-white/40 hover:text-white/70 transition-colors text-center"
                   >
-                    ← Back · Resend code
+                    ← Back
                   </button>
                 </>
               )}
@@ -363,7 +286,6 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
           </div>
         </div>
       </div>
-
     </>
   );
 }
