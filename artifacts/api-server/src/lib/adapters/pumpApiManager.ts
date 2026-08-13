@@ -28,11 +28,22 @@ import { logger as rootLogger } from "../logger.js";
 
 const managerLog = rootLogger.child({ component: "PumpStreamManager" });
 
-/** Seconds to wait after pumpapi.io disconnect before activating chain fallback. */
+/** Seconds to wait after a normal pumpapi.io disconnect before activating chain fallback. */
 const FALLBACK_DELAY_MS = 30_000;
 
 /** Shorter delay on the initial cold-start (pumpapi.io hasn't connected yet). */
 const COLD_START_DELAY_MS = 15_000;
+
+/**
+ * Delay used when the data-staleness watchdog triggered the disconnect.
+ * Must be shorter than FALLBACK_DELAY_MS so the fallback fires BEFORE
+ * pumpapi.io reconnects (reconnect delay starts at 5 s and doubles).
+ * 2 s is enough: the watchdog calls onDataStale → we schedule the fallback →
+ * then pumpapi closes → reconnects after 5 s. The fallback fires at 2 s,
+ * well before the reconnect at 5 s, so _onConnected sees a running fallback
+ * and leaves it running instead of cancelling a pending timer.
+ */
+const STALE_FALLBACK_DELAY_MS = 2_000;
 
 // ── Slack alert helper ─────────────────────────────────────────────────────────
 
@@ -76,6 +87,16 @@ class PumpStreamManager {
 
   private _everConnected   = false;
 
+  /**
+   * Set to true when the data-staleness watchdog fires on the active pumpapi
+   * connection. Cleared once the chain fallback is actually running (or when
+   * pumpapi delivers real data again).  Used to prevent _onConnected from
+   * cancelling a fallback that was scheduled due to a stale connection — which
+   * would create an infinite loop where pumpapi always reconnects before the
+   * fallback timer fires.
+   */
+  private _pendingStaleFallback = false;
+
   /** Wall-clock time when the chain fallback was last activated (for duration reporting). */
   private _fallbackActivatedAt: number | null = null;
 
@@ -83,6 +104,7 @@ class PumpStreamManager {
     this._pumpApi = new PumpApiAdapter({
       onConnected:    () => this._onConnected(),
       onDisconnected: () => this._onDisconnected(),
+      onDataStale:    () => this._onDataStale(),
     });
   }
 
@@ -95,11 +117,41 @@ class PumpStreamManager {
 
   // ── Connection callbacks ────────────────────────────────────────────────────
 
+  private _onDataStale(): void {
+    // Data-staleness watchdog fired — pumpapi.io is connected but delivering no
+    // trade data. Schedule chain fallback immediately (2 s) so it activates
+    // BEFORE pumpapi.io reconnects (~5 s). Without this, the normal 30 s
+    // fallback is always cancelled by the fast reconnect, leaving the app with
+    // no live data indefinitely.
+    this._pendingStaleFallback = true;
+    managerLog.warn(
+      { delayMs: STALE_FALLBACK_DELAY_MS },
+      "pumpApiManager: data stale — scheduling immediate chain fallback"
+    );
+    this._scheduleFallback(STALE_FALLBACK_DELAY_MS);
+  }
+
   private _onConnected(): void {
     this._everConnected = true;
+
+    // If a stale-triggered fallback is pending (timer scheduled but not yet
+    // fired), do NOT cancel it. pumpapi.io has reconnected but we don't yet
+    // know if it will deliver real data. The fallback will start in ~2 s; if
+    // pumpapi.io is actually healthy this time, _onConnected will be called
+    // again with a running _chainFallback and will stop it normally.
+    if (this._pendingStaleFallback) {
+      managerLog.info(
+        "pumpApiManager: pumpapi.io reconnected after stale disconnect — keeping fallback scheduled"
+      );
+      // Do not cancel the fallback timer. Let it fire and start the chain
+      // adapters. They will stop once pumpapi.io proves it is delivering data
+      // (next _onConnected call after the fallback is running will stop them).
+      return;
+    }
+
     managerLog.info("pumpApiManager: pumpapi.io connected — cancelling chain fallback");
 
-    // Cancel any pending fallback timer.
+    // Cancel any pending fallback timer (normal reconnect after network blip).
     if (this._fallbackTimer !== null) {
       clearTimeout(this._fallbackTimer);
       this._fallbackTimer = null;
@@ -111,6 +163,10 @@ class PumpStreamManager {
         ? Math.round((Date.now() - this._fallbackActivatedAt) / 1_000)
         : null;
       this._fallbackActivatedAt = null;
+
+      // pumpapi.io is back and this _onConnected was not skipped (i.e. the
+      // previous stale fallback has already started). Clear the stale flag now.
+      this._pendingStaleFallback = false;
 
       managerLog.info(
         { durationSec },
@@ -145,6 +201,8 @@ class PumpStreamManager {
     this._fallbackTimer = setTimeout(() => {
       this._fallbackTimer = null;
       if (this._chainFallback !== null) return; // already running
+      // Fallback is now activating — the stale-pending flag moves to "running".
+      this._pendingStaleFallback = false;
       this._fallbackActivatedAt = Date.now();
       managerLog.warn("pumpApiManager: activating chain RPC fallback adapters");
       const pumpFun   = new PumpFunChainIndexer();

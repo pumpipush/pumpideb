@@ -978,6 +978,13 @@ export class PumpApiAdapter {
   /** Optional callbacks for health-based fallback coordination. */
   private readonly _onConnected?:    () => void;
   private readonly _onDisconnected?: () => void;
+  /**
+   * Called the moment the data-staleness watchdog fires — BEFORE the WebSocket
+   * is closed. Lets the manager react immediately (e.g. start chain fallback)
+   * rather than waiting for the close event which may arrive after pumpapi.io
+   * has already reconnected, causing the fallback to be cancelled prematurely.
+   */
+  private readonly _onDataStale?:    () => void;
 
   /**
    * Raw-silence watchdog window — defaults to PUMPAPI_WATCHDOG_MS.
@@ -1004,6 +1011,12 @@ export class PumpApiAdapter {
   constructor(opts?: {
     onConnected?:    () => void;
     onDisconnected?: () => void;
+    /**
+     * Called when the data-staleness watchdog fires (pumpapi.io alive but no
+     * trade data). Fires before the WebSocket close so the manager can schedule
+     * the chain fallback before pumpapi.io reconnects and cancels it.
+     */
+    onDataStale?:    () => void;
     /**
      * Override raw-silence watchdog window (ms). Default: PUMPAPI_WATCHDOG_MS (60 000).
      *
@@ -1035,6 +1048,7 @@ export class PumpApiAdapter {
   }) {
     this._onConnected    = opts?.onConnected;
     this._onDisconnected = opts?.onDisconnected;
+    this._onDataStale    = opts?.onDataStale;
     this._watchdogMs     = opts?.watchdogMs  ?? PUMPAPI_WATCHDOG_MS;
     this._dataStaleMs    = opts?.dataStaleMs ?? PUMPAPI_DATA_STALE_MS;
     this._wsFactory      = opts?.wsFactory   ?? ((url) => new WebSocket(url));
@@ -1130,6 +1144,10 @@ export class PumpApiAdapter {
         { dataStaleMs: this._dataStaleMs },
         "pumpapi: data-staleness watchdog fired — no trade events received; forcing reconnect"
       );
+      // Notify manager BEFORE closing so it can schedule chain fallback now.
+      // Without this, pumpapi.io reconnects in ~5 s and cancels the 30 s
+      // fallback timer before it has a chance to fire.
+      this._onDataStale?.();
       ws.close(); // triggers close handler → _onDisconnected → reconnect loop
     }, this._dataStaleMs);
   }
@@ -1195,8 +1213,9 @@ export class PumpApiAdapter {
         //
         // Placed BEFORE dedup: a duplicate event still proves data is flowing.
         const isRealDataAction =
-          (pool === "pump"     && (action === "create" || action === "buy" || action === "sell")) ||
-          (pool === "pump-amm" && (action === "buy"    || action === "sell"));
+          (pool === "pump"              && (action === "create" || action === "buy" || action === "sell")) ||
+          (pool === "pump-amm"          && (action === "buy"    || action === "sell"))         ||
+          (pool === "raydium-launchpad" && (action === "create" || action === "buy" || action === "sell"));
         if (isRealDataAction) {
           this._armDataStaleWatchdog(ws);
         }
