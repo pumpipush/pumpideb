@@ -33,14 +33,45 @@ const FALLBACK_DELAY_MS = 30_000;
 /** Shorter delay on the initial cold-start (pumpapi.io hasn't connected yet). */
 const COLD_START_DELAY_MS = 15_000;
 
+// ── Slack alert helper ─────────────────────────────────────────────────────────
+
+/**
+ * Post a message to the Slack webhook configured in SLACK_WEBHOOK_URL.
+ * Silently no-ops when the env var is absent — alerts are opt-in.
+ * Logs a warning if the webhook is configured but the POST fails.
+ */
+async function slackAlert(text: string): Promise<void> {
+  const url = process.env["SLACK_WEBHOOK_URL"];
+  if (!url) return;
+  try {
+    const res = await fetch(url, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ text }),
+    });
+    if (!res.ok) {
+      managerLog.warn(
+        { status: res.status, statusText: res.statusText },
+        "pumpApiManager: Slack webhook returned non-OK status"
+      );
+    }
+  } catch (err) {
+    managerLog.warn({ err }, "pumpApiManager: failed to post Slack alert");
+  }
+}
+
+// ── PumpStreamManager ──────────────────────────────────────────────────────────
+
 class PumpStreamManager {
   private readonly _pumpApi: PumpApiAdapter;
   private _chainFallback: {
     pumpFun:  PumpFunChainIndexer;
     pumpSwap: PumpSwapIndexer;
   } | null = null;
-  private _fallbackTimer:  ReturnType<typeof setTimeout> | null = null;
-  private _everConnected = false;
+  private _fallbackTimer:    ReturnType<typeof setTimeout> | null = null;
+  private _everConnected   = false;
+  /** Wall-clock time when the chain fallback was last activated (for duration reporting). */
+  private _fallbackActivatedAt: number | null = null;
 
   constructor() {
     this._pumpApi = new PumpApiAdapter({
@@ -70,10 +101,24 @@ class PumpStreamManager {
 
     // Stop chain fallback if it started during a downtime window.
     if (this._chainFallback !== null) {
-      managerLog.info("pumpApiManager: stopping chain fallback adapters");
+      const durationSec = this._fallbackActivatedAt !== null
+        ? Math.round((Date.now() - this._fallbackActivatedAt) / 1_000)
+        : null;
+      this._fallbackActivatedAt = null;
+
+      managerLog.info(
+        { durationSec },
+        "pumpApiManager: stopping chain fallback adapters — pumpapi.io recovered"
+      );
       this._chainFallback.pumpFun.stop();
       this._chainFallback.pumpSwap.stop();
       this._chainFallback = null;
+
+      const durationStr = durationSec !== null ? ` after ${durationSec}s` : "";
+      void slackAlert(
+        `✅ *pumpapi.io recovered${durationStr}* — chain-RPC fallback stopped.\n` +
+        `Alchemy CU spend is back to baseline.`
+      );
     }
   }
 
@@ -85,19 +130,30 @@ class PumpStreamManager {
 
   private _scheduleFallback(delay: number): void {
     if (this._fallbackTimer !== null) return; // already scheduled
+    const coldStart = !this._everConnected;
     managerLog.warn(
-      { delayMs: delay, coldStart: !this._everConnected },
+      { delayMs: delay, coldStart },
       "pumpApiManager: scheduling chain fallback"
     );
     this._fallbackTimer = setTimeout(() => {
       this._fallbackTimer = null;
       if (this._chainFallback !== null) return; // already running
+      this._fallbackActivatedAt = Date.now();
       managerLog.warn("pumpApiManager: activating chain RPC fallback adapters");
       const pumpFun  = new PumpFunChainIndexer();
       const pumpSwap = new PumpSwapIndexer();
       pumpFun.start();
       pumpSwap.start();
       this._chainFallback = { pumpFun, pumpSwap };
+
+      const reason = coldStart
+        ? "pumpapi.io did not connect within the startup window"
+        : "pumpapi.io has been disconnected for 30+ seconds";
+      void slackAlert(
+        `🔴 *pumpapi.io fallback activated* — ${reason}.\n` +
+        `Chain-RPC adapters (PublicNode → Alchemy) are now indexing pump.fun + PumpSwap.\n` +
+        `Alchemy CU spend is elevated until pumpapi.io reconnects.`
+      );
     }, delay);
   }
 }
