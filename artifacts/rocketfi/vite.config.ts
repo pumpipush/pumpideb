@@ -127,6 +127,10 @@ export default defineConfig(async ({ command, mode }) => {
           '..',
           'attached_assets',
         ),
+        // @stripe/stripe-js is a transitive dep of @privy-io/react-auth (via
+        // @stripe/crypto). We don't use Privy embedded wallets so stub it out
+        // to avoid a "could not resolve" error during Vite dep-optimisation.
+        '@stripe/stripe-js': path.resolve(import.meta.dirname, 'src/lib/stripe-stub.ts'),
       },
       dedupe: ['react', 'react-dom'],
     },
