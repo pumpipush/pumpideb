@@ -102,11 +102,14 @@ export function Sidebar() {
 
 export function BottomNav() {
   const [location] = useLocation();
-  const { wallet } = useWallet();
+  const { wallet, openWalletModal } = useWallet();
 
   const { data: profile } = useGetProfile(wallet ?? "", {
     query: { enabled: !!wallet, retry: false, queryKey: getGetProfileQueryKey(wallet ?? "") },
   });
+
+  const profileHref = wallet ? `/profile/${profile?.username ?? wallet}` : null;
+  const isProfileActive = !!wallet && location === `/profile/${profile?.username ?? wallet}`;
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border/60 flex flex-col safe-area-pb">
@@ -133,34 +136,38 @@ export function BottomNav() {
           </div>
         </Link>
 
-        {/* Profile tab (mobile) — shows avatar when connected, generic icon when not */}
-        <Link
-          href={wallet ? `/profile/${profile?.username ?? wallet}` : "/app"}
-          className={cn(
-            "flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-wide transition-all duration-200",
-            wallet && location === `/profile/${profile?.username ?? wallet}` ? "text-primary" : "text-muted-foreground"
-          )}
-        >
-          {wallet && profile?.avatarUrl ? (
-            <img
-              src={profile.avatarUrl}
-              alt="avatar"
-              className={cn(
-                "w-5 h-5 rounded-full object-cover border",
-                location === `/profile/${profile?.username ?? wallet}` ? "border-primary" : "border-border"
-              )}
-            />
-          ) : wallet ? (
-            <TokenAvatar
-              symbol={profile?.username || wallet.slice(0, 4)}
-              size={20}
-              shape="circle"
-            />
-          ) : (
+        {/* Profile tab — navigates to profile when connected, opens wallet modal when not */}
+        {profileHref ? (
+          <Link
+            href={profileHref}
+            className={cn(
+              "flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-wide transition-all duration-200",
+              isProfileActive ? "text-primary" : "text-muted-foreground"
+            )}
+          >
+            {profile?.avatarUrl ? (
+              <img
+                src={profile.avatarUrl}
+                alt="avatar"
+                className={cn(
+                  "w-5 h-5 rounded-full object-cover border",
+                  isProfileActive ? "border-primary" : "border-border"
+                )}
+              />
+            ) : (
+              <TokenAvatar symbol={profile?.username || wallet!.slice(0, 4)} size={20} shape="circle" />
+            )}
+            Profile
+          </Link>
+        ) : (
+          <button
+            onClick={openWalletModal}
+            className="flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-wide text-muted-foreground transition-all duration-200"
+          >
             <UserCircle2 className="w-5 h-5" />
-          )}
-          Profile
-        </Link>
+            Profile
+          </button>
+        )}
       </div>
     </div>
   );
