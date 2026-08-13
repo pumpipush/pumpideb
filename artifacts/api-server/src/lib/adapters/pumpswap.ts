@@ -35,7 +35,7 @@ const SKIP_MINTS = new Set([
   "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
 ]);
 
-class PumpSwapIndexer extends SolanaRpcIndexer {
+export class PumpSwapIndexer extends SolanaRpcIndexer {
   /**
    * Rate limiter — PumpSwap generates 100-200 events/second.
    * Each getTransaction = 100 Compute Units on Alchemy.

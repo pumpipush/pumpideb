@@ -254,9 +254,7 @@ async function fetchMetaFromUri(uri: string): Promise<UriMeta | null> {
 
 // ── Indexer ────────────────────────────────────────────────────────────────────
 
-class PumpFunChainIndexer extends SolanaRpcIndexer {
-  private readonly _pumpApiAdapter = new PumpApiAdapter();
-
+export class PumpFunChainIndexer extends SolanaRpcIndexer {
   /**
    * Per-mint write queue — serializes reserve updates for the same mint when
    * using the constant-product fallback path (i.e. when TradeEvent log was
@@ -282,14 +280,6 @@ class PumpFunChainIndexer extends SolanaRpcIndexer {
 
   constructor() {
     super({ programId: PUMP_PROGRAM, adapterName: "pump_fun" });
-  }
-
-  protected override onAllRpcsExhausted(): void {
-    this._pumpApiAdapter.start();
-  }
-
-  protected override onRpcRecovered(): void {
-    this._pumpApiAdapter.stop();
   }
 
   protected override shouldProcess(logs: string[]): boolean {
@@ -915,84 +905,70 @@ function startZeroHealJob(): void {
   }, 30_000); // 30 s after start — let the indexer warm up first
 }
 
-// ── PumpApiAdapter — last-resort fallback when all Solana RPC WSS endpoints are silent ──
+// ── PumpApiAdapter — exported for use by pumpApiManager ──────────────────────────
 
-/**
- * Connects to the pumpapi.io managed WebSocket stream (wss://stream.pumpapi.io/).
- * This service re-streams pump.fun trade and token-creation events without
- * requiring callers to run their own Solana RPC subscription.
- *
- * Used ONLY as a last-resort fallback after PumpFunChainIndexer exhausts all
- * its Solana RPC WSS endpoints.
- *
- * pumpapi.io stream event schema:
- *   action           — "buy" | "sell" | "create"
- *   pool             — "pump" for bonding-curve; may also be "pump-swap", "raydium", etc.
- *   signature        — Solana tx signature (one tx may emit multiple events)
- *   mint             — token mint address
- *   txSigner         — trader/creator public key
- *   quoteAmount      — SOL amount in decimal SOL (NOT lamports); multiply × 1e9 for lamports
- *   baseAmount       — token amount in decimal display units (6 dp); multiply × 1e6 for base
- *   vQuoteInBondingCurve — virtual SOL reserves (decimal SOL); multiply × 1e9 for lamports
- *   vBaseInBondingCurve  — virtual token reserves (decimal display units); × 1e6 for base
- *   timestamp        — unix timestamp in seconds
- *   name / symbol / uri — creation-only fields
- *
- * Events are deduped by (signature + mint) so no duplicate writes appear if
- * the chain RPC recovers while both sources briefly overlap, AND so that
- * multiple distinct events sharing the same signature (different mints) are
- * all processed correctly.
- */
-const PUMPAPI_WSS = "wss://stream.pumpapi.io/";
+export const PUMPAPI_WSS = "wss://stream.pumpapi.io/";
 
 /** Maximum number of event keys kept in the dedup set (oldest evicted first). */
 const DEDUP_MAX = 20_000;
 
-const pumpApiLog = rootLogger.child({ adapter: "pump_fun_fallback" });
+const pumpApiLog = rootLogger.child({ adapter: "pumpapi_primary" });
 
 /**
- * pumpapi.io stream event shape.
- * Only pump.fun bonding-curve events are processed (pool === "pump").
- * quoteAmount and virtual reserves arrive as decimal SOL; baseAmount in decimal tokens (6 dp).
+ * pumpapi.io stream event shape (verified against live stream 2026-08-13).
+ * Fields tokenAmount / vTokensInBondingCurve / vQuoteInBondingCurve match the
+ * actual wire format — older field names baseAmount / vBaseInBondingCurve were wrong.
  */
-interface PumpApiEvent {
-  action?:     string;  // "buy" | "sell" | "create"
-  pool?:       string;  // "pump" = bonding curve; filter out others
-  signature?:  string;
-  mint?:       string;
-  txSigner?:   string;  // trader / creator public key
-  // Amounts in decimal display units (not raw lamports / base-units)
+export interface PumpApiEvent {
+  action?:    string;  // "buy" | "sell" | "create"
+  pool?:      string;  // "pump" = bonding curve; "pump-amm" = PumpSwap
+  signature?: string;
+  mint?:      string;
+  txSigner?:  string;  // fee payer / tx initiator
+  // Per-trade amounts — decimal display units (6 dp) / decimal SOL
+  tokenAmount?: number; // tokens received/paid (decimal); × 1e6 → base units
   quoteAmount?: number; // SOL paid/received (decimal); × 1e9 → lamports
-  baseAmount?:  number; // token received/paid (decimal, 6 dp); × 1e6 → base units
-  // Virtual reserves post-trade (decimal display units)
-  vQuoteInBondingCurve?: number; // virtual SOL reserves (decimal); × 1e9 → lamports
-  vBaseInBondingCurve?:  number; // virtual token reserves (decimal); × 1e6 → base units
-  timestamp?:  number;  // unix timestamp in seconds
-  // Creation-only
+  // Create-only: amount the creator bought at launch
+  initialBuy?: number; // tokens bought at create time (decimal display units)
+  // Bonding-curve virtual reserves post-event (decimal display units)
+  vTokensInBondingCurve?: number; // virtual token reserves; × 1e6 → base units
+  vQuoteInBondingCurve?:  number; // virtual SOL reserves; × 1e9 → lamports
+  // Pre-computed market data
+  price?:          number; // SOL/token — matches our priceEth storage convention
+  marketCapQuote?: number; // market cap in SOL; × 1e9 → lamports for marketCapEth
+  timestamp?:      number; // unix timestamp in seconds (≥1e12 = already ms)
+  // Metadata (present on all event types)
   name?:   string;
   symbol?: string;
   uri?:    string;
+  // Trader breakdown (first entry is the actual user wallet for multi-hop txs)
+  breakdown?: Array<{ action?: string; trader?: string; tokenAmount?: number; quoteAmount?: number }>;
 }
 
-class PumpApiAdapter {
+export class PumpApiAdapter {
   private _ws:     WebSocket | null = null;
   private _active  = false;
   private _delay   = 5_000;
   private readonly _maxDelay = 120_000;
   private _keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
+  /** Optional callbacks for health-based fallback coordination. */
+  private readonly _onConnected?:    () => void;
+  private readonly _onDisconnected?: () => void;
+
+  constructor(opts?: { onConnected?: () => void; onDisconnected?: () => void }) {
+    this._onConnected    = opts?.onConnected;
+    this._onDisconnected = opts?.onDisconnected;
+  }
+
   /**
-   * Capped dedup set keyed by `signature`.
+   * Capped dedup set keyed by `signature + "|" + action`.
    *
-   * The `trades` table enforces a globally-unique constraint on `tx_hash`, so
-   * at most one row can be stored per Solana transaction signature regardless of
-   * how many events the pumpapi.io stream emits for that tx. Deduplicating at
-   * the signature level matches the DB model exactly: the first event processed
-   * for a given signature wins, and subsequent events (if any) are silently
-   * dropped — consistent with the chain-RPC path's own `onConflictDoNothing`.
-   *
-   * When the chain RPC recovers and both sources briefly overlap, this set
-   * prevents the fallback from re-inserting rows already written by the chain.
+   * Using signature+action (not just signature) allows a single transaction to
+   * emit both a "create" event and a "buy" event (initial buy at launch) without
+   * the second being dropped by the dedup filter. The DB's onConflictDoNothing
+   * on tx_hash prevents duplicate trade rows if the same tx is also seen by a
+   * fallback chain-RPC adapter.
    */
   private readonly _seen:      Set<string> = new Set();
   private readonly _seenOrder: string[]    = [];
@@ -1011,14 +987,14 @@ class PumpApiAdapter {
   start(): void {
     if (this._active) return;
     this._active = true;
-    pumpApiLog.info({ wss: PUMPAPI_WSS }, "pump_fun_fallback: starting pumpapi.io adapter");
+    pumpApiLog.info({ wss: PUMPAPI_WSS }, "pumpapi: starting primary stream");
     this._connect();
   }
 
   stop(): void {
     if (!this._active) return;
     this._active = false;
-    pumpApiLog.info("pump_fun_fallback: stopping pumpapi.io adapter");
+    pumpApiLog.info("pumpapi: stopping stream");
     if (this._keepaliveTimer !== null) {
       clearInterval(this._keepaliveTimer);
       this._keepaliveTimer = null;
@@ -1037,7 +1013,8 @@ class PumpApiAdapter {
 
       ws.addEventListener("open", () => {
         this._delay = 5_000;
-        pumpApiLog.info({ wss: PUMPAPI_WSS }, "pump_fun_fallback: connected");
+        pumpApiLog.info({ wss: PUMPAPI_WSS }, "pumpapi: connected");
+        this._onConnected?.();
 
         // Keepalive ping every 20 s to prevent silent drops.
         this._keepaliveTimer = setInterval(() => {
@@ -1054,30 +1031,41 @@ class PumpApiAdapter {
         } catch { return; }
 
         const action    = (msg.action ?? "").toLowerCase();
+        const pool      = msg.pool ?? "";
         const signature = msg.signature;
         const mint      = msg.mint;
 
-        // Only process bonding-curve events (pool === "pump").
-        // Other pools (pump-swap, raydium, meteora, …) would produce wrong AMM maths.
-        if (msg.pool && msg.pool !== "pump") return;
+        // Only process pump.fun bonding-curve and PumpSwap (pump-amm) events.
+        // raydium-launchpad, meteora-*, etc. are handled by their own adapters.
+        if (pool !== "pump" && pool !== "pump-amm") return;
         if (!signature || !mint) return;
 
-        // Dedup by signature — matches the DB's globally-unique tx_hash constraint.
-        if (!this._trackSeen(signature)) return;
+        // Dedup by (signature + action) — allows the same tx to emit both a
+        // "create" and a "buy" event (initial buy at launch) without dropping one.
+        const dedupKey = `${signature}|${action}`;
+        if (!this._trackSeen(dedupKey)) return;
 
-        if (action === "create") {
-          void this._handleCreate(msg).catch((err) =>
-            pumpApiLog.error({ err, signature }, "pump_fun_fallback: error in handleCreate")
-          );
-        } else if (action === "buy" || action === "sell") {
-          void this._handleTrade(msg, action === "buy").catch((err) =>
-            pumpApiLog.error({ err, signature }, "pump_fun_fallback: error in handleTrade")
-          );
+        if (pool === "pump") {
+          if (action === "create") {
+            void this._handleCreate(msg).catch((err) =>
+              pumpApiLog.error({ err, signature }, "pumpapi: error in pump create")
+            );
+          } else if (action === "buy" || action === "sell") {
+            void this._handleTrade(msg, action === "buy").catch((err) =>
+              pumpApiLog.error({ err, signature }, "pumpapi: error in pump trade")
+            );
+          }
+        } else if (pool === "pump-amm") {
+          if (action === "buy" || action === "sell") {
+            void this._handlePumpAmmTrade(msg, action === "buy").catch((err) =>
+              pumpApiLog.error({ err, signature }, "pumpapi: error in pump-amm trade")
+            );
+          }
         }
       });
 
       ws.addEventListener("error", (err) => {
-        pumpApiLog.warn({ err: String(err) }, "pump_fun_fallback: WebSocket error");
+        pumpApiLog.warn({ err: String(err) }, "pumpapi: WebSocket error");
       });
 
       ws.addEventListener("close", () => {
@@ -1088,14 +1076,16 @@ class PumpApiAdapter {
         if (!this._active) return; // stopped intentionally
         pumpApiLog.warn(
           { retryMs: this._delay },
-          "pump_fun_fallback: disconnected — reconnecting"
+          "pumpapi: disconnected — reconnecting"
         );
+        this._onDisconnected?.();
         setTimeout(() => this._connect(), this._delay);
         this._delay = Math.min(this._delay * 2, this._maxDelay);
       });
     } catch (err) {
-      pumpApiLog.error({ err }, "pump_fun_fallback: failed to open WebSocket");
+      pumpApiLog.error({ err }, "pumpapi: failed to open WebSocket");
       if (this._active) {
+        this._onDisconnected?.();
         setTimeout(() => this._connect(), this._delay);
         this._delay = Math.min(this._delay * 2, this._maxDelay);
       }
@@ -1143,9 +1133,24 @@ class PumpApiAdapter {
     const creatorAddress = msg.txSigner ?? null;
 
     if (!mint || !name || !symbol) {
-      pumpApiLog.debug({ msg }, "pump_fun_fallback: skipping create — missing mint/name/symbol");
+      pumpApiLog.debug({ msg }, "pumpapi: skipping create — missing mint/name/symbol");
       return;
     }
+
+    // Use the stream's post-create bonding curve state if available;
+    // fall back to protocol-defined initial values if not provided.
+    const initVSolStr = msg.vQuoteInBondingCurve != null
+      ? String(msg.vQuoteInBondingCurve)
+      : PUMP_INIT_VSOL_SOL;
+    const initVTokStr = msg.vTokensInBondingCurve != null
+      ? PumpApiAdapter._tokToBase(msg.vTokensInBondingCurve)
+      : PUMP_INIT_VTOK.toString();
+    const initPriceEth = msg.price != null && isFinite(msg.price) && msg.price > 0
+      ? msg.price.toFixed(15)
+      : PUMP_INIT_PRICE_ETH;
+    const initMCStr = msg.marketCapQuote != null
+      ? BigInt(Math.round(msg.marketCapQuote * 1e9)).toString()
+      : PUMP_INIT_MC_LAMPORTS;
 
     await db.insert(tokensTable).values({
       address:              mint,
@@ -1155,15 +1160,35 @@ class PumpApiAdapter {
       imageUrl:             null,
       creatorAddress:       creatorAddress ?? "unknown",
       totalSupply:          PUMP_TOTAL_SUPPLY.toString(),
-      virtualTokenReserves: PUMP_INIT_VTOK.toString(),
-      virtualEthReserves:   PUMP_INIT_VSOL_SOL,
-      marketCapEth:         PUMP_INIT_MC_LAMPORTS,
-      priceEth:             PUMP_INIT_PRICE_ETH,
+      virtualTokenReserves: initVTokStr,
+      virtualEthReserves:   initVSolStr,
+      marketCapEth:         initMCStr,
+      priceEth:             initPriceEth,
       platform:             PLATFORM,
       chain:                CHAIN,
     }).onConflictDoNothing();
 
-    pumpApiLog.info({ mint, name, symbol }, "pump_fun_fallback: new token ingested");
+    // If the creator bought tokens at launch, emit an initial-buy trade.
+    // This captures it even if no separate buy|pump event is emitted for the same tx.
+    if (msg.initialBuy && msg.initialBuy > 0 && msg.quoteAmount && msg.quoteAmount > 0) {
+      const initSolLam  = PumpApiAdapter._solToLamports(msg.quoteAmount);
+      const initTokBase = PumpApiAdapter._tokToBase(msg.initialBuy);
+      const initTs      = PumpApiAdapter._parseTs(msg.timestamp);
+      const initTrader  = msg.breakdown?.[0]?.trader ?? creatorAddress ?? "unknown";
+      await db.insert(tradesTable).values({
+        tokenAddress:  mint,
+        traderAddress: initTrader ?? "unknown",
+        isBuy:         true,
+        ethAmount:     initSolLam,
+        tokenAmount:   initTokBase,
+        priceEth:      initPriceEth,
+        txHash:        msg.signature!,
+        platform:      PLATFORM,
+        timestamp:     initTs,
+      }).onConflictDoNothing();
+    }
+
+    pumpApiLog.info({ mint, name, symbol }, "pumpapi: new pump_fun token ingested");
 
     const broadcastToken = (imageUrl: string | null) => {
       emitNewToken({
@@ -1222,29 +1247,33 @@ class PumpApiAdapter {
   private async _handleTrade(msg: PumpApiEvent, isBuy: boolean): Promise<void> {
     const mint          = msg.mint;
     const signature     = msg.signature;
-    const traderAddress = msg.txSigner ?? "unknown";
+    // breakdown[0].trader is the actual user wallet; txSigner may be a bot/aggregator.
+    const traderAddress = msg.breakdown?.[0]?.trader ?? msg.txSigner ?? "unknown";
 
     if (!mint || !signature) return;
 
     // quoteAmount arrives in decimal SOL; convert to lamports for storage.
-    // baseAmount arrives in decimal display units (6 dp); convert to base units.
+    // tokenAmount arrives in decimal display units (6 dp); convert to base units.
     const solLamports = PumpApiAdapter._solToLamports(msg.quoteAmount);
-    const tokenAmount = PumpApiAdapter._tokToBase(msg.baseAmount);
+    const tokenAmount = PumpApiAdapter._tokToBase(msg.tokenAmount);
 
-    // Virtual reserves: convert from decimal display units to lamports / base units.
+    // Virtual reserves post-trade — decimal SOL / display units → lamports / base units.
     const vSolLam = msg.vQuoteInBondingCurve != null
       ? BigInt(PumpApiAdapter._solToLamports(msg.vQuoteInBondingCurve))
       : null;
-    const vTokBase = msg.vBaseInBondingCurve != null
-      ? BigInt(PumpApiAdapter._tokToBase(msg.vBaseInBondingCurve))
+    const vTokBase = msg.vTokensInBondingCurve != null
+      ? BigInt(PumpApiAdapter._tokToBase(msg.vTokensInBondingCurve))
       : null;
 
-    const priceEth = tokenAmount !== "0" && solLamports !== "0"
-      ? (Number(solLamports) / Number(tokenAmount) / 1000).toFixed(15)
-      : null;
+    // priceEth = SOL/token — use stream's pre-computed value when available.
+    // msg.price is already in SOL/token (verified: quoteAmount/tokenAmount matches).
+    const priceEth = msg.price != null && isFinite(msg.price) && msg.price > 0
+      ? msg.price.toFixed(15)
+      : (tokenAmount !== "0" && solLamports !== "0"
+          ? (Number(solLamports) / Number(tokenAmount) / 1000).toFixed(15)
+          : null);
 
-    // Use the stream's event timestamp so chart data stays accurate regardless of
-    // how long the chain RPC was silent before the fallback activated.
+    // Use the stream's event timestamp so chart data stays accurate.
     const eventTs = PumpApiAdapter._parseTs(msg.timestamp);
 
     const [trade] = await db.insert(tradesTable).values({
@@ -1284,7 +1313,7 @@ class PumpApiAdapter {
       ...(updMCStr    !== undefined ? { marketCapEth: updMCStr }           : {}),
     }).where(eq(tokensTable.address, mint));
 
-    pumpApiLog.debug({ mint, isBuy, sol: solLamports }, "pump_fun_fallback: trade ingested");
+    pumpApiLog.debug({ mint, isBuy, sol: solLamports }, "pumpapi: pump_fun trade ingested");
 
     const [tokenRow] = await db
       .select({
@@ -1329,12 +1358,144 @@ class PumpApiAdapter {
       },
     });
   }
+  // ── PumpSwap (pump-amm) trade handler ─────────────────────────────────────
+
+  private async _handlePumpAmmTrade(msg: PumpApiEvent, isBuy: boolean): Promise<void> {
+    const PUMPSWAP_PLATFORM = "pumpswap";
+    const mint          = msg.mint;
+    const signature     = msg.signature;
+    const traderAddress = msg.breakdown?.[0]?.trader ?? msg.txSigner ?? "unknown";
+
+    if (!mint || !signature) return;
+
+    const solLamports = PumpApiAdapter._solToLamports(msg.quoteAmount);
+    const tokenAmount = PumpApiAdapter._tokToBase(msg.tokenAmount);
+
+    const priceEth = msg.price != null && isFinite(msg.price) && msg.price > 0
+      ? msg.price.toFixed(15)
+      : (tokenAmount !== "0" && solLamports !== "0"
+          ? (Number(solLamports) / Number(tokenAmount) / 1000).toFixed(15)
+          : null);
+
+    const marketCapEth = msg.marketCapQuote != null && isFinite(msg.marketCapQuote)
+      ? BigInt(Math.round(msg.marketCapQuote * 1e9)).toString()
+      : null;
+
+    const eventTs = PumpApiAdapter._parseTs(msg.timestamp);
+
+    // Auto-create the token record on first encounter (graduated = true).
+    const name   = msg.name?.trim()   ?? null;
+    const symbol = msg.symbol?.trim() ?? null;
+    if (name && symbol) {
+      const [inserted] = await db.insert(tokensTable).values({
+        address:        mint,
+        name,
+        symbol,
+        imageUrl:       null,
+        creatorAddress: traderAddress,
+        platform:       PUMPSWAP_PLATFORM,
+        chain:          CHAIN,
+        graduated:      true,
+        ...(priceEth     ? { priceEth }     : {}),
+        ...(marketCapEth ? { marketCapEth } : {}),
+      }).onConflictDoNothing().returning({ id: tokensTable.id });
+
+      if (inserted) {
+        emitNewToken({
+          type: "newToken",
+          token: {
+            address:      mint,
+            name,
+            symbol,
+            imageUrl:     null,
+            priceEth,
+            marketCapEth,
+            platform:     PUMPSWAP_PLATFORM,
+            chain:        CHAIN,
+            createdAt:    eventTs.toISOString(),
+          },
+        });
+      }
+    }
+
+    // Insert trade
+    const [trade] = await db.insert(tradesTable).values({
+      tokenAddress:  mint,
+      traderAddress,
+      isBuy,
+      ethAmount:     solLamports,
+      tokenAmount,
+      priceEth,
+      txHash:        signature,
+      platform:      PUMPSWAP_PLATFORM,
+      timestamp:     eventTs,
+    }).onConflictDoNothing().returning();
+
+    if (!trade) return; // duplicate
+
+    await db.update(tokensTable).set({
+      tradeCount: sql`${tokensTable.tradeCount} + 1`,
+      volumeEth:  sql`CAST(CAST(${tokensTable.volumeEth} AS NUMERIC) + ${solLamports} AS TEXT)`,
+      ...(priceEth     ? { priceEth }     : {}),
+      ...(marketCapEth ? { marketCapEth } : {}),
+    }).where(eq(tokensTable.address, mint));
+
+    pumpApiLog.debug({ mint, isBuy, sol: solLamports }, "pumpapi: pump-amm trade ingested");
+
+    const [tokenRow] = await db
+      .select({
+        name:         tokensTable.name,
+        symbol:       tokensTable.symbol,
+        marketCapEth: tokensTable.marketCapEth,
+        volumeEth:    tokensTable.volumeEth,
+        tradeCount:   tokensTable.tradeCount,
+      })
+      .from(tokensTable)
+      .where(eq(tokensTable.address, mint))
+      .limit(1);
+
+    emitTrade({
+      type: "trade",
+      trade: {
+        id:            trade.id,
+        tokenAddress:  trade.tokenAddress,
+        traderAddress: trade.traderAddress,
+        isBuy:         trade.isBuy,
+        ethAmount:     trade.ethAmount,
+        tokenAmount:   trade.tokenAmount,
+        priceEth:      trade.priceEth,
+        txHash:        trade.txHash,
+        platform:      PUMPSWAP_PLATFORM,
+        timestamp:     trade.timestamp.toISOString(),
+      },
+      token: {
+        address:              mint,
+        name:                 tokenRow?.name   ?? null,
+        symbol:               tokenRow?.symbol ?? null,
+        priceEth,
+        marketCapEth:         tokenRow?.marketCapEth ?? marketCapEth,
+        volumeEth:            tokenRow?.volumeEth    ?? solLamports,
+        virtualEthReserves:   "0",
+        virtualTokenReserves: "0",
+        tradeCount:           Number(tokenRow?.tradeCount ?? 1),
+        platform:             PUMPSWAP_PLATFORM,
+        chain:                CHAIN,
+      },
+    });
+  }
 }
 
-// ── Exported entry point ───────────────────────────────────────────────────────
+// ── Exported entry points ──────────────────────────────────────────────────────
 
+/**
+ * Start the pump.fun chain-RPC indexer (logsSubscribe).
+ * Called by PumpStreamManager as a fallback when pumpapi.io is down.
+ * Normally you should call startPumpStreamManager() from pumpApiManager.ts.
+ */
 export async function startPumpFunAdapter(): Promise<void> {
   const indexer = new PumpFunChainIndexer();
   indexer.start();
   startZeroHealJob();
 }
+
+export { startZeroHealJob };

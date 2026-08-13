@@ -4,14 +4,17 @@
  * Each adapter is started in an isolated try/catch so a crash in one
  * does not affect the others.
  *
+ * pump.fun + PumpSwap are managed together by PumpStreamManager:
+ *   - Primary source: wss://stream.pumpapi.io/ (no API key, zero Alchemy CUs)
+ *   - Fallback: chain-native logsSubscribe (PublicNode → Alchemy) when primary is down
+ *
  * Startup order matters for raydium_amm — it must start before pump_fun
  * so the graduated-mint cache is populated before pump_fun calls
  * registerGraduatedMint().
  */
 
 import { logger } from "../logger.js";
-import { startPumpFunAdapter }          from "./pumpfun.js";
-import { startPumpSwapAdapter }         from "./pumpswap.js";
+import { startPumpStreamManager }      from "./pumpApiManager.js";
 import { startRaydiumLaunchLabAdapter } from "./raydium-launchlab.js";
 
 interface AdapterEntry {
@@ -21,9 +24,8 @@ interface AdapterEntry {
 
 /** Active adapters — all always-on. */
 const ADAPTERS: AdapterEntry[] = [
-  { name: "pump_fun",          start: startPumpFunAdapter          },
-  { name: "pumpswap",          start: startPumpSwapAdapter         },
-  { name: "raydium_launchlab", start: startRaydiumLaunchLabAdapter },
+  { name: "pump_stream_manager", start: startPumpStreamManager      },
+  { name: "raydium_launchlab",   start: startRaydiumLaunchLabAdapter },
 ];
 
 /** Start all adapters. Each is isolated — a failure in one does not block the others. */

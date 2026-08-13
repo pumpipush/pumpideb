@@ -107,6 +107,13 @@ let _id = 1;
 function nextId() { return _id++; }
 
 export abstract class SolanaRpcIndexer {
+  /** Set by stop() — prevents reconnect loop from restarting after a close. */
+  private _stopped = false;
+
+  /** Gracefully stop this indexer — closes the current WebSocket and prevents reconnects. */
+  stop(): void {
+    this._stopped = true;
+  }
   protected readonly programId: string;
   protected readonly httpUrl: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -399,6 +406,7 @@ export abstract class SolanaRpcIndexer {
   }
 
   private connect(): void {
+    if (this._stopped) return; // stop() was called — do not reconnect
     const wssUrl = this._wssUrls[this._wssIdx % this._wssUrls.length];
     const ws = new WebSocket(wssUrl);
 
@@ -516,6 +524,7 @@ export abstract class SolanaRpcIndexer {
         this.onWssDisconnected();
       }
 
+      if (this._stopped) return; // stop() was called — do not reconnect
       this.log.warn({ retryMs: this.delay }, `${this.constructor.name}: disconnected — reconnecting`);
       setTimeout(() => this.connect(), this.delay);
       this.delay = Math.min(this.delay * 2, this.maxDelay);
