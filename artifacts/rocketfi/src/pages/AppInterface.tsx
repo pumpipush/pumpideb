@@ -1052,14 +1052,31 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // stay in sync. We stagger the timing: the on-chain RPC portfolio can refresh after
   // 3s (tx propagation), while DB-derived holdings need ~5-10s for the indexer.
   const queryClient = useQueryClient();
+  // Track pending refresh timers so we can cancel them on unmount or before
+  // scheduling a new batch — prevents stale-wallet invalidations after token
+  // switch or component unmount.
+  const refreshTimerIds = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => {
+    return () => {
+      refreshTimerIds.current.forEach(clearTimeout);
+      refreshTimerIds.current = [];
+    };
+  }, []);
+
   const schedulePortfolioRefresh = () => {
+    // Cancel any previously scheduled timers before adding new ones.
+    refreshTimerIds.current.forEach(clearTimeout);
+    refreshTimerIds.current = [];
+    const push = (fn: () => void, ms: number) => {
+      refreshTimerIds.current.push(setTimeout(fn, ms));
+    };
     // DB-derived "My Coins" holdings (trades table aggregate)
-    setTimeout(() => queryClient.invalidateQueries({ queryKey: ["holdings", wallet] }), 5_000);
-    setTimeout(() => queryClient.invalidateQueries({ queryKey: ["holdings", wallet] }), 10_000);
+    push(() => queryClient.invalidateQueries({ queryKey: ["holdings", wallet] }), 5_000);
+    push(() => queryClient.invalidateQueries({ queryKey: ["holdings", wallet] }), 10_000);
     // On-chain RPC portfolio (Profile Wallet tab)
-    setTimeout(() => queryClient.invalidateQueries({ queryKey: ["wallet-portfolio", wallet] }), 3_000);
+    push(() => queryClient.invalidateQueries({ queryKey: ["wallet-portfolio", wallet] }), 3_000);
     // Wallet activity (Profile Activity tab)
-    setTimeout(() => queryClient.invalidateQueries({ queryKey: ["wallet-activity", wallet] }), 6_000);
+    push(() => queryClient.invalidateQueries({ queryKey: ["wallet-activity", wallet] }), 6_000);
   };
 
   // Live SSE stream — real-time trade events

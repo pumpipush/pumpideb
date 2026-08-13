@@ -757,7 +757,7 @@ export default function Dashboard() {
   // staleTime=25s prevents redundant refetches on window-focus / tab switch.
   // refetchOnWindowFocus=false avoids hammering the API when the user alt-tabs.
   const bubbleListParams = { sort: ListTokensSort.trending, limit: 60 };
-  const { data: bubbleRawTokens } = useListTokens(
+  const { data: bubbleRawTokens, isError: bubbleError } = useListTokens(
     bubbleListParams,
     {
       query: {
@@ -961,11 +961,15 @@ export default function Dashboard() {
             <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
               {bubbleTokens.length === 0 ? (
                 <div className="flex items-center justify-center" style={{ height: 360, background: "#050508" }}>
-                  <div className="flex gap-2.5 items-center">
-                    <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:0ms]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:150ms]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:300ms]" />
-                  </div>
+                  {bubbleError ? (
+                    <p className="text-sm text-muted-foreground">Failed to load bubble map — retrying…</p>
+                  ) : (
+                    <div className="flex gap-2.5 items-center">
+                      <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:0ms]" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:150ms]" />
+                      <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:300ms]" />
+                    </div>
+                  )}
                 </div>
               ) : (
                 <BubbleMap

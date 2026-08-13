@@ -780,9 +780,13 @@ router.get("/tokens/:address/price-history", asyncWrap(async (req, res) => {
   const toNum = (v: string | null) => (v != null ? parseFloat(v) : null);
   const internalResult = { p5m: toNum(r.p5m), p1h: toNum(r.p1h), p6h: toNum(r.p6h), p24h: toNum(r.p24h) };
 
-  // If all values are null (no trade history) check if this is a DEX token and use DexScreener
-  const allNull = Object.values(internalResult).every(v => v === null);
-  if (allNull) {
+  // For DEX tokens (pumpswap, raydium_launchlab) our internal trade history is
+  // often sparse — trades arrive via pumpapi.io stream and gaps exist for older
+  // intervals. Try DexScreener whenever ANY interval is null, then back-fill
+  // only the missing slots so internal values (more accurate for recent data)
+  // take precedence.
+  const anyNull = Object.values(internalResult).some(v => v === null);
+  if (anyNull) {
     const [tokenRow] = await db
       .select({ platform: tokensTable.platform })
       .from(tokensTable)
@@ -793,7 +797,14 @@ router.get("/tokens/:address/price-history", asyncWrap(async (req, res) => {
       const pairs = await fetchDexScreenerTokens([address]);
       const pair  = bestSolanaPair(pairs);
       if (pair && pair.priceNative) {
-        res.json(pairToPriceHistory(pair));
+        const dex = pairToPriceHistory(pair);
+        // Prefer our internal value when available; fill gaps from DexScreener.
+        res.json({
+          p5m:  internalResult.p5m  ?? dex.p5m,
+          p1h:  internalResult.p1h  ?? dex.p1h,
+          p6h:  internalResult.p6h  ?? dex.p6h,
+          p24h: internalResult.p24h ?? dex.p24h,
+        });
         return;
       }
     }

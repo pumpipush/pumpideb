@@ -1005,11 +1005,33 @@ export class PumpApiAdapter {
   constructor(opts?: {
     onConnected?:    () => void;
     onDisconnected?: () => void;
-    /** Override raw-silence watchdog window (ms). Default: PUMPAPI_WATCHDOG_MS (60 000). */
+    /**
+     * Override raw-silence watchdog window (ms). Default: PUMPAPI_WATCHDOG_MS (60 000).
+     *
+     * TEST-INJECTION POINT — do not remove.
+     * `pumpApiWatchdog.test.ts` passes a short value (e.g. 200 ms) here so the
+     * watchdog fires quickly in fake-timer tests.  Removing this option breaks
+     * the raw-silence watchdog test suite.
+     */
     watchdogMs?:  number;
-    /** Override data-staleness watchdog window (ms). Default: PUMPAPI_DATA_STALE_MS (120 000). */
+    /**
+     * Override data-staleness watchdog window (ms). Default: PUMPAPI_DATA_STALE_MS (120 000).
+     *
+     * TEST-INJECTION POINT — do not remove.
+     * `pumpApiWatchdog.test.ts` passes a short value here so the data-stale
+     * watchdog fires quickly in fake-timer tests.  Removing this option breaks
+     * the data-staleness watchdog test suite.
+     */
     dataStaleMs?: number;
-    /** Override WebSocket constructor for testing. */
+    /**
+     * Override WebSocket constructor. Default: `(url) => new WebSocket(url)`.
+     *
+     * TEST-INJECTION POINT — do not remove.
+     * `pumpApiWatchdog.test.ts` supplies a `MockWebSocket` factory via this
+     * option to avoid real network connections.  Removing this option silently
+     * decouples the watchdog tests from the real `_connect()` path.
+     * Not intended for production overrides — in production, omit this option.
+     */
     wsFactory?:   (url: string) => WebSocket;
   }) {
     this._onConnected    = opts?.onConnected;

@@ -18,6 +18,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { SearchDialog } from '@/components/shared/SearchDialog';
 import { CopyToastProvider } from '@/components/shared/CopyToast';
 import { AuthModal } from '@/components/shared/AuthModal';
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { UsernameNudgeBanner } from '@/components/shared/UsernameNudgeBanner';
 import { PlatformFeeBanner } from '@/components/shared/PlatformFeeBanner';
 import { SiteFooter } from '@/components/layout/SiteFooter';
@@ -64,25 +65,27 @@ function AppShell() {
         <Navbar />
         <main ref={mainRef} className="flex-1 overflow-y-auto overflow-x-hidden pb-24 md:pb-0 pt-[60px]">
           <UsernameNudgeBanner />
-          <Switch>
-            <Route path="/" component={Dashboard} />
-            <Route path="/explore"><Redirect to="/" /></Route>
-            <Route path="/dashboard"><Redirect to="/" /></Route>
-            {/* Legacy /app route — redirects to /coin/:address when ?token= is present */}
-            <Route path="/app" component={AppRoute} />
-            {/* Legacy /token/:address — redirect to canonical /coin/:address */}
-            <Route path="/token/:address" component={LegacyTokenRedirect} />
-            {/* Canonical SEO-friendly coin pages */}
-            <Route path="/coin/:address" component={TokenPage} />
-            <Route path="/profile/:slug" component={ProfilePage} />
-            {/* signin/signup show the explore page behind the auth modal */}
-            <Route path="/signin"><Dashboard /></Route>
-            <Route path="/signup"><Dashboard /></Route>
-            <Route path="/privacy" component={PrivacyPolicy} />
-            <Route path="/disclaimer" component={DisclaimerPage} />
-            <Route path="/terms" component={TermsOfService} />
-            <Route component={NotFound} />
-          </Switch>
+          <ErrorBoundary>
+            <Switch>
+              <Route path="/" component={Dashboard} />
+              <Route path="/explore"><Redirect to="/" /></Route>
+              <Route path="/dashboard"><Redirect to="/" /></Route>
+              {/* Legacy /app route — redirects to /coin/:address when ?token= is present */}
+              <Route path="/app" component={AppRoute} />
+              {/* Legacy /token/:address — redirect to canonical /coin/:address */}
+              <Route path="/token/:address" component={LegacyTokenRedirect} />
+              {/* Canonical SEO-friendly coin pages */}
+              <Route path="/coin/:address" component={TokenPage} />
+              <Route path="/profile/:slug" component={ProfilePage} />
+              {/* signin/signup show the explore page behind the auth modal */}
+              <Route path="/signin"><Dashboard /></Route>
+              <Route path="/signup"><Dashboard /></Route>
+              <Route path="/privacy" component={PrivacyPolicy} />
+              <Route path="/disclaimer" component={DisclaimerPage} />
+              <Route path="/terms" component={TermsOfService} />
+              <Route component={NotFound} />
+            </Switch>
+          </ErrorBoundary>
           <SiteFooter />
         </main>
       </div>
