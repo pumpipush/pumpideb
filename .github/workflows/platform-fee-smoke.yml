@@ -1,0 +1,205 @@
+name: Platform Fee Smoke Test
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Runs the platform fee injection smoke test automatically whenever the fee
+# code changes (pre-merge gate) and every night (regression catch).
+#
+# WHY THIS EXISTS
+# ───────────────
+# The fee injection code verifies that platform fees are correctly appended as
+# SystemProgram.transfer instructions in real transactions built against
+# mainnet APIs (pumpportal.fun and the Raydium SDK).
+#
+# If the pumpportal.fun /api/trade-local response shape changes, or the
+# Raydium SDK graduates from alpha and breaks the instruction layout, fees
+# will silently stop being collected. No unit test catches that — only a live
+# call to the real endpoint will.
+#
+# WHAT IT TESTS
+# ─────────────
+# • pumpportal.fun /api/trade-local builds a valid VersionedTransaction
+# • Fee injection appends SystemProgram.transfer with correct lamports/accounts
+# • Raydium SDK createLaunchpad() builds Transaction[] and fee lands on tx[0]
+# • Fee math (calcFeeLamports, PLATFORM_CREATE_FEE_LAMPORTS) — always runs
+#
+# No transactions are submitted — the test is read-only against mainnet.
+# No SOL is spent. Alchemy key is used if set; falls back to PublicNode.
+#
+# FAILURE NOTIFICATIONS
+# ─────────────────────
+# On scheduled runs: a GitHub issue is opened automatically so the team is
+# alerted even if nobody is watching the Actions tab.  The issue is labelled
+# "smoke-failure" and tagged with the failing run URL.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  # ── Pre-merge gate: fires on PRs that touch fee code or the test itself ─────
+  pull_request:
+    paths:
+      - "artifacts/rocketfi/src/lib/platform-fee.ts"
+      - "artifacts/rocketfi/src/lib/pumpfunLauncher.ts"
+      - "artifacts/rocketfi/src/lib/raydiumLauncher.ts"
+      - "artifacts/rocketfi/src/lib/__tests__/platformFee.smoke.test.ts"
+      - "artifacts/rocketfi/package.json"
+
+  # ── Post-merge: keep a green badge on main after every relevant change ──────
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "artifacts/rocketfi/src/lib/platform-fee.ts"
+      - "artifacts/rocketfi/src/lib/pumpfunLauncher.ts"
+      - "artifacts/rocketfi/src/lib/raydiumLauncher.ts"
+      - "artifacts/rocketfi/src/lib/__tests__/platformFee.smoke.test.ts"
+      - "artifacts/rocketfi/package.json"
+
+  # ── Nightly regression catch ─────────────────────────────────────────────────
+  # Runs at 03:00 UTC — offset from raydium-sdk-smoke (02:00 UTC) to avoid
+  # concurrent pnpm install hitting the same cache simultaneously.
+  schedule:
+    - cron: "0 3 * * *"
+
+  # ── Manual trigger for debugging or on-demand verification ──────────────────
+  workflow_dispatch:
+    inputs:
+      smoke_pump_token:
+        description: "pump.fun bonding-curve token address (overrides default)"
+        required: false
+        default: ""
+
+concurrency:
+  # One smoke run at a time per branch; cancel stale runs on force-push.
+  group: platform-fee-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Platform fee smoke (mainnet read-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # Required so the failure-notification step can open issues
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run platform fee smoke test
+        id: smoke
+        run: |
+          pnpm --filter @workspace/rocketfi exec \
+            vitest run --config vitest.config.ts \
+              --reporter=verbose \
+              src/lib/__tests__/platformFee.smoke.test.ts
+        env:
+          RUN_SMOKE_TESTS: "1"
+          # Alchemy key speeds up RPC calls; test falls back to PublicNode if absent
+          ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
+          # Use workflow_dispatch override → repo secret → built-in default
+          SMOKE_PUMP_TOKEN: ${{ inputs.smoke_pump_token || secrets.SMOKE_PUMP_TOKEN || '' }}
+
+      # ── Report fee and SDK versions on every run ───────────────────────────
+      - name: Report versions tested
+        if: always()
+        run: |
+          SDK_VERSION=$(node -e "
+            const p = require('./artifacts/rocketfi/package.json');
+            const deps = { ...p.dependencies, ...p.devDependencies };
+            console.log(deps['@raydium-io/raydium-sdk-v2'] ?? 'not found');
+          ")
+          echo "Raydium SDK version : $SDK_VERSION"
+          echo "SMOKE_PUMP_TOKEN    : ${SMOKE_PUMP_TOKEN:-(default built into test)}"
+        env:
+          SMOKE_PUMP_TOKEN: ${{ inputs.smoke_pump_token || secrets.SMOKE_PUMP_TOKEN || '' }}
+
+      # ── Open a GitHub issue when a scheduled run fails ─────────────────────
+      # Only fires on schedule (not PR/push) so developers aren't flooded with
+      # issues every time they push a failing branch.
+      - name: Open failure issue (scheduled runs only)
+        if: >
+          failure() &&
+          github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const today  = new Date().toISOString().slice(0, 10);
+
+            // Ensure the label exists (first-run repos won't have it yet)
+            try {
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                name:  "smoke-failure",
+                color: "d93f0b",
+                description: "Automated smoke test failure",
+              });
+            } catch (e) {
+              // 422 Unprocessable Entity = label already exists — that's fine
+              if (e.status !== 422) throw e;
+            }
+
+            // Check for an already-open issue so we don't spam duplicates
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner:  context.repo.owner,
+              repo:   context.repo.repo,
+              labels: "smoke-failure",
+              state:  "open",
+            });
+
+            const alreadyOpen = existing.some(issue =>
+              issue.title.includes("Platform fee smoke")
+            );
+
+            if (alreadyOpen) {
+              console.log("An open smoke-failure issue already exists — skipping duplicate.");
+              return;
+            }
+
+            await github.rest.issues.create({
+              owner:  context.repo.owner,
+              repo:   context.repo.repo,
+              title:  `⚠️ Platform fee smoke test failed (${today})`,
+              labels: ["smoke-failure"],
+              body: [
+                "## Platform Fee Smoke Test Failed",
+                "",
+                "The nightly smoke test that verifies platform fee injection against",
+                "live mainnet APIs failed. **Fees may currently be silently dropped.**",
+                "",
+                "### What to check",
+                "- Did `pumpportal.fun /api/trade-local` change its response shape?",
+                "- Did the Raydium SDK graduate from alpha and break the instruction layout?",
+                "- Has the default `SMOKE_PUMP_TOKEN` graduated off the bonding curve?",
+                "  (If so, set the `SMOKE_PUMP_TOKEN` repo secret to an active token.)",
+                "",
+                `### Failed run`,
+                `[View logs](${runUrl})`,
+                "",
+                "### Files to inspect",
+                "- `artifacts/rocketfi/src/lib/platform-fee.ts`",
+                "- `artifacts/rocketfi/src/lib/pumpfunLauncher.ts`",
+                "- `artifacts/rocketfi/src/lib/raydiumLauncher.ts`",
+                "- `artifacts/rocketfi/src/lib/__tests__/platformFee.smoke.test.ts`",
+              ].join("\n"),
+            });
+
+            console.log("Smoke failure issue opened.");
