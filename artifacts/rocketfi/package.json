@@ -80,6 +80,7 @@
   },
   "dependencies": {
     "@raydium-io/raydium-sdk-v2": "0.2.60-alpha",
+    "@react-oauth/google": "^0.13.5",
     "@solana/web3.js": "^1.98.4",
     "@types/bn.js": "^5.2.0",
     "bn.js": "^5.2.5",

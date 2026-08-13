@@ -114,26 +114,52 @@ async function uniqueUsername(base: string): Promise<string> {
 }
 
 // ── POST /api/auth/google ──────────────────────────────────────────────────
+// Accepts either:
+//   { access_token }  — from @react-oauth/google useGoogleLogin implicit flow
+//   { credential }    — Google ID token (legacy GSI / future use)
 
 router.post("/auth/google", asyncWrap(async (req, res) => {
-  const { credential } = req.body as { credential?: string };
-  if (!credential) return void res.status(400).json({ error: "credential required" });
-  if (!GOOGLE_CLIENT_ID) return void res.status(503).json({ error: "Google auth not configured" });
+  const { credential, access_token } = req.body as { credential?: string; access_token?: string };
+  if (!credential && !access_token) {
+    return void res.status(400).json({ error: "credential or access_token required" });
+  }
 
   let googleId: string, email: string, name: string, picture: string;
-  try {
-    const ticket = await googleClient.verifyIdToken({
-      idToken: credential,
-      audience: GOOGLE_CLIENT_ID,
-    });
-    const payload = ticket.getPayload();
-    if (!payload) throw new Error("empty payload");
-    googleId = payload.sub;
-    email    = payload.email ?? "";
-    name     = payload.name  ?? email.split("@")[0] ?? "user";
-    picture  = payload.picture ?? "";
-  } catch (err: unknown) {
-    return void res.status(401).json({ error: "invalid Google token", detail: String(err) });
+
+  if (access_token) {
+    // Verify via Google's userinfo endpoint — no client secret needed on the server
+    let info: Record<string, string>;
+    try {
+      const r = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo`, {
+        headers: { Authorization: `Bearer ${access_token}` },
+      });
+      if (!r.ok) throw new Error(`Google userinfo ${r.status}`);
+      info = await r.json() as Record<string, string>;
+    } catch (err: unknown) {
+      return void res.status(401).json({ error: "invalid Google access_token", detail: String(err) });
+    }
+    googleId = info.sub ?? "";
+    email    = info.email ?? "";
+    name     = info.name  ?? email.split("@")[0] ?? "user";
+    picture  = info.picture ?? "";
+    if (!googleId) return void res.status(401).json({ error: "could not retrieve Google user ID" });
+  } else {
+    // Legacy: verify ID token
+    if (!GOOGLE_CLIENT_ID) return void res.status(503).json({ error: "Google auth not configured" });
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: credential!,
+        audience: GOOGLE_CLIENT_ID,
+      });
+      const payload = ticket.getPayload();
+      if (!payload) throw new Error("empty payload");
+      googleId = payload.sub;
+      email    = payload.email ?? "";
+      name     = payload.name  ?? email.split("@")[0] ?? "user";
+      picture  = payload.picture ?? "";
+    } catch (err: unknown) {
+      return void res.status(401).json({ error: "invalid Google token", detail: String(err) });
+    }
   }
 
   // Find or create profile

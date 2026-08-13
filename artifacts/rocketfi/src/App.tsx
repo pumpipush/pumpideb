@@ -1,3 +1,4 @@
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import { HelmetProvider } from 'react-helmet-async';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
@@ -97,8 +98,10 @@ function AppShell() {
   );
 }
 
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+
 function App() {
-  return (
+  const inner = (
     <HelmetProvider>
       <QueryClientProvider client={queryClient}>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
@@ -115,6 +118,12 @@ function App() {
       </QueryClientProvider>
     </HelmetProvider>
   );
+
+  // Only mount GoogleOAuthProvider when a client ID is configured.
+  // Without a client ID the GSI library throws "Missing required parameter client_id".
+  return GOOGLE_CLIENT_ID
+    ? <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>{inner}</GoogleOAuthProvider>
+    : inner;
 }
 
 export default App;

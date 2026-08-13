@@ -118,6 +118,12 @@ export default defineConfig(async ({ command, mode }) => {
       }),
       ...replitPlugins,
     ],
+    // Pre-bundle Google OAuth so it shares the same React instance as the app.
+    // Without this, Vite lazily optimises it mid-render and creates a second
+    // React copy → "Invalid hook call / Cannot read useState" crash.
+    optimizeDeps: {
+      include: ['@react-oauth/google'],
+    },
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, 'src'),

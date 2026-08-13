@@ -37,6 +37,11 @@ interface AuthContextValue {
   sendEmailOTP: (email: string) => Promise<void>;
   /** Verify OTP and sign in */
   verifyEmailOTP: (email: string, code: string) => Promise<void>;
+  /**
+   * Exchange a Google OAuth access_token for our own JWT.
+   * Call this from useGoogleLogin({ flow: 'implicit' })'s onSuccess handler.
+   */
+  handleGoogleToken: (accessToken: string) => Promise<void>;
   /** Sign out social auth (wallet remains connected if it was) */
   signOut: () => void;
   /** Returns Authorization header object for API calls */
@@ -61,6 +66,7 @@ const AuthContext = createContext<AuthContextValue>({
   isLoading: true,
   sendEmailOTP: async () => {},
   verifyEmailOTP: async () => {},
+  handleGoogleToken: async () => {},
   signOut: () => {},
   authHeaders: () => ({}),
   getWalletLinkChallenge: async () => ({ nonce: "", message: "" }),
@@ -133,6 +139,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       linkedWallet: p.linkedWallet ?? null,
     });
   };
+
+  // ── Google OAuth ──────────────────────────────────────────────────────────
+  const handleGoogleToken = useCallback(async (accessToken: string) => {
+    const r = await fetch(apiUrl("/auth/google"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ access_token: accessToken }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error ?? "Google sign-in failed");
+    }
+    const data = await r.json();
+    handleAuthResponse({ ...data, authType: "google" });
+  }, []);
 
   // ── Email OTP ──────────────────────────────────────────────────────────────
   const sendEmailOTP = useCallback(async (email: string) => {
@@ -220,6 +241,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         sendEmailOTP,
         verifyEmailOTP,
+        handleGoogleToken,
         signOut,
         authHeaders,
         getWalletLinkChallenge,
