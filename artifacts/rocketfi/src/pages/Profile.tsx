@@ -367,12 +367,7 @@ export default function ProfilePage() {
                 {isOwner && (
                   <button
                     onClick={() => setEditOpen(true)}
-                    className="h-8 px-3 flex items-center gap-1.5 rounded-lg border font-medium text-xs transition-colors"
-                    style={{
-                      borderColor: `hsl(${hue},60%,55%,0.4)`,
-                      color: `hsl(${hue},70%,65%)`,
-                      background: `hsl(${hue},60%,50%,0.08)`,
-                    }}
+                    className="h-8 px-3 flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] transition-colors text-xs text-muted-foreground font-medium"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Edit profile</span>
@@ -385,22 +380,6 @@ export default function ProfilePage() {
             <div className="mb-4">
               <div className="flex items-center gap-2.5 flex-wrap mb-1">
                 <h1 className="text-2xl font-bold tracking-tight">{displayUsername}</h1>
-                {/* On-chain badge */}
-                <span
-                  className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide"
-                  style={{
-                    borderWidth: 1,
-                    borderColor: `hsl(${hue},60%,55%,0.3)`,
-                    background: `hsl(${hue},60%,50%,0.08)`,
-                    color: `hsl(${hue},70%,65%)`,
-                  }}
-                >
-                  <span
-                    className="w-1.5 h-1.5 rounded-full animate-pulse"
-                    style={{ background: `hsl(${hue},70%,60%)` }}
-                  />
-                  Wallet
-                </span>
               </div>
               {/* Wallet address copy */}
               <button
