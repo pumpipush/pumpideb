@@ -102,7 +102,7 @@ export function Sidebar() {
 
 export function BottomNav() {
   const [location] = useLocation();
-  const { wallet, openWalletModal } = useWallet();
+  const { wallet } = useWallet();
 
   const { data: profile } = useGetProfile(wallet ?? "", {
     query: { enabled: !!wallet, retry: false, queryKey: getGetProfileQueryKey(wallet ?? "") },
@@ -160,13 +160,13 @@ export function BottomNav() {
             Profile
           </Link>
         ) : (
-          <button
-            onClick={openWalletModal}
+          <Link
+            href="/signin"
             className="flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-wide text-muted-foreground transition-all duration-200"
           >
             <UserCircle2 className="w-5 h-5" />
             Profile
-          </button>
+          </Link>
         )}
       </div>
     </div>
