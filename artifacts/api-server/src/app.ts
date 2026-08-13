@@ -76,7 +76,7 @@ const restLimiter = rateLimit({
   message: { error: "Too many requests — please wait a moment and try again." },
   skip: (req) =>
     req.method === "OPTIONS" ||           // never block CORS preflight
-    req.path === "/health" ||             // never block health checks
+    req.path === "/healthz" ||            // never block health checks
     req.path.endsWith("/stream"),         // SSE streams get their own bucket below
 });
 

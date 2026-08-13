@@ -110,7 +110,9 @@ export default defineConfig(async ({ command, mode }) => {
     plugins: [
       react(),
       tailwindcss(),
-      runtimeErrorOverlay(),
+      // Only include the runtime error overlay in dev mode — it adds unnecessary
+      // weight and exposes dev tooling in production bundles.
+      ...(!isBuild ? [runtimeErrorOverlay()] : []),
       nodePolyfills({
         // Polyfill Buffer and process — required by @solana/web3.js in the browser
         globals: { Buffer: true, global: true, process: true },

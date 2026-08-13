@@ -667,17 +667,21 @@ export async function deepBackfillLaunchLabTokens(): Promise<void> {
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 export function startLaunchLabBackfill(): void {
-  // Deep backfill: run once, 15 s after startup (let adapters + DB settle first)
-  // This pages through ALL historical LaunchLab transactions, not just the last 1000.
-  setTimeout(() => void deepBackfillLaunchLabTokens(), 15_000);
+  // Deep backfill: pages through ALL historical LaunchLab transactions.
+  // Set SKIP_DEEP_BACKFILL=1 to disable (recommended on VPS fresh-start deployments
+  // where you only want live data going forward — saves RPC quota and startup time).
+  if (process.env.SKIP_DEEP_BACKFILL === "1") {
+    log.info("launchlab-deep-backfill: skipped (SKIP_DEEP_BACKFILL=1)");
+  } else {
+    setTimeout(() => void deepBackfillLaunchLabTokens(), 15_000);
+  }
 
-  // Hot backfill: last 30 sigs every 60 s — catches WS-missed creates within ~1 minute.
-  // Starts after 20 s to let the WebSocket adapter settle first.
+  // Hot backfill: tracks new creates via watermark — only fetches the delta since
+  // the last run. Low RPC cost; catches tokens created while the WS stream blinked.
   setTimeout(() => void hotBackfillLaunchLabTokens(), 20_000);
   setInterval(() => void hotBackfillLaunchLabTokens(), 60_000);
 
-  // Regular backfill: run at 60 s delay then every 10 min
-  // Catches tokens created since the last startup or missed during an offline window.
+  // Regular backfill: last 1000 sigs every 10 min — safety net for recent gaps.
   setTimeout(() => void backfillLaunchLabTokens(), 60_000);
   setInterval(() => void backfillLaunchLabTokens(), BACKFILL_INTERVAL_MS);
 }
