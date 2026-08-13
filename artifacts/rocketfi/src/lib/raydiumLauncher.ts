@@ -321,11 +321,13 @@ async function _verifyMetadataReadable(uri: string): Promise<void> {
  *   Useful for updating UI ("SDK loaded, building tx…").
  */
 export async function buildRaydiumLaunchTx(
-  walletPublicKey: string,
-  name:            string,
-  symbol:          string,
-  metadataUri:     string,
-  onSdkLoaded?:   () => void,
+  walletPublicKey:  string,
+  name:             string,
+  symbol:           string,
+  metadataUri:      string,
+  /** SOL to spend buying tokens at launch, in lamports. Raydium SDK requires > 0. */
+  buyAmountLamports: bigint,
+  onSdkLoaded?:    () => void,
 ): Promise<RaydiumLaunchTxResult> {
   if (symbol.length > 10) throw new Error("Ticker must be 10 characters or fewer");
 
@@ -387,7 +389,7 @@ export async function buildRaydiumLaunchTx(
       uri:          metadataUri,
       configId,
       platformId:   new PublicKey(RAYDIUM_DEFAULT_PLATFORM_ID),
-      buyAmount:    new BN(0),
+      buyAmount:    new BN(buyAmountLamports.toString()),
       migrateType:  "cpmm",
       txVersion:    TxVersion.LEGACY,
       feePayer:     owner,

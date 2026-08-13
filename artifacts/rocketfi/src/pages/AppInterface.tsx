@@ -221,6 +221,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const [website,  setWebsite]  = useState("");
   const [showLinks, setShowLinks] = useState(false);
 
+  // Raydium LaunchLab: initial buy amount in SOL (required by SDK, must be > 0)
+  const [initialBuySOL, setInitialBuySOL] = useState("0.1");
+
   // Launch flow state
   const [launchStep,      setLaunchStep]      = useState<LaunchStep>("idle");
   const [launchError,     setLaunchError]     = useState<string | null>(null);
@@ -277,6 +280,12 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     if (platform === "pumpfun") {
       await _launchPumpFun();
     } else {
+      // Validate initial buy amount before kicking off the flow
+      const parsedBuy = parseFloat(initialBuySOL);
+      if (isNaN(parsedBuy) || parsedBuy < 0.001) {
+        toast({ title: "Initial buy too low", description: "Minimum initial buy is 0.001 SOL (required by Raydium).", variant: "destructive" });
+        return;
+      }
       await _launchRaydium();
     }
   };
@@ -358,12 +367,16 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       if (!isRaydiumSdkCached()) {
         setBuildingSubLabel("Preparing launch environment…");
       }
+      // Convert user-entered SOL to lamports (BigInt, as expected by BN inside SDK wrapper)
+      const buyLamports = BigInt(Math.round(parseFloat(initialBuySOL) * 1e9));
+
       const { transactions, mintAddress: newMint, blockhash, lastValidBlockHeight } =
         await buildRaydiumLaunchTx(
           wallet,
           name.trim(),
           symbol.trim().toUpperCase(),
           metadataUri,
+          buyLamports,
           () => setBuildingSubLabel(null), // clear once SDK import resolves
         );
 
@@ -655,6 +668,55 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               </div>
             )}
           </div>
+
+          {/* ── Step 5: Initial Buy (Raydium only, required by SDK) ── */}
+          {platform === "raydium" && (
+            <>
+              <div style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
+              <div className="px-5 pt-4 pb-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
+                    style={{ background: "rgba(59,130,246,0.15)", color: "#93c5fd", border: "1px solid rgba(59,130,246,0.30)" }}>5</span>
+                  <span className="text-[13px] font-semibold text-foreground">Initial Buy</span>
+                  <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(59,130,246,0.10)", color: "#60a5fa" }}>
+                    Required by Raydium
+                  </span>
+                </div>
+                <p className="text-[12px] mb-3" style={{ color: "#64748b" }}>
+                  Raydium LaunchLab requires buying a minimum amount of tokens at launch. This goes directly to your wallet.
+                </p>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    min="0.001"
+                    step="0.01"
+                    placeholder="0.1"
+                    value={initialBuySOL}
+                    onChange={e => setInitialBuySOL(e.target.value)}
+                    disabled={isLaunching}
+                    className="h-9 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 text-[13px] pr-12"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] font-medium pointer-events-none"
+                    style={{ color: "#64748b" }}>SOL</span>
+                </div>
+                <div className="flex gap-1.5 mt-2">
+                  {["0.05", "0.1", "0.5", "1"].map(v => (
+                    <button key={v} type="button"
+                      onClick={() => setInitialBuySOL(v)}
+                      disabled={isLaunching}
+                      className="text-[11px] px-2 py-1 rounded-md transition-colors"
+                      style={{
+                        background: initialBuySOL === v ? "rgba(59,130,246,0.20)" : "rgba(255,255,255,0.05)",
+                        color: initialBuySOL === v ? "#93c5fd" : "#64748b",
+                        border: `1px solid ${initialBuySOL === v ? "rgba(59,130,246,0.35)" : "rgba(255,255,255,0.08)"}`,
+                      }}>
+                      {v} SOL
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
           {/* ── Submit / Progress / Done ── */}
           <div className="px-5 pt-5 pb-5 space-y-4">
