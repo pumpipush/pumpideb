@@ -118,11 +118,14 @@ export default defineConfig(async ({ command, mode }) => {
       }),
       ...replitPlugins,
     ],
-    // Privy v3 bundles wagmi/viem which cause "Invalid hook call" when Vite
-    // pre-bundles them separately (multiple React copies). Excluding forces
-    // the package to be loaded as-is without Vite's dep-optimisation step.
+    // @privy-io/react-auth uses eventemitter3 (CJS) which needs explicit
+    // pre-bundling so Vite can convert it to ESM. Also include wagmi/viem
+    // so they share the same React instance as the host app (prevents the
+    // "Invalid hook call / multiple React copies" error).
     optimizeDeps: {
-      exclude: ["@privy-io/react-auth"],
+      include: [
+        "eventemitter3",
+      ],
     },
     resolve: {
       alias: {
