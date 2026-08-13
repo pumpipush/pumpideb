@@ -12,12 +12,11 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, ArrowRight, ChevronRight, Loader2 } from "lucide-react";
+import { X, ArrowRight, Loader2 } from "lucide-react";
 import { SiApple, SiGithub, SiX } from "react-icons/si";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWallet } from "@/contexts/WalletContext";
-import { WalletSelectModal } from "./WalletSelectModal";
-import { isWalletInstalled, WALLET_DESCRIPTORS } from "@/lib/solana";
+import { isWalletInstalled, isMobile, WALLET_DESCRIPTORS } from "@/lib/solana";
 import { cn } from "@/lib/utils";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
@@ -44,7 +43,7 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
   const [otp, setOtp]             = useState("");
   const [loading, setLoading]     = useState<string | null>(null); // which button is loading
   const [error, setError]         = useState<string | null>(null);
-  const [moreWallets, setMoreWallets] = useState(false);
+  const mobile = isMobile();
   const gsiContainerRef           = useRef<HTMLDivElement>(null);
   const gsiScriptAdded            = useRef(false); // guards script injection only (not button render)
 
@@ -153,6 +152,14 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
   const handleWalletConnect = async (descriptorName: string) => {
     const descriptor = WALLET_DESCRIPTORS.find(d => d.name === descriptorName);
     if (!descriptor) return;
+    // On mobile: redirect to wallet deep link so the wallet app can open the dApp.
+    if (mobile) {
+      const dappUrl = encodeURIComponent(window.location.href);
+      window.location.href = descriptor.deepLinkBase
+        ? `${descriptor.deepLinkBase}${dappUrl}`
+        : descriptor.installUrl;
+      return;
+    }
     const provider = descriptor.getProvider();
     if (!provider) { window.open(descriptor.installUrl, "_blank"); return; }
     setLoading(`wallet_${descriptorName}`); setError(null);
@@ -169,10 +176,8 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
 
   if (!open) return null;
 
-  // ── Top 2 wallets to show inline ──────────────────────────────────────────
-  const topWallets = WALLET_DESCRIPTORS.filter(d =>
-    ["Phantom", "Solflare"].includes(d.name)
-  );
+  // Show all wallets — installed ones detected automatically
+  const allWallets = WALLET_DESCRIPTORS;
 
   return (
     <>
@@ -269,12 +274,13 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                     <div className="flex-1 h-px bg-white/[0.07]" />
                   </div>
 
-                  {/* ── Wallet list ── */}
+                  {/* ── Wallet list — all wallets, installed ones detected automatically ── */}
                   <div className="flex flex-col gap-1">
-                    {topWallets.map((d) => {
-                      const isRecent   = recentWallet === d.name;
-                      const isLoading  = loading === `wallet_${d.name}`;
-                      const imgSrc = `/wallets/${d.name.toLowerCase()}.jpeg`;
+                    {allWallets.map((d) => {
+                      const isRecent    = recentWallet === d.name;
+                      const isLoading   = loading === `wallet_${d.name}`;
+                      const installed   = mobile || isWalletInstalled(d);
+                      const imgSrc      = `/wallets/${d.name.toLowerCase()}.jpeg`;
                       return (
                         <button
                           key={d.name}
@@ -292,15 +298,19 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                             {d.name}
                           </span>
                           {isLoading && <Loader2 className="w-4 h-4 text-white/40 animate-spin shrink-0" />}
-                          {isRecent && !isLoading && (
+                          {!isLoading && installed && !isRecent && (
                             <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded-md shrink-0">
-                              RECENT
+                              Installed
+                            </span>
+                          )}
+                          {!isLoading && isRecent && (
+                            <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded-md shrink-0">
+                              Recent
                             </span>
                           )}
                         </button>
                       );
                     })}
-
                   </div>
                 </>
               ) : (
@@ -354,12 +364,6 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
         </div>
       </div>
 
-      {/* Full wallet picker (opened via "More wallets") */}
-      <WalletSelectModal
-        open={moreWallets}
-        onOpenChange={setMoreWallets}
-        onSuccess={() => { setMoreWallets(false); reset(); close(); }}
-      />
     </>
   );
 }
