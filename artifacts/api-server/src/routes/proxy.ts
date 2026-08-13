@@ -9,19 +9,31 @@ const storageService = new ObjectStorageService();
 
 // ── pump.fun metadata self-hosting ────────────────────────────────────────────
 
-const ALLOWED_IMAGE_MIME = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-]);
+// Accept any image/* MIME type — normalise known aliases before the check.
+// We validate content via buffer inspection after decode, so strict MIME gatekeeping
+// here adds friction without adding real security.
+function isAllowedImageMime(mime: string): boolean {
+  const normalised = mime.trim().toLowerCase()
+    // Non-standard aliases browsers occasionally report
+    .replace(/^image\/jpg$/, "image/jpeg")
+    .replace(/^image\/pjpeg$/, "image/jpeg");
+  return normalised.startsWith("image/") && normalised.length > 6;
+}
 
-const MIME_TO_EXT: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/gif": "gif",
-  "image/webp": "webp",
-};
+// Extension map for saving files — fall back to "bin" for unusual types.
+function mimeToExt(mime: string): string {
+  const m: Record<string, string> = {
+    "image/jpeg":  "jpg",
+    "image/png":   "png",
+    "image/gif":   "gif",
+    "image/webp":  "webp",
+    "image/avif":  "avif",
+    "image/bmp":   "bmp",
+    "image/svg+xml": "svg",
+  };
+  return m[mime.trim().toLowerCase().replace(/^image\/jpg$/, "image/jpeg")] ?? "bin";
+}
+
 
 // Allowlisted hostnames for image proxying — prevents SSRF to internal services.
 // Add new CDN/IPFS hosts here as needed; never allow bare IP addresses or localhost.
@@ -116,17 +128,18 @@ router.post("/pump-ipfs-upload", asyncWrap(async (req, res) => {
   const { name, symbol, description, imageBase64, imageType, twitter, telegram, website } =
     req.body as Record<string, unknown>;
 
-  if (
-    typeof name !== "string" || !name.trim() ||
-    typeof symbol !== "string" || !symbol.trim() ||
-    typeof description !== "string" || !description.trim() ||
-    typeof imageBase64 !== "string" || !imageBase64 ||
-    typeof imageType !== "string" || !ALLOWED_IMAGE_MIME.has(imageType)
-  ) {
-    return res.status(400).json({
-      error: "Missing or invalid required fields: name, symbol, description, imageBase64, imageType",
-    });
-  }
+  // Validate required fields with specific error messages for easier debugging.
+  if (typeof name !== "string" || !name.trim())
+    return res.status(400).json({ error: "Missing or empty required field: name" });
+  if (typeof symbol !== "string" || !symbol.trim())
+    return res.status(400).json({ error: "Missing or empty required field: symbol" });
+  if (typeof imageBase64 !== "string" || !imageBase64)
+    return res.status(400).json({ error: "Missing required field: imageBase64" });
+  if (typeof imageType !== "string" || !isAllowedImageMime(imageType))
+    return res.status(400).json({ error: `Invalid imageType: "${imageType}" — must be an image/* MIME type` });
+
+  // description is optional for Raydium tokens — default to empty string.
+  const descriptionStr = typeof description === "string" ? description.trim() : "";
 
   // Decode base64 image
   let imageBuffer: Buffer;
@@ -156,7 +169,7 @@ router.post("/pump-ipfs-upload", asyncWrap(async (req, res) => {
 
   try {
     const uuid = randomUUID();
-    const ext = MIME_TO_EXT[imageType] ?? "bin";
+    const ext = mimeToExt(imageType);
     const imageSubPath = `token-images/${uuid}.${ext}`;
     const metaSubPath  = `token-meta/${uuid}.json`;
 
@@ -168,7 +181,7 @@ router.post("/pump-ipfs-upload", asyncWrap(async (req, res) => {
     const metadata: Record<string, unknown> = {
       name:        name.trim(),
       symbol:      symbol.trim(),
-      description: description.trim(),
+      description: descriptionStr,
       image:       imageUrl,
       showName:    true,
     };

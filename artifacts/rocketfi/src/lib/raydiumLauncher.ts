@@ -137,25 +137,23 @@ export interface RaydiumLaunchTxResult {
 /**
  * Upload image + metadata for a Raydium LaunchLab token.
  *
- * Tries Raydium's own IPFS service first; falls back to pump.fun IPFS on
- * failure (both produce standard IPFS URIs that Raydium accepts).
+ * Uses our self-hosted metadata storage (same endpoint as pump.fun tokens).
+ * Raydium's own IPFS service (launch-mint-v1.raydium.io) is no longer reachable
+ * as of Aug 2026 — the program accepts any publicly reachable HTTPS metadata URL,
+ * not just Raydium-hosted IPFS URIs.
  */
 export async function uploadToRaydiumIpfs(
   params: RaydiumUploadParams,
 ): Promise<string> {
-  try {
-    return await _tryRaydiumUpload(params);
-  } catch {
-    return uploadToPumpFunIpfs({
-      name:        params.name,
-      symbol:      params.symbol,
-      description: params.description,
-      twitter:     params.twitter,
-      telegram:    params.telegram,
-      website:     params.website,
-      image:       params.image,
-    });
-  }
+  return uploadToPumpFunIpfs({
+    name:        params.name,
+    symbol:      params.symbol,
+    description: params.description,
+    twitter:     params.twitter,
+    telegram:    params.telegram,
+    website:     params.website,
+    image:       params.image,
+  });
 }
 
 async function _tryRaydiumUpload(params: RaydiumUploadParams): Promise<string> {
