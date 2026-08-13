@@ -821,11 +821,17 @@ export default function ProfilePage() {
                                 <TokenAvatar symbol={token.symbol ?? token.mint.slice(0, 4)} size={32} shape="circle" />
                               )}
                               <div className="min-w-0">
+                                {/* Name: if null/garbage, show short mint */}
                                 <p className="text-sm font-semibold truncate">
-                                  {token.name ?? "Unknown"}
+                                  {token.name && token.name.length < 40
+                                    ? token.name
+                                    : `${token.mint.slice(0, 6)}…${token.mint.slice(-4)}`}
                                 </p>
+                                {/* Symbol: if null or looks like junk (??), show dash */}
                                 <p className="text-xs text-muted-foreground/60 font-mono truncate">
-                                  {token.symbol ?? token.mint.slice(0, 8) + "…"}
+                                  {token.symbol && !/^[?!*]+$/.test(token.symbol)
+                                    ? token.symbol
+                                    : <span className="text-muted-foreground/30 font-sans">Unknown</span>}
                                 </p>
                               </div>
                             </div>
