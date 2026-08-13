@@ -1,4 +1,3 @@
-import { PrivyProvider } from '@privy-io/react-auth';
 import { HelmetProvider } from 'react-helmet-async';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
@@ -98,19 +97,9 @@ function AppShell() {
   );
 }
 
-const PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID as string;
-
 function App() {
   return (
-    <PrivyProvider
-      appId={PRIVY_APP_ID}
-      config={{
-        loginMethods: ["google"],
-        appearance: { theme: "dark" },
-        embeddedWallets: { createOnLogin: "off" },
-      }}
-    >
-      <HelmetProvider>
+    <HelmetProvider>
       <QueryClientProvider client={queryClient}>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
           <WalletProvider>
@@ -124,8 +113,7 @@ function App() {
         <Toaster />
         <PlatformFeeBanner />
       </QueryClientProvider>
-      </HelmetProvider>
-    </PrivyProvider>
+    </HelmetProvider>
   );
 }
 

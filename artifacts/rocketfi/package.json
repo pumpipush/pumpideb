@@ -79,7 +79,6 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "@privy-io/react-auth": "^3.37.1",
     "@raydium-io/raydium-sdk-v2": "0.2.60-alpha",
     "@solana/web3.js": "^1.98.4",
     "@types/bn.js": "^5.2.0",

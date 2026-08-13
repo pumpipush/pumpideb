@@ -118,15 +118,6 @@ export default defineConfig(async ({ command, mode }) => {
       }),
       ...replitPlugins,
     ],
-    // @privy-io/react-auth uses eventemitter3 (CJS) which needs explicit
-    // pre-bundling so Vite can convert it to ESM. Also include wagmi/viem
-    // so they share the same React instance as the host app (prevents the
-    // "Invalid hook call / multiple React copies" error).
-    optimizeDeps: {
-      include: [
-        "eventemitter3",
-      ],
-    },
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, 'src'),
@@ -136,10 +127,6 @@ export default defineConfig(async ({ command, mode }) => {
           '..',
           'attached_assets',
         ),
-        // @stripe/stripe-js is a transitive dep of @privy-io/react-auth (via
-        // @stripe/crypto). We don't use Privy embedded wallets so stub it out
-        // to avoid a "could not resolve" error during Vite dep-optimisation.
-        '@stripe/stripe-js': path.resolve(import.meta.dirname, 'src/lib/stripe-stub.ts'),
       },
       dedupe: ['react', 'react-dom'],
     },

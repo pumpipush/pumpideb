@@ -1,16 +1,14 @@
 /**
- * AuthModal — pump.fun-style unified sign-in modal.
+ * AuthModal — unified sign-in modal.
  *
  * Sign-in options:
- *   1. Google via Privy (privy.io handles the OAuth flow)
- *   2. Email OTP (fully functional — code sent via Resend or logged to console in dev)
- *   3. Connect wallet directly (all installed wallets detected automatically)
+ *   1. Email OTP (fully functional)
+ *   2. Connect wallet directly (all installed wallets detected automatically)
  *
- * Users who sign in via Google/email can browse and create a profile without
- * ever connecting a wallet. Wallet is only required for on-chain actions (trading).
+ * Google login will be added later via a dedicated integration.
  */
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { X, ArrowRight, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWallet } from "@/contexts/WalletContext";
@@ -31,7 +29,7 @@ type Step = "main" | "otp";
 /* ── component ───────────────────────────────────────────────────────────── */
 
 export function AuthModal({ open, onOpenChange }: AuthModalProps) {
-  const { loginWithGoogle, sendEmailOTP, verifyEmailOTP, socialUser } = useAuth();
+  const { sendEmailOTP, verifyEmailOTP } = useAuth();
   const { connectWallet } = useWallet();
 
   const [step, setStep]       = useState<Step>("main");
@@ -45,15 +43,6 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
 
   function close() { onOpenChange(false); }
   function reset() { setStep("main"); setEmail(""); setOtp(""); setError(null); setLoading(null); }
-
-  // Auto-close when Privy auth completes and AuthContext sets socialUser
-  useEffect(() => {
-    if (socialUser && open) {
-      reset();
-      close();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socialUser, open]);
 
   // ── Email OTP ─────────────────────────────────────────────────────────────
 
@@ -154,19 +143,6 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
 
               {step === "main" ? (
                 <>
-                  {/* ── Google via Privy ── */}
-                  <button
-                    onClick={() => loginWithGoogle()}
-                    className="w-full h-11 rounded-xl bg-white hover:bg-white/90 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 font-medium text-[13.5px] text-[#1f1f1f] shadow-sm"
-                  >
-                    <img
-                      src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-                      alt="Google"
-                      className="w-4 h-4"
-                    />
-                    Continue with Google
-                  </button>
-
                   {/* ── Email ── */}
                   <div className="relative flex items-center">
                     <input
@@ -195,7 +171,7 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                     <div className="flex-1 h-px bg-white/[0.07]" />
                   </div>
 
-                  {/* ── Wallet list — installed ones detected automatically ── */}
+                  {/* ── Wallet list ── */}
                   <div className="flex flex-col gap-1">
                     {allWallets.map((d) => {
                       const isRecent  = recentWallet === d.name;
