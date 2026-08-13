@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import rateLimit from "express-rate-limit";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
@@ -57,6 +58,49 @@ app.use(
 // 10 MB limit to accommodate base64-encoded token images in pump-ipfs-upload
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+// Trust the first reverse-proxy hop (Replit / nginx / Cloudflare) so the real
+// client IP is read from X-Forwarded-For instead of the proxy's address.
+app.set("trust proxy", 1);
+
+// REST endpoints — 120 req / minute per IP.
+// Note: our own frontend polls at ~64 req/min on an active token page, so a
+// 60/min limit would 429 normal users. 120/min stops scrapers/bots while
+// keeping the UI responsive even with two tabs open simultaneously.
+const restLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 120,
+  standardHeaders: "draft-7", // Return RateLimit-Policy / RateLimit headers
+  legacyHeaders: false,
+  message: { error: "Too many requests — please wait a moment and try again." },
+  skip: (req) =>
+    req.method === "OPTIONS" ||           // never block CORS preflight
+    req.path === "/health" ||             // never block health checks
+    req.path.endsWith("/stream"),         // SSE streams get their own bucket below
+});
+
+// SSE stream endpoints — much tighter (10 opens / minute per IP).
+// Each SSE connection is long-lived and counts only once when it opens, so
+// 10/min allows comfortable reconnect cycles while blocking connection-flood attacks.
+const sseLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many stream connections — please wait before reconnecting." },
+});
+
+// Apply REST limiter to all /api/* except SSE paths (excluded via skip above).
+app.use("/api", restLimiter);
+
+// Apply SSE limiter to both stream endpoints.
+app.use("/api/feed/stream", sseLimiter);
+app.use("/api/tokens", (req, _res, next) => {
+  // Match /api/tokens/:mint/stream only — other token endpoints use the REST bucket.
+  if (req.path.endsWith("/stream")) return sseLimiter(req, _res, next);
+  next();
+});
 
 app.use("/api", router);
 
