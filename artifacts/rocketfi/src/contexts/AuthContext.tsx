@@ -38,8 +38,7 @@ interface AuthContextValue {
   /** Verify OTP and sign in */
   verifyEmailOTP: (email: string, code: string) => Promise<void>;
   /**
-   * Exchange a Google OAuth access_token for our own JWT.
-   * Call this from useGoogleLogin({ flow: 'implicit' })'s onSuccess handler.
+   * Exchange a Google OAuth access_token (from useGoogleLogin implicit flow) for our own JWT.
    */
   handleGoogleToken: (accessToken: string) => Promise<void>;
   /** Sign out social auth (wallet remains connected if it was) */
@@ -141,6 +140,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ── Google OAuth ──────────────────────────────────────────────────────────
+  // Accepts a Google OAuth access_token from useGoogleLogin (implicit flow).
+  // Backend calls Google's userinfo endpoint to verify it and issues our JWT.
   const handleGoogleToken = useCallback(async (accessToken: string) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15_000); // 15 s timeout

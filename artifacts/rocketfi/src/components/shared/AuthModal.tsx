@@ -31,14 +31,22 @@ function GoogleSignInButton({
   onError: (msg: string) => void;
 }) {
   const login = useGoogleLogin({
-    // Scopes needed by the userinfo endpoint on the backend
-    scope: "openid profile email",
-    onSuccess: (r) => onSuccess(r.access_token),
+    // force account picker; bypasses FedCM cached-credential shortcut that
+    // returns "credential_required" in embedded/iframe contexts.
+    prompt: "select_account",
+    onSuccess: (r) => {
+      const token = r.access_token;
+      if (!token) {
+        onError("No token received from Google — please try again");
+        onLoading(false);
+        return;
+      }
+      onSuccess(token);
+    },
     onError: (e) => {
       onLoading(false);
       onError(e.error_description ?? e.error ?? "Google sign-in failed");
     },
-    // Called when the user closes/dismisses the popup — reset loading
     onNonOAuthError: () => {
       onLoading(false);
     },
@@ -211,7 +219,6 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                   {GOOGLE_CLIENT_ID && (
                     <GoogleSignInButton
                       loading={loading === "google"}
-                      onLoading={(v) => setLoading(v ? "google" : null)}
                       onSuccess={handleGoogleSuccess}
                       onError={(msg) => setError(msg)}
                     />
