@@ -28,12 +28,15 @@ name: Raydium SDK Smoke Test
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
-  # ── Pre-merge gate: fires on any PR that touches the SDK version pin ────────
+  # ── Pre-merge gate: fires on any PR that touches the SDK version pin or fee code ──
   pull_request:
     paths:
       - "artifacts/rocketfi/package.json"
       - "artifacts/rocketfi/src/lib/raydiumLauncher.ts"
+      - "artifacts/rocketfi/src/lib/pumpfunLauncher.ts"
+      - "artifacts/rocketfi/src/lib/platform-fee.ts"
       - "artifacts/rocketfi/src/lib/__tests__/raydiumLaunchLab.smoke.test.ts"
+      - "artifacts/rocketfi/src/lib/__tests__/platformFee.smoke.test.ts"
 
   # ── Post-merge: run on main so a green badge is always fresh ───────────────
   push:
@@ -43,7 +46,10 @@ on:
     paths:
       - "artifacts/rocketfi/package.json"
       - "artifacts/rocketfi/src/lib/raydiumLauncher.ts"
+      - "artifacts/rocketfi/src/lib/pumpfunLauncher.ts"
+      - "artifacts/rocketfi/src/lib/platform-fee.ts"
       - "artifacts/rocketfi/src/lib/__tests__/raydiumLaunchLab.smoke.test.ts"
+      - "artifacts/rocketfi/src/lib/__tests__/platformFee.smoke.test.ts"
 
   # ── Nightly regression catch: runs even when no one touched the SDK ─────────
   schedule:
