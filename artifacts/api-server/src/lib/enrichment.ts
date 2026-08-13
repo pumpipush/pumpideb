@@ -96,6 +96,69 @@ async function fetchRaydiumMeta(mint: string): Promise<RaydiumItem | null> {
   }
 }
 
+// ── Birdeye token overview — high-res image + metadata URI ────────────────────
+//
+// Raydium's /mint/ids endpoint returns a tiny 32×32 px icon from img-v1.raydium.io.
+// Birdeye's /defi/token_overview returns the real IPFS/Arweave image URL (100-400 KB)
+// stored in the token's on-chain Metaplex metadata.  We prefer this over the CDN icon
+// whenever BIRDEYE_API_KEY is available.
+
+interface BirdeyeOverview {
+  logoURI?: string;
+  extensions?: {
+    website?: string;
+    twitter?: string;
+    telegram?: string;
+    description?: string;
+  };
+}
+
+/**
+ * Returns the full-resolution image URL from Birdeye for a given mint,
+ * OR null if the key is missing / API call fails / URL is still a tiny CDN icon.
+ */
+async function fetchBirdeyeLogoURI(mint: string): Promise<string | null> {
+  const key = process.env["BIRDEYE_API_KEY"];
+  if (!key) return null;
+  try {
+    const res = await fetch(
+      `https://public-api.birdeye.so/defi/token_overview?address=${mint}`,
+      { signal: AbortSignal.timeout(8_000), headers: { "X-API-KEY": key, "User-Agent": "RocketFi/1.0" } },
+    );
+    if (!res.ok) return null;
+    const body = (await res.json()) as { data?: BirdeyeOverview };
+    const url = body.data?.logoURI ?? null;
+    // Skip the tiny Raydium CDN icon — it's the same 32×32 we already have from Raydium API
+    if (!url || url.includes("img-v1.raydium.io")) return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+// ── Solana DAS (getAsset) — metadata URI for description / socials ─────────────
+//
+// api.mainnet-beta.solana.com supports the Metaplex DAS getAsset method.
+// Returns the json_uri (IPFS / Arweave metadata JSON) which holds description,
+// twitter, telegram etc.  We store this as metadataUri so the enrichment loop
+// can hydrate socials on the next pass.
+
+async function fetchDasMetadataUri(mint: string): Promise<string | null> {
+  try {
+    const res = await fetch("https://api.mainnet-beta.solana.com", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getAsset", params: { id: mint } }),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { result?: { content?: { json_uri?: string } } };
+    return body.result?.content?.json_uri ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Placeholder detection ──────────────────────────────────────────────────────
 
 /** True when name is a truncated mint address placeholder.
@@ -159,15 +222,42 @@ async function fetchMeta(
     platform === "letsbonk" ||
     platform === "daos_fun"
   ) {
-    // Primary: Raydium's /mint/ids endpoint provides generic Solana token metadata.
+    // Primary: Raydium's /mint/ids endpoint provides name + symbol.
+    // Note: its logoURI is a tiny 32×32 icon — we override it with the full-res
+    // Birdeye image below.
     const ray = await fetchRaydiumMeta(mint);
-    if (ray) return { name: ray.name, symbol: ray.symbol, imageUrl: ray.logoURI ?? null };
+    if (ray?.name && ray?.symbol) {
+      // Fetch full-res image (Birdeye) and metadata URI (DAS) in parallel.
+      // Both are best-effort — fall back to Raydium CDN icon if they fail.
+      const [birdeyeImg, dasUri] = await Promise.all([
+        platform === "raydium_launchlab" ? fetchBirdeyeLogoURI(mint) : Promise.resolve(null),
+        platform === "raydium_launchlab" ? fetchDasMetadataUri(mint) : Promise.resolve(null),
+      ]);
+      const imageUrl = birdeyeImg ?? ray.logoURI ?? null;
+      const result: EnrichResult = { name: ray.name, symbol: ray.symbol, imageUrl };
 
+      // If we got a DAS metadata URI and didn't already have one, fetch socials from it
+      const effectiveUri = dasUri ?? metadataUri;
+      if (effectiveUri) {
+        try {
+          const uriMeta = await fetchSafeUriMeta(effectiveUri);
+          if (uriMeta) {
+            if (!result.imageUrl && uriMeta.imageUrl)   result.imageUrl    = uriMeta.imageUrl;
+            if (uriMeta.description)                     result.description = uriMeta.description;
+            if (uriMeta.twitterUrl)                      result.twitterUrl  = uriMeta.twitterUrl;
+            if (uriMeta.telegramUrl)                     result.telegramUrl = uriMeta.telegramUrl;
+            if (uriMeta.websiteUrl)                      result.websiteUrl  = uriMeta.websiteUrl;
+          }
+        } catch { /* socials are best-effort */ }
+      }
+
+      return result;
+    }
+
+    // Raydium API doesn't know this token yet (very fresh).
     // Fallback for LaunchLab: the createLaunchpad instruction embeds a metadata URI
     // (IPFS / Arweave / CDN) that holds the full token JSON including name, symbol,
-    // image, description, and socials.  Very new tokens may not be in Raydium's
-    // registry yet — this lets us resolve them immediately from on-chain data.
-    // fetchSafeUriMeta applies the allowlist-based SSRF guard before any fetch.
+    // image, description, and socials.
     if (platform === "raydium_launchlab" && metadataUri) {
       const uriMeta = await fetchSafeUriMeta(metadataUri);
       if (!uriMeta) return null;
@@ -224,10 +314,16 @@ export function computeEnrichmentUpdate(
   const newSymbol = meta.symbol && !isPlaceholderSymbol(meta.symbol) ? meta.symbol : null;
   const newImage  = meta.imageUrl ? meta.imageUrl : null;
 
+  /** True when the current image is the tiny 32×32 Raydium CDN icon — safe to upgrade. */
+  const isSmallRaydiumIcon = (url: string | null | undefined) =>
+    !!url && url.includes("img-v1.raydium.io");
+
   const update: Record<string, string> = {};
   if (newName   && isPlaceholderName(token.name))     update["name"]     = newName;
   if (newSymbol && isPlaceholderSymbol(token.symbol)) update["symbol"]   = newSymbol;
-  if (newImage  && token.imageUrl == null)             update["imageUrl"] = newImage;
+  // Allow upgrade from null OR from the known-tiny Raydium CDN icon (32×32 px).
+  if (newImage && (token.imageUrl == null || isSmallRaydiumIcon(token.imageUrl)))
+    update["imageUrl"] = newImage;
 
   // Only fill social/description fields when currently empty — never overwrite user-set data
   if (meta.description && !token.description)   update["description"] = meta.description;
