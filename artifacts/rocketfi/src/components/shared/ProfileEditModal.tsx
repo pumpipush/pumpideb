@@ -149,32 +149,104 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
   };
 
   // ── Avatar handling ─────────────────────────────────────────────────────────
-  const handleAvatarFile = useCallback((file: File) => {
+  // Crops the selected file to a 256×256 JPEG Blob.
+  const cropToBlob = (file: File): Promise<Blob> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onerror = () => reject(new Error("Failed to decode image"));
+        img.onload = () => {
+          const SIZE = 256;
+          const canvas = document.createElement("canvas");
+          canvas.width = SIZE; canvas.height = SIZE;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { reject(new Error("Canvas unavailable")); return; }
+          const minDim = Math.min(img.width, img.height);
+          const sx = (img.width - minDim) / 2;
+          const sy = (img.height - minDim) / 2;
+          ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, SIZE, SIZE);
+          canvas.toBlob(
+            (b) => (b ? resolve(b) : reject(new Error("Failed to encode image"))),
+            "image/jpeg",
+            0.82,
+          );
+        };
+        img.src = e.target!.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+
+  const handleAvatarFile = useCallback(async (file: File) => {
     if (!file.type.startsWith("image/")) return;
     setAvatarUploading(true);
-    const reader = new FileReader();
-    reader.onerror = () => { setAvatarUploading(false); };
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onerror = () => { setAvatarUploading(false); };
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const SIZE = 256;
-        canvas.width = SIZE; canvas.height = SIZE;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) { setAvatarUploading(false); return; }
-        const minDim = Math.min(img.width, img.height);
-        const sx = (img.width - minDim) / 2;
-        const sy = (img.height - minDim) / 2;
-        ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, SIZE, SIZE);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
-        setForm((f) => f && { ...f, avatarUrl: dataUrl, avatarPreview: dataUrl });
-        setAvatarUploading(false);
-      };
-      img.src = e.target!.result as string;
-    };
-    reader.readAsDataURL(file);
-  }, []);
+    try {
+      // 1. Crop to 256×256 JPEG Blob
+      const blob = await cropToBlob(file);
+
+      // Show a local preview immediately while the upload is in progress
+      const previewUrl = URL.createObjectURL(blob);
+      setForm((f) => f && { ...f, avatarPreview: previewUrl });
+
+      const jwtHeaders = authHeaders();
+
+      if (jwtHeaders.Authorization) {
+        // ── Social auth user: GCS presigned-URL flow ──────────────────────
+        // Step 2: get a presigned PUT URL
+        const reqRes = await fetch("/api/storage/uploads/request-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...jwtHeaders },
+          body: JSON.stringify({ name: "avatar.jpg", size: blob.size, contentType: "image/jpeg" }),
+        });
+        if (!reqRes.ok) {
+          const err = await reqRes.json().catch(() => ({})) as { error?: string };
+          throw new Error(err.error ?? "Failed to get upload URL");
+        }
+        const { uploadURL, objectPath } = await reqRes.json() as { uploadURL: string; objectPath: string };
+
+        // Step 3: PUT blob directly to GCS
+        const putRes = await fetch(uploadURL, {
+          method: "PUT",
+          headers: { "Content-Type": "image/jpeg" },
+          body: blob,
+        });
+        if (!putRes.ok) throw new Error("Image upload to storage failed");
+
+        // Step 4: confirm — makes object accessible and returns the serving URL
+        const confirmRes = await fetch("/api/storage/uploads/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...jwtHeaders },
+          body: JSON.stringify({ objectPath }),
+        });
+        if (!confirmRes.ok) {
+          const err = await confirmRes.json().catch(() => ({})) as { error?: string };
+          throw new Error(err.error ?? "Failed to confirm upload");
+        }
+        const { servingUrl } = await confirmRes.json() as { servingUrl: string };
+
+        // Store the serving URL — not a data URL — so the DB column stays lean
+        setForm((f) => f && { ...f, avatarUrl: servingUrl });
+      } else {
+        // ── Wallet-only user: fall back to data URL (no JWT for storage API) ──
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = reject;
+          reader.onload = (e) => resolve(e.target!.result as string);
+          reader.readAsDataURL(blob);
+        });
+        setForm((f) => f && { ...f, avatarUrl: dataUrl });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Image upload failed";
+      toast({ title: "Upload failed", description: msg, variant: "destructive" });
+      // Reset preview to what it was before the failed upload
+      setForm((f) => f && { ...f, avatarPreview: f.avatarUrl });
+    } finally {
+      setAvatarUploading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authHeaders, toast]);
 
   // ── Save ────────────────────────────────────────────────────────────────────
   const saveProfile = async () => {

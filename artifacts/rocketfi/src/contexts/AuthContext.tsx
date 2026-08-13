@@ -164,7 +164,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const err = await r.json().catch(() => ({}));
         throw new Error((err as { error?: string }).error ?? "Google sign-in failed");
       }
-      const data = await r.json() as { isNewAccount?: boolean; wasLinked?: boolean };
+      const data = await r.json() as {
+        token: string;
+        profile: { address: string; username: string; avatarUrl?: string | null; email?: string | null; linkedWallet?: string | null };
+        isNewAccount?: boolean;
+        wasLinked?: boolean;
+      };
       handleAuthResponse({ ...data, authType: "google" });
       return {
         isNewAccount: data.isNewAccount ?? false,
