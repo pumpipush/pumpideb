@@ -39,8 +39,9 @@ interface AuthContextValue {
   verifyEmailOTP: (email: string, code: string) => Promise<void>;
   /**
    * Exchange a Google OAuth access_token (from useGoogleLogin implicit flow) for our own JWT.
+   * Returns outcome flags so callers can show appropriate messaging.
    */
-  handleGoogleToken: (accessToken: string) => Promise<void>;
+  handleGoogleToken: (accessToken: string) => Promise<{ isNewAccount: boolean; wasLinked: boolean }>;
   /** Sign out social auth (wallet remains connected if it was) */
   signOut: () => void;
   /** Returns Authorization header object for API calls */
@@ -65,7 +66,7 @@ const AuthContext = createContext<AuthContextValue>({
   isLoading: true,
   sendEmailOTP: async () => {},
   verifyEmailOTP: async () => {},
-  handleGoogleToken: async () => {},
+  handleGoogleToken: async () => ({ isNewAccount: false, wasLinked: false }),
   signOut: () => {},
   authHeaders: () => ({}),
   getWalletLinkChallenge: async () => ({ nonce: "", message: "" }),
@@ -142,7 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ── Google OAuth ──────────────────────────────────────────────────────────
   // Accepts a Google OAuth access_token from useGoogleLogin (implicit flow).
   // Backend calls Google's userinfo endpoint to verify it and issues our JWT.
-  const handleGoogleToken = useCallback(async (accessToken: string) => {
+  const handleGoogleToken = useCallback(async (accessToken: string): Promise<{ isNewAccount: boolean; wasLinked: boolean }> => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15_000); // 15 s timeout
     try {
@@ -156,8 +157,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const err = await r.json().catch(() => ({}));
         throw new Error((err as { error?: string }).error ?? "Google sign-in failed");
       }
-      const data = await r.json();
+      const data = await r.json() as { isNewAccount?: boolean; wasLinked?: boolean };
       handleAuthResponse({ ...data, authType: "google" });
+      return {
+        isNewAccount: data.isNewAccount ?? false,
+        wasLinked:    data.wasLinked    ?? false,
+      };
     } catch (e) {
       if ((e as Error).name === "AbortError") throw new Error("Google sign-in timed out — please try again");
       throw e;

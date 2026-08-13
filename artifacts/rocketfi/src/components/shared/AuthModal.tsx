@@ -12,6 +12,7 @@ import { X, ArrowRight, Loader2 } from "lucide-react";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWallet } from "@/contexts/WalletContext";
+import { useToast } from "@/hooks/use-toast";
 import { isWalletInstalled, isMobile, WALLET_DESCRIPTORS } from "@/lib/solana";
 
 const LAST_WALLET_KEY = "pumpi_last_wallet";
@@ -88,6 +89,7 @@ type Step = "main" | "otp";
 export function AuthModal({ open, onOpenChange }: AuthModalProps) {
   const { sendEmailOTP, verifyEmailOTP, handleGoogleToken } = useAuth();
   const { connectWallet } = useWallet();
+  const { toast } = useToast();
 
   const [step, setStep]         = useState<Step>("main");
   const [email, setEmail]       = useState("");
@@ -106,9 +108,22 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
     setLoading("google");
     setError(null);
     try {
-      await handleGoogleToken(accessToken);
+      const { isNewAccount, wasLinked } = await handleGoogleToken(accessToken);
       reset();
       close();
+      // Show contextual toast after the modal closes so it's visible.
+      if (wasLinked) {
+        toast({
+          title: "Google account linked",
+          description: "Your Google account has been connected to your existing profile.",
+        });
+      } else if (isNewAccount) {
+        toast({
+          title: "Welcome to Pumpi!",
+          description: "Your account is ready. You can set a custom username in your profile.",
+        });
+      }
+      // Returning user (existing Google account) — no toast needed, they know who they are.
     } catch (e) {
       setError(e instanceof Error ? e.message : "Google sign-in failed");
     } finally {

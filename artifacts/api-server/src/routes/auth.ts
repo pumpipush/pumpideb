@@ -177,9 +177,12 @@ router.post("/auth/google", asyncWrap(async (req, res) => {
     .limit(1);
 
   let profile = existing[0];
-  // Track whether this request resulted in a brand-new account so the client
-  // can surface appropriate onboarding messaging.
+  // Track outcome so the client can surface appropriate messaging:
+  //   isNewAccount — brand-new profile was created
+  //   wasLinked    — an existing email-OTP profile was merged with this Google account
+  //                  for the first time (won't fire on subsequent Google sign-ins)
   let isNewAccount = false;
+  let wasLinked    = false;
 
   if (!profile) {
     // Also check by email in case user signed up via email first.
@@ -199,6 +202,7 @@ router.post("/auth/google", asyncWrap(async (req, res) => {
           .where(eq(profilesTable.address, byEmail[0].address))
           .returning()
       )[0];
+      wasLinked = true;
     } else {
       // Create new profile
       isNewAccount   = true;
@@ -221,7 +225,7 @@ router.post("/auth/google", asyncWrap(async (req, res) => {
   }
 
   const token = signToken({ sub: profile.address, authType: "google" });
-  return void res.json({ token, profile, isNewAccount });
+  return void res.json({ token, profile, isNewAccount, wasLinked });
 }));
 
 // ── POST /api/auth/email/send ──────────────────────────────────────────────
