@@ -2,9 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { SEO } from "@/components/seo/SEO";
 import {
   useGetProfile,
-  useGetRecentActivity,
   getGetProfileQueryKey,
-  getGetRecentActivityQueryKey,
   Profile,
 } from "@workspace/api-client-react";
 import { ProfileEditModal } from "@/components/shared/ProfileEditModal";
@@ -153,18 +151,25 @@ export default function ProfilePage() {
       return res.json() as Promise<WalletPortfolio>;
     },
     enabled: activeTab === "wallet" && !!address,
-    staleTime: 60_000,
+    staleTime: 20_000,
+    refetchOnWindowFocus: true,
+    refetchInterval: activeTab === "wallet" ? 30_000 : false,
     retry: 1,
   });
 
-  const activityParams = { limit: 200 };
-  const { data: allActivity } = useGetRecentActivity(activityParams, {
-    query: { enabled: activeTab === "activity" && !!address, queryKey: getGetRecentActivityQueryKey(activityParams) },
+  // Dedicated wallet activity endpoint — returns trades for this specific wallet
+  // directly from the DB (no global-feed limit + client-side filter).
+  const { data: history } = useQuery({
+    queryKey: ["wallet-activity", address],
+    queryFn: async () => {
+      const res = await fetch(`/api/wallet/${address}/activity?limit=100`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: activeTab === "activity" && !!address,
+    staleTime: 20_000,
+    refetchInterval: activeTab === "activity" ? 30_000 : false,
   });
-  // Bug fix: guard toLowerCase() against null/undefined traderAddress
-  const history = allActivity?.filter(
-    (a) => (a.traderAddress ?? "").toLowerCase() === address.toLowerCase()
-  );
 
   // Derived stats
   const totalTrades = history?.length ?? 0;

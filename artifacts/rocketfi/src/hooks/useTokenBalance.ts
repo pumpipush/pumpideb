@@ -186,13 +186,42 @@ export function useTokenBalance(
     // The UI should dim the balance row (via isLoading) instead.
     fetchBalance(snapWallet, snapMint, epoch, true);
 
-    timerRef.current = setInterval(
-      () => fetchBalance(snapWallet, snapMint, epoch, false),
-      POLL_INTERVAL_MS,
-    );
+    // ── Page Visibility — pause polling while tab is hidden ───────────────────
+    // Polling while hidden burns Alchemy Compute Units with no user benefit.
+    // We stop the interval when the tab is hidden and restart it (with an
+    // immediate catch-up fetch) when the user returns to the tab.
+
+    const startInterval = () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(
+        () => fetchBalance(snapWallet, snapMint, epoch, false),
+        POLL_INTERVAL_MS,
+      );
+    };
+
+    const stopInterval = () => {
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    };
+
+    if (!document.hidden) {
+      startInterval();
+    }
+
+    const handleVisibility = () => {
+      if (document.hidden) {
+        stopInterval();
+      } else {
+        // Immediate catch-up fetch when user returns, then resume interval
+        fetchBalance(snapWallet, snapMint, epoch, false);
+        startInterval();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      stopInterval();
+      document.removeEventListener("visibilitychange", handleVisibility);
       refreshWithEpochRef.current = () => {};
     };
   }, [wallet, mintAddress, fetchBalance]);

@@ -195,8 +195,10 @@ async function _finaliseTx(
   }
 
   // SDK does not set recentBlockhash on LEGACY txs; fetch + stamp before returning.
-  const conn = getConnection();
-  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+  // Use server-cached blockhash (/api/blockhash) — shared across all users,
+  // saves one Alchemy Compute Unit call per LaunchLab trade.
+  const { blockhash, lastValidBlockHeight } = await fetch("/api/blockhash")
+    .then(r => r.json() as Promise<{ blockhash: string; lastValidBlockHeight: number }>);
   if (!tx.recentBlockhash) tx.recentBlockhash = blockhash;
   if (!tx.feePayer) tx.feePayer = new PublicKey(user);
 

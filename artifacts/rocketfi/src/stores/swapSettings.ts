@@ -35,8 +35,8 @@ export const SLIPPAGE_PRESETS = [10, 50, 100] as const; // 0.1%, 0.5%, 1%
 const STORAGE_KEY = "pumpi_swap_settings";
 
 const DEFAULTS: SwapSettings = {
-  slippageBps: 100,   // 1%
-  priorityFee: 0,     // Normal
+  slippageBps: 100,       // 1%
+  priorityFee: 100_000,   // Fast — ensures tx lands quickly on mainnet
 };
 
 /** Clamp and validate a single settings value, returning the default on failure. */

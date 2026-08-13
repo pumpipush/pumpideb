@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { 
   useCreateToken, 
   useGetToken, 
@@ -1050,6 +1050,20 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // SPL token balance for the currently-viewed token — drives sell preset buttons
   const { tokenBalance, atomicBalance, isLoading: balanceLoading, refresh: refreshTokenBalance, refreshAfterTrade } = useTokenBalance(wallet, selectedAddress);
 
+  // After a trade, schedule portfolio query invalidation so My Coins + Profile Wallet
+  // stay in sync. We stagger the timing: the on-chain RPC portfolio can refresh after
+  // 3s (tx propagation), while DB-derived holdings need ~5-10s for the indexer.
+  const queryClient = useQueryClient();
+  const schedulePortfolioRefresh = () => {
+    // DB-derived "My Coins" holdings (trades table aggregate)
+    setTimeout(() => queryClient.invalidateQueries({ queryKey: ["holdings", wallet] }), 5_000);
+    setTimeout(() => queryClient.invalidateQueries({ queryKey: ["holdings", wallet] }), 10_000);
+    // On-chain RPC portfolio (Profile Wallet tab)
+    setTimeout(() => queryClient.invalidateQueries({ queryKey: ["wallet-portfolio", wallet] }), 3_000);
+    // Wallet activity (Profile Activity tab)
+    setTimeout(() => queryClient.invalidateQueries({ queryKey: ["wallet-activity", wallet] }), 6_000);
+  };
+
   // Live SSE stream — real-time trade events
   const { liveTrades, liveToken, connected } = useTokenStream(selectedAddress);
 
@@ -1075,6 +1089,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [jupiterQuote, setJupiterQuote]               = useState<JupiterQuoteResponse | null>(null);
   const [jupiterQuoteLoading, setJupiterQuoteLoading] = useState(false);
   const [jupiterQuoteError, setJupiterQuoteError]     = useState<string | null>(null);
+  /** Unix ms timestamp of the most recently cached quote — used to skip the
+   *  submit-time re-fetch when the cached quote is still fresh (< 5 s old). */
+  const jupiterQuoteTimeRef = useRef<number>(0);
 
   const [timeframe, setTimeframe] = useState<Timeframe>("1h");
   const [shareOpen, setShareOpen] = useState(false);
@@ -1136,6 +1153,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         // Discard result if the effect was cleaned up (amount/token changed) while in-flight
         if (cancelled) return;
         setJupiterQuote(quote);
+        jupiterQuoteTimeRef.current = Date.now();
       } catch (err) {
         if (cancelled) return;
         setJupiterQuoteError(err instanceof Error ? err.message.slice(0, 120) : "Quote unavailable");
@@ -1646,14 +1664,15 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         const inputMint  = tradeMode === "buy" ? WSOL_MINT : token.address;
         const outputMint = tradeMode === "buy" ? token.address : WSOL_MINT;
 
-        // Always fetch a fresh quote at submission — the preview quote can be up to
-        // 15 s old; fetching fresh avoids submitting with a stale price reference.
-        const freshQuote = await getJupiterQuote(
-          inputMint,
-          outputMint,
-          amtBaseUnits,
-          safeBps,
-        );
+        // Reuse the background-cached quote if it is < 5 s old — this skips one
+        // Jupiter API round-trip (~400-700 ms) on every trade.  The preview quote
+        // always corresponds to the current amount/mode (the auto-fetch effect
+        // resets it to null on any amount/mode change), so staleness is the only
+        // risk; slippage protection in otherAmountThreshold still applies.
+        const quoteAge = Date.now() - jupiterQuoteTimeRef.current;
+        const freshQuote = (jupiterQuote && quoteAge < 5_000)
+          ? jupiterQuote
+          : await getJupiterQuote(inputMint, outputMint, amtBaseUnits, safeBps);
 
         const { transaction: jupTxRaw, lastValidBlockHeight: jupLastBlock } =
           await buildJupiterSwapTx(freshQuote, wallet);
@@ -1666,7 +1685,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           : BigInt(freshQuote.outAmount);
         const jupTx = await addFeeToVersionedTx(jupTxRaw, wallet, jupSolLamports, getConnection());
 
-        const jupSig = await signAndSendTransaction(jupTx);
+        // Sign via wallet, then broadcast through Alchemy's staked connections —
+        // same pattern as the pump.fun portal path.  Alchemy has dedicated
+        // validator connections and retries stalled txs; wallet default RPC does not.
+        const signedJupTx = await signVersionedTransaction(jupTx);
+        const jupSig = await getConnection().sendRawTransaction(signedJupTx.serialize(), {
+          skipPreflight: true,
+          maxRetries:    5,
+        });
 
         // ── Optimistic release — same pattern as pump.fun path ────────────────
         // The tx is broadcast; release the spinner immediately so the user isn't
@@ -1677,6 +1703,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         refetchHistory();
         // Retry balance several times to cover RPC propagation delay.
         refreshAfterTrade();
+        schedulePortfolioRefresh();
 
         const jupBlockhash = jupTx.message.recentBlockhash;
         waitForJupiterTxConfirmation(jupSig, jupBlockhash, jupLastBlock)
@@ -1709,7 +1736,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           });
           // Inject 1% platform fee (SOL in) into the legacy transaction before signing.
           addFeeToLegacyTx(res.transaction, wallet, solIn);
-          llSig = await signAndSendTransaction(res.transaction);
+          // Sign via wallet, broadcast via Alchemy (skipPreflight + 5 retries).
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const signedLLBuyTx = await signVersionedTransaction(res.transaction as any);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          llSig = await getConnection().sendRawTransaction((signedLLBuyTx as any).serialize(), {
+            skipPreflight: true,
+            maxRetries:    5,
+          });
           llHash = res.blockhash;
           llHeight = res.lastValidBlockHeight;
         } else {
@@ -1721,7 +1755,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             slippageBps:               safeBps,
             priorityFeeMicroLamports:  priorityFee,
           });
-          llSig = await signAndSendTransaction(res.transaction);
+          // Sign via wallet, broadcast via Alchemy (skipPreflight + 5 retries).
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const signedLLSellTx = await signVersionedTransaction(res.transaction as any);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          llSig = await getConnection().sendRawTransaction((signedLLSellTx as any).serialize(), {
+            skipPreflight: true,
+            maxRetries:    5,
+          });
           llHash = res.blockhash;
           llHeight = res.lastValidBlockHeight;
         }
@@ -1731,6 +1772,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         refetchToken();
         refetchHistory();
         refreshAfterTrade();
+        schedulePortfolioRefresh();
 
         waitForTxConfirmation(llSig, llHash, llHeight)
           .then(() => { refetchToken(); refetchHistory(); refreshAfterTrade(); })
@@ -1788,6 +1830,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       refetchToken();
       refetchHistory();
       refreshAfterTrade();
+      schedulePortfolioRefresh();
 
       waitForJupiterTxConfirmation(txSignature, blockhash, lastValidBlockHeight)
         .then(() => { refetchToken(); refetchHistory(); refreshAfterTrade(); })
@@ -2241,7 +2284,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   }}
                 >
                   <Eye className="h-3.5 w-3.5" /> Top Wallets
-                  {topWallets.length > 0 && <span className="ml-1 text-[11px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.08)", color: activeSubTab === "wallets" ? "#e2e8f0" : "#94a3b8" }}>{topWallets.length}</span>}
+                  
                 </button>
                 <button
                   onClick={() => setActiveSubTab("positions")}

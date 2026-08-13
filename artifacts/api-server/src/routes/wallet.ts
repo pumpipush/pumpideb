@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, tokensTable } from "@workspace/db";
-import { inArray } from "drizzle-orm";
+import { db, tokensTable, tradesTable } from "@workspace/db";
+import { inArray, eq, desc, sql } from "drizzle-orm";
 import { asyncWrap } from "../lib/asyncHandler.js";
 import { PUBLICNODE_HTTP, FALLBACK_HTTP_RPCS } from "../lib/adapters/solanaRpcBase";
 
@@ -135,6 +135,49 @@ router.get("/wallet/:address/portfolio", asyncWrap(async (req, res) => {
     console.error("[portfolio] fetch failed:", err);
     res.status(500).json({ error: "Internal server error" });
   }
+}));
+
+// ── GET /api/wallet/:address/activity ──────────────────────────────────────────
+// Returns the trade history for a specific wallet address directly from the DB.
+// Unlike /stats/recent-activity (which fetches global latest N rows and relies on
+// the caller to filter), this endpoint queries WHERE trader_address = :address so
+// the result is always wallet-specific, regardless of global trade volume.
+router.get("/wallet/:address/activity", asyncWrap(async (req, res) => {
+  const { address } = req.params;
+  const limit = Math.min(Number(req.query["limit"] ?? 100), 200);
+
+  if (!address || address.length < 32) {
+    res.status(400).json({ error: "Invalid address" });
+    return;
+  }
+
+  const activity = await db
+    .select({
+      id:             tradesTable.id,
+      tokenAddress:   tradesTable.tokenAddress,
+      tokenName:      tradesTable.tokenName,
+      tokenSymbol:    tradesTable.tokenSymbol,
+      tokenImageUrl:  tokensTable.imageUrl,
+      traderAddress:  tradesTable.traderAddress,
+      isBuy:          tradesTable.isBuy,
+      ethAmount:      tradesTable.ethAmount,
+      tokenAmount:    tradesTable.tokenAmount,
+      txHash:         tradesTable.txHash,
+      timestamp:      tradesTable.timestamp,
+    })
+    .from(tradesTable)
+    .leftJoin(tokensTable, sql`${tradesTable.tokenAddress} = ${tokensTable.address}`)
+    .where(eq(tradesTable.traderAddress, address))
+    .orderBy(desc(tradesTable.timestamp))
+    .limit(limit);
+
+  res.json(
+    activity.map((a) => ({
+      ...a,
+      tokenName:   a.tokenName   ?? "Unknown",
+      tokenSymbol: a.tokenSymbol ?? "???",
+    })),
+  );
 }));
 
 export default router;

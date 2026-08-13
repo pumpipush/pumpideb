@@ -179,6 +179,8 @@ export async function buildPumpFunCreateTx(
   const tx = VersionedTransaction.deserialize(bytes);
 
   const conn = getConnection();
+  // Fetch blockhash from server cache (shared across all users, saves Alchemy CU)
+  // while also fetching any ALTs needed for fee injection — done below in parallel.
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
 
   // ── Inject platform creation fee ──────────────────────────────────────────
@@ -286,12 +288,14 @@ export async function buildPumpFunBuyTxViaPortal(
     throw new Error(`Failed to build buy transaction: ${text}`);
   }
 
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  const tx    = VersionedTransaction.deserialize(bytes);
-
-  // Refresh blockhash — pumpportal's blockhash may be stale by wallet approval time
-  const conn = getConnection();
-  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+  // Fetch pumpportal tx AND blockhash in parallel — saves one sequential RPC round-trip
+  // while the user is still looking at the Phantom approval popup.
+  const [txBytes, bh] = await Promise.all([
+    res.arrayBuffer().then(b => new Uint8Array(b)),
+    fetch("/api/blockhash").then(r => r.json() as Promise<{ blockhash: string; lastValidBlockHeight: number }>),
+  ]);
+  const tx    = VersionedTransaction.deserialize(txBytes);
+  const { blockhash, lastValidBlockHeight } = bh;
   tx.message.recentBlockhash = blockhash;
 
   return { transaction: tx, blockhash, lastValidBlockHeight };
@@ -334,11 +338,13 @@ export async function buildPumpFunSellTxViaPortal(
     throw new Error(`Failed to build sell transaction: ${text}`);
   }
 
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  const tx    = VersionedTransaction.deserialize(bytes);
-
-  const conn = getConnection();
-  const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+  // Fetch pumpportal tx AND blockhash in parallel — saves one sequential RPC round-trip.
+  const [txBytes, bh] = await Promise.all([
+    res.arrayBuffer().then(b => new Uint8Array(b)),
+    fetch("/api/blockhash").then(r => r.json() as Promise<{ blockhash: string; lastValidBlockHeight: number }>),
+  ]);
+  const tx    = VersionedTransaction.deserialize(txBytes);
+  const { blockhash, lastValidBlockHeight } = bh;
   tx.message.recentBlockhash = blockhash;
 
   return { transaction: tx, blockhash, lastValidBlockHeight };

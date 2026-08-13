@@ -9,10 +9,12 @@ import proxyRouter from "./proxy";
 import storageRouter from "./storage";
 import walletRouter from "./wallet";
 import authRouter from "./auth";
+import blockhashRouter from "./blockhash";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(blockhashRouter);
 router.use(feedRouter);
 router.use(tokensRouter);
 router.use(tradesRouter);
