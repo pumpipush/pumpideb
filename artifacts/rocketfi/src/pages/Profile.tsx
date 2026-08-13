@@ -399,7 +399,7 @@ export default function ProfilePage() {
                     className="w-1.5 h-1.5 rounded-full animate-pulse"
                     style={{ background: `hsl(${hue},70%,60%)` }}
                   />
-                  On-chain
+                  Wallet
                 </span>
               </div>
               {/* Wallet address copy */}
