@@ -301,19 +301,6 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                       );
                     })}
 
-                    {/* More wallets */}
-                    <button
-                      onClick={() => setMoreWallets(true)}
-                      className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl hover:bg-white/[0.05] transition-all"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-white/[0.06] border border-white/[0.08] flex items-center justify-center shrink-0">
-                        <ChevronRight className="w-4 h-4 text-white/40" />
-                      </div>
-                      <span className="flex-1 text-left text-[13.5px] font-medium text-white/70">
-                        More wallets
-                      </span>
-                      <ChevronRight className="w-4 h-4 text-white/30 shrink-0" />
-                    </button>
                   </div>
                 </>
               ) : (
