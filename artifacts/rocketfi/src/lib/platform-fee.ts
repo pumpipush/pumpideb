@@ -26,6 +26,14 @@ import {
 /** Platform fee in basis points (100 = 1%) */
 export const PLATFORM_FEE_BPS = 100;
 
+/**
+ * Flat creation fee charged when a user creates a new token on pump.fun.
+ * Pump.fun creates do not include an initial buy (amount = 0), so there is
+ * no percentage base to calculate from — we charge a fixed amount instead.
+ * 0.001 SOL = 1_000_000 lamports.
+ */
+export const PLATFORM_CREATE_FEE_LAMPORTS = 1_000_000n;
+
 /** Read the fee recipient address from the env var, returning null if not set or invalid. */
 export function getPlatformFeeRecipient(): PublicKey | null {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

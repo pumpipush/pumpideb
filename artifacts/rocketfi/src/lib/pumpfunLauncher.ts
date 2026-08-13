@@ -20,8 +20,16 @@
  * user wallet adds its own signature.
  */
 
-import { Keypair, VersionedTransaction } from "@solana/web3.js";
+import {
+  AddressLookupTableAccount,
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  TransactionMessage,
+  VersionedTransaction,
+} from "@solana/web3.js";
 import { getConnection } from "./solanaConnection";
+import { getPlatformFeeRecipient, PLATFORM_CREATE_FEE_LAMPORTS } from "./platform-fee";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -170,18 +178,57 @@ export async function buildPumpFunCreateTx(
   const bytes = new Uint8Array(await res.arrayBuffer());
   const tx = VersionedTransaction.deserialize(bytes);
 
-  // Pumpportal's blockhash may already be stale by the time the user approves in their
-  // wallet (each blockhash is only valid for ~150 slots ≈ 60 s). Refresh it before
-  // signing so the transaction stays valid through the wallet confirmation step.
   const conn = getConnection();
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
-  tx.message.recentBlockhash = blockhash;
 
-  // Sign with the fresh blockhash — must happen AFTER the blockhash is updated
-  tx.sign([mintKeypair]);
+  // ── Inject platform creation fee ──────────────────────────────────────────
+  // MUST happen before signing — adding instructions after signing invalidates sigs.
+  // Strategy: decompile (fetching ALTs if needed) → add fee transfer → recompile
+  // with fresh blockhash → sign with mintKeypair.
+  const feeRecipient = getPlatformFeeRecipient();
+  let finalTx: VersionedTransaction;
+
+  if (feeRecipient) {
+    // Fetch Address Lookup Tables referenced by the pumpportal transaction.
+    const lookups = tx.message.addressTableLookups ?? [];
+    let altAccounts: AddressLookupTableAccount[] = [];
+    if (lookups.length > 0) {
+      const results = await Promise.all(
+        lookups.map(l => conn.getAddressLookupTable(l.accountKey)),
+      );
+      altAccounts = results
+        .map(r => r.value)
+        .filter((v): v is AddressLookupTableAccount => v !== null);
+    }
+
+    const decompiledMsg = TransactionMessage.decompile(tx.message, {
+      addressLookupTableAccounts: altAccounts,
+    });
+
+    // Append flat creation fee transfer (0.001 SOL) from the user to our wallet.
+    decompiledMsg.instructions.push(
+      SystemProgram.transfer({
+        fromPubkey: new PublicKey(walletAddress),
+        toPubkey:   feeRecipient,
+        lamports:   PLATFORM_CREATE_FEE_LAMPORTS,
+      }),
+    );
+
+    // Bake in the fresh blockhash before compiling so partialSign uses the same value.
+    decompiledMsg.recentBlockhash = blockhash;
+    const newMessage = decompiledMsg.compileToV0Message(altAccounts);
+    finalTx = new VersionedTransaction(newMessage);
+  } else {
+    // No fee recipient configured — keep original transaction, just refresh blockhash.
+    tx.message.recentBlockhash = blockhash;
+    finalTx = tx;
+  }
+
+  // Sign with the fresh blockhash — must happen AFTER blockhash is set.
+  finalTx.sign([mintKeypair]);
 
   return {
-    transaction: tx,
+    transaction: finalTx,
     mintAddress: mintKeypair.publicKey.toBase58(),
     blockhash,
     lastValidBlockHeight,

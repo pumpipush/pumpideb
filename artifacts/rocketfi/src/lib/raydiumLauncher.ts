@@ -77,10 +77,11 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import { Keypair, PublicKey, Transaction } from "@solana/web3.js";
+import { Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import BN from "bn.js";
 import { uploadToPumpFunIpfs } from "./pumpfunLauncher";
 import { getConnection } from "./solanaConnection";
+import { calcFeeLamports, getPlatformFeeRecipient } from "./platform-fee";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -332,8 +333,12 @@ export async function buildRaydiumLaunchTx(
   const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
 
   // ── Partial-sign each transaction ─────────────────────────────────────────
-  // For each tx: set blockhash (if missing), then sign with per-tx SDK signers
-  // + mintKeypair. The user's wallet adds its signature separately via the caller.
+  // For each tx: set blockhash (if missing), inject platform fee (first tx only),
+  // then sign with per-tx SDK signers + mintKeypair.
+  // The user's wallet adds its signature separately via the caller.
+  const feeRecipient = getPlatformFeeRecipient();
+  const feeLamports  = feeRecipient ? calcFeeLamports(buyAmountLamports) : 0n;
+
   for (let i = 0; i < txs.length; i++) {
     const tx = txs[i];
 
@@ -342,6 +347,20 @@ export async function buildRaydiumLaunchTx(
 
     // Ensure feePayer is set (SDK should have done this, but be defensive)
     if (!tx.feePayer) tx.feePayer = owner;
+
+    // ── Platform creation fee (first tx only) ────────────────────────────
+    // Charge 1% of the initial buy amount. Injected BEFORE partialSign so the
+    // instruction is included in the hash the mint keypair signs over.
+    // Only on tx[0] — subsequent txs (if any) are setup-only (mint account init etc.)
+    if (i === 0 && feeRecipient && feeLamports > 0n) {
+      tx.add(
+        SystemProgram.transfer({
+          fromPubkey: owner,
+          toPubkey:   feeRecipient,
+          lamports:   feeLamports,
+        }),
+      );
+    }
 
     // Collect all non-wallet signers for this transaction.
     // Filter out any nullish entries that can arise when the SDK returns a flat
