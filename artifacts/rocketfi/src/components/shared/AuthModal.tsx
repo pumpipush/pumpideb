@@ -31,10 +31,8 @@ function GoogleSignInButton({
   onError: (msg: string) => void;
 }) {
   const login = useGoogleLogin({
-    // Request the scopes needed by the userinfo endpoint on the backend
+    // Scopes needed by the userinfo endpoint on the backend
     scope: "openid profile email",
-    // Force popup — prevents accidental redirect mode in iframed environments
-    ux_mode: "popup",
     onSuccess: (r) => onSuccess(r.access_token),
     onError: (e) => {
       onLoading(false);
