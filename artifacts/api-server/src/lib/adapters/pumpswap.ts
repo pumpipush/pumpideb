@@ -47,7 +47,10 @@ class PumpSwapIndexer extends SolanaRpcIndexer {
    * Interval is chosen automatically based on whether ALCHEMY_API_KEY is set.
    */
   private _lastTradePassMs = 0;
-  private readonly _tradeIntervalMs = process.env["ALCHEMY_API_KEY"] ? 2_000 : 30_000;
+  // 10 s with Alchemy key (was 2 s) — getTransaction is now routed to free
+  // PublicNode so the bottleneck is throughput, not CU budget. 10 s still gives
+  // ~6 samples/minute for price discovery without hammering public RPCs.
+  private readonly _tradeIntervalMs = process.env["ALCHEMY_API_KEY"] ? 10_000 : 30_000;
 
   constructor() {
     super({ programId: PUMPSWAP_PROGRAM, adapterName: PLATFORM });

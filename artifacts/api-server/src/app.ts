@@ -98,7 +98,7 @@ app.use("/api", restLimiter);
 app.use("/api/feed/stream", sseLimiter);
 app.use("/api/tokens", (req, _res, next) => {
   // Match /api/tokens/:mint/stream only — other token endpoints use the REST bucket.
-  if (req.path.endsWith("/stream")) return sseLimiter(req, _res, next);
+  if (req.path.endsWith("/stream")) { sseLimiter(req, _res, next); return; }
   next();
 });
 

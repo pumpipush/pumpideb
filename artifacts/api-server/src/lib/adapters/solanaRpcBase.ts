@@ -280,10 +280,36 @@ export abstract class SolanaRpcIndexer {
     // Use "confirmed" commitment to match the logsSubscribe level — the tx is
     // already confirmed when the WS fires, so the RPC can return it immediately
     // without waiting for "finalized" (which adds 5–13 s on many endpoints).
-    return this.rpcCall<RpcTx>("getTransaction", [
+    //
+    // IMPORTANT: We deliberately bypass this.httpUrl (Alchemy) here and go
+    // straight to the free public fallbacks. Alchemy charges 100 CU per
+    // getTransaction call; at pump.fun/PumpSwap/LaunchLab volume this drains
+    // the free tier in hours. The WSS logsSubscribe (which does need Alchemy's
+    // reliability) already runs on this.httpUrl via the WebSocket connection —
+    // getTransaction only needs best-effort delivery, which PublicNode provides.
+    const freeUrls = [PUBLICNODE_HTTP, ...FALLBACK_HTTP_RPCS];
+    const params   = [
       signature,
       { encoding: "json", maxSupportedTransactionVersion: 0, commitment: "confirmed" },
-    ]);
+    ];
+    for (const url of freeUrls) {
+      try {
+        const res = await fetch(url, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ jsonrpc: "2.0", id: nextId(), method: "getTransaction", params }),
+          signal:  AbortSignal.timeout(8_000),
+        });
+        const json = (await res.json()) as { result?: RpcTx; error?: { code?: number } & unknown };
+        const errCode = (json.error as { code?: number } | undefined)?.code;
+        if (errCode === -32005 || errCode === 429) continue; // rate-limited, try next
+        if (json.error) continue;
+        return json.result ?? null;
+      } catch {
+        continue;
+      }
+    }
+    return null;
   }
 
   /** Extract a newly-minted token: in post-balances but NOT in pre-balances */
