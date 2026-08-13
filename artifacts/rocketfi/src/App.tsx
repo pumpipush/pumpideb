@@ -18,6 +18,7 @@ import { SearchDialog } from '@/components/shared/SearchDialog';
 import { CopyToastProvider } from '@/components/shared/CopyToast';
 import { AuthModal } from '@/components/shared/AuthModal';
 import { UsernameNudgeBanner } from '@/components/shared/UsernameNudgeBanner';
+import { PlatformFeeBanner } from '@/components/shared/PlatformFeeBanner';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 
 const queryClient = new QueryClient({
@@ -110,6 +111,7 @@ function App() {
         </WalletProvider>
       </WouterRouter>
       <Toaster />
+      <PlatformFeeBanner />
     </QueryClientProvider>
     </HelmetProvider>
   );

@@ -38,12 +38,37 @@ export const PLATFORM_CREATE_FEE_LAMPORTS = 1_000_000n;
 export function getPlatformFeeRecipient(): PublicKey | null {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const addr = (import.meta as any).env?.VITE_PLATFORM_FEE_RECIPIENT;
-  if (!addr || typeof addr !== "string" || addr.trim() === "") return null;
+  if (!addr || typeof addr !== "string" || addr.trim() === "") {
+    console.warn(
+      "[platform-fee] Platform fee recipient not configured — all fees will be skipped. " +
+      "Set VITE_PLATFORM_FEE_RECIPIENT to a valid Solana wallet address to collect fees.",
+    );
+    return null;
+  }
   try {
     return new PublicKey(addr.trim());
   } catch {
-    console.warn("[platform-fee] VITE_PLATFORM_FEE_RECIPIENT is not a valid Solana address; fee skipped.");
+    console.warn(
+      "[platform-fee] VITE_PLATFORM_FEE_RECIPIENT is not a valid Solana address — all fees will be skipped. " +
+      "Value: " + addr.trim(),
+    );
     return null;
+  }
+}
+
+/**
+ * Check whether the platform fee recipient is configured and valid.
+ * Returns true if fees will be collected, false otherwise.
+ */
+export function isPlatformFeeConfigured(): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const addr = (import.meta as any).env?.VITE_PLATFORM_FEE_RECIPIENT;
+  if (!addr || typeof addr !== "string" || addr.trim() === "") return false;
+  try {
+    new PublicKey(addr.trim());
+    return true;
+  } catch {
+    return false;
   }
 }
 
