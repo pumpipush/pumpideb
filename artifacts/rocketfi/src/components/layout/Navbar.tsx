@@ -6,7 +6,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, UserCircle, Copy, LogOut, ExternalLink, ChevronDown, Pencil, Plus, LogIn, Wallet } from "lucide-react";
+import { Search, UserCircle, Copy, LogOut, ExternalLink, Pencil, Plus, LogIn, Wallet } from "lucide-react";
 import { useWallet } from "@/contexts/WalletContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGetProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
@@ -110,6 +110,27 @@ function WalletButton() {
   const { displayName, avatarUrl } = buildNavbarDisplayInfo(profile, socialUser, walletFallback);
   const subLine = walletName ?? socialUser?.email ?? (wallet ? formatAddress(wallet) : "");
 
+  const [open, setOpen] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function isDesktop() {
+    return typeof window !== "undefined" && window.innerWidth >= 768;
+  }
+
+  function handleMouseEnterTrigger() {
+    if (!isDesktop()) return;
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setOpen(true);
+  }
+  function handleMouseLeave() {
+    if (!isDesktop()) return;
+    closeTimer.current = setTimeout(() => setOpen(false), 120);
+  }
+  function handleMouseEnterContent() {
+    if (!isDesktop()) return;
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+  }
+
   return (
     <>
     {/* SOL balance chip — only for authenticated users */}
@@ -120,37 +141,31 @@ function WalletButton() {
         title="In-app SOL balance — click to deposit"
       >
         <Wallet className="w-3 h-3 text-primary/70 group-hover:text-primary transition-colors shrink-0" />
-        {/* Show balance number on all sizes; keep it short */}
         <span className="text-[12px] font-semibold text-foreground tabular-nums">{solBalance} SOL</span>
       </button>
     )}
 
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <button className="flex items-center gap-2 h-9 pl-1.5 pr-2.5 rounded-full border border-border/60 bg-card hover:border-border hover:bg-card/80 transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 group shrink-0">
-          {/* Avatar */}
-          <div className="h-7 w-7 rounded-full overflow-hidden border border-border/80 shrink-0">
-            <img
-              src={avatarUrl ?? diceBearUrl(wallet ?? socialUser?.address ?? "")}
-              alt={displayName}
-              className="w-full h-full object-cover"
-              style={{ imageRendering: avatarUrl ? "auto" : "pixelated" }}
-            />
-          </div>
-          {/* Name + subline — desktop */}
-          <div className="hidden sm:flex flex-col items-start leading-none">
-            <span className="text-[12px] font-semibold text-foreground">{displayName}</span>
-            <span className="text-[10px] font-mono text-muted-foreground/70 mt-0.5">
-              {subLine}
-            </span>
-          </div>
-          <ChevronDown className="w-3 h-3 text-muted-foreground/60 group-data-[state=open]:rotate-180 transition-transform duration-200 hidden sm:block" />
+        <button
+          onMouseEnter={handleMouseEnterTrigger}
+          onMouseLeave={handleMouseLeave}
+          className="h-9 w-9 rounded-full overflow-hidden border border-border/60 hover:border-border transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 shrink-0"
+        >
+          <img
+            src={avatarUrl ?? diceBearUrl(wallet ?? socialUser?.address ?? "")}
+            alt={displayName}
+            className="w-full h-full object-cover"
+            style={{ imageRendering: avatarUrl ? "auto" : "pixelated" }}
+          />
         </button>
       </DropdownMenuTrigger>
 
       <DropdownMenuContent
         align="end"
         sideOffset={8}
+        onMouseEnter={handleMouseEnterContent}
+        onMouseLeave={handleMouseLeave}
         className="w-60 p-0 rounded-xl border border-border/60 shadow-xl shadow-black/40 overflow-hidden"
       >
         {/* Profile header */}
