@@ -68,6 +68,7 @@ import {
 } from "@/lib/external-tokens";
 import { computeSellPresetAmount } from "@/lib/tradePresets";
 import { getConnection } from "@/lib/solanaConnection";
+import { addFeeToVersionedTx, addFeeToLegacyTx } from "@/lib/platform-fee";
 import { SEO } from "@/components/seo/SEO";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
 import { formatSol, formatTokenAmount, formatAtomicTokenAmount, atomicToDisplayTokens, computeHoldingRow } from "@/lib/utils";
@@ -1577,8 +1578,16 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           safeBps,
         );
 
-        const { transaction: jupTx, lastValidBlockHeight: jupLastBlock } =
+        const { transaction: jupTxRaw, lastValidBlockHeight: jupLastBlock } =
           await buildJupiterSwapTx(freshQuote, wallet);
+
+        // Inject 1% platform fee into the transaction before the user signs.
+        // Buy: 1% of SOL spent (inAmount in lamports).
+        // Sell: 1% of SOL received (outAmount in lamports).
+        const jupSolLamports = tradeMode === "buy"
+          ? BigInt(freshQuote.inAmount)
+          : BigInt(freshQuote.outAmount);
+        const jupTx = await addFeeToVersionedTx(jupTxRaw, wallet, jupSolLamports, getConnection());
 
         const jupSig = await signAndSendTransaction(jupTx);
 
@@ -1619,6 +1628,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             slippageBps:               safeBps,
             priorityFeeMicroLamports:  priorityFee,
           });
+          // Inject 1% platform fee (SOL in) into the legacy transaction before signing.
+          addFeeToLegacyTx(res.transaction, wallet, solIn);
           llSig = await signAndSendTransaction(res.transaction);
           llHash = res.blockhash;
           llHeight = res.lastValidBlockHeight;
@@ -1665,10 +1676,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       const computedPrioritySOL   = priorityFee > 0 ? (priorityFee * 200_000) / 1e15 : 0;
       const priorityFeeSOL        = Math.max(PUMP_MIN_PRIORITY_SOL, computedPrioritySOL);
 
-      const { transaction: portalTx, blockhash, lastValidBlockHeight } =
+      const { transaction: portalTxRaw, blockhash, lastValidBlockHeight } =
         tradeMode === "buy"
           ? await buildPumpFunBuyTxViaPortal(wallet, token.address, numAmount, slippagePct, priorityFeeSOL)
           : await buildPumpFunSellTxViaPortal(wallet, token.address, numAmount, slippagePct, priorityFeeSOL);
+
+      // Inject 1% platform fee on buys (SOL-out for sells is unknown at build time).
+      const portalSolLamports = tradeMode === "buy" ? BigInt(Math.round(numAmount * 1e9)) : 0n;
+      const portalTx = await addFeeToVersionedTx(portalTxRaw, wallet, portalSolLamports, getConnection());
 
       // Sign via the wallet (shows Phantom popup), then submit through our Alchemy RPC.
       // Using sign-then-send (instead of signAndSendTransaction) lets us control the
@@ -3831,7 +3846,14 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
         tradeMode === "buy" ? token.address : WSOL_MINT,
         amtBaseUnits, slippageBps,
       );
-      const { transaction, lastValidBlockHeight } = await buildJupiterSwapTx(freshQuote, wallet);
+      const { transaction: extTxRaw, lastValidBlockHeight } = await buildJupiterSwapTx(freshQuote, wallet);
+
+      // Inject 1% platform fee (SOL in for buy, SOL out for sell) before signing.
+      const extSolLamports = tradeMode === "buy"
+        ? BigInt(freshQuote.inAmount)
+        : BigInt(freshQuote.outAmount);
+      const transaction = await addFeeToVersionedTx(extTxRaw, wallet, extSolLamports, getConnection());
+
       const txSignature = await signAndSendTransaction(transaction);
 
       // Optimistic release — spinner clears as soon as the broadcast succeeds.

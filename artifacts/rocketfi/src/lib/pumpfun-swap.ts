@@ -110,8 +110,8 @@ const BUY_DISCRIMINATOR  = new Uint8Array([102,  6, 61,  18,  1, 218, 235, 234])
  */
 const SELL_DISCRIMINATOR = new Uint8Array([ 51, 230, 133, 164,  1, 127, 131, 173]);
 
-/** Platform referral fee charged on every trade (0.25% = 25 bps) */
-const PLATFORM_FEE_BPS = 25;
+/** Platform referral fee charged on every trade (1% = 100 bps) */
+const PLATFORM_FEE_BPS = 100;
 
 /** Free public Solana RPC fallbacks (used when no Alchemy key is set) */
 const PUBLIC_RPCS = [
@@ -163,7 +163,7 @@ function getRpcUrl(): string {
 /** Resolve the configured platform fee recipient wallet address, or null */
 function getPlatformFeeRecipient(): string | null {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const addr = (import.meta as any).env?.VITE_PUMP_FEE_RECIPIENT;
+  const addr = (import.meta as any).env?.VITE_PLATFORM_FEE_RECIPIENT;
   if (!addr || typeof addr !== "string" || addr.trim() === "") return null;
   return addr.trim();
 }
