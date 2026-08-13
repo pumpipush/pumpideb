@@ -178,7 +178,7 @@ certbot --nginx -d yourdomain.com
 | CORS restricted to your domain only | ✅ Set ALLOWED_ORIGINS |
 | OTP not logged in production | ✅ Throws instead of logging |
 | GCS auth via service account (not Replit sidecar) | ✅ Set GOOGLE_APPLICATION_CREDENTIALS |
-| VITE_PLATFORM_FEE_RECIPIENT set | ⚠️ Required to collect fees |
+| VITE_PLATFORM_FEE_RECIPIENT set | ✅ Build fails with clear error if absent (set `ALLOW_MISSING_FEE_RECIPIENT=1` to override) |
 | ALCHEMY_API_KEY set | ⚠️ Required for Solana indexing |
 | DATABASE_URL points to production DB | ⚠️ Required |
 | nginx SSL configured | ⚠️ Required for production |
