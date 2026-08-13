@@ -18,6 +18,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
+import { applyMeResponse } from "@/lib/profileDisplayUtils";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -231,13 +232,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       if (!r.ok) return;
       const data = await r.json() as { profile: { address: string; username: string; avatarUrl?: string | null; email?: string | null; linkedWallet?: string | null }; authType: string };
-      const p = data.profile;
-      setSocialUser((u) => u ? {
-        ...u,
-        username:     p.username,
-        avatarUrl:    p.avatarUrl ?? null,
-        linkedWallet: p.linkedWallet ?? null,
-      } : u);
+      setSocialUser((u) => u ? applyMeResponse(u, data) : u);
     } catch {
       // Ignore network errors — UI will remain on stale data until next load
     }

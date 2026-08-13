@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { diceBearUrl, formatAddress } from "@/lib/utils";
+import { performPostSave } from "@/lib/profileDisplayUtils";
 import { generateUsername } from "@/lib/username";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -305,17 +306,16 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
       const saved = await res.json() as { username?: string };
       const newUsername = saved.username ?? (profile?.username ?? "");
 
-      // Invalidate all profile-related queries so callers re-fetch
-      await queryClient.invalidateQueries({ queryKey: getGetProfileQueryKey(address) });
-      if (profile?.username && profile.username !== address) {
-        await queryClient.invalidateQueries({ queryKey: getGetProfileQueryKey(profile.username) });
-      }
-
-      // Keep the AuthContext socialUser in sync so username/avatarUrl shown in
-      // the navbar and other fallbacks reflect the new values immediately.
-      if (socialUser) {
-        await refreshSocialUser();
-      }
+      // Invalidate profile queries and sync AuthContext so the navbar
+      // reflects the new values immediately — delegated to performPostSave.
+      await performPostSave({
+        address,
+        oldUsername:        profile?.username,
+        hasSocialUser:      !!socialUser,
+        invalidateQuery:    (key) => queryClient.invalidateQueries({ queryKey: key as string[] }),
+        getQueryKey:        getGetProfileQueryKey,
+        refreshSocialUser:  socialUser ? refreshSocialUser : undefined,
+      });
 
       close();
       toast({ title: "Profile saved", description: "Your profile has been updated." });

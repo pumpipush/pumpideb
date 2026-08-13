@@ -11,6 +11,7 @@ import { useWallet } from "@/contexts/WalletContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGetProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
 import { formatAddress, diceBearUrl } from "@/lib/utils";
+import { buildNavbarDisplayInfo } from "@/lib/profileDisplayUtils";
 import { Link, useLocation } from "wouter";
 import { openSearch } from "@/components/shared/SearchDialog";
 import { useState } from "react";
@@ -66,9 +67,11 @@ function WalletButton() {
 
   // Resolve display info — wallet profile takes priority over social user
   const profileSlug = profile?.username ?? (socialUser ? socialUser.address : wallet ?? "");
-  const displayName = profile?.username ?? socialUser?.username ?? (wallet ? formatAddress(wallet) : "");
-  const avatarUrl   = profile?.avatarUrl ?? socialUser?.avatarUrl ?? (wallet ? diceBearUrl(wallet) : null);
-  const subLine     = walletName ?? socialUser?.email ?? (wallet ? formatAddress(wallet) : "");
+  const walletFallback = wallet
+    ? { displayName: formatAddress(wallet), avatarUrl: diceBearUrl(wallet) }
+    : null;
+  const { displayName, avatarUrl } = buildNavbarDisplayInfo(profile, socialUser, walletFallback);
+  const subLine = walletName ?? socialUser?.email ?? (wallet ? formatAddress(wallet) : "");
 
   return (
     <>
