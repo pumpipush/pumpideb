@@ -326,7 +326,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
       setLaunchStep("done");
       setMintAddress(newMint);
-      launchTimerRef.current = setTimeout(() => onLaunch(newMint), 3000);
+      onLaunch(newMint);
 
     } catch (err: unknown) {
       setLaunchStep("error");
@@ -410,9 +410,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
       setLaunchStep("done");
       setMintAddress(newMint);
-      // Raydium indexer is slower than pump.fun — use 6 s so the token is in our
-      // DB before we redirect the user to the token page.
-      launchTimerRef.current = setTimeout(() => onLaunch(newMint), 6000);
+      onLaunch(newMint);
 
     } catch (err: unknown) {
       setLaunchStep("error");
