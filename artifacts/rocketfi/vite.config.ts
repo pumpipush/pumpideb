@@ -118,6 +118,12 @@ export default defineConfig(async ({ command, mode }) => {
       }),
       ...replitPlugins,
     ],
+    // Privy v3 bundles wagmi/viem which cause "Invalid hook call" when Vite
+    // pre-bundles them separately (multiple React copies). Excluding forces
+    // the package to be loaded as-is without Vite's dep-optimisation step.
+    optimizeDeps: {
+      exclude: ["@privy-io/react-auth"],
+    },
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, 'src'),

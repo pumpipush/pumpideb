@@ -197,8 +197,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // ── Google via Privy ───────────────────────────────────────────────────────
+  // Privy is configured with loginMethods: ['google'] in PrivyProvider,
+  // so calling login() without arguments shows only Google as an option.
   const loginWithGoogle = useCallback(() => {
-    privyLogin({ loginMethods: ["google"] } as Parameters<typeof privyLogin>[0]);
+    privyLogin();
   }, [privyLogin]);
 
   // ── Email OTP ──────────────────────────────────────────────────────────────
