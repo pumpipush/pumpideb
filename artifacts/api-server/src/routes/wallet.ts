@@ -143,7 +143,7 @@ router.get("/wallet/:address/portfolio", asyncWrap(async (req, res) => {
 // the caller to filter), this endpoint queries WHERE trader_address = :address so
 // the result is always wallet-specific, regardless of global trade volume.
 router.get("/wallet/:address/activity", asyncWrap(async (req, res) => {
-  const { address } = req.params;
+  const address = String(req.params["address"] ?? "");
   const limit = Math.min(Number(req.query["limit"] ?? 100), 200);
 
   if (!address || address.length < 32) {
@@ -153,17 +153,21 @@ router.get("/wallet/:address/activity", asyncWrap(async (req, res) => {
 
   const activity = await db
     .select({
-      id:             tradesTable.id,
-      tokenAddress:   tradesTable.tokenAddress,
-      tokenName:      tradesTable.tokenName,
-      tokenSymbol:    tradesTable.tokenSymbol,
-      tokenImageUrl:  tokensTable.imageUrl,
-      traderAddress:  tradesTable.traderAddress,
-      isBuy:          tradesTable.isBuy,
-      ethAmount:      tradesTable.ethAmount,
-      tokenAmount:    tradesTable.tokenAmount,
-      txHash:         tradesTable.txHash,
-      timestamp:      tradesTable.timestamp,
+      id:               tradesTable.id,
+      tokenAddress:     tradesTable.tokenAddress,
+      // Trade-level snapshot (may be null for older rows)
+      _tradeName:       tradesTable.tokenName,
+      _tradeSymbol:     tradesTable.tokenSymbol,
+      // Live tokens-table data (preferred when the token is in our DB)
+      _tokenName:       tokensTable.name,
+      _tokenSymbol:     tokensTable.symbol,
+      tokenImageUrl:    tokensTable.imageUrl,
+      traderAddress:    tradesTable.traderAddress,
+      isBuy:            tradesTable.isBuy,
+      ethAmount:        tradesTable.ethAmount,
+      tokenAmount:      tradesTable.tokenAmount,
+      txHash:           tradesTable.txHash,
+      timestamp:        tradesTable.timestamp,
     })
     .from(tradesTable)
     .leftJoin(tokensTable, sql`${tradesTable.tokenAddress} = ${tokensTable.address}`)
@@ -172,10 +176,12 @@ router.get("/wallet/:address/activity", asyncWrap(async (req, res) => {
     .limit(limit);
 
   res.json(
-    activity.map((a) => ({
+    activity.map(({ _tradeName, _tradeSymbol, _tokenName, _tokenSymbol, ...a }) => ({
       ...a,
-      tokenName:   a.tokenName   ?? "Unknown",
-      tokenSymbol: a.tokenSymbol ?? "???",
+      // Prefer the live tokens-table value; fall back to the trade snapshot.
+      // Use || not ?? so empty-string values also fall through.
+      tokenName:   _tokenName   || _tradeName   || "Unknown",
+      tokenSymbol: _tokenSymbol || _tradeSymbol || "?",
     })),
   );
 }));

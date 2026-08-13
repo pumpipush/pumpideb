@@ -9,7 +9,7 @@
 
 import crypto from "node:crypto";
 import { Router, type Request, type Response } from "express";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db, depositsTable, profilesTable } from "@workspace/db";
 import { asyncWrap } from "../lib/asyncHandler.js";
 import { extractBearer, verifyToken, type AuthPayload } from "../lib/auth-jwt.js";
@@ -218,12 +218,28 @@ router.get(
         BigInt(tx.meta!.postBalances[idx]) - BigInt(tx.meta!.preBalances[idx]);
       if (received <= 0n) { res.json({ status: "pending" }); return; }
 
-      // Credit the user's in-app balance and mark this deposit confirmed
+      // Atomically claim the pending→confirmed transition.
+      //
+      // The AND status = 'pending' predicate is the idempotency guard against
+      // concurrent polls: PostgreSQL's row-lock semantics mean that when two
+      // transactions UPDATE the same row simultaneously, the second one blocks
+      // until the first commits, then re-evaluates the WHERE clause and finds
+      // status = 'confirmed' — returning 0 rows.  Only the winner (claimed.length > 0)
+      // proceeds to credit the balance; all others are no-ops.
+      let credited = false;
       await db.transaction(async (trx) => {
-        await trx
+        const claimed = await trx
           .update(depositsTable)
           .set({ status: "confirmed", txSignature: validSig.signature, confirmedAt: new Date() })
-          .where(eq(depositsTable.referencePubkey, reference));
+          .where(
+            and(
+              eq(depositsTable.referencePubkey, reference),
+              eq(depositsTable.status, "pending"),
+            ),
+          )
+          .returning({ id: depositsTable.id });
+
+        if (claimed.length === 0) return; // another concurrent request already confirmed
 
         await trx
           .update(profilesTable)
@@ -231,13 +247,20 @@ router.get(
             solBalanceLamports: sql`${profilesTable.solBalanceLamports} + ${deposit.amountLamports}`,
           })
           .where(eq(profilesTable.address, auth.sub));
+
+        credited = true;
       });
 
-      logger.info(
-        { reference, txSig: validSig.signature, lamports: deposit.amountLamports.toString() },
-        "deposits: confirmed",
-      );
+      if (credited) {
+        logger.info(
+          { reference, txSig: validSig.signature, lamports: deposit.amountLamports.toString() },
+          "deposits: confirmed",
+        );
+      } else {
+        logger.debug({ reference }, "deposits: already confirmed by concurrent request — skipping credit");
+      }
 
+      // Respond confirmed regardless of which request won the race
       res.json({
         status: "confirmed",
         txSignature: validSig.signature,

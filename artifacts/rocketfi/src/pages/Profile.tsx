@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { copyToClipboard } from "@/components/shared/CopyToast";
 import { useWallet } from "@/contexts/WalletContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { formatAddress, formatMC, formatEth, formatSol, timeAgo, cn, diceBearUrl } from "@/lib/utils";
+import { formatAddress, formatMC, formatSol, timeAgo, cn, diceBearUrl, resolveImageUrl } from "@/lib/utils";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -90,6 +90,20 @@ function ProfileSkeleton() {
 // ─── Main component ────────────────────────────────────────────────────────────
 type Tab = "activity" | "wallet";
 
+type ActivityTrade = {
+  id: number;
+  tokenAddress: string;
+  tokenName: string;
+  tokenSymbol: string;
+  tokenImageUrl: string | null;
+  traderAddress: string;
+  isBuy: boolean;
+  ethAmount: string;
+  tokenAmount: string;
+  txHash: string;
+  timestamp: string;
+};
+
 type WalletToken = {
   mint: string;
   balance: number;
@@ -162,12 +176,12 @@ export default function ProfilePage() {
 
   // Dedicated wallet activity endpoint — returns trades for this specific wallet
   // directly from the DB (no global-feed limit + client-side filter).
-  const { data: history } = useQuery({
+  const { data: history } = useQuery<ActivityTrade[]>({
     queryKey: ["wallet-activity", address],
     queryFn: async () => {
       const res = await fetch(`/api/wallet/${address}/activity?limit=100`);
       if (!res.ok) return [];
-      return res.json();
+      return res.json() as Promise<ActivityTrade[]>;
     },
     enabled: activeTab === "activity" && !!address,
     staleTime: 20_000,
@@ -177,8 +191,17 @@ export default function ProfilePage() {
   // Derived stats
   const totalTrades = history?.length ?? 0;
   const totalVolume = history
-    ? history.reduce((sum, t) => sum + (parseFloat(t.ethAmount) || 0), 0)
+    ? history.reduce((sum: number, t: ActivityTrade) => sum + (parseFloat(t.ethAmount) || 0), 0)
     : 0;
+
+  // Realized PNL: net SOL flow per token (sells add SOL, buys subtract SOL).
+  // Positive = net SOL gained; negative = net SOL spent still open / lost.
+  const realizedPnlLamports: number | null = history
+    ? history.reduce((sum: number, t: ActivityTrade) => {
+        const lam = parseFloat(t.ethAmount) || 0;
+        return sum + (t.isBuy ? -lam : lam);
+      }, 0)
+    : null;
 
   // ── Render ────────────────────────────────────────────────────────────────
   if (isLoading) return <ProfileSkeleton />;
@@ -411,6 +434,17 @@ export default function ProfilePage() {
         <div className="flex divide-x divide-border/30 mb-6 backdrop-blur-sm bg-white/[0.03] border border-border/25 rounded-sm overflow-hidden">
           <StatCard label="Trades" value={totalTrades || "—"} />
           <StatCard label="Volume" value={totalVolume > 0 ? formatSol(totalVolume.toFixed(0)) : "—"} />
+          {realizedPnlLamports !== null && (
+            <div className="flex-1 px-4 py-3 text-center min-w-0">
+              <div className={cn(
+                "text-sm font-bold font-mono tabular-nums",
+                realizedPnlLamports > 0 ? "text-primary" : realizedPnlLamports < 0 ? "text-destructive" : "text-foreground"
+              )}>
+                {realizedPnlLamports > 0 ? "+" : ""}{formatSol(realizedPnlLamports.toFixed(0))}
+              </div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">PNL</div>
+            </div>
+          )}
         </div>
 
         {/* ── Tabs ── */}
@@ -453,7 +487,7 @@ export default function ProfilePage() {
                     <div className="flex items-center gap-3">
                       <span
                         className={cn(
-                          "text-[10px] font-bold uppercase px-2 py-1 rounded-sm min-w-[40px] text-center",
+                          "text-[10px] font-bold uppercase px-2 py-1 rounded-sm min-w-[40px] text-center shrink-0",
                           trade.isBuy
                             ? "bg-primary/15 text-primary"
                             : "bg-destructive/15 text-destructive"
@@ -461,12 +495,25 @@ export default function ProfilePage() {
                       >
                         {trade.isBuy ? "BUY" : "SELL"}
                       </span>
-                      <div>
-                        <div className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-                          {trade.tokenSymbol ?? "???"}
+                      {/* Token image */}
+                      {resolveImageUrl(trade.tokenImageUrl) ? (
+                        <img
+                          src={resolveImageUrl(trade.tokenImageUrl)!}
+                          alt={trade.tokenSymbol ?? ""}
+                          className="w-7 h-7 rounded-full object-cover shrink-0 border border-border/20"
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                        />
+                      ) : (
+                        <div className="w-7 h-7 rounded-full bg-white/[0.06] shrink-0 flex items-center justify-center text-[9px] font-bold text-muted-foreground border border-border/20">
+                          {(trade.tokenSymbol ?? "?").slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                          {trade.tokenSymbol ?? trade.tokenName ?? "Unknown"}
                         </div>
                         <div className="text-xs text-muted-foreground font-mono">
-                          {formatEth(trade.ethAmount)} ETH
+                          {formatSol(trade.ethAmount)}
                         </div>
                       </div>
                     </div>
