@@ -27,8 +27,10 @@ function WalletButton() {
   const [editOpen, setEditOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [solBalance, setSolBalance] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
   const { toast } = useToast();
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const jwtHeaders = authHeaders();
   const hasJwt = !!jwtHeaders.Authorization;
@@ -109,9 +111,6 @@ function WalletButton() {
     : null;
   const { displayName, avatarUrl } = buildNavbarDisplayInfo(profile, socialUser, walletFallback);
   const subLine = walletName ?? socialUser?.email ?? (wallet ? formatAddress(wallet) : "");
-
-  const [open, setOpen] = useState(false);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function isDesktop() {
     return typeof window !== "undefined" && window.innerWidth >= 768;
