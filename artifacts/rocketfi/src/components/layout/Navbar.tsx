@@ -31,8 +31,11 @@ function WalletButton() {
     toast({ title: "Logged out", description: "See you next time." });
   }
 
-  const { data: profile } = useGetProfile(wallet ?? "", {
-    query: { enabled: !!wallet, retry: false, queryKey: getGetProfileQueryKey(wallet ?? "") },
+  // For social-only users (no wallet), query by the social address so the
+  // navbar reflects any username/avatar changes the user saves via Edit Profile.
+  const effectiveNavAddress = wallet ?? socialUser?.address ?? "";
+  const { data: profile } = useGetProfile(effectiveNavAddress, {
+    query: { enabled: !!effectiveNavAddress, retry: false, queryKey: getGetProfileQueryKey(effectiveNavAddress) },
   });
 
   // Not signed in at all — show Sign In button

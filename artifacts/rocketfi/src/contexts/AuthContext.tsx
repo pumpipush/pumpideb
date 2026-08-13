@@ -47,6 +47,12 @@ interface AuthContextValue {
   /** Returns Authorization header object for API calls */
   authHeaders: () => Record<string, string>;
   /**
+   * Re-fetch the current user's profile from /api/auth/me and sync socialUser
+   * state. Call this after any profile edit so that username/avatarUrl shown
+   * in the navbar and elsewhere are immediately up-to-date.
+   */
+  refreshSocialUser: () => Promise<void>;
+  /**
    * Issue a server nonce the wallet must sign before linking.
    * Returns { nonce, message } — client signs `message` with the wallet, then
    * passes the result to linkWallet().
@@ -69,6 +75,7 @@ const AuthContext = createContext<AuthContextValue>({
   handleGoogleToken: async () => ({ isNewAccount: false, wasLinked: false }),
   signOut: () => {},
   authHeaders: () => ({}),
+  refreshSocialUser: async () => {},
   getWalletLinkChallenge: async () => ({ nonce: "", message: "" }),
   linkWallet: async () => {},
   unlinkWallet: async () => {},
@@ -206,6 +213,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetch(apiUrl("/auth/logout"), { method: "POST" }).catch(() => {});
   }, []);
 
+  // ── Refresh social user ───────────────────────────────────────────────────
+  // Re-fetches the current user's profile from /api/auth/me and syncs the
+  // socialUser state. Call after any profile edit to keep username/avatarUrl
+  // in sync without requiring a full page reload.
+  const refreshSocialUser = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const r = await fetch(apiUrl("/auth/me"), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) return;
+      const data = await r.json() as { profile: { address: string; username: string; avatarUrl?: string | null; email?: string | null; linkedWallet?: string | null }; authType: string };
+      const p = data.profile;
+      setSocialUser((u) => u ? {
+        ...u,
+        username:     p.username,
+        avatarUrl:    p.avatarUrl ?? null,
+        linkedWallet: p.linkedWallet ?? null,
+      } : u);
+    } catch {
+      // Ignore network errors — UI will remain on stale data until next load
+    }
+  }, []);
+
   // ── Wallet linking ─────────────────────────────────────────────────────────
   const getWalletLinkChallenge = useCallback(async (walletAddress: string): Promise<{ nonce: string; message: string }> => {
     const headers = authHeaders();
@@ -260,6 +292,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         handleGoogleToken,
         signOut,
         authHeaders,
+        refreshSocialUser,
         getWalletLinkChallenge,
         linkWallet,
         unlinkWallet,

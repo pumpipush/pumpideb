@@ -77,7 +77,7 @@ interface ProfileEditModalProps {
 
 export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }: ProfileEditModalProps) {
   const { wallet, signMessage, openWalletModal } = useWallet();
-  const { socialUser, authHeaders, getWalletLinkChallenge, linkWallet, unlinkWallet } = useAuth();
+  const { socialUser, authHeaders, refreshSocialUser, getWalletLinkChallenge, linkWallet, unlinkWallet } = useAuth();
   const { toast } = useToast();
   const [walletLinking, setWalletLinking] = useState(false);
   const [, setLocation] = useLocation();
@@ -237,6 +237,12 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
       await queryClient.invalidateQueries({ queryKey: getGetProfileQueryKey(address) });
       if (profile?.username && profile.username !== address) {
         await queryClient.invalidateQueries({ queryKey: getGetProfileQueryKey(profile.username) });
+      }
+
+      // Keep the AuthContext socialUser in sync so username/avatarUrl shown in
+      // the navbar and other fallbacks reflect the new values immediately.
+      if (socialUser) {
+        await refreshSocialUser();
       }
 
       close();
