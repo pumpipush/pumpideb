@@ -75,6 +75,22 @@ interface AuthContextValue {
     walletAddress: string,
     signMessage: (msg: Uint8Array) => Promise<Uint8Array>,
   ) => Promise<void>;
+  /**
+   * (Wallet-auth only) Send an OTP to the given email address so the user can
+   * link it to their wallet profile. Throws if the email is already taken.
+   */
+  linkEmailSend: (email: string) => Promise<void>;
+  /**
+   * (Wallet-auth only) Verify the OTP sent by linkEmailSend and save the email
+   * to the profile. Resolves on success, throws on wrong/expired code.
+   */
+  linkEmailVerify: (email: string, code: string) => Promise<void>;
+  /**
+   * (Wallet-auth only) Exchange a Google access_token for a linked Google
+   * identity on the current wallet profile. Throws if the Google account is
+   * already claimed by another profile.
+   */
+  linkGoogle: (accessToken: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -90,6 +106,9 @@ const AuthContext = createContext<AuthContextValue>({
   linkWallet: async () => {},
   unlinkWallet: async () => {},
   loginWithWallet: async () => {},
+  linkEmailSend: async () => {},
+  linkEmailVerify: async () => {},
+  linkGoogle: async () => {},
 });
 
 const STORAGE_KEY = "pumpi_auth_token";
@@ -292,6 +311,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSocialUser((u) => u ? { ...u, linkedWallet: null } : u);
   }, [authHeaders]);
 
+  // ── Wallet → email/Google linking ────────────────────────────────────────
+
+  const linkEmailSend = useCallback(async (email: string) => {
+    const headers = authHeaders();
+    if (!headers.Authorization) throw new Error("Not signed in");
+    const r = await fetch(apiUrl("/auth/link/email/send"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({ email }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({})) as { error?: string };
+      throw new Error(err.error ?? "Failed to send verification code");
+    }
+  }, [authHeaders]);
+
+  const linkEmailVerify = useCallback(async (email: string, code: string) => {
+    const headers = authHeaders();
+    if (!headers.Authorization) throw new Error("Not signed in");
+    const r = await fetch(apiUrl("/auth/link/email/verify"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({ email, code }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({})) as { error?: string };
+      throw new Error(err.error ?? "Invalid or expired code");
+    }
+    // Sync the new email into local state so the UI updates immediately
+    setSocialUser((u) => u ? { ...u, email: email.toLowerCase() } : u);
+  }, [authHeaders]);
+
+  const linkGoogle = useCallback(async (accessToken: string) => {
+    const headers = authHeaders();
+    if (!headers.Authorization) throw new Error("Not signed in");
+    const r = await fetch(apiUrl("/auth/link/google"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({ access_token: accessToken }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({})) as { error?: string };
+      throw new Error(err.error ?? "Failed to link Google account");
+    }
+    const data = await r.json() as { profile: { email?: string | null; avatarUrl?: string | null } };
+    setSocialUser((u) => u
+      ? { ...u, email: data.profile.email ?? u.email, avatarUrl: data.profile.avatarUrl ?? u.avatarUrl }
+      : u);
+  }, [authHeaders]);
+
   // ── Wallet-only login ─────────────────────────────────────────────────────
   // Fetches a one-time challenge, has the wallet sign it, then exchanges the
   // signature for a JWT — giving wallet-only users the same auth capabilities
@@ -362,6 +431,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         linkWallet,
         unlinkWallet,
         loginWithWallet,
+        linkEmailSend,
+        linkEmailVerify,
+        linkGoogle,
       }}
     >
       {children}

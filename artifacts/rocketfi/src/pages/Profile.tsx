@@ -7,6 +7,7 @@ import {
 } from "@workspace/api-client-react";
 import { ProfileEditModal } from "@/components/shared/ProfileEditModal";
 import { DepositModal } from "@/components/shared/DepositModal";
+import { AddEmailModal } from "@/components/shared/AddEmailModal";
 import { generateUsername } from "@/lib/username";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,7 +26,7 @@ import { useParams, useLocation, useSearch } from "wouter";
 import {
   Globe, Copy, Share2, Edit2, Camera, Coins,
   ExternalLink, AlertCircle, ArrowDownToLine,
-  TrendingUp, TrendingDown, Wallet, Activity,
+  TrendingUp, TrendingDown, Wallet, Activity, ShieldAlert,
 } from "lucide-react";
 
 const XIcon = ({ className }: { className?: string }) => (
@@ -150,6 +151,7 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<Tab>("activity");
   const [editOpen, setEditOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
+  const [addEmailOpen, setAddEmailOpen] = useState(false);
 
   const { data: profile, isLoading, refetch } = useGetProfile(slug, {
     query: { enabled: !!slug, retry: false, queryKey: getGetProfileQueryKey(slug) },
@@ -503,6 +505,31 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
+
+            {/* ══ WALLET RECOVERY PROMPT ══════════════════════════════════════════ */}
+            {isOwner && socialUser?.authType === "wallet" && !socialUser?.email && (
+              <div
+                className="flex items-start gap-3 px-4 py-3.5 rounded-xl mb-5 cursor-pointer hover:opacity-90 transition-opacity"
+                style={{
+                  background: "rgba(245,158,11,0.06)",
+                  border: "1px solid rgba(245,158,11,0.2)",
+                }}
+                onClick={() => setAddEmailOpen(true)}
+              >
+                <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "#f59e0b" }} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium" style={{ color: "#f59e0b" }}>
+                    Protect your balance
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    If you lose wallet access your in-app balance will be unrecoverable.{" "}
+                    <span className="underline underline-offset-2" style={{ color: "#f59e0b" }}>
+                      Add an email or Google backup →
+                    </span>
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* ══ TABS ═════════════════════════════════════════════════════════════ */}
             <div
@@ -892,6 +919,7 @@ export default function ProfilePage() {
         </>
       )}
 
+      <AddEmailModal open={addEmailOpen} onClose={() => setAddEmailOpen(false)} />
       <DepositModal open={depositOpen} onOpenChange={setDepositOpen} />
       <ProfileEditModal
         open={editOpen}

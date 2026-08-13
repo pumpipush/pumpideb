@@ -1,11 +1,14 @@
 /**
  * auth.ts — social & email authentication endpoints.
  *
- * POST /api/auth/google         Verify Google ID token → create/find profile → return JWT
- * POST /api/auth/email/send     Send 6-digit OTP to email
- * POST /api/auth/email/verify   Verify OTP → create/find profile → return JWT
- * GET  /api/auth/me             Return profile from JWT (Authorization: Bearer <token>)
- * POST /api/auth/logout         Client-side logout hint (clears server-side nonce if any)
+ * POST /api/auth/google               Verify Google ID token → create/find profile → return JWT
+ * POST /api/auth/email/send           Send 6-digit OTP to email
+ * POST /api/auth/email/verify         Verify OTP → create/find profile → return JWT
+ * POST /api/auth/link/email/send      (wallet-auth only) Send OTP to email to link it
+ * POST /api/auth/link/email/verify    (wallet-auth only) Verify OTP and save email to profile
+ * POST /api/auth/link/google          (wallet-auth only) Link Google account to wallet profile
+ * GET  /api/auth/me                   Return profile from JWT (Authorization: Bearer <token>)
+ * POST /api/auth/logout               Client-side logout hint (clears server-side nonce if any)
  */
 
 import { Router } from "express";
@@ -345,6 +348,174 @@ router.post("/auth/email/verify", asyncWrap(async (req, res) => {
 
   const token = signToken({ sub: profile.address, authType: "email" });
   return void res.json({ token, profile });
+}));
+
+// ── POST /api/auth/link/email/send ────────────────────────────────────────
+// Wallet-only users can add an email address by sending an OTP.
+// Requires: Authorization: Bearer <wallet-auth JWT>
+
+router.post("/auth/link/email/send", asyncWrap(async (req, res) => {
+  const token = extractBearer(req.headers.authorization);
+  if (!token) return void res.status(401).json({ error: "No token" });
+
+  const payload = verifyToken(token);
+  if (!payload) return void res.status(401).json({ error: "Invalid or expired token" });
+  if (payload.authType !== "wallet") {
+    return void res.status(400).json({ error: "Only wallet-auth accounts can link an email this way" });
+  }
+
+  const { email } = req.body as { email?: string };
+  if (!email || !email.includes("@")) {
+    return void res.status(400).json({ error: "valid email required" });
+  }
+
+  // Check email isn't already registered to another profile
+  const taken = await db
+    .select({ address: profilesTable.address })
+    .from(profilesTable)
+    .where(eq(profilesTable.email, email.toLowerCase()))
+    .limit(1);
+  if (taken.length > 0 && taken[0].address !== payload.sub) {
+    return void res.status(409).json({ error: "That email is already associated with another account" });
+  }
+
+  // Max 3 sends per email per 15 minutes (reuse same limiter as registration flow)
+  if (!checkRateLimit(otpSendLimiter, `link:${email.toLowerCase()}`, 3, 15 * 60_000)) {
+    return void res.status(429).json({ error: "Too many attempts. Please wait 15 minutes before requesting another code." });
+  }
+
+  const code = generateOTP(email.toLowerCase());
+  await sendOTPEmail(email.toLowerCase(), code);
+  return void res.json({ ok: true });
+}));
+
+// ── POST /api/auth/link/email/verify ──────────────────────────────────────
+// Verify OTP and save the email to the authenticated wallet user's profile.
+// Requires: Authorization: Bearer <wallet-auth JWT>
+
+router.post("/auth/link/email/verify", asyncWrap(async (req, res) => {
+  const token = extractBearer(req.headers.authorization);
+  if (!token) return void res.status(401).json({ error: "No token" });
+
+  const payload = verifyToken(token);
+  if (!payload) return void res.status(401).json({ error: "Invalid or expired token" });
+  if (payload.authType !== "wallet") {
+    return void res.status(400).json({ error: "Only wallet-auth accounts can link an email this way" });
+  }
+
+  const { email, code } = req.body as { email?: string; code?: string };
+  if (!email || !code) return void res.status(400).json({ error: "email and code required" });
+
+  // Brute-force guard: max 10 attempts per email per 15 minutes
+  if (!checkRateLimit(otpVerifyLimiter, `link:${email.toLowerCase()}`, 10, 15 * 60_000)) {
+    return void res.status(429).json({ error: "Too many verification attempts. Please request a new code." });
+  }
+
+  const ok = verifyOTP(email.toLowerCase(), code);
+  if (!ok) return void res.status(401).json({ error: "Invalid or expired code" });
+
+  // Re-check uniqueness at verify time (race-condition safety)
+  const taken = await db
+    .select({ address: profilesTable.address })
+    .from(profilesTable)
+    .where(eq(profilesTable.email, email.toLowerCase()))
+    .limit(1);
+  if (taken.length > 0 && taken[0].address !== payload.sub) {
+    return void res.status(409).json({ error: "That email is already associated with another account" });
+  }
+
+  let updated;
+  try {
+    updated = await db
+      .update(profilesTable)
+      .set({ email: email.toLowerCase(), updatedAt: new Date() })
+      .where(eq(profilesTable.address, payload.sub))
+      .returning();
+  } catch (err: unknown) {
+    const msg = String(err);
+    if (msg.includes("unique") || msg.includes("duplicate")) {
+      return void res.status(409).json({ error: "That email is already associated with another account" });
+    }
+    throw err;
+  }
+
+  if (!updated[0]) return void res.status(404).json({ error: "Profile not found" });
+  return void res.json({ ok: true, profile: updated[0] });
+}));
+
+// ── POST /api/auth/link/google ─────────────────────────────────────────────
+// Link a Google account to the authenticated wallet user's profile.
+// Accepts { access_token } from @react-oauth/google implicit flow.
+// Requires: Authorization: Bearer <wallet-auth JWT>
+
+router.post("/auth/link/google", asyncWrap(async (req, res) => {
+  const token = extractBearer(req.headers.authorization);
+  if (!token) return void res.status(401).json({ error: "No token" });
+
+  const payload = verifyToken(token);
+  if (!payload) return void res.status(401).json({ error: "Invalid or expired token" });
+  if (payload.authType !== "wallet") {
+    return void res.status(400).json({ error: "Only wallet-auth accounts can link a Google account this way" });
+  }
+
+  const { access_token } = req.body as { access_token?: string };
+  if (!access_token) {
+    return void res.status(400).json({ error: "access_token required" });
+  }
+
+  // Verify via Google's userinfo endpoint
+  let googleId: string, email: string, picture: string, emailVerified: boolean;
+  try {
+    const r = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+    if (!r.ok) throw new Error(`Google userinfo ${r.status}`);
+    const info = await r.json() as Record<string, unknown>;
+    googleId      = String(info.sub ?? "");
+    email         = (String(info.email ?? "")).toLowerCase();
+    picture       = String(info.picture ?? "");
+    emailVerified = info.email_verified === true || info.email_verified === "true";
+    if (!googleId) throw new Error("no sub in userinfo");
+  } catch (err: unknown) {
+    return void res.status(401).json({ error: "invalid Google access_token", detail: String(err) });
+  }
+
+  // Ensure neither googleId nor email is already taken by a different profile
+  const conditions = [eq(profilesTable.googleId, googleId)];
+  if (email && emailVerified) conditions.push(eq(profilesTable.email, email));
+
+  const conflicts = await db
+    .select({ address: profilesTable.address })
+    .from(profilesTable)
+    .where(or(...conditions))
+    .limit(1);
+
+  if (conflicts.length > 0 && conflicts[0].address !== payload.sub) {
+    return void res.status(409).json({ error: "That Google account is already associated with another profile" });
+  }
+
+  let updated;
+  try {
+    updated = await db
+      .update(profilesTable)
+      .set({
+        googleId,
+        email: (email && emailVerified) ? email : undefined,
+        avatarUrl: picture || undefined,
+        updatedAt: new Date(),
+      })
+      .where(eq(profilesTable.address, payload.sub))
+      .returning();
+  } catch (err: unknown) {
+    const msg = String(err);
+    if (msg.includes("unique") || msg.includes("duplicate")) {
+      return void res.status(409).json({ error: "That Google account or email is already associated with another profile" });
+    }
+    throw err;
+  }
+
+  if (!updated[0]) return void res.status(404).json({ error: "Profile not found" });
+  return void res.json({ ok: true, profile: updated[0] });
 }));
 
 // ── GET /api/auth/me ───────────────────────────────────────────────────────
