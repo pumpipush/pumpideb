@@ -13,43 +13,41 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { copyToClipboard } from "@/components/shared/CopyToast";
 import { useWallet } from "@/contexts/WalletContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { formatAddress, formatMC, formatSol, timeAgo, cn, diceBearUrl, resolveImageUrl, formatAtomicTokenAmount } from "@/lib/utils";
+import {
+  formatAddress, formatSol, timeAgo, cn, diceBearUrl,
+  resolveImageUrl, formatAtomicTokenAmount,
+} from "@/lib/utils";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation, useSearch } from "wouter";
+import {
+  Globe, Copy, Share2, Edit2, Camera, Coins,
+  ExternalLink, AlertCircle, ArrowDownToLine,
+  TrendingUp, TrendingDown, Wallet, Activity,
+} from "lucide-react";
+
 const XIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.91-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
   </svg>
 );
 
-import {
-  Globe,
-  Copy,
-  Share2,
-  Edit2,
-  Camera,
-  Coins,
-  ExternalLink,
-  AlertCircle,
-  ArrowDownToLine,
-} from "lucide-react";
-
-
-// ─── Banner gradient + accent from address ────────────────────────────────────
+// ─── Color helpers ────────────────────────────────────────────────────────────
 function accentHue(address: string): number {
-  return parseInt(address.slice(2, 6), 16) % 360;
+  let h = 0;
+  for (let i = 0; i < Math.min(address.length, 8); i++) {
+    h = (h * 31 + address.charCodeAt(i)) & 0xffff;
+  }
+  return h % 360;
 }
-function bannerGradient(address: string): string {
-  const h1 = accentHue(address);
-  const h2 = (h1 + 140) % 360;
-  return `linear-gradient(135deg, hsl(${h1},70%,28%) 0%, hsl(${h2},60%,18%) 50%, hsl(${(h2 + 60) % 360},55%,12%) 100%)`;
+function accentColor(address: string, l = 55) {
+  return `hsl(${accentHue(address)},72%,${l}%)`;
 }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
-function AvatarDisplay({ profile, size = 80 }: { profile: Profile; size?: number }) {
+function AvatarDisplay({ profile }: { profile: Profile }) {
   const src = profile.avatarUrl || diceBearUrl(profile.address);
   return (
     <img
@@ -61,34 +59,7 @@ function AvatarDisplay({ profile, size = 80 }: { profile: Profile; size?: number
   );
 }
 
-// ─── Stat card ────────────────────────────────────────────────────────────────
-function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="flex-1 flex flex-col items-center py-4 px-3">
-      <span className="text-2xl sm:text-3xl font-bold text-foreground tabular-nums leading-none">{value}</span>
-      <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground mt-1.5">{label}</span>
-    </div>
-  );
-}
-
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
-function ProfileSkeleton() {
-  return (
-    <div className="max-w-3xl mx-auto pb-24">
-      <Skeleton className="h-40 w-full" />
-      <div className="px-5 -mt-12 mb-6">
-        <Skeleton className="w-24 h-24 rounded-full border-4 border-background mb-4" />
-        <Skeleton className="h-6 w-40 mb-2" />
-        <Skeleton className="h-4 w-28 mb-4" />
-        <div className="flex gap-3">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 flex-1 rounded-sm" />)}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Main component ────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 type Tab = "activity" | "wallet";
 
 type ActivityTrade = {
@@ -122,6 +93,48 @@ type WalletPortfolio = {
   tokens: WalletToken[];
 };
 
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+function ProfileSkeleton() {
+  return (
+    <div className="max-w-2xl mx-auto pb-24">
+      <Skeleton className="h-44 w-full rounded-none" />
+      <div className="px-5 -mt-14 mb-6">
+        <Skeleton className="w-28 h-28 rounded-full border-4 border-background mb-5" />
+        <Skeleton className="h-7 w-44 mb-2" />
+        <Skeleton className="h-4 w-28 mb-5" />
+        <div className="flex gap-3">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 flex-1 rounded-xl" />)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Stat chip ────────────────────────────────────────────────────────────────
+function StatChip({
+  label, value, sub, color,
+}: { label: string; value: string | number; sub?: string; color?: string }) {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center py-5 px-3 min-w-0 relative">
+      <span
+        className="text-2xl sm:text-3xl font-bold tabular-nums leading-none tracking-tight"
+        style={{ color: color ?? "var(--foreground)" }}
+      >
+        {value}
+      </span>
+      {sub && (
+        <span className="text-[11px] font-medium tabular-nums mt-0.5" style={{ color: color ?? "#6b7280" }}>
+          {sub}
+        </span>
+      )}
+      <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 mt-1.5 font-medium">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+// ─── Main component ────────────────────────────────────────────────────────────
 export default function ProfilePage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug ?? "";
@@ -129,30 +142,24 @@ export default function ProfilePage() {
   const searchString = useSearch();
   const { wallet } = useWallet();
   const { socialUser } = useAuth();
+  const solPrice = useSolPrice();
 
-  // slug can be a username or a wallet address (32-44 base58 chars)
   const looksLikeAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(slug);
-
-  // Whether the page was opened with ?editUsername=1 (from the username nudge banner)
   const editUsernameParam = new URLSearchParams(searchString).get("editUsername") === "1";
 
   const [activeTab, setActiveTab] = useState<Tab>("activity");
   const [editOpen, setEditOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
-  const solPrice = useSolPrice();
 
   const { data: profile, isLoading, refetch } = useGetProfile(slug, {
     query: { enabled: !!slug, retry: false, queryKey: getGetProfileQueryKey(slug) },
   });
 
-  // Resolved address — from profile if loaded, or directly if slug is an address
   const address = profile?.address ?? (looksLikeAddress ? slug : "");
-  // Owner: either the connected wallet matches, OR the social user's UUID matches
   const isOwner =
     (!!wallet && !!address && wallet.toLowerCase() === address.toLowerCase()) ||
     (!!socialUser && !!address && socialUser.address === address);
 
-  // ── Auto-open edit modal when coming from the username nudge banner ────────
   const autoOpenedRef = useRef(false);
   useEffect(() => {
     if (!editUsernameParam || !isOwner || autoOpenedRef.current || isLoading) return;
@@ -161,7 +168,6 @@ export default function ProfilePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editUsernameParam, isOwner, isLoading]);
 
-  // ── Wallet portfolio (on-chain balances) ──────────────────────────────────
   const { data: portfolio, isLoading: portfolioLoading, error: portfolioError } = useQuery<WalletPortfolio>({
     queryKey: ["wallet-portfolio", address],
     queryFn: async () => {
@@ -176,8 +182,6 @@ export default function ProfilePage() {
     retry: 1,
   });
 
-  // Dedicated wallet activity endpoint — returns trades for this specific wallet
-  // directly from the DB (no global-feed limit + client-side filter).
   const { data: history } = useQuery<ActivityTrade[]>({
     queryKey: ["wallet-activity", address],
     queryFn: async () => {
@@ -190,567 +194,699 @@ export default function ProfilePage() {
     refetchInterval: activeTab === "activity" ? 30_000 : false,
   });
 
-  // Derived stats
   const totalTrades = history?.length ?? 0;
-  const totalVolume = history
-    ? history.reduce((sum: number, t: ActivityTrade) => sum + (parseFloat(t.ethAmount) || 0), 0)
-    : 0;
-
-  // Realized PNL: net SOL flow per token (sells add SOL, buys subtract SOL).
-  // Positive = net SOL gained; negative = net SOL spent still open / lost.
+  const totalVolumeLamports = history
+    ? history.reduce((s, t) => s + (parseFloat(t.ethAmount) || 0), 0) : 0;
   const realizedPnlLamports: number | null = history
-    ? history.reduce((sum: number, t: ActivityTrade) => {
+    ? history.reduce((s, t) => {
         const lam = parseFloat(t.ethAmount) || 0;
-        return sum + (t.isBuy ? -lam : lam);
+        return s + (t.isBuy ? -lam : lam);
       }, 0)
     : null;
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  const hue = address ? accentHue(address) : 220;
+
   if (isLoading) return <ProfileSkeleton />;
 
-  // Non-owner visiting a wallet with no profile — dead end
+  // ── Not found ──────────────────────────────────────────────────────────────
   if (!profile && !isOwner) {
     return (
-      <div className="max-w-3xl mx-auto px-4 pt-12 flex flex-col items-center gap-4">
-        <div className="w-16 h-16 rounded-full flex items-center justify-center"
-          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-          <Coins className="w-7 h-7" style={{ color: "#334155" }} />
+      <div className="max-w-lg mx-auto px-4 pt-24 flex flex-col items-center gap-5 text-center">
+        <div
+          className="w-20 h-20 rounded-2xl flex items-center justify-center"
+          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+        >
+          <Coins className="w-9 h-9 text-muted-foreground/40" />
         </div>
-        <div className="text-center space-y-1.5">
-          <p className="text-[16px] font-semibold text-foreground">Wallet not found</p>
-          <p className="text-[13px]" style={{ color: "#64748b" }}>This address hasn't set up a profile yet</p>
-          <p className="text-[11px] font-mono mt-1" style={{ color: "#334155" }}>{formatAddress(address)}</p>
+        <div className="space-y-1.5">
+          <p className="text-lg font-semibold">Wallet not found</p>
+          <p className="text-sm text-muted-foreground">This address hasn't set up a profile yet.</p>
+          <p className="text-xs font-mono text-muted-foreground/50 mt-1">{formatAddress(address)}</p>
         </div>
-        <Button variant="outline" size="sm" className="mt-2 rounded-sm" onClick={() => setLocation("/")}>
+        <Button variant="outline" size="sm" className="rounded-lg" onClick={() => setLocation("/")}>
           Back to Explore
         </Button>
       </div>
     );
   }
 
-  // Display username: if it looks auto-generated from old system, show a nicer one
   const displayUsername = profile
-    ? ((profile.username ?? "").startsWith("user_") ? generateUsername(address) : (profile.username ?? generateUsername(address)))
+    ? ((profile.username ?? "").startsWith("user_")
+        ? generateUsername(address)
+        : (profile.username ?? generateUsername(address)))
     : generateUsername(address);
 
   const seoUsername = profile?.username ?? `Wallet ${formatAddress(address)}`;
 
   return (
-    <div className="w-full max-w-3xl mx-auto pb-16 md:pb-20">
+    <div className="w-full max-w-2xl mx-auto pb-20">
       <SEO
         title={`@${seoUsername}`}
         description={`View ${seoUsername}'s token launches, trades, and Solana portfolio on Pumpi.`}
         url={typeof window !== "undefined" ? window.location.href : undefined}
       />
 
-      {/* ── Owner empty-state (no profile row yet) ── */}
+      {/* ── Owner empty-state ── */}
       {!profile && isOwner && (
-        <div className="max-w-xl mx-auto px-4 pt-10 text-center">
+        <div className="max-w-sm mx-auto px-4 pt-16 flex flex-col items-center text-center gap-5">
           <div
-            className="w-24 h-24 rounded-full overflow-hidden mx-auto mb-5 border-4 border-background"
-            style={{ boxShadow: `0 0 0 2px hsl(${accentHue(address)},65%,52%)` }}
+            className="w-28 h-28 rounded-full overflow-hidden"
+            style={{
+              padding: 3,
+              background: `linear-gradient(135deg, hsl(${hue},72%,55%), hsl(${(hue+140)%360},72%,55%))`,
+            }}
           >
-            <img
-              src={diceBearUrl(address)}
-              alt={address}
-              className="w-full h-full object-cover"
-              style={{ imageRendering: "pixelated" }}
-            />
+            <div className="w-full h-full rounded-full overflow-hidden bg-background">
+              <img src={diceBearUrl(address)} alt="" className="w-full h-full object-cover" style={{ imageRendering: "pixelated" }} />
+            </div>
           </div>
-          <p className="text-xs font-mono text-muted-foreground mb-1">{formatAddress(address)}</p>
-          <h2 className="text-lg font-bold text-foreground mb-2">{displayUsername}</h2>
-          <p className="text-sm text-muted-foreground mb-6 max-w-xs mx-auto">
-            Your profile isn't set up yet. Add a username, bio, and social links so the community knows who you are.
+          <div>
+            <h2 className="text-xl font-bold">{displayUsername}</h2>
+            <p className="text-xs font-mono text-muted-foreground mt-1">{formatAddress(address)}</p>
+          </div>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            Your profile isn't set up yet. Add a username and bio so the community knows who you are.
           </p>
-          <Button
-            size="sm"
-            className="rounded-sm h-9 px-5"
-            onClick={() => setEditOpen(true)}
-          >
-            <Edit2 className="w-3.5 h-3.5 mr-1.5" /> Set up your profile
+          <Button className="rounded-lg px-6" onClick={() => setEditOpen(true)}>
+            <Edit2 className="w-3.5 h-3.5 mr-2" /> Set up profile
           </Button>
         </div>
       )}
 
-      {/* ── Full profile content (profile exists) ── */}
-      {profile && <>
-
-      {/* ── Back ── */}
-      {/* ── Banner ── */}
-      <div
-        className="relative h-28 sm:h-36 w-full overflow-hidden"
-        style={{ background: bannerGradient(address) }}
-      >
-        {/* radial accent glow */}
-        <div
-          className="absolute inset-0"
-          style={{
-            background: `radial-gradient(ellipse at 25% 70%, hsl(${accentHue(address)},70%,30%) 0%, transparent 65%)`,
-            opacity: 0.55,
-          }}
-        />
-        {/* subtle grid overlay */}
-        <div
-          className="absolute inset-0 opacity-[0.07]"
-          style={{
-            backgroundImage:
-              "linear-gradient(rgba(255,255,255,.6) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.6) 1px,transparent 1px)",
-            backgroundSize: "32px 32px",
-          }}
-        />
-        {/* bottom fade to background */}
-        <div className="absolute bottom-0 inset-x-0 h-8 bg-gradient-to-t from-background/60 to-transparent" />
-      </div>
-
-      {/* ── Avatar + header ── */}
-      <div className="px-4 sm:px-6">
-        <div className="flex items-end justify-between -mt-12 mb-4">
-          {/* Avatar */}
-          <div className="relative">
-            <div
-              className="w-24 h-24 rounded-full border-4 border-background overflow-hidden bg-card"
-              style={{
-                boxShadow: `0 0 0 2px hsl(${accentHue(address)},65%,52%), 0 0 24px hsl(${accentHue(address)},65%,38%)`,
-              }}
-            >
-              <AvatarDisplay profile={{ ...profile, username: displayUsername }} size={96} />
-            </div>
-            {isOwner && (
-              <button
-                onClick={() => setEditOpen(true)}
-                className="absolute bottom-0 right-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors border-2 border-background"
-                title="Edit profile"
-              >
-                <Camera className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-2 pb-2">
-            <a
-              href={`https://solscan.io/account/${address}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="h-8 px-2.5 flex items-center gap-1.5 rounded-sm border border-border/50 bg-card hover:bg-muted transition-colors"
-              title="View on Solscan"
-            >
-              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground font-medium hidden sm:inline">Solscan</span>
-            </a>
-            <button
-              onClick={() => copyToClipboard(window.location.href, "Link copied")}
-              className="h-8 w-8 flex items-center justify-center rounded-sm border border-border/50 bg-card hover:bg-muted transition-colors"
-              title="Share profile"
-            >
-              <Share2 className="w-3.5 h-3.5 text-muted-foreground" />
-            </button>
-            {isOwner && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs rounded-sm"
-                onClick={() => setDepositOpen(true)}
-              >
-                <ArrowDownToLine className="w-3 h-3 mr-1.5" /> Deposit
-              </Button>
-            )}
-            {isOwner && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs rounded-sm border-primary/50 text-primary hover:bg-primary/10"
-                onClick={() => setEditOpen(true)}
-              >
-                <Edit2 className="w-3 h-3 mr-1.5" /> Edit profile
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Name + address */}
-        <div className="mb-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-bold text-foreground leading-tight">{displayUsername}</h1>
-            <span
-              className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border"
-              style={{
-                borderColor: `hsl(${accentHue(address)},60%,50%,0.35)`,
-                background: `hsl(${accentHue(address)},60%,50%,0.1)`,
-                color: `hsl(${accentHue(address)},70%,65%)`,
-              }}
-            >
-              <img
-                src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
-                className="w-2.5 h-2.5 rounded-full"
-                alt="SOL"
-              />
-              On-chain
-            </span>
-          </div>
-          <button
-            onClick={() => copyToClipboard(address)}
-            className="inline-flex items-center gap-1 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors mt-0.5"
+      {/* ── Full profile ── */}
+      {profile && (
+        <>
+          {/* ══ BANNER ══════════════════════════════════════════════════════════ */}
+          <div
+            className="relative h-40 sm:h-52 w-full overflow-hidden"
+            style={{
+              background: `linear-gradient(135deg,
+                hsl(${hue},65%,12%) 0%,
+                hsl(${(hue+60)%360},55%,10%) 40%,
+                hsl(${(hue+180)%360},50%,8%) 100%)`,
+            }}
           >
-            {formatAddress(profile.address)}
-            <Copy className="w-3 h-3" />
-          </button>
-        </div>
-
-        {/* Bio */}
-        {profile.bio && (
-          <p className="text-sm text-muted-foreground leading-relaxed mb-3 max-w-xl">{profile.bio}</p>
-        )}
-
-        {/* Social links */}
-        {(profile.twitterHandle || profile.websiteUrl) && (
-          <div className="flex items-center gap-4 mb-4 flex-wrap">
-            {profile.twitterHandle && (
-              <a
-                href={`https://x.com/${profile.twitterHandle}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <XIcon className="w-3.5 h-3.5" />
-                @{profile.twitterHandle}
-                <ExternalLink className="w-2.5 h-2.5 opacity-50" />
-              </a>
-            )}
-            {profile.websiteUrl && /^https?:\/\//.test(profile.websiteUrl) && (
-              <a
-                href={profile.websiteUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <Globe className="w-3.5 h-3.5" />
-                Website
-                <ExternalLink className="w-2.5 h-2.5 opacity-50" />
-              </a>
-            )}
+            {/* large orb left */}
+            <div
+              className="absolute -left-16 -top-16 w-72 h-72 rounded-full blur-3xl opacity-30"
+              style={{ background: `radial-gradient(circle, hsl(${hue},80%,55%) 0%, transparent 70%)` }}
+            />
+            {/* medium orb right */}
+            <div
+              className="absolute right-0 bottom-0 w-48 h-48 rounded-full blur-2xl opacity-20"
+              style={{ background: `radial-gradient(circle, hsl(${(hue+180)%360},70%,55%) 0%, transparent 70%)` }}
+            />
+            {/* dot grid */}
+            <div
+              className="absolute inset-0 opacity-[0.06]"
+              style={{
+                backgroundImage: "radial-gradient(circle, rgba(255,255,255,.9) 1px, transparent 1px)",
+                backgroundSize: "24px 24px",
+              }}
+            />
+            {/* bottom fade */}
+            <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-background to-transparent" />
           </div>
-        )}
 
-        {/* ── Stats row ── */}
-        <div className="flex divide-x divide-border/30 mb-6 backdrop-blur-sm bg-white/[0.03] border border-border/25 rounded-sm overflow-hidden">
-          <StatCard label="Trades" value={totalTrades || "—"} />
-          <StatCard label="Volume" value={totalVolume > 0 ? formatSol(totalVolume.toFixed(0)) : "—"} />
-          {realizedPnlLamports !== null && (
-            <div className="flex-1 px-4 py-3 text-center min-w-0">
-              <div className={cn(
-                "text-sm font-bold font-mono tabular-nums",
-                realizedPnlLamports > 0 ? "text-primary" : realizedPnlLamports < 0 ? "text-destructive" : "text-foreground"
-              )}>
-                {realizedPnlLamports > 0 ? "+" : ""}{formatSol(realizedPnlLamports.toFixed(0))}
+          {/* ══ AVATAR + ACTIONS ════════════════════════════════════════════════ */}
+          <div className="px-4 sm:px-6">
+            <div className="flex items-end justify-between -mt-14 mb-5">
+              {/* Avatar with gradient ring */}
+              <div className="relative">
+                <div
+                  className="rounded-full p-[3px] shrink-0"
+                  style={{
+                    background: `linear-gradient(135deg, hsl(${hue},72%,60%), hsl(${(hue+140)%360},72%,55%))`,
+                    boxShadow: `0 0 28px hsl(${hue},70%,40%,0.5)`,
+                  }}
+                >
+                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full overflow-hidden border-4 border-background bg-card">
+                    <AvatarDisplay profile={{ ...profile, username: displayUsername }} />
+                  </div>
+                </div>
+                {isOwner && (
+                  <button
+                    onClick={() => setEditOpen(true)}
+                    className="absolute bottom-1 right-1 w-7 h-7 flex items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors border-2 border-background shadow-lg"
+                    title="Edit profile"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">PNL</div>
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 pb-1">
+                <a
+                  href={`https://solscan.io/account/${address}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-8 px-3 flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] transition-colors text-xs text-muted-foreground font-medium"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Solscan</span>
+                </a>
+                <button
+                  onClick={() => copyToClipboard(window.location.href, "Link copied")}
+                  className="h-8 w-8 flex items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] transition-colors text-muted-foreground"
+                  title="Share profile"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                </button>
+                {isOwner && (
+                  <button
+                    onClick={() => setDepositOpen(true)}
+                    className="h-8 px-3 flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] transition-colors text-xs text-muted-foreground font-medium"
+                  >
+                    <ArrowDownToLine className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Deposit</span>
+                  </button>
+                )}
+                {isOwner && (
+                  <button
+                    onClick={() => setEditOpen(true)}
+                    className="h-8 px-3 flex items-center gap-1.5 rounded-lg border font-medium text-xs transition-colors"
+                    style={{
+                      borderColor: `hsl(${hue},60%,55%,0.4)`,
+                      color: `hsl(${hue},70%,65%)`,
+                      background: `hsl(${hue},60%,50%,0.08)`,
+                    }}
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Edit profile</span>
+                  </button>
+                )}
+              </div>
             </div>
-          )}
-        </div>
 
-        {/* ── Tabs ── */}
-        <div className="flex border-b border-border/30 mb-5 -mx-1">
-          {(["activity", "wallet"] as Tab[]).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={cn(
-                "px-5 py-3 text-sm font-medium border-b-2 capitalize transition-all duration-150",
-                activeTab === tab
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {tab === "wallet" ? "Wallet" : "Activity"}
-            </button>
-          ))}
-        </div>
-
-        {/* ── Activity tab ── */}
-        {activeTab === "activity" && (
-          <div>
-            {!history ? (
-              <div className="flex flex-col gap-2">
-                {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-14 rounded-sm" />)}
+            {/* ══ IDENTITY ═══════════════════════════════════════════════════════ */}
+            <div className="mb-4">
+              <div className="flex items-center gap-2.5 flex-wrap mb-1">
+                <h1 className="text-2xl font-bold tracking-tight">{displayUsername}</h1>
+                {/* On-chain badge */}
+                <span
+                  className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide"
+                  style={{
+                    borderWidth: 1,
+                    borderColor: `hsl(${hue},60%,55%,0.3)`,
+                    background: `hsl(${hue},60%,50%,0.08)`,
+                    color: `hsl(${hue},70%,65%)`,
+                  }}
+                >
+                  <span
+                    className="w-1.5 h-1.5 rounded-full animate-pulse"
+                    style={{ background: `hsl(${hue},70%,60%)` }}
+                  />
+                  On-chain
+                </span>
               </div>
-            ) : history.length === 0 ? (
-              <div className="py-16 text-center text-muted-foreground text-sm border border-border/30 border-dashed rounded-sm">
-                No trade activity yet.
-              </div>
-            ) : (
-              <div className="flex flex-col divide-y divide-border/20">
-                {history.map((trade) => {
-                  const solAmt   = parseFloat(trade.ethAmount) / 1e9;
-                  const usdAmt   = solPrice && solAmt ? solAmt * solPrice : null;
-                  const tokAmt   = formatAtomicTokenAmount(trade.tokenAmount, 6);
-                  const sign     = trade.isBuy ? "+" : "-";
-                  const imgSrc   = resolveImageUrl(trade.tokenImageUrl);
-                  const sym      = trade.tokenSymbol || trade.tokenName || "?";
+              {/* Wallet address copy */}
+              <button
+                onClick={() => copyToClipboard(address)}
+                className="inline-flex items-center gap-1.5 text-xs font-mono text-muted-foreground/60 hover:text-muted-foreground transition-colors group"
+              >
+                {formatAddress(profile.address)}
+                <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            </div>
 
-                  return (
-                    <div
-                      key={trade.id}
-                      className="flex items-center gap-3 py-3 hover:bg-white/[0.02] transition-colors group"
-                    >
-                      {/* Token image */}
-                      <Link href={`/coin/${trade.tokenAddress}`} className="shrink-0">
-                        {imgSrc ? (
-                          <img
-                            src={imgSrc}
-                            alt={sym}
-                            className="w-9 h-9 rounded-full object-cover border border-border/20"
-                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                          />
-                        ) : (
-                          <div className="w-9 h-9 rounded-full bg-white/[0.06] flex items-center justify-center text-[10px] font-bold text-muted-foreground border border-border/20">
-                            {sym.slice(0, 2).toUpperCase()}
-                          </div>
-                        )}
-                      </Link>
+            {/* Bio */}
+            {profile.bio && (
+              <p className="text-sm text-muted-foreground leading-relaxed mb-3 max-w-lg">{profile.bio}</p>
+            )}
 
-                      {/* Coin name + action */}
-                      <Link href={`/coin/${trade.tokenAddress}`} className="min-w-0 flex-1 group-hover:text-primary transition-colors">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-semibold text-foreground truncate leading-tight">
-                            {sym}
-                          </span>
-                          <span
-                            className={cn(
-                              "text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-[3px] shrink-0",
-                              trade.isBuy
-                                ? "bg-primary/15 text-primary"
-                                : "bg-destructive/15 text-destructive"
-                            )}
-                          >
-                            {trade.isBuy ? "BUY" : "SELL"}
-                          </span>
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {formatSol(trade.ethAmount)} SOL
-                        </div>
-                      </Link>
-
-                      {/* Token amount + USD — right-aligned */}
-                      <div className="text-right shrink-0">
-                        <div
-                          className={cn(
-                            "text-sm font-semibold tabular-nums leading-tight",
-                            trade.isBuy ? "text-primary" : "text-destructive"
-                          )}
-                        >
-                          {sign}{tokAmt} {sym}
-                        </div>
-                        <div className="text-xs text-muted-foreground tabular-nums mt-0.5">
-                          {usdAmt != null
-                            ? `$${usdAmt < 0.01 ? usdAmt.toFixed(4) : usdAmt.toFixed(2)}`
-                            : "—"}
-                        </div>
-                      </div>
-
-                      {/* Time + Solscan */}
-                      <div className="text-right shrink-0 pl-2 flex flex-col items-end gap-1">
-                        <span className="text-xs text-muted-foreground tabular-nums">
-                          {timeAgo(String(trade.timestamp))}
-                        </span>
-                        {trade.txHash && (
-                          <a
-                            href={`https://solscan.io/tx/${trade.txHash}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-                            title="View on Solscan"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+            {/* Social links */}
+            {(profile.twitterHandle || profile.websiteUrl) && (
+              <div className="flex items-center gap-4 mb-5 flex-wrap">
+                {profile.twitterHandle && (
+                  <a
+                    href={`https://x.com/${profile.twitterHandle}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <XIcon className="w-3.5 h-3.5" />
+                    @{profile.twitterHandle}
+                  </a>
+                )}
+                {profile.websiteUrl && /^https?:\/\//.test(profile.websiteUrl) && (
+                  <a
+                    href={profile.websiteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    Website
+                    <ExternalLink className="w-2.5 h-2.5 opacity-40" />
+                  </a>
+                )}
               </div>
             )}
-          </div>
-        )}
 
-        {/* ── Wallet tab ── */}
-        {activeTab === "wallet" && (() => {
-          // derive totals
-          const tokenTotalSol = portfolio?.tokens.reduce((s, t) => s + (t.valueSol ?? 0), 0) ?? 0;
-          const totalSol = (portfolio?.solBalance ?? 0) + tokenTotalSol;
-
-          // top holding: highest value item (SOL or a token)
-          const solEntry = portfolio ? { symbol: "SOL", valueSol: portfolio.solBalance, pct: totalSol > 0 ? portfolio.solBalance / totalSol * 100 : 100 } : null;
-          const topToken = portfolio?.tokens[0];
-          const topHolding = topToken && topToken.valueSol !== null && topToken.valueSol > (portfolio?.solBalance ?? 0)
-            ? { symbol: topToken.symbol ?? topToken.mint.slice(0, 4), valueSol: topToken.valueSol, pct: totalSol > 0 ? topToken.valueSol / totalSol * 100 : 0 }
-            : solEntry;
-
-          return (
-            <div>
-              {/* ── Loading state ── */}
-              {portfolioLoading && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-20 rounded-sm" />)}
+            {/* ══ STATS BAR ═══════════════════════════════════════════════════════ */}
+            <div
+              className="flex divide-x mb-7 rounded-xl overflow-hidden"
+              style={{
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.07)",
+                backdropFilter: "blur(12px)",
+              }}
+            >
+              <StatChip
+                label="Trades"
+                value={totalTrades || "—"}
+              />
+              <StatChip
+                label="Volume"
+                value={totalVolumeLamports > 0 ? formatSol(totalVolumeLamports.toFixed(0)) : "—"}
+                sub={totalVolumeLamports > 0 && solPrice
+                  ? `$${((totalVolumeLamports / 1e9) * solPrice).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                  : undefined}
+              />
+              {realizedPnlLamports !== null && (
+                <div className="flex-1 flex flex-col items-center justify-center py-5 px-3 min-w-0">
+                  <div className="flex items-center gap-1">
+                    {realizedPnlLamports > 0
+                      ? <TrendingUp className="w-4 h-4" style={{ color: "#22c55e" }} />
+                      : realizedPnlLamports < 0
+                        ? <TrendingDown className="w-4 h-4" style={{ color: "#ef4444" }} />
+                        : null}
+                    <span
+                      className="text-2xl sm:text-3xl font-bold tabular-nums leading-none tracking-tight"
+                      style={{
+                        color: realizedPnlLamports > 0 ? "#22c55e"
+                          : realizedPnlLamports < 0 ? "#ef4444"
+                          : undefined,
+                      }}
+                    >
+                      {realizedPnlLamports > 0 ? "+" : ""}
+                      {formatSol(realizedPnlLamports.toFixed(0))}
+                    </span>
                   </div>
-                  <Skeleton className="h-64 rounded-sm" />
+                  {solPrice && (
+                    <span
+                      className="text-[11px] font-medium tabular-nums mt-0.5"
+                      style={{
+                        color: realizedPnlLamports > 0 ? "#16a34a"
+                          : realizedPnlLamports < 0 ? "#dc2626"
+                          : "#6b7280",
+                      }}
+                    >
+                      {realizedPnlLamports > 0 ? "+" : ""}
+                      ${((realizedPnlLamports / 1e9) * solPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </span>
+                  )}
+                  <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 mt-1.5 font-medium">
+                    Realized PNL
+                  </span>
                 </div>
               )}
+            </div>
 
-              {/* ── Error state ── */}
-              {portfolioError && !portfolioLoading && (
-                <div className="py-16 flex flex-col items-center gap-3 text-center border border-border/30 border-dashed rounded-sm">
-                  <AlertCircle className="w-8 h-8 text-muted-foreground/40" />
-                  <p className="text-sm text-muted-foreground">Could not load wallet data. RPC may be rate-limited.</p>
-                </div>
-              )}
+            {/* ══ TABS ═════════════════════════════════════════════════════════════ */}
+            <div
+              className="flex gap-1 p-1 mb-6 rounded-xl w-fit"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
+            >
+              {(["activity", "wallet"] as Tab[]).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={cn(
+                    "flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                    activeTab === tab
+                      ? "bg-white/[0.08] text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {tab === "activity"
+                    ? <Activity className="w-3.5 h-3.5" />
+                    : <Wallet className="w-3.5 h-3.5" />}
+                  {tab === "activity" ? "Activity" : "Wallet"}
+                </button>
+              ))}
+            </div>
 
-              {/* ── Data ── */}
-              {portfolio && !portfolioLoading && (
-                <>
-                  {/* Stats row */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
-                    <div className="bg-card border border-border/50 rounded-sm p-4">
-                      <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium mb-1">Total Value</p>
-                      <p className="text-lg font-bold text-foreground font-mono">{totalSol.toFixed(4)} SOL</p>
-                    </div>
-                    <div className="bg-card border border-border/50 rounded-sm p-4">
-                      <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium mb-1">Top Holding</p>
-                      <p className="text-lg font-bold text-foreground">{topHolding?.symbol ?? "—"}</p>
-                      {topHolding && totalSol > 0 && (
-                        <p className="text-xs text-muted-foreground font-mono">{topHolding.pct.toFixed(1)}% of wallet</p>
-                      )}
-                    </div>
-                    <div className="bg-card border border-border/50 rounded-sm p-4 col-span-2 sm:col-span-1">
-                      <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium mb-1">Tokens Held</p>
-                      <p className="text-lg font-bold text-foreground">{portfolio.tokens.length}</p>
-                      <p className="text-xs text-muted-foreground">SPL tokens</p>
-                    </div>
-                  </div>
-
-                  {/* Balances table */}
-                  <div className="border border-border/50 rounded-sm overflow-hidden">
-                    <div className="bg-muted/30 px-4 py-2.5 border-b border-border/40">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Balances</p>
-                    </div>
-
-                    {/* Header */}
-                    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-2 border-b border-border/20 text-[11px] font-medium text-muted-foreground/60 uppercase tracking-wide">
-                      <span>Coin</span>
-                      <span className="text-right w-24">Balance</span>
-                      <span className="text-right w-24">Value (SOL)</span>
-                      <span className="text-right w-24">Market Cap</span>
-                    </div>
-
-                    {/* SOL row */}
-                    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-3 border-b border-border/10 items-center hover:bg-white/[0.02] transition-colors">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <img
-                          src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
-                          alt="SOL"
-                          className="w-8 h-8 rounded-full shrink-0 object-cover"
-                          onError={(e) => {
-                            const t = e.currentTarget;
-                            t.style.display = "none";
-                            const next = t.nextElementSibling as HTMLElement | null;
-                            if (next) next.style.display = "flex";
-                          }}
-                        />
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#9945FF] to-[#14F195] items-center justify-center shrink-0 hidden">
-                          <span className="text-[10px] font-bold text-white">SOL</span>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-foreground">Solana</p>
-                          <p className="text-xs text-muted-foreground font-mono">SOL</p>
-                        </div>
-                      </div>
-                      <span className="text-sm font-mono text-right w-24">{portfolio.solBalance.toFixed(4)}</span>
-                      <span className="text-sm font-mono text-right w-24">{portfolio.solBalance.toFixed(4)}</span>
-                      <span className="text-sm font-mono text-right w-24 text-muted-foreground">—</span>
-                    </div>
-
-                    {/* Token rows */}
-                    {portfolio.tokens.length === 0 && (
-                      <div className="py-10 text-center text-sm text-muted-foreground">No SPL token holdings found.</div>
-                    )}
-                    {portfolio.tokens.map((token) => (
-                      <div
-                        key={token.mint}
-                        className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-3 border-b border-border/10 last:border-0 items-center hover:bg-white/[0.02] transition-colors cursor-pointer"
-                        onClick={() => token.inDb && setLocation(`/coin/${token.mint}`)}
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          {token.imageUrl ? (
-                            <img
-                              src={token.imageUrl}
-                              alt={token.symbol ?? ""}
-                              className="w-8 h-8 rounded-full object-cover shrink-0"
-                              onError={(e) => {
-                                const t = e.currentTarget;
-                                t.style.display = "none";
-                                const next = t.nextElementSibling as HTMLElement | null;
-                                if (next) next.style.display = "flex";
-                              }}
-                            />
-                          ) : null}
-                          <div className={`shrink-0 ${token.imageUrl ? "hidden" : ""}`}>
-                            <TokenAvatar symbol={token.symbol ?? token.mint.slice(0, 4)} size={32} shape="circle" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-foreground truncate">{token.name ?? "Unknown Token"}</p>
-                            <p className="text-xs text-muted-foreground font-mono truncate">{token.symbol ?? token.mint.slice(0, 8) + "…"}</p>
-                          </div>
-                        </div>
-                        <span className="text-sm font-mono text-right w-24 tabular-nums">
-                          {token.balance >= 1_000_000 ? `${(token.balance / 1_000_000).toFixed(2)}M`
-                            : token.balance >= 1_000 ? `${(token.balance / 1_000).toFixed(2)}K`
-                            : token.balance.toFixed(2)}
-                        </span>
-                        <span className="text-sm font-mono text-right w-24 tabular-nums">
-                          {token.valueSol !== null ? token.valueSol.toFixed(4) : <span className="text-muted-foreground">—</span>}
-                        </span>
-                        <span className="text-sm font-mono text-right w-24 tabular-nums">
-                          {(() => {
-                            try {
-                              if (!token.marketCapEth) return <span className="text-muted-foreground">—</span>;
-                              const mc = BigInt(Math.round(parseFloat(token.marketCapEth)));
-                              return formatSol((mc / BigInt(1e9)).toString());
-                            } catch {
-                              return <span className="text-muted-foreground">—</span>;
-                            }
-                          })()}
-                        </span>
-                      </div>
+            {/* ══ ACTIVITY TAB ═════════════════════════════════════════════════════ */}
+            {activeTab === "activity" && (
+              <div>
+                {!history ? (
+                  <div className="flex flex-col gap-2.5">
+                    {[...Array(6)].map((_, i) => (
+                      <Skeleton key={i} className="h-16 rounded-xl" />
                     ))}
                   </div>
-
-                  {/* Solscan link */}
-                  <div className="mt-3 flex justify-end">
-                    <a
-                      href={`https://solscan.io/account/${address}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                      View full history on Solscan
-                    </a>
+                ) : history.length === 0 ? (
+                  <div
+                    className="py-20 flex flex-col items-center gap-3 text-center rounded-xl"
+                    style={{ background: "rgba(255,255,255,0.02)", border: "1px dashed rgba(255,255,255,0.08)" }}
+                  >
+                    <Activity className="w-8 h-8 text-muted-foreground/30" />
+                    <p className="text-sm text-muted-foreground">No trade activity yet</p>
                   </div>
-                </>
-              )}
-            </div>
-          );
-        })()}
-      </div>
+                ) : (
+                  <div
+                    className="rounded-xl overflow-hidden"
+                    style={{ border: "1px solid rgba(255,255,255,0.07)" }}
+                  >
+                    {history.map((trade, idx) => {
+                      const solAmt  = parseFloat(trade.ethAmount) / 1e9;
+                      const usdAmt  = solPrice && solAmt ? solAmt * solPrice : null;
+                      const tokAmt  = formatAtomicTokenAmount(trade.tokenAmount, 6);
+                      const sign    = trade.isBuy ? "+" : "−";
+                      const imgSrc  = resolveImageUrl(trade.tokenImageUrl);
+                      const sym     = trade.tokenSymbol || trade.tokenName || "?";
 
-      </>} {/* end {profile && <>} */}
+                      return (
+                        <div
+                          key={trade.id}
+                          className="flex items-center gap-3 px-4 py-3.5 hover:bg-white/[0.025] transition-colors"
+                          style={{
+                            borderBottom: idx < history.length - 1
+                              ? "1px solid rgba(255,255,255,0.05)"
+                              : undefined,
+                          }}
+                        >
+                          {/* Token image */}
+                          <Link href={`/coin/${trade.tokenAddress}`} className="shrink-0">
+                            {imgSrc ? (
+                              <img
+                                src={imgSrc}
+                                alt={sym}
+                                className="w-10 h-10 rounded-full object-cover"
+                                style={{ border: "1px solid rgba(255,255,255,0.1)" }}
+                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                              />
+                            ) : (
+                              <div
+                                className="w-10 h-10 rounded-full flex items-center justify-center text-[11px] font-bold text-muted-foreground"
+                                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
+                              >
+                                {sym.slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                          </Link>
 
-      {/* ══ Deposit Modal ══ */}
+                          {/* Coin name + SOL amount */}
+                          <Link href={`/coin/${trade.tokenAddress}`} className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold truncate">{sym}</span>
+                              <span
+                                className={cn(
+                                  "text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-md shrink-0",
+                                  trade.isBuy
+                                    ? "bg-emerald-500/15 text-emerald-400"
+                                    : "bg-red-500/15 text-red-400"
+                                )}
+                              >
+                                {trade.isBuy ? "BUY" : "SELL"}
+                              </span>
+                            </div>
+                            <div className="text-xs text-muted-foreground/60 mt-0.5 font-mono">
+                              {formatSol(trade.ethAmount)} SOL
+                            </div>
+                          </Link>
+
+                          {/* Token amount + USD */}
+                          <div className="text-right shrink-0">
+                            <div className={cn(
+                              "text-sm font-semibold tabular-nums",
+                              trade.isBuy ? "text-emerald-400" : "text-red-400"
+                            )}>
+                              {sign}{tokAmt} <span className="text-xs opacity-70">{sym}</span>
+                            </div>
+                            <div className="text-xs text-muted-foreground/60 tabular-nums mt-0.5">
+                              {usdAmt != null
+                                ? `$${usdAmt < 0.01 ? usdAmt.toFixed(4) : usdAmt.toFixed(2)}`
+                                : "—"}
+                            </div>
+                          </div>
+
+                          {/* Time + Solscan */}
+                          <div className="shrink-0 pl-3 flex flex-col items-end gap-1.5">
+                            <span className="text-xs text-muted-foreground/50 tabular-nums whitespace-nowrap">
+                              {timeAgo(String(trade.timestamp))}
+                            </span>
+                            {trade.txHash && (
+                              <a
+                                href={`https://solscan.io/tx/${trade.txHash}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-muted-foreground/30 hover:text-muted-foreground/70 transition-colors"
+                                title="View on Solscan"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ══ WALLET TAB ═══════════════════════════════════════════════════════ */}
+            {activeTab === "wallet" && (() => {
+              const tokenTotalSol = portfolio?.tokens.reduce((s, t) => s + (t.valueSol ?? 0), 0) ?? 0;
+              const totalSol = (portfolio?.solBalance ?? 0) + tokenTotalSol;
+              const topToken = portfolio?.tokens[0];
+              const solEntry = portfolio
+                ? { symbol: "SOL", valueSol: portfolio.solBalance, pct: totalSol > 0 ? portfolio.solBalance / totalSol * 100 : 100 }
+                : null;
+              const topHolding =
+                topToken && topToken.valueSol !== null && topToken.valueSol > (portfolio?.solBalance ?? 0)
+                  ? { symbol: topToken.symbol ?? topToken.mint.slice(0, 4), valueSol: topToken.valueSol, pct: totalSol > 0 ? topToken.valueSol / totalSol * 100 : 0 }
+                  : solEntry;
+
+              return (
+                <div className="space-y-4">
+                  {/* Loading */}
+                  {portfolioLoading && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-3 gap-3">
+                        {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+                      </div>
+                      <Skeleton className="h-64 rounded-xl" />
+                    </div>
+                  )}
+
+                  {/* Error */}
+                  {portfolioError && !portfolioLoading && (
+                    <div
+                      className="py-16 flex flex-col items-center gap-3 text-center rounded-xl"
+                      style={{ background: "rgba(255,255,255,0.02)", border: "1px dashed rgba(255,255,255,0.08)" }}
+                    >
+                      <AlertCircle className="w-8 h-8 text-muted-foreground/30" />
+                      <p className="text-sm text-muted-foreground">Could not load wallet data. RPC may be rate-limited.</p>
+                    </div>
+                  )}
+
+                  {/* Data */}
+                  {portfolio && !portfolioLoading && (
+                    <>
+                      {/* Summary cards */}
+                      <div className="grid grid-cols-3 gap-3">
+                        {/* Total Value */}
+                        <div
+                          className="rounded-xl p-4"
+                          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+                        >
+                          <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-medium mb-2">Total Value</p>
+                          <p className="text-lg font-bold tabular-nums leading-tight">{totalSol.toFixed(3)}</p>
+                          <p className="text-xs text-muted-foreground/60 font-mono mt-0.5">
+                            {solPrice ? `$${(totalSol * solPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "SOL"}
+                          </p>
+                        </div>
+                        {/* Top Holding */}
+                        <div
+                          className="rounded-xl p-4"
+                          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+                        >
+                          <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-medium mb-2">Top Holding</p>
+                          <p className="text-lg font-bold truncate">{topHolding?.symbol ?? "—"}</p>
+                          {topHolding && totalSol > 0 && (
+                            <div className="mt-1.5">
+                              <div
+                                className="h-1 rounded-full overflow-hidden"
+                                style={{ background: "rgba(255,255,255,0.08)" }}
+                              >
+                                <div
+                                  className="h-full rounded-full"
+                                  style={{
+                                    width: `${Math.min(topHolding.pct, 100)}%`,
+                                    background: `hsl(${hue},65%,55%)`,
+                                  }}
+                                />
+                              </div>
+                              <p className="text-xs text-muted-foreground/60 mt-1">{topHolding.pct.toFixed(1)}%</p>
+                            </div>
+                          )}
+                        </div>
+                        {/* Tokens */}
+                        <div
+                          className="rounded-xl p-4"
+                          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+                        >
+                          <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-medium mb-2">Tokens Held</p>
+                          <p className="text-lg font-bold">{portfolio.tokens.length}</p>
+                          <p className="text-xs text-muted-foreground/60 mt-0.5">SPL tokens</p>
+                        </div>
+                      </div>
+
+                      {/* Holdings table */}
+                      <div
+                        className="rounded-xl overflow-hidden"
+                        style={{ border: "1px solid rgba(255,255,255,0.07)" }}
+                      >
+                        {/* Header */}
+                        <div
+                          className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-3"
+                          style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+                        >
+                          {["Coin", "Balance", "Value", "Mkt Cap"].map((h, i) => (
+                            <span
+                              key={h}
+                              className={cn(
+                                "text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50",
+                                i > 0 ? "text-right w-20 sm:w-24" : "",
+                              )}
+                            >
+                              {h}
+                            </span>
+                          ))}
+                        </div>
+
+                        {/* SOL row */}
+                        <div
+                          className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-3.5 items-center hover:bg-white/[0.02] transition-colors"
+                          style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <img
+                              src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                              alt="SOL"
+                              className="w-8 h-8 rounded-full shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold">Solana</p>
+                              <p className="text-xs text-muted-foreground/60 font-mono">SOL</p>
+                            </div>
+                          </div>
+                          <span className="text-sm font-mono text-right w-20 sm:w-24 tabular-nums">
+                            {portfolio.solBalance.toFixed(4)}
+                          </span>
+                          <span className="text-sm font-mono text-right w-20 sm:w-24 tabular-nums">
+                            {portfolio.solBalance.toFixed(4)}
+                            {solPrice && (
+                              <span className="block text-xs text-muted-foreground/50">
+                                ${(portfolio.solBalance * solPrice).toFixed(2)}
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-sm text-right w-20 sm:w-24 text-muted-foreground/40">—</span>
+                        </div>
+
+                        {/* Token rows */}
+                        {portfolio.tokens.length === 0 && (
+                          <div className="py-10 text-center text-sm text-muted-foreground/50">
+                            No SPL token holdings found.
+                          </div>
+                        )}
+                        {portfolio.tokens.map((token, idx) => (
+                          <div
+                            key={token.mint}
+                            className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-3.5 items-center hover:bg-white/[0.02] transition-colors cursor-pointer"
+                            style={{
+                              borderBottom: idx < portfolio.tokens.length - 1
+                                ? "1px solid rgba(255,255,255,0.04)"
+                                : undefined,
+                            }}
+                            onClick={() => token.inDb && setLocation(`/coin/${token.mint}`)}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              {token.imageUrl ? (
+                                <img
+                                  src={token.imageUrl}
+                                  alt={token.symbol ?? ""}
+                                  className="w-8 h-8 rounded-full object-cover shrink-0"
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                                  }}
+                                />
+                              ) : (
+                                <TokenAvatar symbol={token.symbol ?? token.mint.slice(0, 4)} size={32} shape="circle" />
+                              )}
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold truncate">
+                                  {token.name ?? "Unknown"}
+                                </p>
+                                <p className="text-xs text-muted-foreground/60 font-mono truncate">
+                                  {token.symbol ?? token.mint.slice(0, 8) + "…"}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-sm font-mono text-right w-20 sm:w-24 tabular-nums">
+                              {token.balance >= 1_000_000
+                                ? `${(token.balance / 1_000_000).toFixed(2)}M`
+                                : token.balance >= 1_000
+                                  ? `${(token.balance / 1_000).toFixed(2)}K`
+                                  : token.balance.toFixed(2)}
+                            </span>
+                            <span className="text-sm font-mono text-right w-20 sm:w-24 tabular-nums">
+                              {token.valueSol !== null ? (
+                                <>
+                                  {token.valueSol.toFixed(4)}
+                                  {solPrice && (
+                                    <span className="block text-xs text-muted-foreground/50">
+                                      ${(token.valueSol * solPrice).toFixed(2)}
+                                    </span>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-muted-foreground/40">—</span>
+                              )}
+                            </span>
+                            <span className="text-sm font-mono text-right w-20 sm:w-24 tabular-nums">
+                              {(() => {
+                                try {
+                                  if (!token.marketCapEth) return <span className="text-muted-foreground/40">—</span>;
+                                  const mc = BigInt(Math.round(parseFloat(token.marketCapEth)));
+                                  return formatSol((mc / BigInt(1e9)).toString());
+                                } catch {
+                                  return <span className="text-muted-foreground/40">—</span>;
+                                }
+                              })()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Solscan link */}
+                      <div className="flex justify-end pt-1">
+                        <a
+                          href={`https://solscan.io/account/${address}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          View on Solscan
+                        </a>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        </>
+      )}
+
       <DepositModal open={depositOpen} onOpenChange={setDepositOpen} />
-
-      {/* ══ Edit Profile Modal ══ */}
       <ProfileEditModal
         open={editOpen}
         onOpenChange={setEditOpen}
