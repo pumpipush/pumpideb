@@ -127,6 +127,7 @@ async function runBuildWithMock(opts: {
     "TestToken",
     "TEST",
     FAKE_METADATA_URI,
+    1_000_000n, // 0.001 SOL initial buy — satisfies SDK > 0 requirement
   );
 
   return { result, RaydiumClass, instance, ownerKeypair };
@@ -260,6 +261,7 @@ describe("fetchLaunchConfigs() shape variants", () => {
       "TestToken",
       "TEST",
       FAKE_METADATA_URI,
+      1_000_000n,
     );
 
     return (capturedConfigId as PublicKey).toBase58();
@@ -335,7 +337,7 @@ describe("fetchLaunchConfigs() shape variants", () => {
 
     const { buildRaydiumLaunchTx } = await import("../raydiumLauncher");
     await expect(
-      buildRaydiumLaunchTx(ownerKeypair.publicKey.toBase58(), "T", "T", FAKE_METADATA_URI),
+      buildRaydiumLaunchTx(ownerKeypair.publicKey.toBase58(), "T", "T", FAKE_METADATA_URI, 1_000_000n),
     ).rejects.toThrow(/konfigurasi|LaunchLab|tersedia|config/i);
   });
 });
@@ -393,7 +395,7 @@ describe("createLaunchpad() transaction result shapes", () => {
 
     const { buildRaydiumLaunchTx } = await import("../raydiumLauncher");
     await expect(
-      buildRaydiumLaunchTx(ownerKeypair.publicKey.toBase58(), "T", "T", FAKE_METADATA_URI),
+      buildRaydiumLaunchTx(ownerKeypair.publicKey.toBase58(), "T", "T", FAKE_METADATA_URI, 1_000_000n),
     ).rejects.toThrow(/transaksi|transaction/i);
   });
 });
@@ -494,6 +496,7 @@ describe("input validation", () => {
         "TestToken",
         "TOOLONGTICKER",
         FAKE_METADATA_URI,
+        1_000_000n,
       ),
     ).rejects.toThrow(/10/);
   });

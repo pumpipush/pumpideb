@@ -98,10 +98,48 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// ── 0. Current behavior — delegation to pump.fun ─────────────────────────────
+//
+// As of Aug 2026 the Raydium IPFS endpoint (launch-mint-v1.raydium.io) is no
+// longer reachable. uploadToRaydiumIpfs now delegates directly to
+// uploadToPumpFunIpfs. The tests below (sections 1–5) are kept as skipped
+// documentation of the old behavior so they can be un-skipped if Raydium ever
+// restores their IPFS service.
+
+describe("uploadToRaydiumIpfs() — current behavior (delegates to pump.fun)", () => {
+  it("returns the pump.fun URI from the delegated call", async () => {
+    const result = await uploadToRaydiumIpfs(VALID_PARAMS);
+    expect(result).toBe(PUMPFUN_URI);
+    expect(pumpFunMock).toHaveBeenCalledOnce();
+  });
+
+  it("passes all params through to uploadToPumpFunIpfs", async () => {
+    const params = {
+      ...VALID_PARAMS,
+      twitter:  "https://twitter.com/test",
+      telegram: "https://t.me/test",
+      website:  "https://test.io",
+    };
+    await uploadToRaydiumIpfs(params);
+    expect(pumpFunMock).toHaveBeenCalledWith(expect.objectContaining({
+      name:     params.name,
+      symbol:   params.symbol,
+      description: params.description,
+      twitter:  params.twitter,
+      telegram: params.telegram,
+      website:  params.website,
+      image:    params.image,
+    }));
+  });
+});
+
 // ── 1. Response shape — uri field ────────────────────────────────────────────
+// SKIPPED: Raydium IPFS endpoint (launch-mint-v1.raydium.io) is unreachable
+// as of Aug 2026. uploadToRaydiumIpfs now delegates to uploadToPumpFunIpfs.
+// Un-skip these tests if Raydium restores their IPFS service.
 
 describe("uploadToRaydiumIpfs() — uri field in response", () => {
-  it("happy path: returns metadata uri when both uploads succeed", async () => {
+  it.skip("happy path: returns metadata uri when both uploads succeed", async () => {
     mockFetch
       .mockResolvedValueOnce(ok({ uri: CDN_IMAGE }))  // image upload
       .mockResolvedValueOnce(ok({ uri: CDN_META }))   // metadata upload
@@ -116,7 +154,7 @@ describe("uploadToRaydiumIpfs() — uri field in response", () => {
     expect(pumpFunMock).not.toHaveBeenCalled();
   });
 
-  it("metadata sent to Raydium includes name, symbol, description, and image URI", async () => {
+  it.skip("metadata sent to Raydium includes name, symbol, description, and image URI", async () => {
     const paramsWithLinks = {
       ...VALID_PARAMS,
       twitter:  "https://twitter.com/test",
@@ -148,9 +186,10 @@ describe("uploadToRaydiumIpfs() — uri field in response", () => {
 });
 
 // ── 2. Response shape — url fallback ─────────────────────────────────────────
+// SKIPPED: Raydium IPFS endpoint removed Aug 2026 — see section 0 above.
 
 describe("uploadToRaydiumIpfs() — url field fallback", () => {
-  it("reads url when uri is absent in the image response", async () => {
+  it.skip("reads url when uri is absent in the image response", async () => {
     mockFetch
       .mockResolvedValueOnce(ok({ url: CDN_IMAGE }))  // image: url only
       .mockResolvedValueOnce(ok({ uri: CDN_META }))
@@ -159,7 +198,7 @@ describe("uploadToRaydiumIpfs() — url field fallback", () => {
     expect(await uploadToRaydiumIpfs(VALID_PARAMS)).toBe(CDN_META);
   });
 
-  it("reads url when uri is absent in the metadata response", async () => {
+  it.skip("reads url when uri is absent in the metadata response", async () => {
     mockFetch
       .mockResolvedValueOnce(ok({ uri: CDN_IMAGE }))
       .mockResolvedValueOnce(ok({ url: CDN_META }))   // metadata: url only
@@ -168,7 +207,7 @@ describe("uploadToRaydiumIpfs() — url field fallback", () => {
     expect(await uploadToRaydiumIpfs(VALID_PARAMS)).toBe(CDN_META);
   });
 
-  it("reads url when both responses use only the url field", async () => {
+  it.skip("reads url when both responses use only the url field", async () => {
     mockFetch
       .mockResolvedValueOnce(ok({ url: CDN_IMAGE }))
       .mockResolvedValueOnce(ok({ url: CDN_META }))
@@ -177,7 +216,7 @@ describe("uploadToRaydiumIpfs() — url field fallback", () => {
     expect(await uploadToRaydiumIpfs(VALID_PARAMS)).toBe(CDN_META);
   });
 
-  it("uri is preferred over url when both fields are present", async () => {
+  it.skip("uri is preferred over url when both fields are present", async () => {
     const ALT = "https://cdn.raydium.io/alt.json";
     mockFetch
       .mockResolvedValueOnce(ok({ uri: CDN_IMAGE, url: "https://cdn.raydium.io/alt.png" }))
@@ -269,7 +308,7 @@ describe("uploadToRaydiumIpfs() — missing uri and url fields", () => {
 describe("uploadToRaydiumIpfs() — metadata readback validation", () => {
   // Fail-open cases: the upload itself succeeds even if readback fails
 
-  it("fails-open when readback returns 404 (IPFS not yet propagated)", async () => {
+  it.skip("fails-open when readback returns 404 (IPFS not yet propagated)", async () => {
     mockFetch
       .mockResolvedValueOnce(ok({ uri: CDN_IMAGE }))
       .mockResolvedValueOnce(ok({ uri: CDN_META }))
@@ -280,7 +319,7 @@ describe("uploadToRaydiumIpfs() — metadata readback validation", () => {
     expect(pumpFunMock).not.toHaveBeenCalled();
   });
 
-  it("fails-open when readback throws a network error", async () => {
+  it.skip("fails-open when readback throws a network error", async () => {
     mockFetch
       .mockResolvedValueOnce(ok({ uri: CDN_IMAGE }))
       .mockResolvedValueOnce(ok({ uri: CDN_META }))
@@ -290,7 +329,7 @@ describe("uploadToRaydiumIpfs() — metadata readback validation", () => {
     expect(pumpFunMock).not.toHaveBeenCalled();
   });
 
-  it("fails-open when readback throws an AbortError (timeout)", async () => {
+  it.skip("fails-open when readback throws an AbortError (timeout)", async () => {
     mockFetch
       .mockResolvedValueOnce(ok({ uri: CDN_IMAGE }))
       .mockResolvedValueOnce(ok({ uri: CDN_META }))
@@ -340,7 +379,7 @@ describe("uploadToRaydiumIpfs() — metadata readback validation", () => {
     expect(await uploadToRaydiumIpfs(VALID_PARAMS)).toBe(PUMPFUN_URI);
   });
 
-  it("accepts valid metadata with all required fields present", async () => {
+  it.skip("accepts valid metadata with all required fields present", async () => {
     mockFetch
       .mockResolvedValueOnce(ok({ uri: CDN_IMAGE }))
       .mockResolvedValueOnce(ok({ uri: CDN_META }))
