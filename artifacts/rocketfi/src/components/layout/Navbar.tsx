@@ -6,7 +6,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, UserCircle, Copy, LogOut, ExternalLink, ChevronDown, Pencil, Plus, LogIn } from "lucide-react";
+import { Search, UserCircle, Copy, LogOut, ExternalLink, ChevronDown, Pencil, Plus, LogIn, Wallet } from "lucide-react";
 import { useWallet } from "@/contexts/WalletContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGetProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
@@ -14,17 +14,54 @@ import { formatAddress, diceBearUrl } from "@/lib/utils";
 import { buildNavbarDisplayInfo } from "@/lib/profileDisplayUtils";
 import { Link, useLocation } from "wouter";
 import { openSearch } from "@/components/shared/SearchDialog";
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { copyToClipboard } from "@/components/shared/CopyToast";
 import { ProfileEditModal } from "@/components/shared/ProfileEditModal";
+import { DepositModal } from "@/components/shared/DepositModal";
 
 function WalletButton() {
   const { wallet, walletName, disconnect } = useWallet();
-  const { socialUser, signOut } = useAuth();
+  const { socialUser, signOut, authHeaders } = useAuth();
   const [, navigate] = useLocation();
   const [editOpen, setEditOpen] = useState(false);
+  const [depositOpen, setDepositOpen] = useState(false);
+  const [solBalance, setSolBalance] = useState<string | null>(null);
   const { toast } = useToast();
+  const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const jwtHeaders = authHeaders();
+  const hasJwt = !!jwtHeaders.Authorization;
+
+  const fetchSolBalance = useCallback(async () => {
+    if (!hasJwt) return;
+    try {
+      const res = await fetch("/api/deposits/balance", { headers: jwtHeaders });
+      if (res.ok) {
+        const data = await res.json() as { solBalance: string };
+        setSolBalance(data.solBalance);
+      }
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasJwt]);
+
+  // Fetch balance on mount / when auth changes, and refresh every 60s
+  useEffect(() => {
+    void fetchSolBalance();
+    if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
+    if (hasJwt) {
+      refreshTimerRef.current = setInterval(() => void fetchSolBalance(), 60_000);
+    }
+    return () => {
+      if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
+    };
+  }, [fetchSolBalance, hasJwt]);
+
+  // Re-fetch after deposit modal closes (user may have deposited)
+  const handleDepositOpenChange = useCallback((open: boolean) => {
+    setDepositOpen(open);
+    if (!open) void fetchSolBalance();
+  }, [fetchSolBalance]);
 
   async function handleLogout() {
     if (wallet) await disconnect();
@@ -75,6 +112,19 @@ function WalletButton() {
 
   return (
     <>
+    {/* SOL balance chip — only for authenticated users */}
+    {hasJwt && solBalance !== null && (
+      <button
+        onClick={() => setDepositOpen(true)}
+        className="flex items-center gap-1.5 h-8 px-2 sm:px-2.5 rounded-full border border-border/60 bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-150 shrink-0 group"
+        title="In-app SOL balance — click to deposit"
+      >
+        <Wallet className="w-3 h-3 text-primary/70 group-hover:text-primary transition-colors shrink-0" />
+        {/* Show balance number on all sizes; keep it short */}
+        <span className="text-[12px] font-semibold text-foreground tabular-nums">{solBalance} SOL</span>
+      </button>
+    )}
+
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className="flex items-center gap-2 h-9 pl-1.5 pr-2.5 rounded-full border border-border/60 bg-card hover:border-border hover:bg-card/80 transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 group shrink-0">
@@ -194,6 +244,7 @@ function WalletButton() {
     </DropdownMenu>
 
     <ProfileEditModal open={editOpen} onOpenChange={setEditOpen} />
+    <DepositModal open={depositOpen} onOpenChange={handleDepositOpenChange} />
     </>
   );
 }
