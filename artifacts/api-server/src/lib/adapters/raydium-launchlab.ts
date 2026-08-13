@@ -152,7 +152,7 @@ function parseTradeEventFromLogs(
 // Verified Aug 2026 by comparing pool 6mgg1Afs… with Low Cortisol mint HxfH5ai9…
 const POOL_MINT_OFFSET = 205;
 
-class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
+export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
   /**
    * Active interval when the WSS is believed to be dead.
    * Started 30 s after the first WSS disconnect; cleared on recovery.
@@ -226,6 +226,16 @@ class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
       // so we tolerate longer silences before concluding the connection is dead.
       watchdogMs: 300_000,
     });
+  }
+
+  /**
+   * Override stop() to also cancel LaunchLab-specific HTTP poll fallback timers.
+   * Without this, an active poll interval or pending start timer would keep running
+   * and could trigger getAccountInfo / getSignaturesForAddress calls after the WS is closed.
+   */
+  override stop(): void {
+    this._stopPollFallback();
+    super.stop();
   }
 
   private _startPollFallback(): void {

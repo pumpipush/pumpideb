@@ -110,9 +110,31 @@ export abstract class SolanaRpcIndexer {
   /** Set by stop() — prevents reconnect loop from restarting after a close. */
   private _stopped = false;
 
-  /** Gracefully stop this indexer — closes the current WebSocket and prevents reconnects. */
+  /** Reference to the currently open WebSocket so stop() can close it immediately. */
+  private _currentWs: WebSocket | null = null;
+
+  /**
+   * Gracefully stop this indexer — closes the active WebSocket, clears all
+   * keepalive/watchdog timers, and prevents the reconnect loop from restarting.
+   * Subclasses that manage additional timers (e.g. HTTP poll fallbacks) should
+   * override this method, call their own cleanup, then invoke super.stop().
+   */
   stop(): void {
     this._stopped = true;
+    // Clear base timers — these belong to the current connection
+    if (this._watchdogTimer !== null) {
+      clearTimeout(this._watchdogTimer);
+      this._watchdogTimer = null;
+    }
+    if (this._keepaliveTimer !== null) {
+      clearInterval(this._keepaliveTimer);
+      this._keepaliveTimer = null;
+    }
+    // Close the active WebSocket so the logsSubscribe stream stops immediately
+    if (this._currentWs !== null) {
+      try { this._currentWs.close(); } catch { /* ignore */ }
+      this._currentWs = null;
+    }
   }
   protected readonly programId: string;
   protected readonly httpUrl: string;
@@ -409,6 +431,8 @@ export abstract class SolanaRpcIndexer {
     if (this._stopped) return; // stop() was called — do not reconnect
     const wssUrl = this._wssUrls[this._wssIdx % this._wssUrls.length];
     const ws = new WebSocket(wssUrl);
+    // Track the active connection so stop() can close it immediately.
+    this._currentWs = ws;
 
     // Per-connection flags — prevent stale callbacks from touching a newer connection's
     // timers, and detect pre-open failures (connection closed before `open` fired).
@@ -501,6 +525,9 @@ export abstract class SolanaRpcIndexer {
     ws.addEventListener("close", () => {
       if (connClosed) return; // guard against double-fire
       connClosed = true;
+      // Discard the reference only if this ws is still the current one —
+      // stop() may have already nulled it out (and closed a newer connection).
+      if (this._currentWs === ws) this._currentWs = null;
 
       // Clear watchdog + keepalive for THIS connection only.
       // The connClosed flag above prevents stale keepalive/watchdog callbacks

@@ -23,6 +23,7 @@
 
 import { PumpApiAdapter, PumpFunChainIndexer, startZeroHealJob } from "./pumpfun.js";
 import { PumpSwapIndexer } from "./pumpswap.js";
+import { RaydiumLaunchLabIndexer } from "./raydium-launchlab.js";
 import { logger as rootLogger } from "../logger.js";
 
 const managerLog = rootLogger.child({ component: "PumpStreamManager" });
@@ -64,12 +65,17 @@ async function slackAlert(text: string): Promise<void> {
 
 class PumpStreamManager {
   private readonly _pumpApi: PumpApiAdapter;
+
   private _chainFallback: {
     pumpFun:  PumpFunChainIndexer;
     pumpSwap: PumpSwapIndexer;
+    launchLab: RaydiumLaunchLabIndexer;
   } | null = null;
+
   private _fallbackTimer:    ReturnType<typeof setTimeout> | null = null;
+
   private _everConnected   = false;
+
   /** Wall-clock time when the chain fallback was last activated (for duration reporting). */
   private _fallbackActivatedAt: number | null = null;
 
@@ -112,6 +118,7 @@ class PumpStreamManager {
       );
       this._chainFallback.pumpFun.stop();
       this._chainFallback.pumpSwap.stop();
+      this._chainFallback.launchLab.stop();
       this._chainFallback = null;
 
       const durationStr = durationSec !== null ? ` after ${durationSec}s` : "";
@@ -140,18 +147,20 @@ class PumpStreamManager {
       if (this._chainFallback !== null) return; // already running
       this._fallbackActivatedAt = Date.now();
       managerLog.warn("pumpApiManager: activating chain RPC fallback adapters");
-      const pumpFun  = new PumpFunChainIndexer();
-      const pumpSwap = new PumpSwapIndexer();
+      const pumpFun   = new PumpFunChainIndexer();
+      const pumpSwap  = new PumpSwapIndexer();
+      const launchLab = new RaydiumLaunchLabIndexer();
       pumpFun.start();
       pumpSwap.start();
-      this._chainFallback = { pumpFun, pumpSwap };
+      launchLab.start();
+      this._chainFallback = { pumpFun, pumpSwap, launchLab };
 
       const reason = coldStart
         ? "pumpapi.io did not connect within the startup window"
         : "pumpapi.io has been disconnected for 30+ seconds";
       void slackAlert(
         `🔴 *pumpapi.io fallback activated* — ${reason}.\n` +
-        `Chain-RPC adapters (PublicNode → Alchemy) are now indexing pump.fun + PumpSwap.\n` +
+        `Chain-RPC adapters (PublicNode → Alchemy) are now indexing pump.fun + PumpSwap + Raydium LaunchLab.\n` +
         `Alchemy CU spend is elevated until pumpapi.io reconnects.`
       );
     }, delay);

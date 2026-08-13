@@ -14,8 +14,7 @@
  */
 
 import { logger } from "../logger.js";
-import { startPumpStreamManager }      from "./pumpApiManager.js";
-import { startRaydiumLaunchLabAdapter } from "./raydium-launchlab.js";
+import { startPumpStreamManager } from "./pumpApiManager.js";
 
 interface AdapterEntry {
   name:  string;
@@ -24,8 +23,7 @@ interface AdapterEntry {
 
 /** Active adapters — all always-on. */
 const ADAPTERS: AdapterEntry[] = [
-  { name: "pump_stream_manager", start: startPumpStreamManager      },
-  { name: "raydium_launchlab",   start: startRaydiumLaunchLabAdapter },
+  { name: "pump_stream_manager", start: startPumpStreamManager },
 ];
 
 /** Start all adapters. Each is isolated — a failure in one does not block the others. */

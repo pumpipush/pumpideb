@@ -252,8 +252,7 @@ async function fetchMetaFromUri(uri: string): Promise<UriMeta | null> {
   }
 }
 
-// ── Indexer ────────────────────────────────────────────────────────────────────
-
+const LL_PLATFORM           = "raydium_launchlab";
 export class PumpFunChainIndexer extends SolanaRpcIndexer {
   /**
    * Per-mint write queue — serializes reserve updates for the same mint when
@@ -891,7 +890,7 @@ async function healTokenTrades(mint: string): Promise<void> {
   }
 }
 
-function startZeroHealJob(): void {
+export function startZeroHealJob(): void {
   // Run once shortly after startup, then on a fixed interval.
   setTimeout(() => {
     void healZeroAmountTrades().catch((err: unknown) =>
@@ -1184,9 +1183,9 @@ export class PumpApiAdapter {
         const signature = msg.signature;
         const mint      = msg.mint;
 
-        // Only process pump.fun bonding-curve and PumpSwap (pump-amm) events.
-        // raydium-launchpad, meteora-*, etc. are handled by their own adapters.
-        if (pool !== "pump" && pool !== "pump-amm") return;
+        // Only process pump.fun bonding-curve, PumpSwap (pump-amm), and
+        // Raydium LaunchLab (raydium-launchpad) events.
+        if (pool !== "pump" && pool !== "pump-amm" && pool !== "raydium-launchpad") return;
         if (!signature || !mint) return;
 
         // Reset the data-staleness watchdog ONLY for actions that actually
@@ -1221,6 +1220,16 @@ export class PumpApiAdapter {
           if (action === "buy" || action === "sell") {
             void this._handlePumpAmmTrade(msg, action === "buy").catch((err) =>
               pumpApiLog.error({ err, signature }, "pumpapi: error in pump-amm trade")
+            );
+          }
+        } else if (pool === "raydium-launchpad") {
+          if (action === "create") {
+            void this._handleLabCreate(msg).catch((err) =>
+              pumpApiLog.error({ err, signature }, "pumpapi: error in raydium-launchpad create")
+            );
+          } else if (action === "buy" || action === "sell") {
+            void this._handleLabTrade(msg, action === "buy").catch((err) =>
+              pumpApiLog.error({ err, signature }, "pumpapi: error in raydium-launchpad trade")
             );
           }
         }
@@ -1648,6 +1657,239 @@ export class PumpApiAdapter {
       },
     });
   }
+
+  // ── Raydium LaunchLab create handler ──────────────────────────────────────
+
+  private async _handleLabCreate(msg: PumpApiEvent): Promise<void> {
+    const mint   = msg.mint;
+    const name   = msg.name?.trim()   ?? "";
+    const symbol = msg.symbol?.trim() ?? "";
+    const uri    = msg.uri?.trim()    ?? null;
+    const creatorAddress = msg.txSigner ?? null;
+
+    if (!mint || !name || !symbol) {
+      pumpApiLog.debug({ msg }, "pumpapi: skipping raydium-launchpad create — missing mint/name/symbol");
+      return;
+    }
+
+    const initVSolStr = msg.vQuoteInBondingCurve != null
+      ? String(msg.vQuoteInBondingCurve)
+      : LL_INIT_VSOL_SOL;
+    const initVTokStr = msg.vTokensInBondingCurve != null
+      ? PumpApiAdapter._tokToBase(msg.vTokensInBondingCurve)
+      : LL_INIT_VTOK.toString();
+    const initPriceEth = msg.price != null && isFinite(msg.price) && msg.price > 0
+      ? msg.price.toFixed(15)
+      : LL_INIT_PRICE_ETH;
+    const initMCStr = msg.marketCapQuote != null
+      ? BigInt(Math.round(msg.marketCapQuote * 1e9)).toString()
+      : LL_INIT_MC_LAMPORTS;
+
+    await db.insert(tokensTable).values({
+      address:              mint,
+      name,
+      symbol,
+      description:          null,
+      imageUrl:             null,
+      creatorAddress:       creatorAddress ?? "unknown",
+      totalSupply:          LL_TOTAL_SUPPLY.toString(),
+      virtualTokenReserves: initVTokStr,
+      virtualEthReserves:   initVSolStr,
+      marketCapEth:         initMCStr,
+      priceEth:             initPriceEth,
+      platform:             LL_PLATFORM,
+      chain:                CHAIN,
+    }).onConflictDoNothing();
+
+    pumpApiLog.info({ mint, name, symbol }, "pumpapi: new raydium_launchlab token ingested");
+
+    const broadcastToken = (imageUrl: string | null) => {
+      emitNewToken({
+        type: "newToken",
+        token: {
+          address:      mint,
+          name,
+          symbol,
+          imageUrl,
+          priceEth:     initPriceEth,
+          marketCapEth: initMCStr,
+          platform:     LL_PLATFORM,
+          chain:        CHAIN,
+          createdAt:    new Date().toISOString(),
+        },
+      });
+    };
+
+    if (uri) {
+      let broadcasted = false;
+      const fallback = setTimeout(() => {
+        if (!broadcasted) { broadcasted = true; broadcastToken(null); }
+      }, 3_000);
+
+      fetchMetaFromUri(uri)
+        .then(async (meta) => {
+          clearTimeout(fallback);
+          if (meta) {
+            const dbUpdate: Record<string, string | null> = {};
+            if (meta.imageUrl)    dbUpdate["imageUrl"]    = meta.imageUrl;
+            if (meta.description) dbUpdate["description"] = meta.description;
+            if (meta.twitterUrl)  dbUpdate["twitterUrl"]  = meta.twitterUrl;
+            if (meta.telegramUrl) dbUpdate["telegramUrl"] = meta.telegramUrl;
+            if (meta.websiteUrl)  dbUpdate["websiteUrl"]  = meta.websiteUrl;
+            if (Object.keys(dbUpdate).length > 0) {
+              await db.update(tokensTable).set(dbUpdate).where(eq(tokensTable.address, mint));
+            }
+          }
+          const imageUrl = meta?.imageUrl ?? null;
+          if (!broadcasted) { broadcasted = true; broadcastToken(imageUrl); }
+          else if (imageUrl) broadcastToken(imageUrl);
+        })
+        .catch(() => {
+          clearTimeout(fallback);
+          if (!broadcasted) { broadcasted = true; broadcastToken(null); }
+        });
+    } else {
+      broadcastToken(null);
+    }
+  }
+
+  // ── Raydium LaunchLab trade handler ────────────────────────────────────────
+
+  private async _handleLabTrade(msg: PumpApiEvent, isBuy: boolean): Promise<void> {
+    const mint          = msg.mint;
+    const signature     = msg.signature;
+    const traderAddress = msg.breakdown?.[0]?.trader ?? msg.txSigner ?? "unknown";
+
+    if (!mint || !signature) return;
+
+    const solLamports = PumpApiAdapter._solToLamports(msg.quoteAmount);
+    const tokenAmount = PumpApiAdapter._tokToBase(msg.tokenAmount);
+
+    const vSolLam = msg.vQuoteInBondingCurve != null
+      ? BigInt(PumpApiAdapter._solToLamports(msg.vQuoteInBondingCurve))
+      : null;
+    const vTokBase = msg.vTokensInBondingCurve != null
+      ? BigInt(PumpApiAdapter._tokToBase(msg.vTokensInBondingCurve))
+      : null;
+
+    const priceEth = msg.price != null && isFinite(msg.price) && msg.price > 0
+      ? msg.price.toFixed(15)
+      : (tokenAmount !== "0" && solLamports !== "0"
+          ? (Number(solLamports) / Number(tokenAmount) / 1000).toFixed(15)
+          : null);
+
+    const marketCapEth = vSolLam !== null && vTokBase !== null && vTokBase > 0n
+      ? (LL_TOTAL_SUPPLY * vSolLam / vTokBase).toString()
+      : (msg.marketCapQuote != null && isFinite(msg.marketCapQuote)
+          ? BigInt(Math.round(msg.marketCapQuote * 1e9)).toString()
+          : undefined);
+
+    const eventTs = PumpApiAdapter._parseTs(msg.timestamp);
+
+    // Auto-create a placeholder token row if we missed the create event.
+    const [existing] = await db
+      .select({ id: tokensTable.id })
+      .from(tokensTable)
+      .where(eq(tokensTable.address, mint))
+      .limit(1);
+
+    if (!existing) {
+      pumpApiLog.warn({ mint }, "pumpapi: raydium-launchpad first trade — auto-creating placeholder");
+      await db.insert(tokensTable).values({
+        address:              mint,
+        name:                 msg.name?.trim() ?? mint.slice(0, 8) + "…",
+        symbol:               msg.symbol?.trim() ?? "???",
+        description:          null,
+        imageUrl:             null,
+        creatorAddress:       traderAddress,
+        totalSupply:          LL_TOTAL_SUPPLY.toString(),
+        virtualTokenReserves: vTokBase?.toString() ?? LL_INIT_VTOK.toString(),
+        virtualEthReserves:   vSolLam != null ? (Number(vSolLam) / 1e9).toFixed(6) : LL_INIT_VSOL_SOL,
+        marketCapEth:         marketCapEth ?? LL_INIT_MC_LAMPORTS,
+        priceEth:             priceEth ?? LL_INIT_PRICE_ETH,
+        platform:             LL_PLATFORM,
+        chain:                CHAIN,
+      }).onConflictDoNothing();
+    }
+
+    const [trade] = await db.insert(tradesTable).values({
+      tokenAddress:  mint,
+      tokenName:     null,
+      tokenSymbol:   null,
+      traderAddress,
+      isBuy,
+      ethAmount:     solLamports,
+      tokenAmount,
+      priceEth,
+      txHash:        signature,
+      platform:      LL_PLATFORM,
+      timestamp:     eventTs,
+    }).onConflictDoNothing().returning();
+
+    if (!trade) return; // duplicate
+
+    let updVSolStr: string | undefined;
+    let updVTokStr: string | undefined;
+
+    if (vSolLam !== null && vTokBase !== null && vSolLam > 0n && vTokBase > 0n) {
+      updVSolStr = (Number(vSolLam) / 1e9).toFixed(6).replace(/\.?0+$/, "");
+      updVTokStr = vTokBase.toString();
+    }
+
+    await db.update(tokensTable).set({
+      tradeCount: sql`${tokensTable.tradeCount} + 1`,
+      volumeEth:  sql`CAST(CAST(${tokensTable.volumeEth} AS NUMERIC) + ${solLamports} AS TEXT)`,
+      ...(priceEth    !== null     ? { priceEth }                          : {}),
+      ...(updVSolStr  !== undefined ? { virtualEthReserves: updVSolStr }   : {}),
+      ...(updVTokStr  !== undefined ? { virtualTokenReserves: updVTokStr } : {}),
+      ...(marketCapEth !== undefined ? { marketCapEth }                    : {}),
+    }).where(eq(tokensTable.address, mint));
+
+    pumpApiLog.debug({ mint, isBuy, sol: solLamports }, "pumpapi: raydium_launchlab trade ingested");
+
+    const [tokenRow] = await db
+      .select({
+        name:                 tokensTable.name,
+        symbol:               tokensTable.symbol,
+        marketCapEth:         tokensTable.marketCapEth,
+        volumeEth:            tokensTable.volumeEth,
+        virtualEthReserves:   tokensTable.virtualEthReserves,
+        virtualTokenReserves: tokensTable.virtualTokenReserves,
+        tradeCount:           tokensTable.tradeCount,
+      })
+      .from(tokensTable)
+      .where(eq(tokensTable.address, mint))
+      .limit(1);
+
+    emitTrade({
+      type: "trade",
+      trade: {
+        id:            trade.id,
+        tokenAddress:  trade.tokenAddress,
+        traderAddress: trade.traderAddress,
+        isBuy:         trade.isBuy,
+        ethAmount:     trade.ethAmount,
+        tokenAmount:   trade.tokenAmount,
+        priceEth:      trade.priceEth,
+        txHash:        trade.txHash,
+        platform:      LL_PLATFORM,
+        timestamp:     trade.timestamp.toISOString(),
+      },
+      token: {
+        address:              mint,
+        name:                 tokenRow?.name        ?? null,
+        symbol:               tokenRow?.symbol      ?? null,
+        priceEth,
+        marketCapEth:         tokenRow?.marketCapEth ?? marketCapEth ?? null,
+        volumeEth:            tokenRow?.volumeEth    ?? solLamports,
+        virtualEthReserves:   tokenRow?.virtualEthReserves   ?? LL_INIT_VSOL_SOL,
+        virtualTokenReserves: tokenRow?.virtualTokenReserves ?? LL_INIT_VTOK.toString(),
+        tradeCount:           Number(tokenRow?.tradeCount ?? 1),
+        platform:             LL_PLATFORM,
+        chain:                CHAIN,
+      },
+    });
+  }
 }
 
 // ── Exported entry points ──────────────────────────────────────────────────────
@@ -1662,5 +1904,13 @@ export async function startPumpFunAdapter(): Promise<void> {
   indexer.start();
   startZeroHealJob();
 }
+const LL_TOTAL_SUPPLY       = 1_000_000_000_000_000n;
+const LL_INIT_VSOL_LAMPORTS = 30_000_000_000n;
+const LL_INIT_VSOL_SOL      = "30";
+const LL_INIT_VTOK          = LL_TOTAL_SUPPLY;
 
-export { startZeroHealJob };
+const LL_INIT_MC_LAMPORTS   =
+  (LL_TOTAL_SUPPLY * LL_INIT_VSOL_LAMPORTS / LL_INIT_VTOK).toString();
+
+const LL_INIT_PRICE_ETH     =
+  (Number(LL_INIT_VSOL_LAMPORTS) / Number(LL_INIT_VTOK) / 1000).toFixed(15);
