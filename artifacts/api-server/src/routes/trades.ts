@@ -211,13 +211,13 @@ router.get("/tokens/:address/stream", asyncWrap(async (req: Request, res: Respon
     res.write(`data: ${JSON.stringify(snapshot)}\n\n`);
   }
 
-  // Send a heartbeat data frame every 25 s.
+  // Send a heartbeat data frame every 10 s.
   // Must be a real "data:" SSE frame — comment lines (": ping") are invisible
   // to the browser's EventSource.onmessage and would never reset the client
   // watchdog timer, causing spurious reconnects on quiet streams.
   const heartbeat = setInterval(() => {
     res.write(`data: ${JSON.stringify({ type: "ping" })}\n\n`);
-  }, 25_000);
+  }, 10_000);
 
   const tradeHandler    = (event: TradeEvent)    => res.write(`data: ${JSON.stringify(event)}\n\n`);
   const snapshotHandler = (event: SnapshotEvent) => res.write(`data: ${JSON.stringify(event)}\n\n`);

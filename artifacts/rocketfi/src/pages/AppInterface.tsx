@@ -949,11 +949,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     query: {
       enabled: !!selectedAddress,
       queryKey: ["tradeHistory", selectedAddress],
-      // Poll every 10 s as a fallback for when the SSE connection is silently
+      // Poll every 5 s as a fallback for when the SSE connection is silently
       // dead. Responses are 304-cached at the server when no new trades arrive,
       // so this is cheap for quiet tokens and keeps the table live when SSE fails.
-      refetchInterval: 10_000,
-      staleTime: 8_000,
+      refetchInterval: 5_000,
+      staleTime: 4_000,
     }
   });
 
@@ -962,8 +962,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     query: {
       enabled: !!selectedAddress,
       queryKey: ["topWallets", selectedAddress],
-      refetchInterval: 15_000,
-      staleTime: 12_000,
+      refetchInterval: 10_000,
+      staleTime: 8_000,
     }
   });
   const topWallets = topWalletsData?.wallets ?? [];
@@ -982,8 +982,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       return res.json();
     },
     enabled: !!selectedAddress,
-    refetchInterval: 15_000,
-    staleTime: 12_000,
+    refetchInterval: 8_000,
+    staleTime: 6_000,
   });
 
   // ── Server-side holder list (SQL net balance across ALL trades — no 100-row cap) ────
@@ -999,8 +999,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       return json.holders ?? [];
     },
     enabled: !!selectedAddress,
-    refetchInterval: 15_000,
-    staleTime: 12_000,
+    refetchInterval: 8_000,
+    staleTime: 6_000,
   });
 
   // ── Server-side position (SQL aggregate across ALL trades — no 100-row cap) ─
@@ -1019,8 +1019,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       return res.json();
     },
     enabled: !!selectedAddress && !!wallet,
-    refetchInterval: 30_000,
-    staleTime: 25_000,
+    refetchInterval: 15_000,
+    staleTime: 12_000,
   });
 
   // ── Server-side 24h stats (SQL aggregate — no 100-row cap) ────────────────
@@ -1037,8 +1037,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       return res.json();
     },
     enabled: !!selectedAddress,
-    refetchInterval: 30_000,
-    staleTime: 25_000,
+    refetchInterval: 12_000,
+    staleTime: 10_000,
   });
 
   const recordTrade = useRecordTrade();

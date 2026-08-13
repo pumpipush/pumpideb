@@ -59,8 +59,8 @@ interface UseTokenStreamResult {
 }
 
 const MAX_LIVE_TRADES  = 200;
-const WATCHDOG_TICK    = 30_000;   // ms between watchdog checks
-const WATCHDOG_SILENCE = 45_000;   // ms of silence before watchdog forces reconnect
+const WATCHDOG_TICK    = 10_000;   // ms between watchdog checks
+const WATCHDOG_SILENCE = 20_000;   // ms of silence before watchdog forces reconnect
 
 // How long to wait before showing the reconnecting chip after `connected` goes
 // false.  Suppresses the brief flash that occurs on every initial mount while

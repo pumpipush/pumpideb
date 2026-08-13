@@ -56,10 +56,10 @@ const MAX_LIVE_TOKENS = 100;
 export const BADGE_TTL_MS = 12_000;
 
 // ── Reconnect / watchdog constants ────────────────────────────────────────────
-const WATCHDOG_TICK      = 30_000;   // ms between watchdog checks
-const WATCHDOG_SILENCE   = 45_000;   // ms of silence before watchdog forces reconnect
+const WATCHDOG_TICK      = 10_000;   // ms between watchdog checks
+const WATCHDOG_SILENCE   = 20_000;   // ms of silence before watchdog forces reconnect
 const RECONNECT_BASE     =  1_000;   // ms — first backoff interval
-const RECONNECT_MAX      = 30_000;   // ms — ceiling for exponential backoff
+const RECONNECT_MAX      = 10_000;   // ms — ceiling for exponential backoff
 /** Delay before the reconnecting chip appears — suppresses the mount-flash */
 const DISCONNECT_GRACE_MS = 500;
 

@@ -748,7 +748,7 @@ export default function Dashboard() {
   const { data: rawTokens, isLoading: loadingTokens } = useListTokens(listParams, {
     // Re-fetch every 30 s so logos and market caps that resolved after the
     // initial load (via enrichment or IPFS fetch) appear without a manual refresh.
-    query: { refetchInterval: 30_000, queryKey: getListTokensQueryKey(listParams) },
+    query: { refetchInterval: 15_000, staleTime: 12_000, queryKey: getListTokensQueryKey(listParams) },
   });
 
 
@@ -761,8 +761,8 @@ export default function Dashboard() {
     bubbleListParams,
     {
       query: {
-        refetchInterval:      30_000,
-        staleTime:            25_000,
+        refetchInterval:      15_000,
+        staleTime:            12_000,
         refetchOnWindowFocus: false,
         queryKey:             getListTokensQueryKey(bubbleListParams),
       },

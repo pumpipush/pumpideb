@@ -25,7 +25,7 @@ import {
 
 const router: IRouter = Router();
 
-const HEARTBEAT_INTERVAL_MS = 25_000;
+const HEARTBEAT_INTERVAL_MS = 10_000;
 
 router.get("/feed/stream", (req: Request, res: Response) => {
   res.setHeader("Content-Type", "text/event-stream");
