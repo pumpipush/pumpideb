@@ -945,20 +945,50 @@ export interface PumpApiEvent {
   breakdown?: Array<{ action?: string; trader?: string; tokenAmount?: number; quoteAmount?: number }>;
 }
 
+/**
+ * How long (ms) with no WebSocket messages before the watchdog force-closes
+ * the connection. pumpapi.io streams all Solana pump.fun activity continuously —
+ * 60 s of silence reliably indicates a dead connection.
+ * Exported so tests can reference the constant without hard-coding it.
+ */
+export const PUMPAPI_WATCHDOG_MS = 60_000;
+
 export class PumpApiAdapter {
   private _ws:     WebSocket | null = null;
   private _active  = false;
   private _delay   = 5_000;
   private readonly _maxDelay = 120_000;
   private _keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+  private _watchdogTimer:  ReturnType<typeof setTimeout>  | null = null;
 
   /** Optional callbacks for health-based fallback coordination. */
   private readonly _onConnected?:    () => void;
   private readonly _onDisconnected?: () => void;
 
-  constructor(opts?: { onConnected?: () => void; onDisconnected?: () => void }) {
+  /**
+   * Configurable watchdog window — defaults to PUMPAPI_WATCHDOG_MS.
+   * Exposed via constructor options so tests can pass a short value.
+   */
+  private readonly _watchdogMs: number;
+
+  /**
+   * Injectable WebSocket factory — defaults to `(url) => new WebSocket(url)`.
+   * Tests pass a mock factory to avoid real network connections.
+   */
+  private readonly _wsFactory: (url: string) => WebSocket;
+
+  constructor(opts?: {
+    onConnected?:    () => void;
+    onDisconnected?: () => void;
+    /** Override watchdog window (ms). Default: PUMPAPI_WATCHDOG_MS (60 000). */
+    watchdogMs?: number;
+    /** Override WebSocket constructor for testing. */
+    wsFactory?: (url: string) => WebSocket;
+  }) {
     this._onConnected    = opts?.onConnected;
     this._onDisconnected = opts?.onDisconnected;
+    this._watchdogMs     = opts?.watchdogMs ?? PUMPAPI_WATCHDOG_MS;
+    this._wsFactory      = opts?.wsFactory  ?? ((url) => new WebSocket(url));
   }
 
   /**
@@ -995,6 +1025,7 @@ export class PumpApiAdapter {
     if (!this._active) return;
     this._active = false;
     pumpApiLog.info("pumpapi: stopping stream");
+    this._clearWatchdog();
     if (this._keepaliveTimer !== null) {
       clearInterval(this._keepaliveTimer);
       this._keepaliveTimer = null;
@@ -1005,10 +1036,39 @@ export class PumpApiAdapter {
     }
   }
 
+  // ── Watchdog helpers ────────────────────────────────────────────────────────
+
+  /**
+   * Arm (or re-arm) the watchdog timer for a specific WebSocket connection.
+   * Call this on open AND on every incoming message so it continuously resets.
+   * If the watchdog fires it force-closes `ws`; the close handler then handles
+   * reconnect and the `_onDisconnected` callback.
+   */
+  private _armWatchdog(ws: WebSocket): void {
+    if (this._watchdogTimer !== null) {
+      clearTimeout(this._watchdogTimer);
+    }
+    this._watchdogTimer = setTimeout(() => {
+      this._watchdogTimer = null;
+      pumpApiLog.warn(
+        { watchdogMs: this._watchdogMs },
+        "pumpapi: watchdog fired — no messages received; forcing reconnect"
+      );
+      ws.close(); // triggers close handler → _onDisconnected → reconnect loop
+    }, this._watchdogMs);
+  }
+
+  private _clearWatchdog(): void {
+    if (this._watchdogTimer !== null) {
+      clearTimeout(this._watchdogTimer);
+      this._watchdogTimer = null;
+    }
+  }
+
   private _connect(): void {
     if (!this._active) return;
     try {
-      const ws = new WebSocket(PUMPAPI_WSS);
+      const ws = this._wsFactory(PUMPAPI_WSS);
       this._ws = ws;
 
       ws.addEventListener("open", () => {
@@ -1016,15 +1076,24 @@ export class PumpApiAdapter {
         pumpApiLog.info({ wss: PUMPAPI_WSS }, "pumpapi: connected");
         this._onConnected?.();
 
-        // Keepalive ping every 20 s to prevent silent drops.
+        // Keepalive ping every 20 s — first line of defence against silent drops.
         this._keepaliveTimer = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
             try { ws.send(JSON.stringify({ method: "ping" })); } catch { /* ignore */ }
           }
         }, 20_000);
+
+        // Watchdog: arm immediately on open. Any incoming message resets it.
+        // If no message arrives within _watchdogMs the connection is considered
+        // stalled and is force-closed to trigger the reconnect loop.
+        this._armWatchdog(ws);
       });
 
       ws.addEventListener("message", (rawEvent) => {
+        // Reset watchdog on EVERY message — even unrecognised ones — so a live
+        // connection that sends non-trade events (e.g. pong frames) isn't killed.
+        this._armWatchdog(ws);
+
         let msg: PumpApiEvent;
         try {
           msg = JSON.parse(rawEvent.data as string) as PumpApiEvent;
@@ -1069,6 +1138,8 @@ export class PumpApiAdapter {
       });
 
       ws.addEventListener("close", () => {
+        // Always clear timers regardless of whether the close was intentional.
+        this._clearWatchdog();
         if (this._keepaliveTimer !== null) {
           clearInterval(this._keepaliveTimer);
           this._keepaliveTimer = null;
