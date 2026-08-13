@@ -91,22 +91,24 @@ function bs58Encode(bytes: Buffer | Uint8Array): string {
 /**
  * Parse a LaunchLab TradeEvent from "Program data: <base64>" log lines.
  *
- * Confirmed layout (147 bytes):
+ * Updated layout (147 bytes) — Raydium changed the event in mid-2026:
  *   [0..7]   discriminator  bddb7fd34ee661ee
- *   [8..39]  mint           token mint pubkey
+ *   [8..39]  poolAddress    LaunchLab pool/bonding-curve state account (NOT the mint)
  *   [40..71] reserves       4 × u64 (vSol, vTok, realSol, realTok)
  *   [72..79] sol_amount     lamports transferred
  *   [80..87] tok_amount     base units transferred
  *   [88]     is_buy         1 = buy, 0 = sell
  *   [89..146] trader + ts + extras
  *
- * is_buy is confirmed at byte 88 by comparing BuyExactIn vs SellExactIn txs.
- * We additionally validate against the instruction log for robustness.
+ * NOTE: The mint is no longer embedded in the event. Instead bytes 8-40 hold
+ * the pool state account address. The actual token mint lives at offset 205
+ * within that pool state account (verified empirically Aug 2026).
+ * Use getMintForPool() to resolve poolAddress → tokenMint (cached per pool).
  */
 function parseTradeEventFromLogs(
   logs: string[],
 ): {
-  mint:        string;
+  poolAddress: string;
   solLamports: string;
   tokenAmount: string;
   isBuy:       boolean;
@@ -122,28 +124,33 @@ function parseTradeEventFromLogs(
     if (!log.startsWith(PREFIX)) continue;
     try {
       const raw = Buffer.from(log.slice(PREFIX.length), "base64");
-      if (raw.length < 88) continue;
+      if (raw.length < 89) continue;
       if (!raw.subarray(0, 8).equals(TRADE_EVENT_DISC)) continue;
 
-      const mint        = bs58Encode(raw.subarray(8, 40));
+      // Bytes 8-40 = pool state account (post-2026 layout change)
+      const poolAddress = bs58Encode(raw.subarray(8, 40));
       const solLamports = raw.readBigUInt64LE(72).toString();
       const tokenAmount = raw.readBigUInt64LE(80).toString();
 
-      // Sanity: skip zero-amount events and known non-token mints
+      // Sanity: skip zero-amount events
       if (solLamports === "0" || tokenAmount === "0") continue;
-      if (SKIP_MINTS.has(mint)) continue;
 
       // Cross-check byte-88 with instruction log (robustness)
       const isBuyFromEvent = raw[88] === 1;
       const isBuy = isBuyFromLog ?? isBuyFromEvent;
 
-      return { mint, solLamports, tokenAmount, isBuy };
+      return { poolAddress, solLamports, tokenAmount, isBuy };
     } catch { continue; }
   }
   return null;
 }
 
 // ── Indexer ───────────────────────────────────────────────────────────────────
+
+// Pool state account layout (Raydium LaunchLab, 429 bytes):
+//   offset 205..236 — token mint address (32 bytes)
+// Verified Aug 2026 by comparing pool 6mgg1Afs… with Low Cortisol mint HxfH5ai9…
+const POOL_MINT_OFFSET = 205;
 
 class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
   /**
@@ -156,6 +163,61 @@ class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
    * Cancelled by onEventReceived() if any WS event arrives before the 30 s elapses.
    */
   private _pollFallbackPending: ReturnType<typeof setTimeout>  | null = null;
+
+  /**
+   * Pool-address → token-mint cache.
+   * Populated on first trade for each pool via getAccountInfo (one call per pool lifetime).
+   * Subsequent trades for the same pool are instant cache lookups with zero RPC calls.
+   */
+  private _poolMintCache = new Map<string, string>();
+
+  /**
+   * Resolve the actual SPL token mint from a LaunchLab pool state account.
+   *
+   * Raydium's 2026 TradeEvent change removed the mint from event bytes 8-40,
+   * replacing it with the pool state account address. The mint lives at offset
+   * POOL_MINT_OFFSET (205) within that 429-byte pool state account.
+   *
+   * Results are cached permanently (a pool's mint never changes).
+   */
+  private async getMintForPool(poolAddress: string): Promise<string | null> {
+    const cached = this._poolMintCache.get(poolAddress);
+    if (cached) return cached;
+
+    try {
+      const rpcUrl = process.env["ALCHEMY_API_KEY"]
+        ? `https://solana-mainnet.g.alchemy.com/v2/${process.env["ALCHEMY_API_KEY"]}`
+        : "https://solana-rpc.publicnode.com";
+
+      const resp = await fetch(rpcUrl, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          jsonrpc: "2.0", id: 1,
+          method:  "getAccountInfo",
+          params:  [poolAddress, { encoding: "base64" }],
+        }),
+        signal: AbortSignal.timeout(8_000),
+      });
+      const j = await resp.json() as { result?: { value?: { data?: [string, string] } | null } };
+      const data64 = j.result?.value?.data?.[0];
+      if (!data64) return null;
+
+      const buf = Buffer.from(data64, "base64");
+      if (buf.length < POOL_MINT_OFFSET + 32) return null;
+
+      const mintBytes = buf.subarray(POOL_MINT_OFFSET, POOL_MINT_OFFSET + 32);
+      const mint      = bs58Encode(mintBytes);
+      if (SKIP_MINTS.has(mint)) return null;
+
+      this._poolMintCache.set(poolAddress, mint);
+      this.log.debug({ poolAddress, mint }, "raydium_launchlab: pool→mint resolved and cached");
+      return mint;
+    } catch (err) {
+      this.log.warn({ poolAddress, err }, "raydium_launchlab: getMintForPool failed");
+      return null;
+    }
+  }
 
   constructor() {
     super({
@@ -358,11 +420,21 @@ class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
   private async handleTrade(event: LogEvent): Promise<void> {
     const { signature, logs } = event;
 
-    // ── FAST PATH: decode from "Program data:" log (zero extra RPC calls) ──
+    // ── FAST PATH: decode from "Program data:" log ───────────────────────
+    // Since Raydium's 2026 TradeEvent change, bytes 8-40 hold the pool state
+    // account address (not the mint).  getMintForPool() resolves the actual
+    // token mint from that pool account — cached after the first lookup so
+    // subsequent trades on the same token cost zero extra RPC calls.
     const fast = parseTradeEventFromLogs(logs);
 
     if (fast) {
-      const { mint, solLamports, tokenAmount, isBuy } = fast;
+      const { poolAddress, solLamports, tokenAmount, isBuy } = fast;
+
+      const mint = await this.getMintForPool(poolAddress);
+      if (!mint) {
+        this.log.warn({ poolAddress, signature }, "raydium_launchlab: could not resolve mint from pool state — skipping trade");
+        return;
+      }
 
       const priceEth = tokenAmount !== "0" && solLamports !== "0"
         ? (Number(solLamports) / Number(tokenAmount) / 1000).toFixed(15)
