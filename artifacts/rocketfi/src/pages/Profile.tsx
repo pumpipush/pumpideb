@@ -26,8 +26,10 @@ import { useParams, useLocation, useSearch } from "wouter";
 import {
   Globe, Copy, Share2, Edit2, Camera, Coins,
   ExternalLink, AlertCircle, ArrowDownToLine,
-  TrendingUp, TrendingDown, Wallet, Activity, ShieldAlert,
+  TrendingUp, TrendingDown, Wallet, Activity, ShieldAlert, Gift, Loader2,
 } from "lucide-react";
+import { useTxToast } from "@/hooks/useTxToast";
+import { fetchClaimableLamports, buildCollectCreatorFeeTx } from "@/lib/pumpfun-creator-fees";
 
 const XIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
@@ -152,6 +154,9 @@ export default function ProfilePage() {
   const [editOpen, setEditOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [addEmailOpen, setAddEmailOpen] = useState(false);
+  const [claimLoading, setClaimLoading] = useState(false);
+  const { submitTx } = useTxToast();
+  const { signAndSendTransaction } = useWallet();
 
   const { data: profile, isLoading, refetch } = useGetProfile(slug, {
     query: { enabled: !!slug, retry: false, queryKey: getGetProfileQueryKey(slug) },
@@ -195,6 +200,34 @@ export default function ProfilePage() {
     staleTime: 20_000,
     refetchInterval: activeTab === "activity" ? 30_000 : false,
   });
+
+  // ── Creator fee balance (only fetched for profile owner) ──────────────────
+  const { data: claimableLamports = 0n, refetch: refetchFees } = useQuery<bigint>({
+    queryKey: ["creator-fees", address],
+    queryFn: () => fetchClaimableLamports(address),
+    enabled: isOwner && !!address,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    refetchInterval: isOwner ? 60_000 : false,
+  });
+
+  const handleClaimFees = async () => {
+    if (!wallet || claimLoading) return;
+    setClaimLoading(true);
+    try {
+      await submitTx(
+        (async () => {
+          const { transaction } = await buildCollectCreatorFeeTx(wallet);
+          return signAndSendTransaction(transaction);
+        })(),
+        "Claim Creator Fees",
+      );
+      // Refresh balance after a few seconds so the user sees the updated amount
+      setTimeout(() => { void refetchFees(); }, 4_000);
+    } finally {
+      setClaimLoading(false);
+    }
+  };
 
   const totalTrades = history?.length ?? 0;
   const totalVolumeLamports = history
@@ -484,6 +517,44 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
+
+            {/* ══ CREATOR FEES CARD ════════════════════════════════════════════════ */}
+            {isOwner && claimableLamports > 1_000_000n && (
+              <div
+                className="flex items-center gap-3 px-4 py-3.5 rounded-xl mb-5"
+                style={{
+                  background: "rgba(34,197,94,0.06)",
+                  border: "1px solid rgba(34,197,94,0.2)",
+                }}
+              >
+                <Gift className="w-4 h-4 shrink-0" style={{ color: "#22c55e" }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold" style={{ color: "#22c55e" }}>
+                    Creator fees available
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {formatSol(String(claimableLamports))} SOL
+                    {solPrice && (
+                      <span className="ml-1 opacity-70">
+                        (≈ ${((Number(claimableLamports) / 1e9) * solPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })})
+                      </span>
+                    )}
+                    {" "}earned from trades on your tokens
+                  </p>
+                </div>
+                <button
+                  onClick={() => void handleClaimFees()}
+                  disabled={claimLoading}
+                  className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-semibold shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e" }}
+                >
+                  {claimLoading
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Gift className="w-3.5 h-3.5" />}
+                  {claimLoading ? "Claiming…" : "Claim"}
+                </button>
+              </div>
+            )}
 
             {/* ══ WALLET RECOVERY PROMPT ══════════════════════════════════════════ */}
             {isOwner && socialUser?.authType === "wallet" && !socialUser?.email && (

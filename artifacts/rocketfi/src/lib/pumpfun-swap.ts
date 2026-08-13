@@ -87,7 +87,7 @@ async function getPumpFeeRecipient(conn: Connection): Promise<PublicKey> {
  * Anchor event authority PDA for the pump.fun program.
  * Seed: ["__event_authority"], program: PUMP_FUN_PROGRAM_ID
  */
-const PUMP_EVENT_AUTHORITY = new PublicKey(
+export const PUMP_EVENT_AUTHORITY = new PublicKey(
   "Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp9F1"
 );
 
@@ -152,7 +152,7 @@ function getATA(owner: PublicKey, mint: PublicKey): PublicKey {
 
 /** Resolve the Solana RPC endpoint to use.
  *  Priority: VITE_ALCHEMY_API_KEY → VITE_SOLANA_RPC_URL → PublicNode free */
-function getRpcUrl(): string {
+export function getRpcUrl(): string {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const env = (import.meta as any).env;
   if (env?.VITE_ALCHEMY_API_KEY) return `https://solana-mainnet.g.alchemy.com/v2/${env.VITE_ALCHEMY_API_KEY}`;
