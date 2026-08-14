@@ -12,6 +12,7 @@
  */
 
 import { Router } from "express";
+import { authLimiter } from "../lib/rateLimiters.js";
 import { OAuth2Client } from "google-auth-library";
 import { randomUUID } from "crypto";
 import { eq, or } from "drizzle-orm";
@@ -300,7 +301,7 @@ router.post("/auth/google", asyncWrap(async (req, res) => {
 
 // ── POST /api/auth/email/send ──────────────────────────────────────────────
 
-router.post("/auth/email/send", asyncWrap(async (req, res) => {
+router.post("/auth/email/send", authLimiter, asyncWrap(async (req, res) => {
   const { email } = req.body as { email?: string };
   if (!email || !email.includes("@")) {
     return void res.status(400).json({ error: "valid email required" });
@@ -316,7 +317,7 @@ router.post("/auth/email/send", asyncWrap(async (req, res) => {
 
 // ── POST /api/auth/email/verify ────────────────────────────────────────────
 
-router.post("/auth/email/verify", asyncWrap(async (req, res) => {
+router.post("/auth/email/verify", authLimiter, asyncWrap(async (req, res) => {
   const { email, code } = req.body as { email?: string; code?: string };
   if (!email || !code) return void res.status(400).json({ error: "email and code required" });
 
@@ -354,7 +355,7 @@ router.post("/auth/email/verify", asyncWrap(async (req, res) => {
 // Wallet-only users can add an email address by sending an OTP.
 // Requires: Authorization: Bearer <wallet-auth JWT>
 
-router.post("/auth/link/email/send", asyncWrap(async (req, res) => {
+router.post("/auth/link/email/send", authLimiter, asyncWrap(async (req, res) => {
   const token = extractBearer(req.headers.authorization);
   if (!token) return void res.status(401).json({ error: "No token" });
 
@@ -393,7 +394,7 @@ router.post("/auth/link/email/send", asyncWrap(async (req, res) => {
 // Verify OTP and save the email to the authenticated wallet user's profile.
 // Requires: Authorization: Bearer <wallet-auth JWT>
 
-router.post("/auth/link/email/verify", asyncWrap(async (req, res) => {
+router.post("/auth/link/email/verify", authLimiter, asyncWrap(async (req, res) => {
   const token = extractBearer(req.headers.authorization);
   if (!token) return void res.status(401).json({ error: "No token" });
 
@@ -555,7 +556,7 @@ router.get("/auth/me", asyncWrap(async (req, res) => {
 // No prior JWT required — this is how wallet-only users get their first JWT.
 // Query: ?wallet=<base58 Solana address>
 
-router.get("/auth/wallet/login/challenge", asyncWrap(async (req, res) => {
+router.get("/auth/wallet/login/challenge", authLimiter, asyncWrap(async (req, res) => {
   const walletAddress = typeof req.query.wallet === "string" ? req.query.wallet.trim() : "";
   if (!walletAddress || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(walletAddress)) {
     return void res.status(400).json({ error: "wallet query param must be a valid Solana address" });
@@ -574,7 +575,7 @@ router.get("/auth/wallet/login/challenge", asyncWrap(async (req, res) => {
 // then find-or-create a profile and issue a JWT.
 // Body: { walletAddress, signature, message }
 
-router.post("/auth/wallet/login", asyncWrap(async (req, res) => {
+router.post("/auth/wallet/login", authLimiter, asyncWrap(async (req, res) => {
   const body = req.body as { walletAddress?: string; signature?: string; message?: string };
   const { walletAddress, signature, message } = body;
 

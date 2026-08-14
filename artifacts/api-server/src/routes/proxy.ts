@@ -3,11 +3,12 @@ import { Router } from "express";
 import { URL } from "url";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { asyncWrap } from "../lib/asyncHandler.js";
+import { uploadLimiter } from "../lib/rateLimiters.js";
 
 const router = Router();
 const storageService = new ObjectStorageService();
 
-// ── pump.fun metadata self-hosting ────────────────────────────────────────────
+// ── pump.fun metadata self-hosting ─────────────────────────────────────────────
 
 // Accept any image/* MIME type — normalise known aliases before the check.
 // We validate content via buffer inspection after decode, so strict MIME gatekeeping
@@ -111,20 +112,9 @@ function isAllowedUrl(raw: string): boolean {
  *   imageType: string (required) — MIME type, e.g. "image/png"
  *   twitter, telegram, website: string (optional)
  *
- * Rate: 1 upload every 10 s per IP — token creation is a deliberate user action.
+ * Rate: 6 req / min / IP via uploadLimiter (uses req.ip, respects trust-proxy header).
  */
-const _ipfsRateMap = new Map<string, number>();
-const IPFS_RATE_MS = 10_000;
-
-router.post("/pump-ipfs-upload", asyncWrap(async (req, res) => {
-  const ip = req.socket.remoteAddress ?? "unknown";
-  const now = Date.now();
-  const last = _ipfsRateMap.get(ip) ?? 0;
-  if (now - last < IPFS_RATE_MS) {
-    return res.status(429).json({ error: "Too many upload requests — wait a moment and try again" });
-  }
-  _ipfsRateMap.set(ip, now);
-
+router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
   const { name, symbol, description, imageBase64, imageType, twitter, telegram, website } =
     req.body as Record<string, unknown>;
 
