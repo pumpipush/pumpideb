@@ -11,7 +11,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { PublicKey } from "@solana/web3.js";
-import { getConnection } from "@/lib/solanaConnection";
+import { getReadConnection } from "@/lib/solanaConnection";
 
 /** Polling interval while tab is visible. */
 const POLL_INTERVAL_MS = 15_000;
@@ -27,7 +27,7 @@ export function useSolBalance(wallet: string | null): {
 
   const fetchBalance = useCallback(async (address: string) => {
     try {
-      const lamports = await getConnection().getBalance(new PublicKey(address), "confirmed");
+      const lamports = await getReadConnection().getBalance(new PublicKey(address), "confirmed");
       setSolBalance(lamports / 1e9);
     } catch {
       // silently ignore — balance stays at previous value

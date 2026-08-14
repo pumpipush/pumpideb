@@ -13,7 +13,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db, depositsTable, profilesTable } from "@workspace/db";
 import { asyncWrap } from "../lib/asyncHandler.js";
 import { extractBearer, verifyToken, type AuthPayload } from "../lib/auth-jwt.js";
-import { getPrimaryHttpRpc } from "../lib/adapters/solanaRpcBase.js";
+import { PUBLICNODE_HTTP } from "../lib/adapters/solanaRpcBase.js";
 import { logger as rootLogger } from "../lib/logger.js";
 
 const router = Router();
@@ -45,8 +45,10 @@ function base58Encode(buf: Buffer): string {
 }
 
 // ── Solana RPC helper ─────────────────────────────────────────────────────────
+// Deposit balance checks are low-volume — free PublicNode is sufficient.
+// Alchemy is NOT needed here and would waste premium CUs on simple queries.
 async function rpc<T>(method: string, params: unknown[]): Promise<T> {
-  const res = await fetch(getPrimaryHttpRpc(), {
+  const res = await fetch(PUBLICNODE_HTTP, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),

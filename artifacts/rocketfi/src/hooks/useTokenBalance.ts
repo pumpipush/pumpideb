@@ -35,7 +35,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { PublicKey } from "@solana/web3.js";
-import { getConnection } from "@/lib/solanaConnection";
+import { getReadConnection } from "@/lib/solanaConnection";
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -93,7 +93,7 @@ export function useTokenBalance(
     }
 
     try {
-      const conn     = getConnection();
+      const conn     = getReadConnection();
       const mintPk   = new PublicKey(mint);
       const walletPk = new PublicKey(walletAddr);
 

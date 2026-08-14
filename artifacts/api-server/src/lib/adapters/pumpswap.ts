@@ -38,19 +38,12 @@ const SKIP_MINTS = new Set([
 export class PumpSwapIndexer extends SolanaRpcIndexer {
   /**
    * Rate limiter — PumpSwap generates 100-200 events/second.
-   * Each getTransaction = 100 Compute Units on Alchemy.
-   *
-   * Free tier  (no key): 30M  CU/month → ≈1 call/30s to stay under budget.
-   * Premium    (key set): 300M+ CU/month → 2s interval is safe and keeps
-   *   prices near real-time (≈30 trades/minute per token captured).
-   *
-   * Interval is chosen automatically based on whether ALCHEMY_API_KEY is set.
+   * getTransaction is always routed to free PublicNode (never Alchemy),
+   * so the bottleneck is PublicNode throughput, not Alchemy CU budget.
+   * 10 s gives ~6 samples/minute — good price discovery without hammering RPCs.
    */
   private _lastTradePassMs = 0;
-  // 10 s with Alchemy key (was 2 s) — getTransaction is now routed to free
-  // PublicNode so the bottleneck is throughput, not CU budget. 10 s still gives
-  // ~6 samples/minute for price discovery without hammering public RPCs.
-  private readonly _tradeIntervalMs = process.env["ALCHEMY_API_KEY"] ? 10_000 : 30_000;
+  private readonly _tradeIntervalMs = 10_000; // 10 s — PublicNode throughput limit
 
   constructor(opts?: { wssUrl?: string }) {
     super({ programId: PUMPSWAP_PROGRAM, adapterName: PLATFORM, wssUrl: opts?.wssUrl });
