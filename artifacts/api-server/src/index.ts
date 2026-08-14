@@ -9,6 +9,7 @@
 import { fileURLToPath } from "url";
 import path from "path";
 import http from "http";
+import { openSync, writeSync, closeSync, readFileSync, unlinkSync, existsSync } from "fs";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startAdapters } from "./lib/adapters/index";
@@ -40,6 +41,110 @@ if (process.env["NODE_ENV"] !== "production") {
   );
 }
 
+// ── Cross-process background-worker lock ───────────────────────────────────────
+//
+// In PM2 cluster mode with 2 workers, a rolling reload briefly runs two
+// generations of worker-0 simultaneously (the new one starts before the old one
+// exits).  Both have NODE_APP_INSTANCE=0, so a simple instance-ID check would
+// start adapters twice.
+//
+// We use a PID lock file with O_EXCL (exclusive create — atomic on POSIX) so
+// only ONE process at a time ever holds the "background jobs" role:
+//   • O_EXCL guarantees exactly one process creates the file.
+//   • When the retiring worker exits its shutdown handler, it unlinks the file.
+//   • The new worker's retry loop then acquires the lock and starts jobs.
+//   • If the lock file is stale (holder PID gone), we remove and retry.
+//
+// The retry interval (2 s) is well within the rolling-reload window (kill_timeout
+// is 10 s), so jobs start on the new primary in ≤ 2 s after the old one exits.
+
+const WORKER_LOCK_FILE = "/tmp/rocketfi-worker.lock";
+let _backgroundStarted = false;
+let _retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Atomically try to claim the background-worker lock.
+ * Returns true only if this process is now the exclusive lock holder.
+ */
+function tryAcquireLock(): boolean {
+  try {
+    // 'wx' = O_WRONLY | O_CREAT | O_EXCL — fails immediately if file exists
+    const fd = openSync(WORKER_LOCK_FILE, "wx");
+    writeSync(fd, String(process.pid));
+    closeSync(fd);
+    return true;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== "EEXIST") return false;
+
+    // Lock file exists — verify the holder is still alive
+    try {
+      const raw = readFileSync(WORKER_LOCK_FILE, "utf8").trim();
+      const pid = parseInt(raw, 10);
+      if (Number.isNaN(pid)) {
+        // Corrupt file — remove and retry
+        try { unlinkSync(WORKER_LOCK_FILE); } catch { /* ignore */ }
+        return tryAcquireLock();
+      }
+      process.kill(pid, 0); // throws ESRCH if process doesn't exist
+      return false;         // holder is alive; we do not own the lock
+    } catch (killErr: unknown) {
+      // Holder process is gone — remove stale lock and retry once
+      try { unlinkSync(WORKER_LOCK_FILE); } catch { /* ignore */ }
+      return tryAcquireLock();
+    }
+  }
+}
+
+/**
+ * Release the background-worker lock if this process holds it.
+ * Called from the graceful-shutdown handler so the new generation can
+ * pick up the lock within its retry interval (≤ 2 s).
+ */
+function releaseLock(): void {
+  if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
+  try {
+    if (!existsSync(WORKER_LOCK_FILE)) return;
+    const pid = parseInt(readFileSync(WORKER_LOCK_FILE, "utf8").trim(), 10);
+    if (pid === process.pid) unlinkSync(WORKER_LOCK_FILE);
+  } catch { /* ignore — best-effort release */ }
+}
+
+/**
+ * Try to become the background-job primary.  If another process (the retiring
+ * reload predecessor) already holds the lock, schedule a retry so we pick it
+ * up as soon as the old worker exits and releases.
+ */
+function tryBecomeWorkerPrimary(): void {
+  if (_backgroundStarted) return;
+
+  if (tryAcquireLock()) {
+    _backgroundStarted = true;
+    logger.info({ pid: process.pid }, "worker-primary lock acquired — starting background jobs");
+
+    // Start all platform data adapters (Pump.fun, PumpSwap, LaunchLab)
+    // Each adapter is isolated — a crash in one will not affect the server
+    void startAdapters();
+
+    // Start background enrichment loop — retries metadata for tokens that
+    // got placeholder names/symbols because the upstream API wasn't ready yet
+    startEnrichmentLoop();
+
+    // Download and cache Jupiter strict token list (enables "All Solana Tokens" search)
+    startJupiterTokenSync();
+
+    // Backfill historical LaunchLab tokens from on-chain creation transactions.
+    // Runs 10 s after startup (to let adapters connect first), then every 10 min.
+    startLaunchLabBackfill();
+  } else {
+    // Predecessor still holds the lock — retry after kill_timeout gives it time to exit
+    _retryTimer = setTimeout(tryBecomeWorkerPrimary, 2_000);
+    _retryTimer.unref(); // don't block process exit during shutdown
+    logger.debug("worker-primary lock held by predecessor — will retry in 2 s");
+  }
+}
+
+// ── Server startup ─────────────────────────────────────────────────────────────
+
 async function start(): Promise<void> {
   // Resolve the migrations folder relative to this file's bundled location.
   // At runtime the bundle is at  artifacts/api-server/dist/index.mjs;
@@ -67,39 +172,34 @@ async function start(): Promise<void> {
 
       logger.info({ port }, "Server listening");
 
-      // In PM2 cluster mode, NODE_APP_INSTANCE identifies each worker.
-      // Only worker 0 (or a non-clustered single process) runs background jobs
-      // so adapters, enrichment, and backfill never run twice in parallel.
-      const isPrimaryWorker =
-        !process.env["NODE_APP_INSTANCE"] ||
-        process.env["NODE_APP_INSTANCE"] === "0";
-
-      if (isPrimaryWorker) {
-        // Start all platform data adapters (Pump.fun, PumpSwap, LaunchLab)
-        // Each adapter is isolated — a crash in one will not affect the server
-        void startAdapters();
-
-        // Start background enrichment loop — retries metadata for tokens that
-        // got placeholder names/symbols because the upstream API wasn't ready yet
-        startEnrichmentLoop();
-
-        // Download and cache Jupiter strict token list (enables "All Solana Tokens" search)
-        startJupiterTokenSync();
-
-        // Backfill historical LaunchLab tokens from on-chain creation transactions.
-        // Runs 10 s after startup (to let adapters connect first), then every 10 min.
-        startLaunchLabBackfill();
-      }
+      // Try to become the background-job primary via cross-process lock.
+      // Safe across PM2 rolling-reload generations — see lock comment above.
+      tryBecomeWorkerPrimary();
 
       resolve();
     });
   });
 
   // ── Graceful shutdown (SIGTERM / SIGINT) ─────────────────────────────────────
-  // On VPS: process manager (systemd/PM2) sends SIGTERM; Ctrl+C sends SIGINT.
-  // Stop accepting new connections, wait for in-flight requests, then close DB.
+  // On VPS: PM2 sends SIGINT during reload (configurable); Ctrl+C sends SIGINT.
+  //
+  // Shutdown sequence:
+  //   1. Release the worker-primary lock so the incoming generation can acquire it.
+  //   2. Stop accepting new connections (server.close).
+  //   3. Existing requests (including SSE streams) drain until they finish or
+  //      kill_timeout (10 s) is reached, whichever comes first.
+  //   4. Close the DB pool and exit cleanly.
+  //
+  // SSE streams: browser EventSource reconnects automatically after the stream
+  // closes.  The reconnect delay is typically < 1 s; there is no data loss
+  // because the new worker resumes from the same live sources.
   const shutdown = (signal: string) => {
     logger.info({ signal }, "Received shutdown signal — draining server");
+
+    // Release lock first so the new worker can acquire it and start jobs
+    // while this worker is still draining existing connections.
+    releaseLock();
+
     server.close(() => {
       logger.info("HTTP server closed — ending DB pool");
       pool.end().then(() => {
@@ -111,11 +211,13 @@ async function start(): Promise<void> {
       });
     });
 
-    // Force-kill if graceful drain takes too long
+    // Force-kill if graceful drain takes too long.
+    // PM2's kill_timeout (10 s in ecosystem.config.cjs) will also hard-kill
+    // if this timer hasn't fired; whichever fires first wins.
     setTimeout(() => {
       logger.error("Graceful shutdown timed out — forcing exit");
       process.exit(1);
-    }, 10_000).unref();
+    }, 9_000).unref();
   };
 
   process.once("SIGTERM", () => shutdown("SIGTERM"));

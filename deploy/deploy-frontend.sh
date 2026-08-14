@@ -75,13 +75,19 @@ RELEASE_DIR=$(ssh "$VPS_USER_HOST" "
 ")
 echo "    Built to: $RELEASE_DIR"
 
-# ── 3. Atomic symlink swap (ln -sfn is atomic on Linux) ─────────────────────
-# nginx follows the symlink on every request, so new requests immediately
-# get the new release.  There is no partial-file window.
-echo "    [3/4] Atomically swapping nginx root symlink"
+# ── 3. Atomic symlink swap via rename(2) ────────────────────────────────────
+# ln -sfn is NOT atomic (unlink + symlink = two syscalls, gap in between).
+# The correct approach:
+#   1. Create a brand-new symlink at a temp path (always succeeds atomically)
+#   2. mv -Tf renames it onto 'current' using the rename(2) syscall, which IS
+#      atomic on Linux — nginx never sees a missing or intermediate state.
+echo "    [3/4] Atomically swapping nginx root symlink (rename syscall)"
 ssh "$VPS_USER_HOST" "
-  ln -sfn $RELEASE_DIR $APP_DIR/current
-  echo '    /opt/rocketfi/current → $RELEASE_DIR'
+  # Create temp symlink (new path, no existing file to clobber)
+  ln -s $RELEASE_DIR $APP_DIR/current.new
+  # Atomic rename onto 'current' — rename(2) is a single kernel operation
+  mv -Tf $APP_DIR/current.new $APP_DIR/current
+  echo '    /opt/rocketfi/current → $RELEASE_DIR (atomic rename)'
 "
 
 # ── 4. Verify nginx is serving the new release ──────────────────────────────

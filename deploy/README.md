@@ -98,7 +98,18 @@ nginx keeps serving the old release while the build runs — no downtime, no par
 /opt/rocketfi/current  →  releases/20260814_190012   (nginx root)
 ```
 
-`ln -sfn` on Linux is atomic — nginx sees the new release the instant the symlink is swapped.
+### Why the swap is truly atomic
+
+`ln -sfn` is **not** atomic — it unlinks then recreates (two syscalls, gap in between).
+The script instead uses:
+
+```bash
+ln -s $RELEASE_DIR $APP_DIR/current.new   # create temp symlink (no existing file)
+mv -Tf $APP_DIR/current.new $APP_DIR/current   # atomic rename(2) syscall
+```
+
+`mv -T` invokes `rename(2)` which replaces the target in a single kernel operation —
+nginx never sees a missing or partially-written root.
 
 **Rollback** to a previous release in one command:
 ```bash
