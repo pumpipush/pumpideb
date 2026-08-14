@@ -595,12 +595,17 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
       }
 
       // ── Update token price + market cap immediately ───────────────────────
-      await db.update(tokensTable).set({
-        tradeCount: sql`${tokensTable.tradeCount} + 1`,
-        volumeEth:  sql`CAST(CAST(${tokensTable.volumeEth} AS NUMERIC) + ${solLamports} AS TEXT)`,
-        ...(priceEth  ? { priceEth }                   : {}),
-        ...(updMCStr  ? { marketCapEth: updMCStr }      : {}),
-      }).where(eq(tokensTable.address, mint));
+      // IMPORTANT: tradeCount and volumeEth are intentionally NOT updated here.
+      // They are incremented only after the trade row is confirmed inserted in the
+      // background handler below. Updating cumulative stats speculatively — before
+      // the insert — causes phantom stats when the insert is a duplicate or fails
+      // (e.g. event replay, network retry, onConflictDoNothing hit).
+      if (priceEth || updMCStr) {
+        await db.update(tokensTable).set({
+          ...(priceEth ? { priceEth }              : {}),
+          ...(updMCStr ? { marketCapEth: updMCStr } : {}),
+        }).where(eq(tokensTable.address, mint));
+      }
 
       // ── Immediate SSE broadcast ───────────────────────────────────────────
       const [tokenRow] = await db
@@ -616,6 +621,14 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
         .from(tokensTable)
         .where(eq(tokensTable.address, mint))
         .limit(1);
+
+      // Compute optimistic counts for the live broadcast: the DB stats are not
+      // yet incremented (they'll be committed only after the trade insert confirms),
+      // so we add this trade's contribution locally to keep the UI accurate.
+      const optimisticTradeCount = Number(tokenRow?.tradeCount ?? 0) + 1;
+      const optimisticVolumeEth  = String(
+        BigInt(tokenRow?.volumeEth ?? "0") + BigInt(solLamports),
+      );
 
       // Broadcast SSE now — trader address fills in below from background getTransaction
       const broadcastTrade = (tradeId: number | null, traderAddress: string) => {
@@ -639,10 +652,10 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
             symbol:               tokenRow?.symbol   ?? null,
             priceEth,
             marketCapEth:         tokenRow?.marketCapEth ?? updMCStr ?? null,
-            volumeEth:            tokenRow?.volumeEth    ?? solLamports,
+            volumeEth:            optimisticVolumeEth,
             virtualEthReserves:   tokenRow?.virtualEthReserves   ?? LL_INIT_VSOL_SOL,
             virtualTokenReserves: tokenRow?.virtualTokenReserves ?? LL_INIT_VTOK.toString(),
-            tradeCount:           Number(tokenRow?.tradeCount ?? 1),
+            tradeCount:           optimisticTradeCount,
             platform:             PLATFORM,
             chain:                CHAIN,
           },
@@ -671,7 +684,16 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
           timestamp:     new Date(),
         }).onConflictDoNothing().returning();
 
-        if (!trade) return; // duplicate
+        if (!trade) return; // duplicate — insert was rejected by onConflictDoNothing
+
+        // ── Confirmed insert: increment cumulative token stats ────────────────
+        // Stats are committed here (not in the fast-path above) so that duplicate
+        // events or failed inserts never leave phantom trade_count / volume_eth
+        // entries on the token row.
+        await db.update(tokensTable).set({
+          tradeCount: sql`${tokensTable.tradeCount} + 1`,
+          volumeEth:  sql`CAST(CAST(${tokensTable.volumeEth} AS NUMERIC) + ${solLamports} AS TEXT)`,
+        }).where(eq(tokensTable.address, mint));
 
         // Update virtual reserves from on-chain state (constant-product estimate)
         try {

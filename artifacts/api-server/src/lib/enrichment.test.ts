@@ -17,6 +17,7 @@ import {
   buildLabChainUpdate,
   computeSupplyBackfillUpdate,
   selectLongTailCandidates,
+  needsStatReconciliation,
   LL_DEFAULT_SUPPLY_STR,
   LL_PRICE_VERIFY_MIN_TRADES,
   LL_PRICE_VERIFY_BATCH,
@@ -509,5 +510,68 @@ describe("selectLongTailCandidates", () => {
     expect(LL_PRICE_VERIFY_MIN_TRADES).toBeGreaterThan(0);
     expect(typeof LL_PRICE_VERIFY_BATCH).toBe("number");
     expect(LL_PRICE_VERIFY_BATCH).toBeGreaterThan(0);
+  });
+});
+
+// ── needsStatReconciliation ────────────────────────────────────────────────────
+//
+// Guards the comparison logic used by the 10-minute self-healing reconciliation
+// job that corrects token trade_count / volume_eth when they diverge from the
+// actual trades table (e.g. from phantom stats caused by failed inserts,
+// event replay, or race conditions before the fast-path fix).
+
+describe("needsStatReconciliation", () => {
+  it("returns false when stored stats exactly match actual", () => {
+    expect(needsStatReconciliation(
+      { tradeCount: 5,  volumeEth: "1000000000" },
+      { tradeCount: 5,  volumeEth: 1_000_000_000n },
+    )).toBe(false);
+  });
+
+  it("returns true when trade_count diverges (phantom insert case)", () => {
+    // Stored trade_count is higher than actual rows in the trades table.
+    expect(needsStatReconciliation(
+      { tradeCount: 10, volumeEth: "5000000000" },
+      { tradeCount:  7, volumeEth: 5_000_000_000n },
+    )).toBe(true);
+  });
+
+  it("returns true when volume_eth diverges while trade_count matches", () => {
+    expect(needsStatReconciliation(
+      { tradeCount: 3, volumeEth: "9999999999" },
+      { tradeCount: 3, volumeEth: 3_000_000_000n },
+    )).toBe(true);
+  });
+
+  it("returns true when both stats diverge (classic phantom-stats case)", () => {
+    // Simulates a token with trade_count=30 and volume>0 but zero actual trade rows.
+    expect(needsStatReconciliation(
+      { tradeCount: 30, volumeEth: "150000000000" },
+      { tradeCount:  0, volumeEth:             0n },
+    )).toBe(true);
+  });
+
+  it("returns false for a token with zero trades and zero stored stats", () => {
+    expect(needsStatReconciliation(
+      { tradeCount: 0, volumeEth: "0" },
+      { tradeCount: 0, volumeEth: 0n },
+    )).toBe(false);
+  });
+
+  it("handles large BigInt volumes correctly without precision loss", () => {
+    // 1 000 SOL in lamports = 1_000_000_000_000
+    const largeVol = 1_000_000_000_000n;
+    expect(needsStatReconciliation(
+      { tradeCount: 500, volumeEth: largeVol.toString() },
+      { tradeCount: 500, volumeEth: largeVol },
+    )).toBe(false);
+  });
+
+  it("returns true when only volume_eth differs by a single lamport", () => {
+    // Ensures the comparison is exact (BigInt equality, not float approximation).
+    expect(needsStatReconciliation(
+      { tradeCount: 1, volumeEth: "1000000001" },
+      { tradeCount: 1, volumeEth: 1_000_000_000n },
+    )).toBe(true);
   });
 });

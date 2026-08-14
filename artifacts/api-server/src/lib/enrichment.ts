@@ -583,6 +583,7 @@ async function backfillBondingCurves(): Promise<void> {
 
 const GRADUATION_DETECT_INTERVAL_MS  = 5 * 60_000; // every 5 minutes
 const PUMPSWAP_ENRICH_INTERVAL_MS    = 5 * 60_000; // every 5 minutes
+const LL_STATS_RECONCILE_INTERVAL_MS  = 10 * 60_000; // every 10 minutes
 const LL_PRICE_ENRICH_INTERVAL_MS    =     60_000; // every 60 s
 const LL_PRICE_ENRICH_BATCH          = 60;          // tokens per tick — primary pass (most active)
 /** Min trades a long-tail token must have before it triggers a one-time Birdeye check. */
@@ -599,6 +600,24 @@ export const LL_PRICE_VERIFY_BATCH      =  5;
  * Exported for unit testing so the overlap-exclusion logic can be verified
  * without a database.
  */
+/**
+ * Pure helper: given the actual trade stats (recomputed from the trades table)
+ * and the stats currently stored on the token row, return true when the stored
+ * values have drifted and need to be corrected.
+ *
+ * Exported for unit testing — the reconciliation SQL job uses equivalent
+ * comparison logic inside the database.
+ */
+export function needsStatReconciliation(
+  stored: { tradeCount: number; volumeEth: string },
+  actual: { tradeCount: number; volumeEth: bigint },
+): boolean {
+  return (
+    stored.tradeCount !== actual.tradeCount ||
+    BigInt(stored.volumeEth) !== actual.volumeEth
+  );
+}
+
 export function selectLongTailCandidates(
   candidates:   ReadonlyArray<{ address: string; tradeCount: number }>,
   primaryAddrs: ReadonlySet<string>,
@@ -1413,6 +1432,58 @@ async function backfillLaunchLabSupply(): Promise<void> {
   }
 }
 
+// ── LaunchLab trade-stat reconciliation ───────────────────────────────────────
+//
+// The fast-path adapter increments trade_count / volume_eth only after a
+// confirmed DB insert (onConflictDoNothing returning a row).  This prevents
+// new phantom stats from accumulating.
+//
+// This job acts as a belt-and-suspenders self-heal: every 10 minutes it
+// recomputes the true trade_count and volume_eth for every LaunchLab token
+// directly from the trades table, and corrects any rows that have drifted —
+// whether from residual pre-fix phantom inserts, RPC retries, or edge cases
+// not covered by the fast-path guard.
+
+async function reconcileLabTradeStats(): Promise<void> {
+  try {
+    const result = await db.execute(sql`
+      UPDATE tokens
+      SET
+        trade_count = subq.actual_count,
+        volume_eth  = subq.actual_volume
+      FROM (
+        SELECT
+          t.address,
+          COALESCE(tr.cnt, 0)::int              AS actual_count,
+          COALESCE(tr.vol, 0)::text             AS actual_volume
+        FROM tokens t
+        LEFT JOIN (
+          SELECT
+            token_address,
+            COUNT(*)::int                        AS cnt,
+            SUM(CAST(eth_amount AS NUMERIC))     AS vol
+          FROM trades
+          WHERE platform = 'raydium_launchlab'
+          GROUP BY token_address
+        ) tr ON t.address = tr.token_address
+        WHERE t.platform = 'raydium_launchlab'
+          AND (
+            t.trade_count::int       != COALESCE(tr.cnt, 0)
+            OR t.volume_eth::numeric != COALESCE(tr.vol, 0)
+          )
+      ) subq
+      WHERE tokens.address = subq.address
+    `);
+
+    const corrected = (result as { rowCount?: number }).rowCount ?? 0;
+    if (corrected > 0) {
+      log.info({ corrected }, "enrichment: launchlab trade stats reconciled");
+    }
+  } catch (err) {
+    log.warn({ err }, "enrichment: launchlab trade stats reconciliation failed");
+  }
+}
+
 // ── Entry point ────────────────────────────────────────────────────────────────
 
 export function startEnrichmentLoop(): void {
@@ -1465,6 +1536,13 @@ export function startEnrichmentLoop(): void {
   };
   void sweepLaunchLabGraduations();
   setInterval(() => void sweepLaunchLabGraduations(), 5 * 60_000); // every 5 min
+  // Self-healing reconciliation: recomputes trade_count and volume_eth from the
+  // actual trades table and corrects any divergence from phantom stats.
+  // Starts 5 minutes after startup (let adapters settle) then every 10 minutes.
+  setTimeout(() => {
+    void reconcileLabTradeStats();
+    setInterval(() => void reconcileLabTradeStats(), LL_STATS_RECONCILE_INTERVAL_MS);
+  }, 5 * 60_000);
   // First tick slightly delayed so adapters can connect and insert initial records
   setTimeout(() => {
     void enrichTick();
