@@ -2124,7 +2124,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             )}
           </div>}</div>
 
-          {/* ── MOBILE: Row 3 — Vol 24h (left) + 5m / 1h / 6h % (right) ── */}
+          {/* ── MOBILE: Row 3 — Vol 24h (left) + 5m / 1h / 6h / 24h % (right) ── */}
           <div className="flex items-center justify-between mt-2 md:hidden">
             <div className="flex flex-col justify-center">
               <span className="text-[12px] font-medium mb-0.5" style={{ color: "#94a3b8" }}>Vol 24h</span>
@@ -2134,12 +2134,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             </div>
             <div className="flex items-center gap-3">
               {([
-                { label: "5m", data: priceStats.p5m },
-                { label: "1h", data: priceStats.p1h },
-                { label: "6h", data: priceStats.p6h },
+                { label: "5m",  data: priceStats.p5m },
+                { label: "1h",  data: priceStats.p1h },
+                { label: "6h",  data: priceStats.p6h },
+                { label: "24h", data: priceStats.p24h },
               ] as { label: string; data: { val: string; up: boolean } | null }[]).map(({ label, data }) => (
                 <div key={label} className="flex flex-col items-center">
-                  <span className="text-[12px] font-medium mb-0.5" style={{ color: "#64748b" }}>{label}</span>
+                  <span className="text-[12px] font-medium mb-0.5" style={{ color: label === "24h" ? "#94a3b8" : "#64748b" }}>{label}</span>
                   <span
                     className="font-mono font-bold text-[14px] tabular-nums leading-tight"
                     style={{ color: data ? (data.up ? "#4ade80" : "#f87171") : "#475569" }}
@@ -2212,7 +2213,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               )}
             </div>
             )}
-            {/* Price */}
+            {/* Price + 24h % */}
             <div className="flex-1 flex flex-col justify-center items-end">
               <span className="text-[12px] font-medium mb-0.5" style={{ color: "#94a3b8" }}>Price USD</span>
               <span
@@ -2224,6 +2225,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   ? formatTokenPrice(solPrice ? priceStats.currentPrice * solPrice : priceStats.currentPrice)
                   : "—"}
               </span>
+              {priceStats.p24h && (
+                <span
+                  className="text-[12px] font-semibold font-mono tabular-nums mt-0.5"
+                  style={{ color: priceStats.p24h.up ? "#4ade80" : "#f87171" }}
+                >
+                  {priceStats.p24h.up ? "▲" : "▼"} {priceStats.p24h.val} 24h
+                </span>
+              )}
             </div>
           </div>
 
