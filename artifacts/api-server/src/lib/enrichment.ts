@@ -1306,23 +1306,7 @@ async function enrichLabTokensFromChain(): Promise<void> {
   }
 }
 
-// ── LaunchLab supply backfill ──────────────────────────────────────────────────
-//
-// Corrects existing LaunchLab token rows that were stored with the hardcoded
-// 1B default supply (1_000_000_000_000_000) before per-token supply fetching
-// was added.  Tokens like USD1 (World Liberty Financial USD) have different
-// supplies, which caused wildly wrong market caps (e.g. $2.15 trillion instead
-// of a few thousand dollars).
-//
-// For each affected row:
-//   1. Fetch the actual supply from the SPL mint account on-chain.
-//   2. If it differs from the 1B default, update totalSupply.
-//   3. Recompute marketCapEth = realSupply × priceEth × 1000 (lamports)
-//      where priceEth (SOL/display-token) is the current stored spot price.
-//
-// Runs once at startup; safe to re-run (skips rows whose supply is already
-// correct or non-default).
-
+const WSOL_MINT_ADDRESS     = "So11111111111111111111111111111111111111112";
 /** The legacy hardcoded 1B default supply (1B tokens × 10^6 decimals). */
 export const LL_DEFAULT_SUPPLY_STR = "1000000000000000";
 
@@ -1513,6 +1497,15 @@ export function startEnrichmentLoop(): void {
     void enrichLaunchLabPrices();
     setInterval(() => void enrichLaunchLabPrices(), LL_PRICE_ENRICH_INTERVAL_MS);
   }, 15_000);
+  // Re-sync LaunchLab bonding curve reserves from Raydium's pool API every 5 min.
+  // Corrects drift that accumulated from constant-product estimation and also
+  // fixes tokens whose reserves were never updated via the live TradeEvent path
+  // (e.g. discovered via HTTP poll fallback without a WebSocket TradeEvent).
+  // Run once 30 s after startup (let the DB settle first) then on a 5-min cadence.
+  setTimeout(() => {
+    void refreshLaunchLabReserves();
+    setInterval(() => void refreshLaunchLabReserves(), LL_RESERVE_REFRESH_INTERVAL_MS);
+  }, 30_000);
   // Periodically mark LaunchLab tokens as graduated when virtual_eth_reserves
   // exceeds 115 SOL (30 virtual floor + 85 raised = graduation threshold).
   // This catches tokens where the adapter's reserve estimate drifted past the
@@ -1549,3 +1542,180 @@ export function startEnrichmentLoop(): void {
     setInterval(() => void enrichTick(), POLL_INTERVAL_MS);
   }, 5_000);
 }
+
+const LL_INIT_VTOK_BIG      = 1_000_000_000_000_000n; // 1B tokens × 10^6
+
+interface RaydiumPoolsResponse {
+  success?: boolean;
+  data?: {
+    count?: number;
+    data?: RaydiumPoolEntry[];
+  };
+}
+
+/** LaunchLab program ID — used to verify a pool is the bonding-curve pool,
+ *  not a post-graduation CPMM/CLMM pool created for the same mint. */
+const LL_POOL_PROGRAM_ID = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj";
+
+const LL_INIT_VSOL_LAM_BIG  = 30_000_000_000n;
+
+const LL_VIRTUAL_SOL_FLOOR  = 30;           // SOL — constant virtual floor
+
+const LL_RESERVE_REFRESH_INTERVAL_MS = 5 * 60_000; // every 5 minutes
+
+const LL_GRADUATION_VSOL    = 115;          // SOL — vSol at graduation
+
+const LL_RESERVE_REFRESH_BATCH       = 40;          // mints per Raydium API call
+
+const LL_K0_BIG             = LL_INIT_VSOL_LAM_BIG * LL_INIT_VTOK_BIG;
+
+interface RaydiumPoolEntry {
+  programId?:   string;
+  mintA?: { address?: string };
+  mintB?: { address?: string };
+  mintAmountA?: number;
+  mintAmountB?: number;
+}
+
+/**
+ * Periodic job: resync virtualEthReserves and virtualTokenReserves for all
+ * non-graduated LaunchLab tokens from actual Raydium pool state.
+ *
+ * Uses a rotating offset (_llReserveOffset) so every tick processes a different
+ * slice of the token table ordered by address.  One full rotation covers every
+ * token in ceil(N / LL_RESERVE_REFRESH_BATCH) ticks — no token is permanently
+ * skipped regardless of trade volume.  The offset resets to 0 when a partial
+ * page is returned, signalling the end of the table.
+ *
+ * Only writes when the delta is ≥ 0.01 SOL to avoid unnecessary DB churn for
+ * tokens with no new activity since the last refresh.
+ */
+async function refreshLaunchLabReserves(): Promise<void> {
+  const tokens = await db
+    .select({
+      address:            tokensTable.address,
+      totalSupply:        tokensTable.totalSupply,
+      virtualEthReserves: tokensTable.virtualEthReserves,
+    })
+    .from(tokensTable)
+    .where(
+      and(
+        eq(tokensTable.platform, "raydium_launchlab"),
+        eq(tokensTable.graduated, false),
+      ),
+    )
+    .orderBy(tokensTable.address) // deterministic order so the offset cursor is stable
+    .limit(LL_RESERVE_REFRESH_BATCH)
+    .offset(_llReserveOffset);
+
+  // Advance the rotating offset.  A partial page means we've reached the end
+  // of the table — reset to 0 so the next tick starts from the beginning again.
+  if (tokens.length < LL_RESERVE_REFRESH_BATCH) {
+    _llReserveOffset = 0;
+  } else {
+    _llReserveOffset += LL_RESERVE_REFRESH_BATCH;
+  }
+
+  if (tokens.length === 0) return;
+
+  let updated = 0;
+
+  for (const token of tokens) {
+    try {
+      const realSol = await fetchLabPoolRealSol(token.address);
+      if (realSol === null) continue; // no LaunchLab pool yet (very fresh or already graduated)
+
+      // Virtual SOL = real SOL in pool + 30 SOL constant floor
+      const newVSolSol = realSol + LL_VIRTUAL_SOL_FLOOR;
+
+      // Sanity check: must be in [30, 200] SOL to be a valid pre-graduation reserve
+      if (newVSolSol < LL_VIRTUAL_SOL_FLOOR || newVSolSol > 200) continue;
+
+      // Skip update when the delta is < 0.01 SOL (avoids unnecessary DB writes
+      // for tokens with no new activity since the last tick).
+      const storedVSol = parseFloat(token.virtualEthReserves ?? "30");
+      if (Math.abs(newVSolSol - storedVSol) < 0.01) continue;
+
+      // Recompute vTok from the constant-product invariant k = 30B_lam × totalSupply.
+      // This keeps virtualTokenReserves internally consistent with virtualEthReserves.
+      const newVSolLam   = BigInt(Math.round(newVSolSol * 1e9));
+      const totalSup     = token.totalSupply && BigInt(token.totalSupply) > 0n
+        ? BigInt(token.totalSupply)
+        : LL_INIT_VTOK_BIG;
+      const k            = LL_INIT_VSOL_LAM_BIG * totalSup;
+      const newVTok      = k / newVSolLam;
+      const vSolStr      = newVSolSol.toFixed(6).replace(/\.?0+$/, "");
+      const graduatedNow = newVSolSol >= LL_GRADUATION_VSOL;
+
+      await db.update(tokensTable).set({
+        virtualEthReserves:   vSolStr,
+        virtualTokenReserves: newVTok.toString(),
+        ...(graduatedNow ? { graduated: true } : {}),
+      }).where(eq(tokensTable.address, token.address));
+
+      updated++;
+    } catch (err) {
+      log.warn({ address: token.address, err }, "enrichment: launchlab reserve refresh failed for token");
+    }
+  }
+
+  if (updated > 0) {
+    log.info({ updated, total: tokens.length, nextOffset: _llReserveOffset },
+      "enrichment: launchlab bonding curve reserves refreshed from Raydium API");
+  }
+}
+
+/**
+ * Fetch the actual pool reserves for a LaunchLab token from Raydium's v3 API.
+ *
+ * Only accepts pools whose `programId` matches the LaunchLab program
+ * (`LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj`).  This prevents
+ * accidentally reading a post-graduation CPMM/CLMM pool for the same mint,
+ * which would give unrelated liquidity amounts and corrupt the progress bar.
+ *
+ * Returns realSolInPool (SOL, decimal) or null when:
+ *   - no LaunchLab pool exists for this token yet (very fresh, or already graduated)
+ *   - all returned pools have a different programId
+ *   - the response is malformed or times out
+ *
+ * Exported for unit testing.
+ */
+export async function fetchLabPoolRealSol(mint: string): Promise<number | null> {
+  try {
+    const url = `https://api-v3.raydium.io/pools/info/mint?mint1=${mint}&poolType=all&poolSortField=liquidity&sortType=desc&pageSize=5&page=1`;
+    const res = await fetch(url, {
+      signal:  AbortSignal.timeout(10_000),
+      headers: { "User-Agent": "RocketFi/1.0" },
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as RaydiumPoolsResponse;
+    const pools = body.data?.data ?? [];
+
+    for (const pool of pools) {
+      // Only accept the LaunchLab bonding-curve pool — reject any CPMM/CLMM
+      // pool created post-graduation for the same token mint.
+      if (pool.programId !== LL_POOL_PROGRAM_ID) continue;
+
+      const aAddr = pool.mintA?.address ?? "";
+      const bAddr = pool.mintB?.address ?? "";
+      const aAmt  = pool.mintAmountA;
+      const bAmt  = pool.mintAmountB;
+
+      // Find which side is SOL (WSOL) and which is the token
+      if (aAddr === WSOL_MINT_ADDRESS && bAddr === mint && aAmt != null && aAmt >= 0) {
+        return aAmt; // SOL is mintA
+      }
+      if (bAddr === WSOL_MINT_ADDRESS && aAddr === mint && bAmt != null && bAmt >= 0) {
+        return bAmt; // SOL is mintB
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Rotating page offset so every tick covers a different slice of all non-graduated
+ *  LaunchLab tokens, guaranteeing the full population is visited over time.
+ *  Resets to 0 when a partial page is returned (end of table reached). */
+let _llReserveOffset = 0;

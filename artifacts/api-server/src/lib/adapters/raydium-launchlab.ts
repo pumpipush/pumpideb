@@ -158,10 +158,17 @@ function bs58Encode(bytes: Buffer | Uint8Array): string {
 export function parseTradeEventFromLogs(
   logs: string[],
 ): {
-  poolAddress: string;
-  solLamports: string;
-  tokenAmount: string;
-  isBuy:       boolean;
+  poolAddress:   string;
+  solLamports:   string;
+  tokenAmount:   string;
+  isBuy:         boolean;
+  /** Post-trade virtual SOL reserve in lamports (bytes 40–47). Present when
+   *  the event is ≥ 147 bytes and the value passes a sanity range check
+   *  (30 SOL ≤ vSol ≤ 200 SOL).  Use directly to update virtualEthReserves;
+   *  eliminates the constant-product drift that previously corrupted progress %. */
+  vSolLamports:  string | null;
+  /** Post-trade virtual token reserve in base units (bytes 48–55). */
+  vTokAtoms:     string | null;
 } | null {
   // Instruction log gives us a reliable is_buy signal even if byte 88 is ambiguous.
   const instrBuy  = logs.some(l => /Instruction:\s*BuyExactIn/i.test(l));
@@ -189,7 +196,27 @@ export function parseTradeEventFromLogs(
       const isBuyFromEvent = raw[88] === 1;
       const isBuy = isBuyFromLog ?? isBuyFromEvent;
 
-      return { poolAddress, solLamports, tokenAmount, isBuy };
+      // ── Post-trade virtual reserves (bytes 40–55) ────────────────────────
+      // These are the actual on-chain values after the trade, written by the
+      // Raydium program itself.  Using them directly avoids the drift that
+      // accumulated from constant-product estimation per trade.
+      // Sanity range: vSol must be between 30 SOL (floor) and 200 SOL (well
+      // above graduation at 115 SOL) — values outside this range indicate
+      // the offset mapping has changed and we should not trust this data.
+      let vSolLamports: string | null = null;
+      let vTokAtoms:    string | null = null;
+      if (raw.length >= 56) {
+        const vSolRaw = raw.readBigUInt64LE(40);
+        const vTokRaw = raw.readBigUInt64LE(48);
+        const MIN_VSOL = 30_000_000_000n;  // 30 SOL floor
+        const MAX_VSOL = 200_000_000_000n; // 200 SOL — well above 115 SOL graduation
+        if (vSolRaw >= MIN_VSOL && vSolRaw <= MAX_VSOL && vTokRaw > 0n) {
+          vSolLamports = vSolRaw.toString();
+          vTokAtoms    = vTokRaw.toString();
+        }
+      }
+
+      return { poolAddress, solLamports, tokenAmount, isBuy, vSolLamports, vTokAtoms };
     } catch { continue; }
   }
   return null;
@@ -695,35 +722,52 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
           volumeEth:  sql`CAST(CAST(${tokensTable.volumeEth} AS NUMERIC) + ${solLamports} AS TEXT)`,
         }).where(eq(tokensTable.address, mint));
 
-        // Update virtual reserves from on-chain state (constant-product estimate)
+        // Update virtual reserves using the on-chain values from the TradeEvent.
+        // bytes 40-55 of the event carry the post-trade vSol / vTok written by
+        // the Raydium program itself, eliminating all constant-product drift.
+        // When the event doesn't include valid reserve bytes (sanity check
+        // failed in parseTradeEventFromLogs), fall back to the old estimate.
         try {
-          const [cur] = await db
-            .select({ virtualEthReserves: tokensTable.virtualEthReserves,
-                      virtualTokenReserves: tokensTable.virtualTokenReserves })
-            .from(tokensTable)
-            .where(eq(tokensTable.address, mint))
-            .limit(1);
-
-          const vSolSol  = parseFloat(cur?.virtualEthReserves   ?? LL_INIT_VSOL_SOL);
-          const vTokAtom = BigInt(cur?.virtualTokenReserves ?? LL_INIT_VTOK.toString());
-          const solLam   = BigInt(solLamports);
-          const oldVSolLam = BigInt(Math.round(vSolSol * 1e9));
-          const k          = oldVSolLam * vTokAtom;
-          const newVSolLam = isBuy
-            ? oldVSolLam + solLam
-            : oldVSolLam > solLam ? oldVSolLam - solLam : oldVSolLam;
-
-          if (newVSolLam > 0n) {
-            const newVTok  = k / newVSolLam;
-            const vSolStr  = (Number(newVSolLam) / 1e9).toFixed(6).replace(/\.?0+$/, "");
-            // Auto-detect graduation: LaunchLab graduates at 85 SOL raised above
-            // the 30 SOL virtual floor, i.e. vSol > 115 SOL total.
+          if (fast.vSolLamports && fast.vTokAtoms) {
+            // ── Primary path: use exact on-chain reserves from the event ──────
+            const newVSolLam  = BigInt(fast.vSolLamports);
+            const vSolStr     = (Number(newVSolLam) / 1e9).toFixed(6).replace(/\.?0+$/, "");
+            // Graduation: LaunchLab graduates at 85 SOL raised above the 30 SOL
+            // virtual floor, i.e. vSol > 115 SOL total.
             const graduatedNow = Number(newVSolLam) / 1e9 > 115;
             await db.update(tokensTable).set({
               virtualEthReserves:   vSolStr,
-              virtualTokenReserves: newVTok.toString(),
+              virtualTokenReserves: fast.vTokAtoms,
               ...(graduatedNow ? { graduated: true } : {}),
             }).where(eq(tokensTable.address, mint));
+          } else {
+            // ── Fallback: constant-product estimate (event reserves absent) ───
+            const [cur] = await db
+              .select({ virtualEthReserves: tokensTable.virtualEthReserves,
+                        virtualTokenReserves: tokensTable.virtualTokenReserves })
+              .from(tokensTable)
+              .where(eq(tokensTable.address, mint))
+              .limit(1);
+
+            const vSolSol    = parseFloat(cur?.virtualEthReserves   ?? LL_INIT_VSOL_SOL);
+            const vTokAtom   = BigInt(cur?.virtualTokenReserves ?? LL_INIT_VTOK.toString());
+            const solLam     = BigInt(solLamports);
+            const oldVSolLam = BigInt(Math.round(vSolSol * 1e9));
+            const k          = oldVSolLam * vTokAtom;
+            const newVSolLam = isBuy
+              ? oldVSolLam + solLam
+              : oldVSolLam > solLam ? oldVSolLam - solLam : oldVSolLam;
+
+            if (newVSolLam > 0n) {
+              const newVTok  = k / newVSolLam;
+              const vSolStr  = (Number(newVSolLam) / 1e9).toFixed(6).replace(/\.?0+$/, "");
+              const graduatedNow = Number(newVSolLam) / 1e9 > 115;
+              await db.update(tokensTable).set({
+                virtualEthReserves:   vSolStr,
+                virtualTokenReserves: newVTok.toString(),
+                ...(graduatedNow ? { graduated: true } : {}),
+              }).where(eq(tokensTable.address, mint));
+            }
           }
         } catch { /* non-critical — keep existing reserves */ }
 
