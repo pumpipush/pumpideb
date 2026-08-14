@@ -2585,12 +2585,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     )}
 
                     <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                      <table style={{ minWidth: "580px", width: "100%", borderCollapse: "collapse" }}>
+                      {/* minWidth: 580px on desktop (7 cols); 360px on mobile (4 cols: #, Wallet, Holdings, P&L) */}
+                      <table className="min-w-[360px] md:min-w-[580px]" style={{ width: "100%", borderCollapse: "collapse" }}>
                         <thead>
                           <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
                             <th style={{ width: 3, padding: 0 }} />
-                            <th className="text-center px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8", width: 40 }}>#</th>
-                            <th className="text-left   px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Wallet</th>
+                            <th className="text-center px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8", width: 36 }}>#</th>
+                            <th className="text-left   px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8", width: 140 }}>Wallet</th>
                             <th className="text-right  px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Holdings</th>
                             <th className="hidden md:table-cell text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Avg Entry</th>
                             <th className="text-right  px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>P&amp;L</th>
@@ -2670,14 +2671,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                                 </td>
 
                                 {/* Wallet */}
-                                <td className="px-3 py-3">
-                                  <div className="flex items-center gap-2">
+                                <td className="px-3 py-3" style={{ width: 140, maxWidth: 140 }}>
+                                  <div className="flex items-center gap-2 min-w-0">
                                     <span className="w-5 h-5 rounded-full shrink-0"
                                       style={{ background: `hsl(${avatarHue} 65% 45%)`, display: "inline-block" }} />
                                     <a
                                       href={`https://solscan.io/account/${w.address}`}
                                       target="_blank" rel="noopener noreferrer"
-                                      className="font-mono text-[13px] hover:text-white transition-colors"
+                                      className="font-mono text-[13px] hover:text-white transition-colors truncate"
                                       style={{ color: "#94a3b8" }}
                                     >
                                       {w.address.slice(0, 4)}…{w.address.slice(-4)}
