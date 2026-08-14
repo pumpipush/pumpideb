@@ -412,12 +412,9 @@ router.get("/tokens", asyncWrap(async (req, res) => {
       conditions.push(eq(tokensTable.platform, platform));
     }
   }
-  // For the "newest" sort, only show tokens that have been traded at least once
-  // — zero-activity coins are likely scam/rug launches that were never touched.
-  // No SERVER_START_TIME restriction so pagination works across all historical coins.
-  if (sort === "newest") {
-    conditions.push(gt(tokensTable.tradeCount, "0"));
-  }
+  // "newest" sort: no tradeCount gate — a newly created token appears immediately
+  // even before its first trade lands. The frontend live feed already surfaces
+  // brand-new coins, so the REST list should be consistent with that.
 
   if (conditions.length > 0) {
     query = query.where(and(...conditions));

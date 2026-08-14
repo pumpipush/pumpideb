@@ -914,10 +914,10 @@ export default function Dashboard() {
     }
     // Skip onlyGraduated toggle on the Graduated tab — it already filters by mcap threshold below
     if (onlyGraduated && activeTab !== "Graduated") apiDisplay = apiDisplay.filter((t) => t.graduated);
-    if (onlyWithImage)  apiDisplay = apiDisplay.filter((t) => !!t.imageUrl);
-    // New tab: only show coins that have been traded at least once — prevents
-    // untouched scam / rug launches from cluttering the feed.
-    if (activeTab === "New") apiDisplay = apiDisplay.filter((t) => (t.tradeCount ?? 0) > 0);
+    // "Has image" filter: never apply to the New tab — newly created tokens
+    // take seconds→minutes to load IPFS metadata; hiding them defeats the point
+    // of a "just launched" view. Show a placeholder image instead.
+    if (onlyWithImage && activeTab !== "New") apiDisplay = apiDisplay.filter((t) => !!t.imageUrl);
     // Graduated tab: proxy for "bonding curve completed" — filter by pump.fun graduation mcap threshold
     if (activeTab === "Graduated") {
       apiDisplay = apiDisplay.filter((t) => (parseFloat(t.marketCapEth ?? "0") || 0) >= PUMP_GRADUATION_LAMPORTS);
@@ -940,17 +940,10 @@ export default function Dashboard() {
     //   • Volume   — NEVER: a coin just launched has zero 24h volume; showing it here
     //               contaminates the ranked list with unranked noise
     //   • Graduated — NEVER: brand-new launches haven't completed the bonding curve
-    // For the New tab, additionally require at least one trade so zero-activity
-    // launches (scam/rug coins that were never touched) don't appear.
-    const liveOnlyForNew = activeTab === "New"
-      ? liveOnly.filter((t) => (t.tradeCount ?? 0) > 0)
-      : liveOnly;
-    // Trending returns early above; this branch only covers New / Volume / Graduated.
-    // Only New tab gets live-feed tokens.
+    // Live SSE tokens on the New tab: always show regardless of tradeCount or
+    // image — these are real-time events; filtering them defeats the feed's purpose.
     const showLive = activeTab === "New";
-    const filteredLiveOnly = showLive
-      ? (onlyWithImage ? liveOnlyForNew.filter((t) => !!t.imageUrl) : liveOnlyForNew)
-      : [];
+    const filteredLiveOnly = showLive ? liveOnly : [];
     const apiLive    = apiDisplay.filter((t) => t.isLive);
     const apiNonLive = apiDisplay.filter((t) => !t.isLive);
     const combined = [...filteredLiveOnly, ...apiLive, ...apiNonLive];
