@@ -751,22 +751,20 @@ router.get("/sitemap.xml", asyncWrap(async (_req, res) => {
   try {
     // Fetch the top 500 tokens by trade count as a reasonable "popular" proxy.
     // Exclude placeholder symbols that are not real tokens.
-    const { rows } = await pool.query<{ address: string; updated_at: Date | null }>(
-      `SELECT address, updated_at
+    const { rows } = await pool.query<{ address: string }>(
+      `SELECT address
        FROM   tokens
        WHERE  symbol != '???'
        ORDER  BY trade_count DESC, id DESC
        LIMIT  500`
     );
 
-    const SITE = "https://pumpi.io";
+    const SITE    = "https://pumpi.io";
+    const today   = new Date().toISOString().split("T")[0];
 
     const urls = rows
       .map((r) => {
-        const lastmod = r.updated_at
-          ? r.updated_at.toISOString().split("T")[0]
-          : new Date().toISOString().split("T")[0];
-        return `  <url>\n    <loc>${SITE}/coin/${r.address}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>hourly</changefreq>\n    <priority>0.8</priority>\n  </url>`;
+        return `  <url>\n    <loc>${SITE}/coin/${r.address}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>hourly</changefreq>\n    <priority>0.8</priority>\n  </url>`;
       })
       .join("\n");
 
