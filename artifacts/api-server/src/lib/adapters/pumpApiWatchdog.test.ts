@@ -84,8 +84,11 @@ describe("PumpApiAdapter watchdog", () => {
     vi.useRealTimers();
   });
 
-  it("exports PUMPAPI_WATCHDOG_MS as a positive number ≥ 30 s", () => {
-    expect(PUMPAPI_WATCHDOG_MS).toBeGreaterThanOrEqual(30_000);
+  it("exports PUMPAPI_WATCHDOG_MS as a positive number ≥ 15 s", () => {
+    // 15 s is the practical lower bound — below this, transient proxy hiccups
+    // would trigger false positives. The value is intentionally lower than the
+    // old 60 s default to reduce the startup dead-zone when pumpapi.io is stale.
+    expect(PUMPAPI_WATCHDOG_MS).toBeGreaterThanOrEqual(15_000);
   });
 
   it("force-closes the WebSocket after watchdog window with no messages", async () => {

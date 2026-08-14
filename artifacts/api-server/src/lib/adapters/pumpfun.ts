@@ -947,10 +947,11 @@ export interface PumpApiEvent {
 /**
  * How long (ms) with no WebSocket messages before the watchdog force-closes
  * the connection. pumpapi.io streams all Solana pump.fun activity continuously —
- * 60 s of silence reliably indicates a dead connection.
+ * 20 s of total silence (no pings, no data frames) reliably indicates a dead
+ * or stalled TCP connection.
  * Exported so tests can reference the constant without hard-coding it.
  */
-export const PUMPAPI_WATCHDOG_MS = 60_000;
+export const PUMPAPI_WATCHDOG_MS = 20_000;
 
 /**
  * How long (ms) with no REAL TRADE OR CREATE events before the data-staleness
@@ -961,10 +962,12 @@ export const PUMPAPI_WATCHDOG_MS = 60_000;
  * resets) but their internal routing has stopped forwarding trade data, causing
  * prices to silently go stale.
  *
- * At peak hours pump.fun averages 5–10 trades/second; even at 1 tx/min the 120 s
- * window is generous enough to avoid false positives during low-volume periods.
+ * 30 s is ample — at peak hours pump.fun averages 5–10 trades/second, so even
+ * at minimal activity a healthy stream sends a trade event every few seconds.
+ * Must remain > PUMPAPI_WATCHDOG_MS so the raw-silence watchdog fires first
+ * when the connection is completely dead (no pings either).
  */
-export const PUMPAPI_DATA_STALE_MS = 120_000;
+export const PUMPAPI_DATA_STALE_MS = 30_000;
 
 export class PumpApiAdapter {
   private _ws:     WebSocket | null = null;

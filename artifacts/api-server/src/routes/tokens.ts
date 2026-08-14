@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, ilike, and, not, sql, gte } from "drizzle-orm";
+import { eq, desc, ilike, and, not, sql, gte, gt } from "drizzle-orm";
 import { db, pool, tokensTable } from "@workspace/db";
 import {
   ListTokensQueryParams,
@@ -30,7 +30,10 @@ const router: IRouter = Router();
 // Cache key = serialised query-param object so different sort/limit combos
 // each get their own slot.  Max entries capped at 50 to bound memory.
 const _tokenListCache = new Map<string, { payload: unknown; expiresAt: number }>();
-const TOKEN_LIST_TTL = 60_000;   // ms — how long a cached response is valid
+/** Default TTL for cached token lists. Real-time price is handled by SSE; REST only needs freshness for ranking changes. */
+const TOKEN_LIST_TTL         = 60_000;   // ms — trending / volume / graduated
+/** Shorter TTL for the "newest" sort — ensures fresh tokens appear quickly on page load even before SSE events arrive. */
+const TOKEN_LIST_TTL_NEWEST  =  5_000;   // ms — newest sort only
 const TOKEN_LIST_MAX = 50;        // max distinct cache slots
 
 function _cacheGet(key: string): unknown | null {
@@ -40,13 +43,13 @@ function _cacheGet(key: string): unknown | null {
   return entry.payload;
 }
 
-function _cacheSet(key: string, payload: unknown): void {
+function _cacheSet(key: string, payload: unknown, ttl = TOKEN_LIST_TTL): void {
   if (_tokenListCache.size >= TOKEN_LIST_MAX) {
     // Evict oldest entry
     const oldest = _tokenListCache.keys().next().value;
     if (oldest !== undefined) _tokenListCache.delete(oldest);
   }
-  _tokenListCache.set(key, { payload, expiresAt: Date.now() + TOKEN_LIST_TTL });
+  _tokenListCache.set(key, { payload, expiresAt: Date.now() + ttl });
 }
 
 // ── Helper: fetch 24-hour price % change for a set of token addresses ────────
@@ -298,10 +301,11 @@ router.get("/tokens", asyncWrap(async (req, res) => {
     }
   }
   // For the "newest" sort, only show tokens that appeared AFTER this server
-  // session started.  If the server boots at 11:00, the New tab shows coins
-  // from 11:00 onwards — not historical data already in the database.
+  // session started AND have been traded at least once — zero-activity coins
+  // are likely scam/rug launches that were never touched.
   if (sort === "newest") {
     conditions.push(gte(tokensTable.createdAt, SERVER_START_TIME));
+    conditions.push(gt(tokensTable.tradeCount, "0"));
   }
 
   if (conditions.length > 0) {
@@ -334,8 +338,10 @@ router.get("/tokens", asyncWrap(async (req, res) => {
 
   const pctChanges = await fetch24hPctChanges(tokens.map(t => t.address));
   const payload = ListTokensResponse.parse(tokens.map(t => formatToken(t, pctChanges.get(t.address))));
-  _cacheSet(cacheKey, payload);
-  res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
+  const ttl = sort === "newest" ? TOKEN_LIST_TTL_NEWEST : TOKEN_LIST_TTL;
+  const maxAge = Math.floor(ttl / 1_000);
+  _cacheSet(cacheKey, payload, ttl);
+  res.setHeader("Cache-Control", `public, max-age=${maxAge}, stale-while-revalidate=${maxAge}`);
   res.setHeader("X-Cache", "MISS");
   res.json(payload);
 }));

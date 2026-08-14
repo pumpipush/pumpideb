@@ -39,6 +39,10 @@ beforeAll(async () => {
   // 1. Insert the test token — raydium_launchlab with placeholder symbol ???
   //    Only required-without-default fields need to be provided; the rest use
   //    schema defaults (virtualTokenReserves, chain, platform, etc.).
+  // Insert with tradeCount=1: in production, raydium_launchlab tokens with ???
+  // symbol are always discovered via a trade event (tradeCount ≥ 1).  The
+  // sort=newest filter now requires tradeCount > 0 to suppress untouched
+  // scam launches — a test token with 0 trades would be incorrectly excluded.
   await db.insert(tokensTable).values({
     address:        TEST_ADDR,
     name:           "TestLaunchLabToken…",
@@ -46,6 +50,7 @@ beforeAll(async () => {
     creatorAddress: "TestCreator11111111111111111111T",
     platform:       "raydium_launchlab",
     chain:          "solana",
+    tradeCount:     "1",
   }).onConflictDoNothing();
 
   // 2. Start an in-process HTTP server on a random OS-assigned port.

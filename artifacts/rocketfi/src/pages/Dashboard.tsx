@@ -871,7 +871,9 @@ export default function Dashboard() {
     // Skip onlyGraduated toggle on the Graduated tab — it already filters by mcap threshold below
     if (onlyGraduated && activeTab !== "Graduated") apiDisplay = apiDisplay.filter((t) => t.graduated);
     if (onlyWithImage)  apiDisplay = apiDisplay.filter((t) => !!t.imageUrl);
-    if (activeTab === "New") apiDisplay = apiDisplay.filter((t) => (parseFloat(t.marketCapEth ?? "0") || 0) > 0);
+    // New tab: only show coins that have been traded at least once — prevents
+    // untouched scam / rug launches from cluttering the feed.
+    if (activeTab === "New") apiDisplay = apiDisplay.filter((t) => (t.tradeCount ?? 0) > 0);
     // Graduated tab: proxy for "bonding curve completed" — filter by pump.fun graduation mcap threshold
     if (activeTab === "Graduated") {
       apiDisplay = apiDisplay.filter((t) => (parseFloat(t.marketCapEth ?? "0") || 0) >= PUMP_GRADUATION_LAMPORTS);
@@ -891,8 +893,13 @@ export default function Dashboard() {
     // All other tabs: liveOnly tokens at the top (page 1 only); within apiDisplay, live rows first
     // Graduated tab never shows live-feed tokens — brand-new launches haven't completed the bonding curve
     // New tab: live tokens always shown (no page restriction — it's a single pool, not paginated)
+    // For the New tab, additionally require at least one trade so zero-activity
+    // launches (scam/rug coins that were never touched) don't appear at the top.
+    const liveOnlyForNew = activeTab === "New"
+      ? liveOnly.filter((t) => (t.tradeCount ?? 0) > 0)
+      : liveOnly;
     const filteredLiveOnly = activeTab !== "Graduated" && (activeTab === "New" || page === 1)
-      ? (onlyWithImage ? liveOnly.filter((t) => !!t.imageUrl) : liveOnly)
+      ? (onlyWithImage ? liveOnlyForNew.filter((t) => !!t.imageUrl) : liveOnlyForNew)
       : [];
     const apiLive    = apiDisplay.filter((t) => t.isLive);
     const apiNonLive = apiDisplay.filter((t) => !t.isLive);
