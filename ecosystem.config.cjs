@@ -34,6 +34,11 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: "1G",
+      // Graceful shutdown: give in-flight requests up to 10 s to complete
+      // before PM2 force-kills the old process during a reload.
+      kill_timeout: 10000,
+      // Listen for SIGINT so the server can drain connections cleanly.
+      listen_timeout: 8000,
       env: {
         ...env,
         NODE_ENV: "production",

@@ -1,36 +1,111 @@
 # Deployment
 
-Configuration files for the production VPS.
+Scripts and config for the production VPS (`pumpi.io`).
 
-## Nginx
+## Full Release Checklist
 
-`nginx/rocketfi` is the nginx site config for `rocketfi.app`.
+```
+1. git push origin main          # push code
+2. ./deploy/deploy-api.sh        # build + graceful reload API (zero dropped connections)
+3. ./deploy/deploy-frontend.sh   # build + write new static files (nginx serves instantly)
+4. ./deploy/deploy-nginx.sh      # only when nginx config changed
+```
 
-### Automated deployment (recommended)
+All three scripts accept `user@host` as the first argument (or via `VPS_USER_HOST`).
 
-Use `deploy/deploy-nginx.sh` to copy the config, enable the site, test it,
-and reload nginx in a single command:
+---
+
+## API Server (`deploy/deploy-api.sh`)
+
+Builds the Node.js API on the VPS and reloads it **gracefully** via PM2:
+- In-flight HTTP requests get up to 10 s to finish before the old process exits
+- New process starts in parallel — zero dropped connections
+- Falls back to `pm2 start` if the process isn't running yet
 
 ```bash
-./deploy/deploy-nginx.sh user@your-vps
+./deploy/deploy-api.sh root@155.103.50.121
+# or
+export VPS_USER_HOST=root@155.103.50.121
+./deploy/deploy-api.sh
 ```
 
-The script accepts the VPS host as a positional argument **or** via the
-`VPS_USER_HOST` environment variable, which makes it easy to wire into CI:
+### How graceful reload works
 
-```yaml
-# Example GitHub Actions step
-- name: Deploy nginx config
-  run: ./deploy/deploy-nginx.sh
-  env:
-    VPS_USER_HOST: ${{ secrets.VPS_USER_HOST }}
+```
+Old process  ←── SIGINT sent by PM2 reload
+                  │  finishes in-flight requests (≤ 10 s)
+                  └──────────────────────── exits
+
+New process  ─────────────── starts in parallel, takes traffic immediately
 ```
 
-Prerequisites:
-- SSH key-based access to the VPS (no interactive password prompt)
-- The remote user must have `sudo` rights for nginx commands
+`kill_timeout: 10000` and `listen_timeout: 8000` are set in `ecosystem.config.cjs`.
 
-Additional environment variables (all optional):
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `VPS_USER_HOST` | _(required if not passed as arg)_ | `user@host` of the VPS |
+| `APP_DIR` | `/opt/rocketfi` | Absolute path to the repo on the VPS |
+| `PM2_APP_NAME` | `rocketfi-api` | PM2 process name in `ecosystem.config.cjs` |
+
+---
+
+## Frontend (`deploy/deploy-frontend.sh`)
+
+Builds the Vite SPA on the VPS and writes it to the nginx root.  
+nginx keeps serving the old build until the new bundle is fully written — no downtime.
+
+```bash
+./deploy/deploy-frontend.sh root@155.103.50.121
+```
+
+### Build env file
+
+The frontend requires `VITE_*` variables at build time.  
+Create this file once on the VPS:
+
+```bash
+cat > /opt/rocketfi/artifacts/rocketfi/.env.build << 'EOF'
+VITE_ALCHEMY_API_KEY=<your-alchemy-key>
+VITE_PLATFORM_FEE_RECIPIENT=<your-solana-wallet>
+VITE_PRIVY_APP_ID=<your-privy-app-id>
+VITE_GOOGLE_CLIENT_ID=<your-google-client-id>
+BASE_PATH=/
+EOF
+```
+
+The deploy script reads this file automatically via `source .env.build`.
+
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `VPS_USER_HOST` | _(required if not passed as arg)_ | `user@host` of the VPS |
+| `APP_DIR` | `/opt/rocketfi` | Absolute path to the repo on the VPS |
+| `ENV_FILE` | `$APP_DIR/artifacts/rocketfi/.env.build` | Path to the build env file |
+
+---
+
+## Nginx (`deploy/deploy-nginx.sh`)
+
+Only needed when `deploy/nginx/rocketfi` has changed.  
+Copies the config, enables the site, tests it, and **reloads nginx** (zero-downtime).
+
+```bash
+./deploy/deploy-nginx.sh root@155.103.50.121
+```
+
+### Cache strategy
+
+| Resource | Cache-Control | Why |
+|---|---|---|
+| `index.html` / SPA routes | `no-cache, no-store, must-revalidate` | Vite hashes JS/CSS filenames on every build; a cached HTML referencing old chunk names → blank page |
+| `*.js`, `*.css`, fonts | `public, max-age=31536000, immutable` | Filenames contain a content hash — safe to cache forever |
+| `/api/storage/public-objects/*` | `public, max-age=31536000, immutable` + nginx proxy cache 7d | Token images are content-addressed; cached on disk after first fetch |
+| `/api/*` | no caching (proxied) | Dynamic API responses |
+
+### Environment variables
 
 | Variable | Default | Description |
 |---|---|---|
@@ -38,26 +113,34 @@ Additional environment variables (all optional):
 | `NGINX_SITE` | `rocketfi` | Site name under `sites-available/` |
 | `NGINX_DIR` | `/etc/nginx` | Root nginx directory on the VPS |
 
-### Manual steps (reference)
+---
+
+## Manual steps (reference)
+
+### API server
 
 ```bash
-# 1. Copy the config
-scp deploy/nginx/rocketfi user@your-vps:/etc/nginx/sites-available/rocketfi
-
-# 2. Enable the site (if not already symlinked)
-ssh user@your-vps "sudo ln -sf /etc/nginx/sites-available/rocketfi /etc/nginx/sites-enabled/rocketfi"
-
-# 3. Test the config
-ssh user@your-vps "sudo nginx -t"
-
-# 4. Reload nginx (zero-downtime)
-ssh user@your-vps "sudo systemctl reload nginx"
+ssh root@155.103.50.121
+cd /opt/rocketfi
+git pull origin main
+cd artifacts/api-server && pnpm run build
+cd /opt/rocketfi
+pm2 reload ecosystem.config.cjs --update-env --only rocketfi-api
+pm2 save
 ```
 
-### Cache strategy
+### Frontend
 
-| Resource | Cache-Control | Why |
-|---|---|---|
-| `index.html` / SPA routes | `no-cache, no-store, must-revalidate` | Vite hashes JS/CSS filenames on every build; a cached HTML referencing old chunk names → blank page on mobile |
-| `*.js`, `*.css`, fonts, images | `public, max-age=31536000, immutable` | Filenames already contain a content hash; safe to cache forever |
-| `/api/*` | no caching (proxied) | Dynamic API responses |
+```bash
+ssh root@155.103.50.121
+cd /opt/rocketfi/artifacts/rocketfi
+set -a && source .env.build && set +a
+pnpm run build
+```
+
+### Check PM2 status
+
+```bash
+pm2 list
+pm2 logs rocketfi-api --lines 50
+```
