@@ -667,12 +667,34 @@ async function detectGraduations(): Promise<void> {
  * but have no metadata yet (name = "???").
  */
 async function enrichPumpSwapPrices(): Promise<void> {
-  const tokens = await db
-    .select({ address: tokensTable.address, name: tokensTable.name, symbol: tokensTable.symbol })
-    .from(tokensTable)
-    .where(eq(tokensTable.platform, "pumpswap"))
-    .orderBy(desc(tokensTable.createdAt))
-    .limit(120); // batch across multiple DexScreener calls
+  // Prioritise in two passes so DexScreener quota goes to where it matters most:
+  //   Pass 1 — tokens missing market_cap_eth (any age) — fills data gaps.
+  //   Pass 2 — most active tokens by trade_count (freshness).
+  // Both passes are deduplicated and combined before calling DexScreener.
+  const [missingMC, mostActive] = await Promise.all([
+    db.select({ address: tokensTable.address, name: tokensTable.name, symbol: tokensTable.symbol })
+      .from(tokensTable)
+      .where(and(
+        eq(tokensTable.platform, "pumpswap"),
+        or(isNull(tokensTable.marketCapEth), sql`${tokensTable.marketCapEth} = ''`),
+      ))
+      .orderBy(desc(tokensTable.tradeCount))
+      .limit(60),
+    db.select({ address: tokensTable.address, name: tokensTable.name, symbol: tokensTable.symbol })
+      .from(tokensTable)
+      .where(eq(tokensTable.platform, "pumpswap"))
+      .orderBy(desc(tokensTable.createdAt))
+      .limit(60),
+  ]);
+  // Merge, deduplicate by address, cap at 120 total.
+  const seen = new Set<string>();
+  const tokens: typeof missingMC = [];
+  for (const t of [...missingMC, ...mostActive]) {
+    if (seen.has(t.address)) continue;
+    seen.add(t.address);
+    tokens.push(t);
+    if (tokens.length >= 120) break;
+  }
 
   if (tokens.length === 0) return;
 
