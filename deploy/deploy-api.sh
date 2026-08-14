@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 # deploy/deploy-api.sh
 #
-# Pulls the latest code, rebuilds the API server, then does a ROLLING RELOAD
-# across cluster workers so in-flight HTTP requests are never dropped.
+# Pulls the latest code, rebuilds the API server, and reloads it via PM2.
 #
-# How zero-downtime works (cluster mode, 2 workers):
-#   PM2 replaces one worker at a time:
-#     1. Stop worker A (SIGINT → drain ≤ kill_timeout=10 s → exit)
-#     2. Start new worker A (new code)
-#     3. New A healthy → stop worker B → start new B
-#   Worker B handles all traffic while A is being replaced, and vice versa.
-#   Result: at least one worker is always serving requests.
+# Reload behaviour (fork mode, instances: 1):
+#   PM2 sends SIGINT to the running process.  The server has up to
+#   kill_timeout (10 s) to finish active requests before PM2 force-kills it,
+#   then the new process starts.  There is a brief window (typically < 1 s)
+#   between the old process exiting and the new one accepting connections.
+#   For true zero-downtime reloads, switch ecosystem.config.cjs to cluster
+#   mode with instances ≥ 2 so PM2 can roll workers one at a time.
 #
 # Usage:
 #   ./deploy/deploy-api.sh user@your-vps
@@ -19,6 +18,9 @@
 #   VPS_USER_HOST  — e.g. "deploy@203.0.113.42"  (or pass as first argument)
 #   APP_DIR        — absolute path on VPS (default: /opt/rocketfi)
 #   PM2_APP_NAME   — PM2 process name (default: rocketfi-api)
+#   API_PORT       — port the API server listens on (default: 8080, must
+#                    match the PORT env var in artifacts/api-server/.env and
+#                    the proxy_pass port in deploy/nginx/rocketfi)
 
 set -euo pipefail
 
@@ -32,6 +34,8 @@ fi
 
 APP_DIR="${APP_DIR:-/opt/rocketfi}"
 PM2_APP_NAME="${PM2_APP_NAME:-rocketfi-api}"
+# Must match PORT in artifacts/api-server/.env and proxy_pass in deploy/nginx/rocketfi
+API_PORT="${API_PORT:-8080}"
 
 echo "==> Deploying API server to $VPS_USER_HOST …"
 
@@ -47,10 +51,11 @@ ssh "$VPS_USER_HOST" "cd $APP_DIR && pnpm install --frozen-lockfile 2>&1 | tail 
 echo "    [3/4] Building API server"
 ssh "$VPS_USER_HOST" "cd $APP_DIR/artifacts/api-server && pnpm run build"
 
-# ── 4. Rolling reload across cluster workers (zero dropped connections) ─────
-# pm2 reload replaces workers one at a time so at least one is always up.
-# Falls back to 'pm2 start' if the process has never been started.
-echo "    [4/4] Rolling reload via PM2 cluster"
+# ── 4. Reload via PM2 ───────────────────────────────────────────────────────
+# pm2 reload sends SIGINT to the old process; it has up to kill_timeout (10 s)
+# to drain in-flight requests before PM2 force-kills it, then the new process
+# starts.  Use 'start' as a fallback if the process isn't running yet.
+echo "    [4/4] Reload via PM2"
 ssh "$VPS_USER_HOST" "
   cd $APP_DIR
   if pm2 describe $PM2_APP_NAME >/dev/null 2>&1; then
@@ -62,11 +67,11 @@ ssh "$VPS_USER_HOST" "
   pm2 save
 "
 
-# ── 5. Health check — confirm workers are accepting requests ────────────────
+# ── 5. Health check — confirm the process is accepting requests ─────────────
 echo "    Waiting for API to pass health check …"
 ssh "$VPS_USER_HOST" "
   for i in \$(seq 1 12); do
-    status=\$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/healthz 2>/dev/null || true)
+    status=\$(curl -s -o /dev/null -w '%{http_code}' http://localhost:$API_PORT/api/healthz 2>/dev/null || true)
     if [[ \"\$status\" == '200' ]]; then
       echo '    Health check passed (HTTP 200 /api/healthz)'
       exit 0

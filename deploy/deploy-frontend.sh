@@ -7,13 +7,13 @@
 #
 # Directory layout on VPS after first deploy:
 #   /opt/rocketfi/releases/
-#     20260814_185500/     ← previous release (kept for quick rollback)
+#     20260814_185500/     ← previous release (kept for rollback)
 #     20260814_190012/     ← current release
-#   /opt/rocketfi/current  → releases/20260814_190012   ← nginx root (symlink)
+#   /opt/rocketfi/current  →  releases/20260814_190012  ← nginx root (symlink)
 #
-# The nginx root MUST be set to /opt/rocketfi/current in the nginx config.
-# Run  ./deploy/deploy-nginx.sh  once after updating deploy/nginx/rocketfi
-# to apply the new root path.
+# The nginx root MUST be /opt/rocketfi/current — matches the `root` directive
+# in deploy/nginx/rocketfi.  Run ./deploy/deploy-nginx.sh once after updating
+# the nginx config to apply any root-path changes.
 #
 # Usage:
 #   ./deploy/deploy-frontend.sh user@your-vps
@@ -21,10 +21,14 @@
 # Environment variables (override defaults):
 #   VPS_USER_HOST   — e.g. "deploy@203.0.113.42"  (or pass as first argument)
 #   APP_DIR         — absolute path on VPS (default: /opt/rocketfi)
-#   RELEASES_DIR    — where release snapshots live (default: $APP_DIR/releases)
+#   RELEASES_DIR    — where release snapshots live
+#                     (default: $APP_DIR/releases)
+#                     must be on the same filesystem as NGINX_ROOT for atomic mv
+#   NGINX_ROOT      — nginx document root (default: $APP_DIR/current)
+#                     must match the `root` directive in deploy/nginx/rocketfi
 #   ENV_FILE        — path to the build env file on VPS
 #                     (default: $APP_DIR/artifacts/rocketfi/.env.build)
-#   KEEP_RELEASES   — number of old releases to keep (default: 3)
+#   KEEP_RELEASES   — number of old releases to keep for rollback (default: 3)
 
 set -euo pipefail
 
@@ -37,6 +41,7 @@ fi
 
 APP_DIR="${APP_DIR:-/opt/rocketfi}"
 RELEASES_DIR="${RELEASES_DIR:-$APP_DIR/releases}"
+NGINX_ROOT="${NGINX_ROOT:-$APP_DIR/current}"
 ENV_FILE="${ENV_FILE:-$APP_DIR/artifacts/rocketfi/.env.build}"
 KEEP_RELEASES="${KEEP_RELEASES:-3}"
 
@@ -47,7 +52,7 @@ echo "    [1/4] Pulling latest code"
 ssh "$VPS_USER_HOST" "cd $APP_DIR && git pull origin main"
 
 # ── 2. Build into a fresh release directory ─────────────────────────────────
-# Build output goes to a timestamped directory — NOT the live nginx root.
+# Build output goes into a timestamped snapshot — NOT the live nginx root.
 # nginx keeps serving the previous release uninterrupted during the build.
 echo "    [2/4] Building into release snapshot"
 RELEASE_DIR=$(ssh "$VPS_USER_HOST" "
@@ -62,14 +67,13 @@ RELEASE_DIR=$(ssh "$VPS_USER_HOST" "
     exit 1
   fi
 
-  # Build Vite into the standard dist location, then move the output
   set -a
   source '$ENV_FILE'
   set +a
   cd $APP_DIR/artifacts/rocketfi
   pnpm run build
 
-  # Move the built public dir into the release snapshot
+  # Move the built output into the release snapshot
   mv dist/public/* \$RELEASE_PATH/
   echo \$RELEASE_PATH
 ")
@@ -78,26 +82,27 @@ echo "    Built to: $RELEASE_DIR"
 # ── 3. Atomic symlink swap via rename(2) ────────────────────────────────────
 # ln -sfn is NOT atomic (unlink + symlink = two syscalls, gap in between).
 # The correct approach:
-#   1. Create a brand-new symlink at a temp path (always succeeds atomically)
-#   2. mv -Tf renames it onto 'current' using the rename(2) syscall, which IS
+#   1. Create a brand-new symlink at a temp path on the SAME filesystem as
+#      NGINX_ROOT (critical — mv rename(2) is only atomic within one fs).
+#   2. mv -Tf renames it onto NGINX_ROOT using the rename(2) syscall, which IS
 #      atomic on Linux — nginx never sees a missing or intermediate state.
 echo "    [3/4] Atomically swapping nginx root symlink (rename syscall)"
 ssh "$VPS_USER_HOST" "
-  # Create temp symlink (new path, no existing file to clobber)
-  ln -s $RELEASE_DIR $APP_DIR/current.new
-  # Atomic rename onto 'current' — rename(2) is a single kernel operation
-  mv -Tf $APP_DIR/current.new $APP_DIR/current
-  echo '    /opt/rocketfi/current → $RELEASE_DIR (atomic rename)'
+  # Temp path must be on the same filesystem as NGINX_ROOT for atomic rename
+  TMP_LINK=${NGINX_ROOT}.new
+  ln -s $RELEASE_DIR \"\$TMP_LINK\"
+  mv -Tf \"\$TMP_LINK\" $NGINX_ROOT
+  echo '    $NGINX_ROOT → $RELEASE_DIR (atomic rename)'
 "
 
 # ── 4. Verify nginx is serving the new release ──────────────────────────────
-echo "    [4/4] Verifying nginx is serving the new release"
+echo "    [4/4] Verifying nginx root"
 ssh "$VPS_USER_HOST" "
-  INDEX=$RELEASE_DIR/index.html
+  INDEX=$NGINX_ROOT/index.html
   if [[ -f \"\$INDEX\" ]]; then
-    echo \"    index.html OK (\$(stat -c%s \"\$INDEX\") bytes)\"
+    echo \"    index.html in nginx root (\$(stat -c%s \"\$INDEX\") bytes)\"
   else
-    echo 'ERROR: index.html missing from release directory' >&2
+    echo 'ERROR: index.html not found in nginx root ($NGINX_ROOT)' >&2
     exit 1
   fi
 "
@@ -114,4 +119,4 @@ ssh "$VPS_USER_HOST" "
   fi
 "
 
-echo "==> Done. Frontend is live. Rollback: ln -sfn \$RELEASES_DIR/<prev> $APP_DIR/current"
+echo "==> Done. Frontend is live. Rollback: ln -sfn \$RELEASES_DIR/<prev> $NGINX_ROOT"

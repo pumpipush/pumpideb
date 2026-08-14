@@ -1,0 +1,141 @@
+name: Nginx Config Lint
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Validates the nginx site config using the official nginx Docker image before
+# it can reach the VPS.  A syntax error caught here prevents the broken config
+# from ever being SCP'd to production.
+#
+# WHY THIS EXISTS
+# ───────────────
+# `deploy/deploy-nginx.sh` runs `nginx -t` on the remote server, but by then
+# the broken file is already on the VPS.  A version mismatch between local and
+# remote nginx can also hide edge-case directives.  Running `nginx -t` inside
+# the official Docker image gives us a reproducible, version-pinned check that
+# fires before the SCP step even starts.
+#
+# WHAT IT CHECKS
+# ──────────────
+# • `deploy/nginx/rocketfi` passes `nginx -t` inside the official nginx image
+# • The check uses a minimal wrapper config (nginx.conf) so the site config is
+#   loaded exactly as nginx would load it from sites-enabled/.
+# • SSL certificate paths are stubbed with self-signed certs so the TLS block
+#   doesn't cause "file not found" errors during the syntax check.
+# • A proxy_cache_path zone is declared in the wrapper so the
+#   `proxy_cache pumpi_images` directive in the site config is satisfied.
+#
+# The job fails if nginx reports any syntax or configuration error.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  # ── Pre-merge gate: fires on PRs that touch the nginx config or deploy script ─
+  pull_request:
+    paths:
+      - "deploy/nginx/**"
+      - "deploy/deploy-nginx.sh"
+      - ".github/workflows/nginx-config-lint.yml"
+
+  # ── Post-merge: keep a green badge on main after every relevant change ───────
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "deploy/nginx/**"
+      - "deploy/deploy-nginx.sh"
+      - ".github/workflows/nginx-config-lint.yml"
+
+  # ── Manual trigger ───────────────────────────────────────────────────────────
+  workflow_dispatch:
+
+concurrency:
+  group: nginx-config-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Validate nginx config (official nginx image)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Stub the SSL certificate files so nginx -t doesn't fail on missing
+      # /etc/nginx/ssl paths — we're only checking syntax, not TLS handshakes.
+      - name: Stub SSL certificates
+        run: |
+          mkdir -p /tmp/nginx-lint/ssl
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout /tmp/nginx-lint/ssl/pumpi.io.key \
+            -out    /tmp/nginx-lint/ssl/pumpi.io.crt \
+            -subj "/CN=pumpi.io"
+
+      # Build a minimal nginx.conf that includes the site config under test.
+      # nginx -t -c requires an absolute path and a valid top-level nginx.conf.
+      - name: Build temporary nginx.conf wrapper
+        run: |
+          LINT_DIR=/tmp/nginx-lint
+          mkdir -p "$LINT_DIR/sites-enabled" "$LINT_DIR/cache"
+
+          # Rewrite ssl_certificate paths inside the site config to point to
+          # our stubbed certs, then drop it into sites-enabled/.
+          # Also strip IPv6 listen directives (listen [::]:...) — the Docker
+          # sandbox used for syntax checking doesn't expose IPv6 sockets, but
+          # that's a runtime concern, not a config-syntax concern.
+          sed \
+            -e "s|/etc/nginx/ssl/pumpi.io.crt|$LINT_DIR/ssl/pumpi.io.crt|g" \
+            -e "s|/etc/nginx/ssl/pumpi.io.key|$LINT_DIR/ssl/pumpi.io.key|g" \
+            -e "/listen \[::\]/d" \
+            deploy/nginx/rocketfi > "$LINT_DIR/sites-enabled/rocketfi"
+
+          # Write a minimal nginx.conf wrapper that loads our site config.
+          # Logs go to /dev/null — we only care about the exit code of nginx -t.
+          # pid points to /tmp/nginx.pid (writable inside the container but
+          # outside our read-only mount point).
+          # proxy_cache_path declares the pumpi_images zone that the site config
+          # references — without this, nginx -t reports an unknown zone error.
+          # /tmp/nginx-proxy-cache is inside the container's own writable /tmp,
+          # not on our read-only volume mount, so nginx can chown it freely.
+          cat > "$LINT_DIR/nginx.conf" <<'EOF'
+          worker_processes 1;
+
+          error_log /dev/null;
+          pid       /tmp/nginx.pid;
+
+          events {
+              worker_connections 1024;
+          }
+
+          http {
+              include       /etc/nginx/mime.types;
+              default_type  application/octet-stream;
+
+              access_log off;
+
+              proxy_cache_path /tmp/nginx-proxy-cache
+                  levels=1:2
+                  keys_zone=pumpi_images:1m
+                  max_size=64m
+                  inactive=7d
+                  use_temp_path=off;
+
+              include /tmp/nginx-lint/sites-enabled/*;
+          }
+          EOF
+
+      - name: Run nginx -t inside official nginx container
+        run: |
+          docker run --rm \
+            -v /tmp/nginx-lint:/tmp/nginx-lint:ro \
+            nginx:stable-alpine \
+            nginx -t -c /tmp/nginx-lint/nginx.conf
+
+      - name: Show nginx error log on failure
+        if: failure()
+        run: |
+          echo "=== nginx error log ==="
+          # error_log goes to /dev/null in the wrapper; show the site config
+          # that was tested instead so the failure reason is visible in CI.
+          echo "=== site config tested ==="
+          cat /tmp/nginx-lint/sites-enabled/rocketfi 2>/dev/null || echo "(not written)"
