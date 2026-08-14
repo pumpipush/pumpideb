@@ -1987,6 +1987,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         url={`${typeof window !== "undefined" ? window.location.origin : ""}/coin/${token.address}`}
         keywords={`${displaySymbol}, ${displayName}, solana memecoin, trade ${displaySymbol}`}
       />
+      <FaviconUpdater imageUrl={displayImageUrl} />
 
       {/* ── LEFT: scrollable chart + info ── */}
       <div data-token-panel className="flex-1 min-w-0 overflow-y-auto border-r border-border/20 px-0 md:px-5 py-0 md:py-4 pb-20 md:pb-6">
@@ -3820,6 +3821,26 @@ function TrendingSidebar({ onSelectToken }: { onSelectToken: (addr: string) => v
 //   1. Module-level cache (populated when user clicked a search result)
 //   2. Client-side Jupiter strict list (handles direct URL / page reload)
 //   3. Generic error state if address is not in the Jupiter list at all
+
+// ── Dynamic favicon updater ────────────────────────────────────────────────────
+// Swaps every <link rel="icon"> to the token image while viewing a coin page,
+// then restores originals on unmount (navigation away).
+function FaviconUpdater({ imageUrl }: { imageUrl: string | null | undefined }) {
+  useEffect(() => {
+    if (!imageUrl) return;
+    const resolved = resolveImageUrl(imageUrl) ?? imageUrl;
+
+    const links = Array.from(
+      document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]')
+    );
+    const saved = links.map(el => ({ el, href: el.href }));
+    links.forEach(el => { el.href = resolved; });
+
+    return () => { saved.forEach(({ el, href }) => { el.href = href; }); };
+  }, [imageUrl]);
+
+  return null;
+}
 
 function ExternalTokenLoader({ address, wallet }: { address: string | null; wallet: string | null }) {
   const [extToken, setExtToken]     = useState<ExternalSolanaToken | null>(() =>
