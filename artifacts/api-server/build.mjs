@@ -20,6 +20,7 @@ async function buildAll() {
       path.resolve(artifactDir, "src/scripts/birdeye-backfill.ts"),
       path.resolve(artifactDir, "src/scripts/enrich-dex-pct.ts"),
       path.resolve(artifactDir, "src/scripts/backfill-launchlab-names.ts"),
+      path.resolve(artifactDir, "src/scripts/backfill-launchlab-supply.ts"),
     ],
     platform: "node",
     bundle: true,
