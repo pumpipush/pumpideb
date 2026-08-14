@@ -931,15 +931,21 @@ export default function Dashboard() {
       return apiDisplay;
     }
 
-    // All other tabs: liveOnly tokens at the top (page 1 only); within apiDisplay, live rows first
-    // Graduated tab never shows live-feed tokens — brand-new launches haven't completed the bonding curve
-    // New tab: live tokens always shown (no page restriction — it's a single pool, not paginated)
+    // Live SSE tokens only belong on tabs where "brand new coin" is relevant:
+    //   • New      — always show live tokens (this is the point of the tab)
+    //   • Trending — show on page 1 (a new coin can immediately be hot)
+    //   • Volume   — NEVER: a coin just launched has zero 24h volume; showing it here
+    //               contaminates the ranked list with unranked noise
+    //   • Graduated — NEVER: brand-new launches haven't completed the bonding curve
     // For the New tab, additionally require at least one trade so zero-activity
-    // launches (scam/rug coins that were never touched) don't appear at the top.
+    // launches (scam/rug coins that were never touched) don't appear.
     const liveOnlyForNew = activeTab === "New"
       ? liveOnly.filter((t) => (t.tradeCount ?? 0) > 0)
       : liveOnly;
-    const filteredLiveOnly = activeTab !== "Graduated" && (activeTab === "New" || page === 1)
+    // Trending returns early above; this branch only covers New / Volume / Graduated.
+    // Only New tab gets live-feed tokens.
+    const showLive = activeTab === "New";
+    const filteredLiveOnly = showLive
       ? (onlyWithImage ? liveOnlyForNew.filter((t) => !!t.imageUrl) : liveOnlyForNew)
       : [];
     const apiLive    = apiDisplay.filter((t) => t.isLive);
