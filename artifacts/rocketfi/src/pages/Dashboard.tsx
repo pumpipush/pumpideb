@@ -947,6 +947,11 @@ export default function Dashboard() {
     const apiLive    = apiDisplay.filter((t) => t.isLive);
     const apiNonLive = apiDisplay.filter((t) => !t.isLive);
     const combined = [...filteredLiveOnly, ...apiLive, ...apiNonLive];
+    // New tab: sort everything by creation time so live SSE tokens and API
+    // tokens appear in a single newest-first order instead of live-first then API.
+    if (activeTab === "New") {
+      combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
     return combined;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawTokens, liveTokens, liveTradeStats, platformFilter, search, onlyGraduated, onlyWithImage, minMcap, activeTab, solPrice, page]);
