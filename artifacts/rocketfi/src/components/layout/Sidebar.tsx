@@ -3,6 +3,7 @@ import { Rocket, LayoutGrid, ArrowRightLeft, Plus, UserCircle2 } from "lucide-re
 import { cn, diceBearUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useWallet } from "@/contexts/WalletContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { useGetProfile, getGetProfileQueryKey } from "@workspace/api-client-react";
 import { formatAddress } from "@/lib/utils";
@@ -103,13 +104,18 @@ export function Sidebar() {
 export function BottomNav() {
   const [location] = useLocation();
   const { wallet } = useWallet();
+  const { socialUser } = useAuth();
 
-  const { data: profile } = useGetProfile(wallet ?? "", {
-    query: { enabled: !!wallet, retry: false, queryKey: getGetProfileQueryKey(wallet ?? "") },
+  // Privy social login gives a wallet address via socialUser.address even when
+  // no extension wallet is connected — use the same fallback chain as Navbar.
+  const effectiveAddress = wallet ?? socialUser?.address ?? null;
+
+  const { data: profile } = useGetProfile(effectiveAddress ?? "", {
+    query: { enabled: !!effectiveAddress, retry: false, queryKey: getGetProfileQueryKey(effectiveAddress ?? "") },
   });
 
-  const profileHref = wallet ? `/profile/${profile?.username ?? wallet}` : null;
-  const isProfileActive = !!wallet && location === `/profile/${profile?.username ?? wallet}`;
+  const profileHref = effectiveAddress ? `/profile/${profile?.username ?? effectiveAddress}` : null;
+  const isProfileActive = !!effectiveAddress && location === `/profile/${profile?.username ?? effectiveAddress}`;
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border/60 flex flex-col safe-area-pb">
@@ -155,7 +161,7 @@ export function BottomNav() {
                 )}
               />
             ) : (
-              <TokenAvatar symbol={profile?.username || wallet!.slice(0, 4)} size={20} shape="circle" />
+              <TokenAvatar symbol={profile?.username || effectiveAddress!.slice(0, 4)} size={20} shape="circle" />
             )}
             Profile
           </Link>
