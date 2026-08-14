@@ -47,15 +47,20 @@ function WalletButton() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasJwt]);
 
-  // Fetch balance on mount / when auth changes, and refresh every 60s
+  // Fetch balance on mount / when auth changes, poll every 10 s, and
+  // immediately re-fetch when the browser tab becomes visible again
+  // (user may have deposited in another tab or returned after a transaction).
   useEffect(() => {
     void fetchSolBalance();
     if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
     if (hasJwt) {
-      refreshTimerRef.current = setInterval(() => void fetchSolBalance(), 60_000);
+      refreshTimerRef.current = setInterval(() => void fetchSolBalance(), 10_000);
     }
+    const onVisible = () => { if (!document.hidden) void fetchSolBalance(); };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [fetchSolBalance, hasJwt]);
 

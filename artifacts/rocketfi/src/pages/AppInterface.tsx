@@ -1199,8 +1199,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [chartTypeOpen, setChartTypeOpen] = useState(false);
 
   // Server-side OHLCV: pre-aggregated over the full trade history (no 100-row limit).
-  // Re-fetched every 30 s so new trades reconcile with the live SSE overlay.
-  // Returns { bars, maxTradeId } — maxTradeId gates which SSE events to overlay.
+  // Adaptive refetch: short timeframes need faster bar updates (a new 1-minute bar
+  // opens every 60 s, so polling at 8 s means users see it within one tick).
+  // Longer timeframes are less time-sensitive; 30 s is fine there.
+  const ohlcvRefetchMs = chartTf === "1m" || chartTf === "5m" ? 8_000
+    : chartTf === "15m" || chartTf === "1H"                   ? 15_000
+    : 30_000;
   const { data: serverOhlcv, isLoading: ohlcvLoading } = useGetTokenOhlcv(
     selectedAddress || "",
     { tf: chartTf },
@@ -1208,8 +1212,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       query: {
         enabled: !!selectedAddress,
         queryKey: ["ohlcv", selectedAddress, chartTf],
-        refetchInterval: 30_000,
-        staleTime: 25_000,
+        refetchInterval: ohlcvRefetchMs,
+        staleTime: ohlcvRefetchMs - 2_000,
       }
     }
   );
