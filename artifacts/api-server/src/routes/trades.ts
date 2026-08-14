@@ -691,55 +691,67 @@ router.get("/tokens/:address/stats", asyncWrap(async (req, res) => {
   const address = req.params.address as string;
   if (!address) { res.status(400).json({ error: "address required" }); return; }
 
-  const { rows } = await pool.query<{
-    vol24h_sol:      string;
-    vol24h_buy_sol:  string;
-    vol24h_sell_sol: string;
-    txns_buy:        string;
-    txns_sell:       string;
-  }>(`
-    SELECT
-      COALESCE(SUM(CAST(eth_amount AS NUMERIC)) / 1e9, 0)                                       AS vol24h_sol,
-      COALESCE(SUM(CASE WHEN is_buy     THEN CAST(eth_amount AS NUMERIC) ELSE 0 END) / 1e9, 0)  AS vol24h_buy_sol,
-      COALESCE(SUM(CASE WHEN NOT is_buy THEN CAST(eth_amount AS NUMERIC) ELSE 0 END) / 1e9, 0)  AS vol24h_sell_sol,
-      COUNT(CASE WHEN is_buy     THEN 1 END)                                                     AS txns_buy,
-      COUNT(CASE WHEN NOT is_buy THEN 1 END)                                                     AS txns_sell
-    FROM trades
-    WHERE token_address = $1
-      AND timestamp > NOW() - INTERVAL '24 hours'
-      AND CAST(eth_amount AS NUMERIC) > 0
-  `, [address]);
+  // Run DB query and token lookup in parallel
+  const [{ rows }, [tokenRow]] = await Promise.all([
+    pool.query<{
+      vol24h_sol:      string;
+      vol24h_buy_sol:  string;
+      vol24h_sell_sol: string;
+      txns_buy:        string;
+      txns_sell:       string;
+    }>(`
+      SELECT
+        COALESCE(SUM(CAST(eth_amount AS NUMERIC)) / 1e9, 0)                                       AS vol24h_sol,
+        COALESCE(SUM(CASE WHEN is_buy     THEN CAST(eth_amount AS NUMERIC) ELSE 0 END) / 1e9, 0)  AS vol24h_buy_sol,
+        COALESCE(SUM(CASE WHEN NOT is_buy THEN CAST(eth_amount AS NUMERIC) ELSE 0 END) / 1e9, 0)  AS vol24h_sell_sol,
+        COUNT(CASE WHEN is_buy     THEN 1 END)                                                     AS txns_buy,
+        COUNT(CASE WHEN NOT is_buy THEN 1 END)                                                     AS txns_sell
+      FROM trades
+      WHERE token_address = $1
+        AND timestamp > NOW() - INTERVAL '24 hours'
+        AND CAST(eth_amount AS NUMERIC) > 0
+    `, [address]),
+    db.select({ platform: tokensTable.platform })
+      .from(tokensTable)
+      .where(eq(tokensTable.address, address))
+      .limit(1),
+  ]);
 
   const r = rows[0];
-  const vol24hSol    = parseFloat(r.vol24h_sol);
+  const dbVol24hSol  = parseFloat(r.vol24h_sol);
   const txns24hBuy   = parseInt(r.txns_buy, 10);
   const txns24hSell  = parseInt(r.txns_sell, 10);
 
-  // If no internal trades found, check if this is a DEX token and use Birdeye vol data
-  if (vol24hSol === 0 && txns24hBuy === 0 && txns24hSell === 0) {
-    const [tokenRow] = await db
-      .select({ platform: tokensTable.platform })
-      .from(tokensTable)
-      .where(eq(tokensTable.address, address))
-      .limit(1);
+  // For ALL token types: if DB vol is zero OR this is a DEX token, supplement
+  // with DexScreener — our trades table only covers trades observed since the
+  // stream started, so tokens indexed recently may have incomplete history.
+  // Strategy: always fetch DexScreener for any token where DB vol < DexScreener vol
+  // (use whichever is higher so live-stream data wins once it catches up).
+  const needsExternal =
+    (dbVol24hSol === 0 && txns24hBuy === 0 && txns24hSell === 0) ||
+    (tokenRow != null && DEX_PLATFORMS.has(tokenRow.platform));
 
-    if (tokenRow && DEX_PLATFORMS.has(tokenRow.platform)) {
-      const pairs = await fetchDexScreenerTokens([address]);
-      const pair  = bestSolanaPair(pairs);
-      if (pair && pair.volume?.h24) {
-        const solPrice      = pairToSolPrice(pair);
-        const toSol         = (usd: number) => solPrice > 0 ? usd / solPrice : 0;
-        const vol24hSol     = toSol(pair.volume.h24);
-        const buys24h       = pair.txns?.h24?.buys  ?? 0;
-        const sells24h      = pair.txns?.h24?.sells ?? 0;
-        const total24h      = buys24h + sells24h;
-        const buyRatio      = total24h > 0 ? buys24h / total24h : 0.5;
+  if (needsExternal) {
+    const pairs = await fetchDexScreenerTokens([address]);
+    const pair  = bestSolanaPair(pairs);
+    if (pair && pair.volume?.h24) {
+      const solPrice      = pairToSolPrice(pair);
+      const toSol         = (usd: number) => solPrice > 0 ? usd / solPrice : 0;
+      const dsVol24hSol   = toSol(pair.volume.h24);
+      const buys24h       = pair.txns?.h24?.buys  ?? 0;
+      const sells24h      = pair.txns?.h24?.sells ?? 0;
+      const total24h      = buys24h + sells24h;
+      const buyRatio      = total24h > 0 ? buys24h / total24h : 0.5;
+
+      // Use DexScreener vol when it's higher (more complete 24h history)
+      // or when DB has nothing at all.
+      if (dsVol24hSol > dbVol24hSol) {
         res.json({
-          vol24hSol,
-          vol24hBuySol:  vol24hSol * buyRatio,
-          vol24hSellSol: vol24hSol * (1 - buyRatio),
-          txns24hBuy:    buys24h,
-          txns24hSell:   sells24h,
+          vol24hSol:     dsVol24hSol,
+          vol24hBuySol:  dsVol24hSol * buyRatio,
+          vol24hSellSol: dsVol24hSol * (1 - buyRatio),
+          txns24hBuy:    buys24h   > txns24hBuy  ? buys24h  : txns24hBuy,
+          txns24hSell:   sells24h  > txns24hSell ? sells24h : txns24hSell,
         });
         return;
       }
@@ -747,9 +759,9 @@ router.get("/tokens/:address/stats", asyncWrap(async (req, res) => {
   }
 
   res.json({
-    vol24hSol,
-    vol24hBuySol:   parseFloat(r.vol24h_buy_sol),
-    vol24hSellSol:  parseFloat(r.vol24h_sell_sol),
+    vol24hSol:     dbVol24hSol,
+    vol24hBuySol:  parseFloat(r.vol24h_buy_sol),
+    vol24hSellSol: parseFloat(r.vol24h_sell_sol),
     txns24hBuy,
     txns24hSell,
   });
