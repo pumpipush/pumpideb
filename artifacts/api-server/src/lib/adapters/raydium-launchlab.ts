@@ -105,7 +105,7 @@ function bs58Encode(bytes: Buffer | Uint8Array): string {
  * within that pool state account (verified empirically Aug 2026).
  * Use getMintForPool() to resolve poolAddress → tokenMint (cached per pool).
  */
-function parseTradeEventFromLogs(
+export function parseTradeEventFromLogs(
   logs: string[],
 ): {
   poolAddress: string;
