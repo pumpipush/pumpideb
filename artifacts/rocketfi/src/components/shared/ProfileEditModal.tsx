@@ -10,6 +10,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import { useWallet } from "@/contexts/WalletContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -338,8 +339,8 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
 
   // Show a loading shell while the profile query is still in flight
   if (!form) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+    return createPortal(
+      <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4">
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={close} />
         <div className="relative w-full sm:max-w-lg bg-card border border-border rounded-t-2xl sm:rounded-sm shadow-2xl p-5 sm:p-6 z-10">
           <div className="flex items-center justify-between mb-5">
@@ -352,13 +353,14 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
         </div>
-      </div>
+      </div>,
+      document.body,
     );
   }
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4"
       onClick={(e) => e.target === e.currentTarget && close()}
     >
       {/* Backdrop */}
@@ -590,6 +592,7 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
