@@ -186,4 +186,30 @@ router.get("/wallet/:address/activity", asyncWrap(async (req, res) => {
   );
 }));
 
+// ── GET /api/wallet/:address/created-tokens ─────────────────────────────────
+// Returns all tokens whose creator_address matches, ordered by trade count desc.
+router.get("/wallet/:address/created-tokens", asyncWrap(async (req, res) => {
+  const { address } = req.params;
+  if (!address || address.length < 32) {
+    res.status(400).json({ error: "Invalid address" });
+    return;
+  }
+  const tokens = await db
+    .select({
+      address:      tokensTable.address,
+      name:         tokensTable.name,
+      symbol:       tokensTable.symbol,
+      imageUrl:     tokensTable.imageUrl,
+      marketCapEth: tokensTable.marketCapEth,
+      tradeCount:   tokensTable.tradeCount,
+      platform:     tokensTable.platform,
+      graduated:    tokensTable.graduated,
+    })
+    .from(tokensTable)
+    .where(eq(tokensTable.creatorAddress, String(address)))
+    .orderBy(desc(tokensTable.tradeCount))
+    .limit(200);
+  res.json(tokens);
+}));
+
 export default router;

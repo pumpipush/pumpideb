@@ -63,7 +63,18 @@ function AvatarDisplay({ profile }: { profile: Profile }) {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Tab = "activity" | "wallet";
+type Tab = "activity" | "wallet" | "creator-fee";
+
+type CreatedToken = {
+  address:      string;
+  name:         string;
+  symbol:       string;
+  imageUrl:     string | null;
+  marketCapEth: string | null;
+  tradeCount:   string | null;
+  platform:     string;
+  graduated:    boolean;
+};
 
 type ActivityTrade = {
   id: number;
@@ -201,7 +212,7 @@ export default function ProfilePage() {
     refetchInterval: activeTab === "activity" ? 30_000 : false,
   });
 
-  // ── Creator fee balance (only fetched for profile owner) ──────────────────
+  // ── Creator fee balance (owner only) ─────────────────────────────────────
   const { data: claimableLamports = 0n, refetch: refetchFees } = useQuery<bigint>({
     queryKey: ["creator-fees", address],
     queryFn: () => fetchClaimableLamports(address),
@@ -209,6 +220,19 @@ export default function ProfilePage() {
     staleTime: 30_000,
     refetchOnWindowFocus: true,
     refetchInterval: isOwner ? 60_000 : false,
+  });
+
+  // ── Tokens created by this address ───────────────────────────────────────
+  const { data: createdTokens, isLoading: createdLoading } = useQuery<CreatedToken[]>({
+    queryKey: ["created-tokens", address],
+    queryFn: async () => {
+      const res = await fetch(`/api/wallet/${address}/created-tokens`);
+      if (!res.ok) return [];
+      return res.json() as Promise<CreatedToken[]>;
+    },
+    enabled: activeTab === "creator-fee" && !!address,
+    staleTime: 60_000,
+    refetchInterval: activeTab === "creator-fee" ? 60_000 : false,
   });
 
   const handleClaimFees = async () => {
@@ -518,42 +542,19 @@ export default function ProfilePage() {
               )}
             </div>
 
-            {/* ══ CREATOR FEES CARD ════════════════════════════════════════════════ */}
-            {isOwner && claimableLamports > 1_000_000n && (
-              <div
-                className="flex items-center gap-3 px-4 py-3.5 rounded-xl mb-5"
-                style={{
-                  background: "rgba(34,197,94,0.06)",
-                  border: "1px solid rgba(34,197,94,0.2)",
-                }}
+            {/* Creator fee badge — quick hint to switch to the tab */}
+            {isOwner && claimableLamports > 1_000_000n && activeTab !== "creator-fee" && (
+              <button
+                onClick={() => setActiveTab("creator-fee")}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl mb-5 w-full text-left transition-opacity hover:opacity-80"
+                style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.2)" }}
               >
-                <Gift className="w-4 h-4 shrink-0" style={{ color: "#22c55e" }} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold" style={{ color: "#22c55e" }}>
-                    Creator fees available
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {formatSol(String(claimableLamports))} SOL
-                    {solPrice && (
-                      <span className="ml-1 opacity-70">
-                        (≈ ${((Number(claimableLamports) / 1e9) * solPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })})
-                      </span>
-                    )}
-                    {" "}earned from trades on your tokens
-                  </p>
-                </div>
-                <button
-                  onClick={() => void handleClaimFees()}
-                  disabled={claimLoading}
-                  className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-semibold shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e" }}
-                >
-                  {claimLoading
-                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    : <Gift className="w-3.5 h-3.5" />}
-                  {claimLoading ? "Claiming…" : "Claim"}
-                </button>
-              </div>
+                <Gift className="w-3.5 h-3.5 shrink-0" style={{ color: "#22c55e" }} />
+                <span className="text-xs font-semibold" style={{ color: "#22c55e" }}>
+                  {formatSol(String(claimableLamports))} SOL in creator fees available
+                </span>
+                <span className="text-xs text-muted-foreground ml-auto">View →</span>
+              </button>
             )}
 
             {/* ══ WALLET RECOVERY PROMPT ══════════════════════════════════════════ */}
@@ -586,7 +587,7 @@ export default function ProfilePage() {
               className="flex gap-1 p-1 mb-6 rounded-xl w-fit"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
             >
-              {(["activity", "wallet"] as Tab[]).map((tab) => (
+              {(["activity", "wallet", ...(isOwner ? ["creator-fee"] : [])] as Tab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -597,10 +598,20 @@ export default function ProfilePage() {
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  {tab === "activity"
-                    ? <Activity className="w-3.5 h-3.5" />
-                    : <Wallet className="w-3.5 h-3.5" />}
-                  {tab === "activity" ? "Activity" : "Wallet"}
+                  {tab === "activity" && <Activity className="w-3.5 h-3.5" />}
+                  {tab === "wallet"   && <Wallet   className="w-3.5 h-3.5" />}
+                  {tab === "creator-fee" && (
+                    <span className="relative">
+                      <Gift className="w-3.5 h-3.5" />
+                      {claimableLamports > 1_000_000n && (
+                        <span
+                          className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full"
+                          style={{ background: "#22c55e" }}
+                        />
+                      )}
+                    </span>
+                  )}
+                  {tab === "activity" ? "Activity" : tab === "wallet" ? "Wallet" : "Creator Fees"}
                 </button>
               ))}
             </div>
@@ -965,6 +976,145 @@ export default function ProfilePage() {
                 </div>
               );
             })()}
+
+            {/* ══ CREATOR FEES TAB ═════════════════════════════════════════════ */}
+            {activeTab === "creator-fee" && (
+              <div className="space-y-5">
+                {/* Balance card */}
+                <div
+                  className="rounded-xl p-5"
+                  style={{ background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.18)" }}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-widest text-muted-foreground/60 font-medium mb-2">Claimable balance</p>
+                      {claimableLamports > 0n ? (
+                        <>
+                          <p className="text-3xl font-bold tabular-nums" style={{ color: "#22c55e" }}>
+                            {formatSol(String(claimableLamports))} SOL
+                          </p>
+                          {solPrice && (
+                            <p className="text-sm text-muted-foreground mt-1">
+                              ≈ ${((Number(claimableLamports) / 1e9) * solPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })} USD
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-2xl font-bold text-muted-foreground/40">0 SOL</p>
+                      )}
+                      <p className="text-xs text-muted-foreground/50 mt-2">
+                        pump.fun creator vault — 1% fee from every trade on tokens you created
+                      </p>
+                    </div>
+                    {claimableLamports > 1_000_000n && (
+                      <button
+                        onClick={() => void handleClaimFees()}
+                        disabled={claimLoading}
+                        className="flex items-center gap-2 px-4 h-10 rounded-xl text-sm font-semibold shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ background: "rgba(34,197,94,0.18)", color: "#22c55e" }}
+                      >
+                        {claimLoading
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <Gift className="w-4 h-4" />}
+                        {claimLoading ? "Claiming…" : "Claim All"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Created tokens list */}
+                <div>
+                  <p className="text-xs uppercase tracking-widest text-muted-foreground/60 font-medium mb-3">
+                    Tokens created
+                  </p>
+
+                  {createdLoading && (
+                    <div className="space-y-2">
+                      {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}
+                    </div>
+                  )}
+
+                  {!createdLoading && (!createdTokens || createdTokens.length === 0) && (
+                    <div
+                      className="py-14 flex flex-col items-center gap-3 text-center rounded-xl"
+                      style={{ background: "rgba(255,255,255,0.02)", border: "1px dashed rgba(255,255,255,0.08)" }}
+                    >
+                      <Gift className="w-8 h-8 text-muted-foreground/20" />
+                      <p className="text-sm text-muted-foreground">No tokens created yet</p>
+                      <p className="text-xs text-muted-foreground/50">Tokens you launch on pump.fun appear here</p>
+                    </div>
+                  )}
+
+                  {!createdLoading && createdTokens && createdTokens.length > 0 && (
+                    <div
+                      className="rounded-xl overflow-hidden"
+                      style={{ border: "1px solid rgba(255,255,255,0.07)" }}
+                    >
+                      {/* Header */}
+                      <div
+                        className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-3 text-[10px] uppercase tracking-wider font-medium text-muted-foreground/50"
+                        style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+                      >
+                        <span>Token</span>
+                        <span className="w-16 text-right">Trades</span>
+                        <span className="w-20 text-right">Mkt Cap</span>
+                        <span className="w-20 text-right">Status</span>
+                      </div>
+
+                      {createdTokens.map((token, idx) => (
+                        <div
+                          key={token.address}
+                          className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-3 items-center cursor-pointer hover:bg-white/[0.02] transition-colors"
+                          style={{ borderBottom: idx < createdTokens.length - 1 ? "1px solid rgba(255,255,255,0.04)" : undefined }}
+                          onClick={() => setLocation(`/coin/${token.address}`)}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {token.imageUrl ? (
+                              <img
+                                src={resolveImageUrl(token.imageUrl) ?? token.imageUrl}
+                                alt={token.symbol}
+                                className="w-8 h-8 rounded-full object-cover shrink-0"
+                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                              />
+                            ) : (
+                              <TokenAvatar symbol={token.symbol} size={32} shape="circle" />
+                            )}
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold truncate">{token.name}</p>
+                              <p className="text-xs text-muted-foreground/60 font-mono">{token.symbol}</p>
+                            </div>
+                          </div>
+                          <span className="text-sm font-mono text-right w-16 tabular-nums text-muted-foreground">
+                            {token.tradeCount ? Number(token.tradeCount).toLocaleString() : "0"}
+                          </span>
+                          <span className="text-sm font-mono text-right w-20 tabular-nums">
+                            {(() => {
+                              try {
+                                if (!token.marketCapEth) return <span className="text-muted-foreground/40">—</span>;
+                                const mc = BigInt(Math.round(parseFloat(token.marketCapEth)));
+                                return formatSol((mc / BigInt(1e9)).toString());
+                              } catch { return <span className="text-muted-foreground/40">—</span>; }
+                            })()}
+                          </span>
+                          <span className="w-20 text-right">
+                            {token.graduated ? (
+                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(139,92,246,0.15)", color: "#a78bfa" }}>
+                                Grad
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(34,197,94,0.10)", color: "#4ade80" }}>
+                                Live
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
           </div>
         </>
       )}
