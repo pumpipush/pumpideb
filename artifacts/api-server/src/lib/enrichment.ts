@@ -870,8 +870,8 @@ export function buildLabChainUpdate(
 //
 // Rate-limit budget: max 5 tokens per tick (2 RPC calls each = 10 calls/30 s).
 
-const LL_CHAIN_ENRICH_BATCH = 5;
-const LL_CHAIN_ENRICH_INTERVAL_MS = 60_000; // runs every 60 s (separate timer)
+const LL_CHAIN_ENRICH_BATCH = 20;
+const LL_CHAIN_ENRICH_INTERVAL_MS = 30_000; // runs every 30 s (separate timer)
 
 const LAUNCHLAB_PROGRAM_ID = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj";
 
