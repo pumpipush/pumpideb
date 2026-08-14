@@ -36,6 +36,7 @@ import {
   type DexScreenerPair,
 } from "./dexscreener";
 import { bs58Decode as _bs58Decode, decodeLabCreateParamsRaw } from "./adapters/launchlabDecode";
+import { fetchMintTotalSupply } from "./adapters/raydium-launchlab";
 import { fetchBirdeyeTokenOverview, getSolPriceUsd } from "./birdeye";
 
 const POLL_INTERVAL_MS       = 30_000;
@@ -1191,12 +1192,141 @@ async function enrichLabTokensFromChain(): Promise<void> {
   }
 }
 
+// ── LaunchLab supply backfill ──────────────────────────────────────────────────
+//
+// Corrects existing LaunchLab token rows that were stored with the hardcoded
+// 1B default supply (1_000_000_000_000_000) before per-token supply fetching
+// was added.  Tokens like USD1 (World Liberty Financial USD) have different
+// supplies, which caused wildly wrong market caps (e.g. $2.15 trillion instead
+// of a few thousand dollars).
+//
+// For each affected row:
+//   1. Fetch the actual supply from the SPL mint account on-chain.
+//   2. If it differs from the 1B default, update totalSupply.
+//   3. Recompute marketCapEth = realSupply × priceEth × 1000 (lamports)
+//      where priceEth (SOL/display-token) is the current stored spot price.
+//
+// Runs once at startup; safe to re-run (skips rows whose supply is already
+// correct or non-default).
+
+/** The legacy hardcoded 1B default supply (1B tokens × 10^6 decimals). */
+export const LL_DEFAULT_SUPPLY_STR = "1000000000000000";
+
+/** Page size for keyset-paginated supply backfill. Small to avoid RPC bursts. */
+const LL_SUPPLY_BACKFILL_PAGE = 20;
+
+/**
+ * Given a non-standard real supply and the token's stored priceEth, compute
+ * the DB update that should be applied to correct the row.
+ *
+ * Returns null when the real supply matches the legacy default (no correction
+ * needed) or is unavailable (RPC failed).
+ *
+ * Exported for unit testing.
+ *
+ * Market cap formula:
+ *   priceEth = SOL per display token (display token = 10^6 atoms)
+ *   price per atom (lamports) = priceEth × 1e9 / 1e6 = priceEth × 1000
+ *   marketCapEth (lamports)   = realSupply (atoms) × priceEth × 1000
+ */
+export function computeSupplyBackfillUpdate(
+  realSupply: bigint | null,
+  priceEth:   string | null,
+): { totalSupply: string; marketCapEth?: string } | null {
+  if (!realSupply || realSupply.toString() === LL_DEFAULT_SUPPLY_STR) return null;
+
+  const update: { totalSupply: string; marketCapEth?: string } = {
+    totalSupply: realSupply.toString(),
+  };
+
+  const priceNum = priceEth ? parseFloat(priceEth) : 0;
+  if (priceNum > 0) {
+    update.marketCapEth = String(Math.round(Number(realSupply) * priceNum * 1000));
+  }
+
+  return update;
+}
+
+/**
+ * One-time startup backfill that corrects existing LaunchLab token rows stored
+ * with the hardcoded 1B default supply before per-token supply fetching was added.
+ *
+ * Uses keyset pagination (ordered by `address`) to exhaust ALL matching rows in
+ * a single run — no starvation: every batch advances the cursor past the rows
+ * just seen, regardless of whether their supply needed correction.
+ *
+ * Standard-1B rows and RPC-failed rows are skipped (no DB write), but the
+ * cursor still advances past them so they don't re-block later rows in the
+ * same run.  On the next restart they will be re-checked (cheap — one RPC call
+ * per token), which ensures any that failed transiently are retried.
+ */
+async function backfillLaunchLabSupply(): Promise<void> {
+  let cursor     = ""; // keyset cursor — "" sorts before all valid base58 addresses
+  let corrected  = 0;
+  let totalSeen  = 0;
+
+  for (;;) {
+    const page = await db
+      .select({ address: tokensTable.address, priceEth: tokensTable.priceEth })
+      .from(tokensTable)
+      .where(
+        and(
+          eq(tokensTable.platform, "raydium_launchlab"),
+          eq(tokensTable.totalSupply, LL_DEFAULT_SUPPLY_STR),
+          gt(tokensTable.address, cursor),
+        ),
+      )
+      .orderBy(tokensTable.address)  // deterministic keyset order
+      .limit(LL_SUPPLY_BACKFILL_PAGE);
+
+    if (page.length === 0) break; // all matching rows exhausted
+
+    if (totalSeen === 0) {
+      log.info("enrichment: launchlab supply backfill started — paging through all legacy-default rows");
+    }
+
+    cursor    = page[page.length - 1]!.address; // advance cursor past this page
+    totalSeen += page.length;
+
+    for (const { address, priceEth } of page) {
+      try {
+        const realSupply = await fetchMintTotalSupply(address);
+        const update     = computeSupplyBackfillUpdate(realSupply, priceEth);
+        if (!update) continue; // standard 1B or RPC failed — skip, cursor already advanced
+
+        await db.update(tokensTable)
+          .set(update)
+          .where(eq(tokensTable.address, address));
+
+        corrected++;
+        log.debug({ address, totalSupply: update.totalSupply, marketCapEth: update.marketCapEth },
+          "enrichment: launchlab supply corrected");
+      } catch (err) {
+        log.warn({ address, err }, "enrichment: launchlab supply backfill failed for token");
+      }
+    }
+
+    // Brief pause between pages to avoid overwhelming the free public RPC.
+    await new Promise<void>(r => setTimeout(r, 150));
+  }
+
+  if (totalSeen === 0) {
+    log.debug("enrichment: launchlab supply backfill — no legacy-default rows found");
+  } else {
+    log.info({ totalSeen, corrected },
+      "enrichment: launchlab supply backfill complete");
+  }
+}
+
 // ── Entry point ────────────────────────────────────────────────────────────────
 
 export function startEnrichmentLoop(): void {
   log.info({ intervalMs: POLL_INTERVAL_MS }, "enrichment: background loop started");
   // Run bonding-curve backfill immediately so existing tokens get real MC values
   void backfillBondingCurves();
+  // Correct existing LaunchLab rows that were stored with the hardcoded 1B supply
+  // before per-token supply fetching was added (e.g. USD1, other non-standard tokens).
+  void backfillLaunchLabSupply();
   // Detect tokens that graduated while the indexer was offline (missed migration events)
   void detectGraduations();
   setInterval(() => void detectGraduations(), GRADUATION_DETECT_INTERVAL_MS);

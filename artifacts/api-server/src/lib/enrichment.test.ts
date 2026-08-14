@@ -15,6 +15,8 @@ import {
   isPlaceholderSymbol,
   computeEnrichmentUpdate,
   buildLabChainUpdate,
+  computeSupplyBackfillUpdate,
+  LL_DEFAULT_SUPPLY_STR,
   ENRICHABLE_PLATFORMS_EXPORT,
 } from "./enrichment";
 
@@ -332,5 +334,88 @@ describe("buildLabChainUpdate", () => {
     const update = buildLabChainUpdate(letsbonk, { name: "ABCD1234...", symbol: "REAL", uri: "" });
     expect(update).not.toHaveProperty("name");
     expect(update["symbol"]).toBe("REAL");
+  });
+});
+
+// ── computeSupplyBackfillUpdate ─────────────────────────────────────────────────
+//
+// Guards the pure helper that decides what DB fields to write when correcting
+// a LaunchLab token row that was stored with the hardcoded 1B default supply.
+
+describe("computeSupplyBackfillUpdate", () => {
+  const STANDARD_SUPPLY = BigInt(LL_DEFAULT_SUPPLY_STR); // 1_000_000_000_000_000n
+
+  it("returns null when realSupply is null (RPC failed)", () => {
+    expect(computeSupplyBackfillUpdate(null, "0.000000030000000")).toBeNull();
+  });
+
+  it("returns null when realSupply equals the legacy 1B default (no correction needed)", () => {
+    // Standard LaunchLab token — supply is already correct, nothing to write.
+    expect(computeSupplyBackfillUpdate(STANDARD_SUPPLY, "0.000000030000000")).toBeNull();
+  });
+
+  it("returns totalSupply when realSupply differs from 1B default (no price available)", () => {
+    const nonStandard = 50_000_000_000n;
+    const update = computeSupplyBackfillUpdate(nonStandard, null);
+    expect(update).not.toBeNull();
+    expect(update!.totalSupply).toBe("50000000000");
+    expect(update!.marketCapEth).toBeUndefined();
+  });
+
+  it("returns totalSupply only when priceEth is '0' (zero price → no MC recompute)", () => {
+    const nonStandard = 50_000_000_000n;
+    const update = computeSupplyBackfillUpdate(nonStandard, "0");
+    expect(update!.totalSupply).toBe("50000000000");
+    expect(update!.marketCapEth).toBeUndefined();
+  });
+
+  it("returns both totalSupply and marketCapEth when realSupply and priceEth are valid", () => {
+    // USD1-like token: 50B atoms, price 0.000001 SOL/token
+    const nonStandard = 50_000_000_000n;
+    const priceEth    = "0.000001000000000"; // 0.000001 SOL per display token
+    // Expected MC: 50_000_000_000 × 0.000001 × 1000 = 50_000_000 lamports
+    const update = computeSupplyBackfillUpdate(nonStandard, priceEth);
+    expect(update!.totalSupply).toBe("50000000000");
+    expect(update!.marketCapEth).toBe("50000000");
+  });
+
+  it("marketCapEth rounds correctly for a non-integer result", () => {
+    const supply   = 3n;
+    const priceEth = "1.0";
+    // 3 × 1.0 × 1000 = 3000 (already integer, no rounding edge case, but also covers the path)
+    const update = computeSupplyBackfillUpdate(supply, priceEth);
+    expect(update!.marketCapEth).toBe("3000");
+  });
+
+  it("correctly computes MC for a large supply matching a real Solana token scale", () => {
+    // 1B tokens with 9 decimals → 1e18 atoms; price 0.000000001 SOL/token
+    const supply   = 1_000_000_000_000_000_000n;
+    const priceEth = "0.000000001000000";
+    // MC = 1e18 × 0.000000001 × 1000 = 1e18 × 1e-9 × 1e3 = 1e12 lamports
+    const update = computeSupplyBackfillUpdate(supply, priceEth);
+    expect(update).not.toBeNull();
+    expect(update!.totalSupply).toBe("1000000000000000000");
+    // Allow ±1 for floating-point rounding in Math.round
+    expect(Math.abs(Number(update!.marketCapEth) - 1e12)).toBeLessThan(10);
+  });
+
+  it("processes more than one batch worth of rows by exhausting the supply", () => {
+    // Simulate what happens across two calls: first row is standard (skipped),
+    // second is nonstandard (corrected). This mirrors the keyset-pagination behavior
+    // where standard/RPC-failed rows return null and the cursor still advances.
+    const rows = [
+      { supply: STANDARD_SUPPLY, price: "0.00003" }, // standard — skip
+      { supply: null,            price: "0.00003" }, // RPC fail — skip
+      { supply: 42_000_000n,     price: "0.00005" }, // nonstandard — correct
+    ];
+
+    const results = rows.map(r => computeSupplyBackfillUpdate(r.supply, r.price));
+    expect(results[0]).toBeNull(); // standard supply → no update
+    expect(results[1]).toBeNull(); // RPC failure → no update
+    expect(results[2]).not.toBeNull(); // nonstandard → update
+    expect(results[2]!.totalSupply).toBe("42000000");
+    expect(results[2]!.marketCapEth).toBe(
+      String(Math.round(42_000_000 * 0.00005 * 1000)),
+    );
   });
 });
