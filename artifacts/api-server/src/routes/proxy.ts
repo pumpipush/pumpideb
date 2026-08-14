@@ -157,6 +157,7 @@ router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
   const proto = (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto) ?? "https";
   const baseUrl = `${proto}://${host}`;
 
+  // ── Path A: Replit object storage (available on Replit hosted envs) ──────────
   try {
     const uuid = randomUUID();
     const ext = mimeToExt(imageType);
@@ -185,9 +186,51 @@ router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
 
     const metadataUri = `${baseUrl}/api/storage/public-objects/${metaSubPath}`;
     return res.json({ metadataUri });
-  } catch (err) {
-    console.error("[proxy] pump-ipfs-upload failed:", err);
-    return res.status(502).json({ error: "Metadata upload failed" });
+  } catch (storageErr) {
+    console.warn("[proxy] pump-ipfs-upload: object storage unavailable, trying pump.fun fallback:", storageErr);
+  }
+
+  // ── Path B: pump.fun /api/ipfs (works from VPS IPs — not blocked by Cloudflare) ──
+  // The Replit sidecar at 127.0.0.1:1106 is only present in Replit-hosted envs.
+  // On the VPS the sidecar is absent, so GCS auth fails and we fall through here.
+  // pump.fun's /api/ipfs accepts multipart/form-data and returns { metadataUri }.
+  try {
+    const { FormData, Blob } = await import("node:buffer") as unknown as {
+      FormData: typeof globalThis.FormData;
+      Blob: typeof globalThis.Blob;
+    };
+    // Node 18+ has FormData globally; use globalThis for compatibility
+    const form: FormData = new (globalThis.FormData ?? FormData)();
+    form.append("name",        (name as string).trim());
+    form.append("symbol",      (symbol as string).trim());
+    form.append("description", descriptionStr);
+    if (typeof twitter  === "string" && twitter.trim())  form.append("twitter",  twitter.trim());
+    if (typeof telegram === "string" && telegram.trim()) form.append("telegram", telegram.trim());
+    if (typeof website  === "string" && website.trim())  form.append("website",  website.trim());
+
+    const ext = mimeToExt(imageType);
+    const blob = new (globalThis.Blob ?? Blob)([imageBuffer.buffer as ArrayBuffer], { type: imageType });
+    form.append("file", blob, `image.${ext}`);
+
+    const pumpRes = await fetch("https://pump.fun/api/ipfs", {
+      method: "POST",
+      body: form,
+      signal: AbortSignal.timeout(20_000),
+    });
+
+    if (!pumpRes.ok) {
+      const txt = await pumpRes.text().catch(() => `HTTP ${pumpRes.status}`);
+      throw new Error(`pump.fun /api/ipfs returned ${pumpRes.status}: ${txt.slice(0, 200)}`);
+    }
+
+    const pumpData = await pumpRes.json() as { metadataUri?: string };
+    if (!pumpData.metadataUri) throw new Error("pump.fun /api/ipfs did not return metadataUri");
+
+    console.info("[proxy] pump-ipfs-upload: used pump.fun fallback successfully");
+    return res.json({ metadataUri: pumpData.metadataUri });
+  } catch (pumpErr) {
+    console.error("[proxy] pump-ipfs-upload: both storage and pump.fun fallback failed:", pumpErr);
+    return res.status(502).json({ error: "Metadata upload failed — object storage and pump.fun fallback both unavailable" });
   }
 }));
 
