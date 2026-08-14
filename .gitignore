@@ -27,6 +27,7 @@ service-account*.json
 .cache/
 .local/
 .config/
+.replit.merged
 
 # Agent memory — internal AI assistant notes, not relevant to the codebase
 .agents/
@@ -37,9 +38,10 @@ artifacts/.launchlab-deep-backfill-done
 *.pid
 *.seed
 
-# ── User-uploaded screenshots / attached files ────────────────────────────────
-# These are temporary files uploaded during development sessions
+# ── Development session files ─────────────────────────────────────────────────
+# Temporary files from development sessions — not part of the codebase
 attached_assets/
+screenshots/
 
 # ── IDEs and editors ─────────────────────────────────────────────────────────
 /.idea
