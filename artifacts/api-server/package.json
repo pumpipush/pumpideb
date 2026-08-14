@@ -11,6 +11,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "backfill:birdeye": "node ./build.mjs && node --enable-source-maps ./dist/scripts/birdeye-backfill.mjs",
+    "backfill:launchlab-names": "node ./build.mjs && node --enable-source-maps ./dist/scripts/backfill-launchlab-names.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
