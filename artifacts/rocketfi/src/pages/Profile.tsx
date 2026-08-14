@@ -154,7 +154,7 @@ export default function ProfilePage() {
   const slug = params.slug ?? "";
   const [, setLocation] = useLocation();
   const searchString = useSearch();
-  const { wallet } = useWallet();
+  const { wallet, openWalletModal } = useWallet();
   const { socialUser } = useAuth();
   const solPrice = useSolPrice();
 
@@ -750,10 +750,68 @@ export default function ProfilePage() {
                   ? { symbol: topToken.symbol ?? topToken.mint.slice(0, 4), valueSol: topToken.valueSol, pct: totalSol > 0 ? topToken.valueSol / totalSol * 100 : 0 }
                   : solEntry;
 
+              // ── Social user on their own profile with no linked wallet ──────────
+              // Show a helpful CTA rather than a confusing error/empty state.
+              const isSocialNoWallet = isOwner && !!socialUser && !socialUser.linkedWallet;
+
               return (
                 <div className="space-y-4">
+
+                  {/* Social user without linked wallet — CTA */}
+                  {isSocialNoWallet && (
+                    <div
+                      className="py-14 flex flex-col items-center gap-4 text-center rounded-xl"
+                      style={{ background: "rgba(255,255,255,0.02)", border: "1px dashed rgba(255,255,255,0.08)" }}
+                    >
+                      <div
+                        className="w-14 h-14 rounded-full flex items-center justify-center"
+                        style={{ background: "rgba(255,255,255,0.05)" }}
+                      >
+                        <Wallet className="w-6 h-6 text-muted-foreground/50" />
+                      </div>
+                      <div className="space-y-1.5 max-w-xs">
+                        <p className="text-sm font-semibold text-foreground">No wallet linked</p>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          Link a Solana wallet to your account to view your token holdings, SOL balance, and portfolio value.
+                        </p>
+                      </div>
+                      <div className="flex flex-col sm:flex-row items-center gap-2 mt-1">
+                        {wallet ? (
+                          /* Phantom/extension already connected — guide to link it */
+                          <Button
+                            size="sm"
+                            className="rounded-lg h-9 px-5 text-sm font-semibold"
+                            onClick={() => setEditOpen(true)}
+                          >
+                            <Wallet className="w-3.5 h-3.5 mr-1.5" />
+                            Link connected wallet
+                          </Button>
+                        ) : (
+                          /* No wallet at all — offer to connect one first */
+                          <Button
+                            size="sm"
+                            className="rounded-lg h-9 px-5 text-sm font-semibold"
+                            onClick={openWalletModal}
+                          >
+                            <Wallet className="w-3.5 h-3.5 mr-1.5" />
+                            Connect wallet
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="rounded-lg h-9 px-4 text-sm text-muted-foreground hover:text-foreground"
+                          onClick={() => setEditOpen(true)}
+                        >
+                          <Edit2 className="w-3.5 h-3.5 mr-1.5" />
+                          Edit profile to link
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Loading */}
-                  {portfolioLoading && (
+                  {!isSocialNoWallet && portfolioLoading && (
                     <div className="space-y-3">
                       <div className="grid grid-cols-3 gap-3">
                         {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
@@ -763,7 +821,7 @@ export default function ProfilePage() {
                   )}
 
                   {/* Error */}
-                  {portfolioError && !portfolioLoading && (
+                  {!isSocialNoWallet && portfolioError && !portfolioLoading && (
                     <div
                       className="py-16 flex flex-col items-center gap-3 text-center rounded-xl"
                       style={{ background: "rgba(255,255,255,0.02)", border: "1px dashed rgba(255,255,255,0.08)" }}
@@ -774,7 +832,7 @@ export default function ProfilePage() {
                   )}
 
                   {/* Data */}
-                  {portfolio && !portfolioLoading && (
+                  {!isSocialNoWallet && portfolio && !portfolioLoading && (
                     <>
                       {/* Summary cards */}
                       <div className="grid grid-cols-3 gap-3">
