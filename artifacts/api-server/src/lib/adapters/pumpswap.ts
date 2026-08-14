@@ -88,12 +88,15 @@ export class PumpSwapIndexer extends SolanaRpcIndexer {
       : null;
 
     // ── Dust trade guard ──────────────────────────────────────────────────────
-    // Trades with fewer than 1 000 atomic token units produce astronomically
-    // wrong prices and pollute trade history / volume stats.  Skip entirely.
-    const MIN_PRICE_ATOMS = 1_000n;
-    if (tokBig < MIN_PRICE_ATOMS) {
+    // Trades with fewer than 1 000 atomic token units OR fewer than 10 000
+    // lamports SOL (~$0.002) produce astronomically wrong prices and pollute
+    // trade history / volume stats.  Skip entirely.
+    const MIN_PRICE_ATOMS  = 1_000n;
+    const MIN_SOL_LAMPORTS = 10_000n; // 0.00001 SOL ≈ $0.002
+    const solBig = BigInt(solLamports);
+    if (tokBig < MIN_PRICE_ATOMS || solBig < MIN_SOL_LAMPORTS) {
       this.log.debug({ mint, tokenAmount, solLamports },
-        "pumpswap: dust trade skipped (tokenAmount < MIN_PRICE_ATOMS)");
+        "pumpswap: dust trade skipped (tokenAmount < MIN_PRICE_ATOMS or solLamports < MIN_SOL_LAMPORTS)");
       return;
     }
 

@@ -501,13 +501,16 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
       }
 
       // ── Dust trade guard ─────────────────────────────────────────────────
-      // Trades with fewer than MIN_PRICE_ATOMS (~0.001 display tokens) are
-      // atomically meaningless: they corrupt price/MC and add noise to trade
-      // history, volume stats, and holder positions.  Token row was still
-      // auto-created above when missing — that placeholder is legitimate.
-      if (tokBig < MIN_PRICE_ATOMS) {
+      // Trades with fewer than MIN_PRICE_ATOMS (~0.001 display tokens) OR
+      // fewer than MIN_SOL_LAMPORTS SOL are atomically meaningless: they
+      // corrupt price/MC and add noise to trade history, volume stats, and
+      // holder positions.  Token row was still auto-created above when
+      // missing — that placeholder is legitimate.
+      const MIN_SOL_LAMPORTS = 10_000n; // 0.00001 SOL ≈ $0.002
+      const solBig = BigInt(solLamports);
+      if (tokBig < MIN_PRICE_ATOMS || solBig < MIN_SOL_LAMPORTS) {
         this.log.debug({ mint, tokenAmount, solLamports },
-          "raydium_launchlab: fast-path dust trade skipped (tokenAmount < MIN_PRICE_ATOMS)");
+          "raydium_launchlab: fast-path dust trade skipped (tokenAmount < MIN_PRICE_ATOMS or solLamports < MIN_SOL_LAMPORTS)");
         return;
       }
 
@@ -671,11 +674,13 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
     }
 
     // ── Dust trade guard (fallback path) ─────────────────────────────────────
-    // Same threshold as fast path: skip INSERT + token stats for atomically
-    // tiny token amounts.  Token placeholder was still created above when missing.
-    if (tokBig < MIN_PRICE_ATOMS) {
+    // Same thresholds as fast path: skip INSERT + token stats for atomically
+    // tiny token or SOL amounts.  Token placeholder was still created above.
+    const MIN_SOL_LAMPORTS = 10_000n; // 0.00001 SOL ≈ $0.002
+    const solBig = BigInt(solLamports);
+    if (tokBig < MIN_PRICE_ATOMS || solBig < MIN_SOL_LAMPORTS) {
       this.log.debug({ mint, tokenAmount, solLamports },
-        "raydium_launchlab: fallback dust trade skipped (tokenAmount < MIN_PRICE_ATOMS)");
+        "raydium_launchlab: fallback dust trade skipped (tokenAmount < MIN_PRICE_ATOMS or solLamports < MIN_SOL_LAMPORTS)");
       return;
     }
 
