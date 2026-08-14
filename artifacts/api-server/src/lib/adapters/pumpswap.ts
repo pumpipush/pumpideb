@@ -82,9 +82,20 @@ export class PumpSwapIndexer extends SolanaRpcIndexer {
     mint: string, isBuy: boolean, solLamports: string,
     tokenAmount: string, traderAddress: string, signature: string,
   ): Promise<void> {
-    const priceEth = tokenAmount !== "0" && solLamports !== "0"
+    const tokBig   = BigInt(tokenAmount);
+    const priceEth = tokBig > 0n && solLamports !== "0"
       ? (Number(solLamports) / Number(tokenAmount) / 1000).toFixed(15)
       : null;
+
+    // ── Dust trade guard ──────────────────────────────────────────────────────
+    // Trades with fewer than 1 000 atomic token units produce astronomically
+    // wrong prices and pollute trade history / volume stats.  Skip entirely.
+    const MIN_PRICE_ATOMS = 1_000n;
+    if (tokBig < MIN_PRICE_ATOMS) {
+      this.log.debug({ mint, tokenAmount, solLamports },
+        "pumpswap: dust trade skipped (tokenAmount < MIN_PRICE_ATOMS)");
+      return;
+    }
 
     // ── Auto-create token on first encounter ─────────────────────────────────
     // If this mint is unknown, fetch DexScreener once to get name/symbol/image/price/socials.
