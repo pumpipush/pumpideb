@@ -795,13 +795,16 @@ export default function Dashboard() {
   // Poll every 30s — trending rankings shift faster than all-time volume.
   // staleTime=25s prevents redundant refetches on window-focus / tab switch.
   // refetchOnWindowFocus=false avoids hammering the API when the user alt-tabs.
-  const bubbleListParams = { sort: ListTokensSort.trending, limit: 60 };
+  // Newest sort — bubbles reflect the latest launches so the map feels live.
+  // 5 s poll matches the server-side cache TTL for sort=newest, so every tick
+  // gets a genuinely fresh list without hammering the DB.
+  const bubbleListParams = { sort: ListTokensSort.newest, limit: 60 };
   const { data: bubbleRawTokens, isError: bubbleError } = useListTokens(
     bubbleListParams,
     {
       query: {
-        refetchInterval:      15_000,
-        staleTime:            12_000,
+        refetchInterval:      5_000,
+        staleTime:            4_000,
         refetchOnWindowFocus: false,
         queryKey:             getListTokensQueryKey(bubbleListParams),
       },
