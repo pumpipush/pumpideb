@@ -27,8 +27,6 @@ channel = "stable-25_05"
 [userenv.shared]
 VITE_PUMP_FEE_RECIPIENT = "JBCqngc3TYcz3Rtv5Md3CZyw8X6AxLik7gswCCttRS5E"
 VITE_PLATFORM_FEE_RECIPIENT = "JBCqngc3TYcz3Rtv5Md3CZyw8X6AxLik7gswCCttRS5E"
-VITE_PRIVY_APP_ID = "cmsrnx7sf00op0cldlq18prrn"
-PRIVY_APP_ID = "cmsrnx7sf00op0cldlq18prrn"
 VITE_GOOGLE_CLIENT_ID = "233507294164-a2mnc88t1i1b0luj39v0o4eip42hsbcu.apps.googleusercontent.com"
 GOOGLE_CLIENT_ID = "233507294164-a2mnc88t1i1b0luj39v0o4eip42hsbcu.apps.googleusercontent.com"
 PLATFORM_TREASURY_ADDRESS = "JBCqngc3TYcz3Rtv5Md3CZyw8X6AxLik7gswCCttRS5E"
