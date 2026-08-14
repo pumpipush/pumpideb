@@ -18,6 +18,7 @@ import { searchJupiterTokens } from "../lib/jupiter-tokens";
 import { verifyWalletSignature, isValidIndexerSecret, parseWalletAuthFields } from "../lib/wallet-auth";
 import { asyncWrap } from "../lib/asyncHandler.js";
 import { SERVER_START_TIME } from "../lib/serverMeta.js";
+import { logger } from "../lib/logger.js";
 
 const router: IRouter = Router();
 
@@ -775,7 +776,11 @@ router.get("/sitemap.xml", asyncWrap(async (_req, res) => {
     res.setHeader("Cache-Control", "public, max-age=3600");
     res.send(xml);
   } catch (err) {
-    res.status(500).send("<!-- sitemap generation error -->");
+    logger.error({ err }, "sitemap: failed to generate dynamic sitemap");
+    res.setHeader("Content-Type", "application/xml; charset=utf-8");
+    res.status(500).send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<!-- sitemap generation error: ${err instanceof Error ? err.message : String(err)} -->\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"/>`
+    );
   }
 }));
 
