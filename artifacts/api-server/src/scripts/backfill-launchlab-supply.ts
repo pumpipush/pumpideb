@@ -18,25 +18,39 @@
  *   • Re-running after a fresh data restore or migration
  *   • Dry-run auditing before committing changes
  *
+ * Concurrency safety
+ * ──────────────────
+ * The UPDATE uses a compare-and-set WHERE guard:
+ *   WHERE address = $addr AND total_supply = '1000000000000000'
+ *
+ * If another process (e.g. server restart triggering the startup backfill) has
+ * already corrected a row between this script's SELECT and UPDATE, the guard
+ * rejects the write (0 rows matched) and the row is not double-counted.
+ *
+ * marketCapEth is computed from the current price_eth column value at write time
+ * (SQL expression), not from the stale value read during the page scan. A trade
+ * that lands between SELECT and UPDATE is therefore reflected in the new MC.
+ *
  * Safety
  * ──────
- * • Safe to re-run: standard-1B rows and RPC-failed rows are skipped (no DB write).
- * • Dry-run mode (--dry-run): prints what would be written without touching the DB.
+ * • Safe to re-run: standard-1B rows and RPC-failed rows are skipped (no write).
+ * • --dry-run mode: prints what would be written without touching the DB.
  * • Rate-limited: 150 ms pause between pages of 20 tokens, ~8 RPC calls/s max.
  *
  * Usage
  * ─────
- *   # Live run (writes corrections):
- *   DATABASE_URL=postgres://... npx tsx src/scripts/backfill-launchlab-supply.ts
+ *   # Build first (or let the package script handle it):
+ *   pnpm --filter @workspace/api-server backfill:launchlab-supply
+ *   pnpm --filter @workspace/api-server backfill:launchlab-supply -- --dry-run
  *
- *   # Dry run (audit only, no DB writes):
- *   DATABASE_URL=postgres://... npx tsx src/scripts/backfill-launchlab-supply.ts --dry-run
+ *   # Or run from source during development:
+ *   DATABASE_URL=postgres://... npx tsx src/scripts/backfill-launchlab-supply.ts [--dry-run]
  */
 
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { db, tokensTable } from "@workspace/db";
-import { fetchMintTotalSupply }        from "../lib/adapters/raydium-launchlab.js";
-import { computeSupplyBackfillUpdate, LL_DEFAULT_SUPPLY_STR } from "../lib/enrichment.js";
+import { fetchMintTotalSupply }          from "../lib/adapters/raydium-launchlab.js";
+import { LL_DEFAULT_SUPPLY_STR }         from "../lib/enrichment.js";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -54,15 +68,16 @@ async function main(): Promise<void> {
   );
   console.log(`   Querying LaunchLab tokens with totalSupply = '${LL_DEFAULT_SUPPLY_STR}' …\n`);
 
-  let cursor    = "";       // keyset cursor — "" sorts before all valid base58 addresses
+  let cursor    = "";   // keyset cursor — "" sorts before all valid base58 addresses
   let totalSeen = 0;
-  let corrected = 0;
-  let skipped   = 0;        // standard-1B (supply on-chain also = 1B)
-  let rpcFailed = 0;        // fetchMintTotalSupply returned null
+  let corrected = 0;   // rows actually updated (WHERE guard matched)
+  let skipped   = 0;   // standard-1B supply on-chain (no correction needed)
+  let rpcFailed = 0;   // fetchMintTotalSupply returned null
+  let concurrent = 0; // concurrent fix already applied (returning() = 0 rows)
 
   for (;;) {
     const page = await db
-      .select({ address: tokensTable.address, priceEth: tokensTable.priceEth })
+      .select({ address: tokensTable.address })
       .from(tokensTable)
       .where(
         and(
@@ -79,43 +94,69 @@ async function main(): Promise<void> {
     cursor     = page[page.length - 1]!.address;
     totalSeen += page.length;
 
-    for (const { address, priceEth } of page) {
+    for (const { address } of page) {
       try {
         const realSupply = await fetchMintTotalSupply(address);
 
         if (realSupply === null) {
           rpcFailed++;
-          console.log(`  ⚠  ${address}  — RPC failed, will retry on next server restart`);
+          console.log(`  ⚠  ${address}  — RPC failed, will retry on next run`);
           continue;
         }
 
-        const update = computeSupplyBackfillUpdate(realSupply, priceEth);
-
-        if (!update) {
-          // realSupply === LL_DEFAULT_SUPPLY_STR — token is standard 1B, no fix needed
+        if (realSupply.toString() === LL_DEFAULT_SUPPLY_STR) {
+          // On-chain supply is genuinely 1B — this is a standard LaunchLab token.
           skipped++;
           continue;
         }
 
-        // Non-standard supply found — apply (or preview) the correction
+        const supplyStr = realSupply.toString();
+
         if (isDryRun) {
           console.log(
             `  📋 ${address}  ` +
-            `totalSupply: ${update.totalSupply}  ` +
-            (update.marketCapEth ? `marketCapEth: ${update.marketCapEth}` : "marketCapEth: (no price — will skip)"),
+            `totalSupply: ${supplyStr}  ` +
+            `marketCapEth: (computed from current price_eth at write time)`,
           );
-        } else {
-          await db.update(tokensTable)
-            .set(update)
-            .where(eq(tokensTable.address, address));
-          console.log(
-            `  ✅ ${address}  ` +
-            `supply corrected → ${update.totalSupply}` +
-            (update.marketCapEth ? `  mcEth → ${update.marketCapEth}` : ""),
-          );
+          corrected++;
+          continue;
+        }
+
+        // Compare-and-set UPDATE:
+        //   WHERE totalSupply = LL_DEFAULT_SUPPLY_STR prevents this write from
+        //   overwriting a correction already applied by a concurrent process
+        //   (e.g. server restart running backfillLaunchLabSupply) between our
+        //   SELECT and this UPDATE.
+        //
+        // marketCapEth uses the current price_eth column value at write time —
+        // not the value from the page SELECT — so a trade that landed between
+        // the SELECT and this UPDATE is reflected in the corrected market cap.
+        const [updated] = await db.update(tokensTable)
+          .set({
+            totalSupply:  supplyStr,
+            marketCapEth: sql<string>`
+              CASE
+                WHEN price_eth IS NOT NULL AND CAST(price_eth AS numeric) > 0
+                THEN ROUND(CAST(price_eth AS numeric) * CAST(${supplyStr} AS numeric) * 1000)::text
+                ELSE market_cap_eth
+              END
+            `,
+          })
+          .where(and(
+            eq(tokensTable.address, address),
+            eq(tokensTable.totalSupply, LL_DEFAULT_SUPPLY_STR), // compare-and-set guard
+          ))
+          .returning({ address: tokensTable.address });
+
+        if (!updated) {
+          // 0 rows matched: a concurrent process already corrected this row
+          // between our SELECT and this UPDATE — do not double-count it.
+          concurrent++;
+          continue;
         }
 
         corrected++;
+        console.log(`  ✅ ${address}  supply corrected → ${supplyStr}`);
       } catch (err) {
         rpcFailed++;
         console.error(`  ❌ ${address}  — unexpected error:`, err);
@@ -134,17 +175,20 @@ async function main(): Promise<void> {
   if (totalSeen === 0) {
     console.log("✅  No LaunchLab tokens with legacy-default supply found — nothing to do.");
   } else {
-    console.log(`Total rows scanned  : ${totalSeen}`);
-    console.log(`Standard 1B (skipped): ${skipped}`);
-    console.log(`RPC failures (skipped): ${rpcFailed}`);
+    console.log(`Total rows scanned       : ${totalSeen}`);
+    console.log(`Standard 1B (skipped)    : ${skipped}`);
+    console.log(`RPC failures (skipped)   : ${rpcFailed}`);
+    if (concurrent > 0) {
+      console.log(`Concurrent fixes (skipped): ${concurrent}`);
+    }
     if (isDryRun) {
-      console.log(`Would correct       : ${corrected}`);
+      console.log(`Would correct            : ${corrected}`);
       console.log("\n↑  Re-run without --dry-run to apply these changes.");
     } else {
-      console.log(`Corrected           : ${corrected}`);
+      console.log(`Corrected                : ${corrected}`);
       if (rpcFailed > 0) {
         console.log(
-          "\nℹ  Some tokens failed RPC — re-run this script (or restart the server) to retry them.",
+          "\nℹ  Some tokens failed RPC — re-run this script to retry them.",
         );
       }
     }

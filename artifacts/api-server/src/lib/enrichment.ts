@@ -1386,18 +1386,44 @@ async function backfillLaunchLabSupply(): Promise<void> {
     cursor    = page[page.length - 1]!.address; // advance cursor past this page
     totalSeen += page.length;
 
-    for (const { address, priceEth } of page) {
+    for (const { address } of page) {
       try {
         const realSupply = await fetchMintTotalSupply(address);
-        const update     = computeSupplyBackfillUpdate(realSupply, priceEth);
-        if (!update) continue; // standard 1B or RPC failed — skip, cursor already advanced
+        // Standard-1B or RPC-failed: computeSupplyBackfillUpdate returns null → skip.
+        // Cursor already advanced past this row regardless.
+        if (!realSupply || realSupply.toString() === LL_DEFAULT_SUPPLY_STR) continue;
 
-        await db.update(tokensTable)
-          .set(update)
-          .where(eq(tokensTable.address, address));
+        const supplyStr = realSupply.toString();
+
+        // Compare-and-set UPDATE:
+        //   WHERE totalSupply = LL_DEFAULT_SUPPLY_STR prevents this write from
+        //   overwriting a correction already applied by a concurrent process (e.g.
+        //   another server restart) between our SELECT and this UPDATE.
+        //
+        // marketCapEth uses the current price_eth column value at write time — not
+        // the stale priceEth from the page SELECT — so a trade that landed between
+        // the SELECT and this UPDATE is reflected immediately.
+        const [updated] = await db.update(tokensTable)
+          .set({
+            totalSupply:  supplyStr,
+            marketCapEth: sql<string>`
+              CASE
+                WHEN price_eth IS NOT NULL AND CAST(price_eth AS numeric) > 0
+                THEN ROUND(CAST(price_eth AS numeric) * CAST(${supplyStr} AS numeric) * 1000)::text
+                ELSE market_cap_eth
+              END
+            `,
+          })
+          .where(and(
+            eq(tokensTable.address, address),
+            eq(tokensTable.totalSupply, LL_DEFAULT_SUPPLY_STR), // compare-and-set guard
+          ))
+          .returning({ address: tokensTable.address });
+
+        if (!updated) continue; // concurrent process already corrected this row — skip
 
         corrected++;
-        log.debug({ address, totalSupply: update.totalSupply, marketCapEth: update.marketCapEth },
+        log.debug({ address, totalSupply: supplyStr },
           "enrichment: launchlab supply corrected");
       } catch (err) {
         log.warn({ address, err }, "enrichment: launchlab supply backfill failed for token");
