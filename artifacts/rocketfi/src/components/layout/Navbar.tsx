@@ -30,7 +30,6 @@ function WalletButton() {
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
   const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const jwtHeaders = authHeaders();
   const hasJwt = !!jwtHeaders.Authorization;
@@ -117,24 +116,6 @@ function WalletButton() {
   const { displayName, avatarUrl } = buildNavbarDisplayInfo(profile, socialUser, walletFallback);
   const subLine = walletName ?? socialUser?.email ?? (wallet ? formatAddress(wallet) : "");
 
-  function isDesktop() {
-    return typeof window !== "undefined" && window.innerWidth >= 768;
-  }
-
-  function handleMouseEnterTrigger() {
-    if (!isDesktop()) return;
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    setOpen(true);
-  }
-  function handleMouseLeave() {
-    if (!isDesktop()) return;
-    closeTimer.current = setTimeout(() => setOpen(false), 120);
-  }
-  function handleMouseEnterContent() {
-    if (!isDesktop()) return;
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-  }
-
   return (
     <>
     {/* SOL balance chip — only for authenticated users */}
@@ -152,8 +133,6 @@ function WalletButton() {
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <button
-          onMouseEnter={handleMouseEnterTrigger}
-          onMouseLeave={handleMouseLeave}
           className="h-9 w-9 rounded-full overflow-hidden border border-border/60 hover:border-border transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-primary/50 shrink-0"
         >
           <img
@@ -167,9 +146,7 @@ function WalletButton() {
 
       <DropdownMenuContent
         align="end"
-        sideOffset={8}
-        onMouseEnter={handleMouseEnterContent}
-        onMouseLeave={handleMouseLeave}
+        sideOffset={6}
         className="w-60 p-0 rounded-xl border border-border/60 shadow-xl shadow-black/40 overflow-hidden"
       >
         {/* Profile header */}
