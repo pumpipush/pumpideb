@@ -446,12 +446,17 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
         return;
       }
 
-      const priceEth = tokenAmount !== "0" && solLamports !== "0"
+      // Guard: require at least 1 000 atomic units (~0.001 display tokens) to
+      // prevent dust trades (e.g. 1 atom sold for 0.195 SOL) from producing
+      // astronomically wrong prices (195 030 SOL/token in one real case).
+      const MIN_PRICE_ATOMS = 1_000n;
+      const tokBig = BigInt(tokenAmount);
+      const priceEth = tokBig >= MIN_PRICE_ATOMS && solLamports !== "0"
         ? (Number(solLamports) / Number(tokenAmount) / 1000).toFixed(15)
         : null;
 
-      const updMCStr = solLamports !== "0" && tokenAmount !== "0"
-        ? (LL_TOTAL_SUPPLY * BigInt(solLamports) / BigInt(tokenAmount)).toString()
+      const updMCStr = tokBig >= MIN_PRICE_ATOMS && solLamports !== "0"
+        ? (LL_TOTAL_SUPPLY * BigInt(solLamports) / tokBig).toString()
         : undefined;
 
       // ── Ensure token row exists (auto-create if we missed the create event) ─
@@ -621,7 +626,10 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
 
     const { mint, isBuy, solLamports, tokenAmount, traderAddress } = swap;
 
-    const priceEth = tokenAmount !== "0" && solLamports !== "0"
+    // Guard: minimum 1 000 atoms to prevent dust trades from corrupting price
+    const MIN_PRICE_ATOMS = 1_000n;
+    const tokBig = BigInt(tokenAmount);
+    const priceEth = tokBig >= MIN_PRICE_ATOMS && solLamports !== "0"
       ? (Number(solLamports) / Number(tokenAmount) / 1000).toFixed(15)
       : null;
 
@@ -671,8 +679,8 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
     let updVSolStr: string | undefined;
     let updVTokStr: string | undefined;
 
-    if (solLamports !== "0" && tokenAmount !== "0") {
-      updMCStr = (LL_TOTAL_SUPPLY * BigInt(solLamports) / BigInt(tokenAmount)).toString();
+    if (tokBig >= MIN_PRICE_ATOMS && solLamports !== "0") {
+      updMCStr = (LL_TOTAL_SUPPLY * BigInt(solLamports) / tokBig).toString();
       try {
         const [cur] = await db
           .select({ virtualEthReserves: tokensTable.virtualEthReserves,

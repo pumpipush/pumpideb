@@ -1970,7 +1970,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // Prefer live snapshot identity (pushed by SSE on connect and after enrichment) over the
   // initial REST response, so name/symbol/image update in real time without a page refresh.
   const displayName     = (liveToken?.name   && !liveToken.name.endsWith("…")   && liveToken.name   !== "???" ? liveToken.name   : null) ?? token.name;
-  const displaySymbol   = (liveToken?.symbol && liveToken.symbol !== "???"                                     ? liveToken.symbol : null) ?? token.symbol;
+  const rawSymbol       = (liveToken?.symbol && liveToken.symbol !== "???"                                     ? liveToken.symbol : null) ?? token.symbol;
+  // For unnamed LaunchLab placeholder tokens (symbol still "???"), derive a
+  // readable symbol from the token address so the header/page-title are useful.
+  const displaySymbol   = rawSymbol === "???" ? token.address.slice(0, 6).toUpperCase() : rawSymbol;
   const displayImageUrl = liveToken?.imageUrl ?? token.imageUrl;
 
   return (
