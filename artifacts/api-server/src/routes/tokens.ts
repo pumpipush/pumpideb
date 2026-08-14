@@ -765,7 +765,7 @@ router.get("/sitemap.xml", asyncWrap(async (_req, res) => {
         const lastmod = r.updated_at
           ? r.updated_at.toISOString().split("T")[0]
           : new Date().toISOString().split("T")[0];
-        return `  <url>\n    <loc>${SITE}/token/${r.address}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>hourly</changefreq>\n    <priority>0.8</priority>\n  </url>`;
+        return `  <url>\n    <loc>${SITE}/coin/${r.address}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>hourly</changefreq>\n    <priority>0.8</priority>\n  </url>`;
       })
       .join("\n");
 
