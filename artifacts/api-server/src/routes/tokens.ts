@@ -19,6 +19,7 @@ import { verifyWalletSignature, isValidIndexerSecret, parseWalletAuthFields } fr
 import { asyncWrap } from "../lib/asyncHandler.js";
 import { SERVER_START_TIME } from "../lib/serverMeta.js";
 import { logger } from "../lib/logger.js";
+import { getSolPriceUsd } from "../lib/birdeye.js";
 
 const router: IRouter = Router();
 
@@ -109,6 +110,15 @@ async function fetch24hPctChanges(addresses: string[]): Promise<Map<string, numb
 
   return result;
 }
+
+// GET /sol-price — lightweight endpoint so the frontend can get a reliable
+// SOL/USD price from the server (Birdeye, cached 60s) instead of CoinGecko
+// which can be rate-limited or blocked on VPS.
+router.get("/sol-price", asyncWrap(async (_req, res) => {
+  const price = await getSolPriceUsd();
+  res.setHeader("Cache-Control", "public, max-age=30");
+  res.json({ price: price > 0 ? price : null });
+}));
 
 // GET /tokens
 router.get("/tokens", asyncWrap(async (req, res) => {

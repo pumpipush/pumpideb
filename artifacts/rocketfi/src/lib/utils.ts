@@ -129,7 +129,7 @@ export function formatTokenPrice(priceUsd: number): string {
  *  Returns "—" when lamportStr is absent or zero (data not yet available). */
 export function formatMCUsd(lamportStr: string | null | undefined, solPrice: number | null): string {
   if (!lamportStr || lamportStr === "0") return "—";
-  if (!solPrice) return formatMC(lamportStr); // fallback to SOL while price loads
+  if (!solPrice) return "—"; // price loading — show dash rather than misleading ◎ SOL value
   const sol = lamportsToSol(lamportStr);
   if (sol <= 0) return "—";
   return formatUSD(sol * solPrice);

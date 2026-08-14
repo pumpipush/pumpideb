@@ -1,7 +1,11 @@
 /**
- * Fetches SOL/USD price from CoinGecko public API.
- * Module-level cache so every component calling this hook
- * shares one request — no redundant fetches.
+ * Fetches SOL/USD price.
+ *
+ * Primary source: /api/sol-price (our own server, Birdeye-backed, cached 60s).
+ * Fallback: CoinGecko public API.
+ *
+ * Module-level cache so every component calling this hook shares one
+ * request — no redundant fetches across the page.
  */
 
 import { useState, useEffect } from "react";
@@ -13,7 +17,18 @@ let cacheTs = 0;
 let inflight: Promise<number | null> | null = null;
 const listeners = new Set<(p: number) => void>();
 
-async function fetchPrice(): Promise<number | null> {
+async function fetchFromServer(): Promise<number | null> {
+  try {
+    const res = await fetch("/api/sol-price", { signal: AbortSignal.timeout(4_000) });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return typeof json?.price === "number" && json.price > 0 ? json.price : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchFromCoinGecko(): Promise<number | null> {
   try {
     const res = await fetch(
       "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
@@ -31,7 +46,9 @@ async function fetchPrice(): Promise<number | null> {
 async function refresh() {
   if (inflight) return inflight;
   if (Date.now() - cacheTs < CACHE_TTL_MS && cachedPrice !== null) return cachedPrice;
-  inflight = fetchPrice().then(p => {
+  inflight = (async () => {
+    // Try our own API server first (Birdeye-backed, reliable on VPS)
+    const p = (await fetchFromServer()) ?? (await fetchFromCoinGecko());
     inflight = null;
     if (p !== null) {
       cachedPrice = p;
@@ -39,7 +56,7 @@ async function refresh() {
       listeners.forEach(fn => fn(p));
     }
     return p;
-  });
+  })();
   return inflight;
 }
 
@@ -49,12 +66,9 @@ export function useSolPrice(): number | null {
   useEffect(() => {
     let active = true;
 
-    // subscribe to broadcast updates from the module-level cache
     listeners.add(setPrice);
-    // trigger refresh (no-op if cache is fresh); guard against post-unmount set
     refresh().then(p => { if (active && p !== null) setPrice(p); });
 
-    // re-fetch on a 60 s interval
     const id = setInterval(() => {
       cacheTs = 0; // force refresh
       refresh().then(p => { if (active && p !== null) setPrice(p); });
