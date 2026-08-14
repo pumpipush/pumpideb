@@ -1413,7 +1413,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const DEX_PLATFORMS_SET = new Set(["pumpswap", "raydium_launchlab"]);
   const isDexToken = DEX_PLATFORMS_SET.has(token?.platform ?? "");
   const effectiveMcEth = useMemo(() => {
-    const raw = liveToken?.marketCapEth ?? token?.marketCapEth;
+    // DEX tokens: skip liveToken.marketCapEth — the adapter computes it from
+    // the same /1000-decimal formula used for priceEth, which is unreliable for
+    // non-6-decimal tokens (same bug that caused WSOL price to show 1000× low).
+    // Use DB marketCapEth instead (kept fresh by the Birdeye OHLCV async update).
+    const raw = isDexToken
+      ? token?.marketCapEth
+      : (liveToken?.marketCapEth ?? token?.marketCapEth);
+
     if (raw && raw !== "0") return raw;
 
     // For DEX tokens: fallback to marketCapUsd converted to lamports (formatMCUsd ÷1e9 × solPrice)
@@ -1436,10 +1443,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       const mc = Math.round(1e15 * (vSolSol * 1e9) / vTokAtom);
       return mc > 0 ? mc.toString() : null;
     } catch { return null; }
-  }, [liveToken?.marketCapEth, token?.marketCapEth,
+  }, [isDexToken, liveToken?.marketCapEth, token?.marketCapEth,
       liveToken?.virtualEthReserves, token?.virtualEthReserves,
       liveToken?.virtualTokenReserves, token?.virtualTokenReserves,
-      isDexToken, solPrice]);
+      solPrice]);
 
   // Memoized chart JSX — only re-renders when chart config state changes, not on crosshair moves
   const ChartSection = useMemo(() => {

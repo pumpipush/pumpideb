@@ -359,7 +359,13 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
             .set({
               priceEth:     currentSol.toFixed(15),
               priceUsd:     overview.price,
-              marketCapEth: overview.mc ? String(Math.round(overview.mc / solPrice * 1e9)) : undefined,
+              // overview.mc is Birdeye's marketCap field (mapped in birdeye.ts via n("marketCap")??n("mc"))
+              // Store both the lamport-encoded form AND the raw USD value so effectiveMcEth
+              // can use the USD value as a sanity-checked fallback.
+              ...(overview.mc && overview.mc > 0 && solPrice > 0 ? {
+                marketCapEth: String(Math.round(overview.mc / solPrice * 1e9)),
+                marketCapUsd: overview.mc,
+              } : {}),
             })
             .where(eq(tokensTable.address, address))
             .catch(() => { /* non-fatal */ });
