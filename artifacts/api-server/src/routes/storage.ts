@@ -262,6 +262,10 @@ router.get(
     res.status(response.status);
     response.headers.forEach((value, key) => res.setHeader(key, value));
 
+    // Token images are content-addressed (immutable) — cache aggressively in browser + CDN.
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Vary', 'Accept');
+
     if (response.body) {
       const nodeStream = Readable.fromWeb(
         response.body as ReadableStream<Uint8Array>,
