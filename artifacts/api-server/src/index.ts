@@ -1,3 +1,11 @@
+// BigInt serialization support — JSON.stringify does not support BigInt natively.
+// This patch makes BigInt values serialize as strings (e.g. "1000000" instead of
+// crashing with "Do not know how to serialize a BigInt").
+// Must run before any res.json() call, so it lives at the very top of the entry point.
+(BigInt.prototype as unknown as { toJSON: () => string }).toJSON = function () {
+  return this.toString();
+};
+
 import { fileURLToPath } from "url";
 import path from "path";
 import http from "http";
