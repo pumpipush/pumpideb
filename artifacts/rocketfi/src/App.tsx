@@ -27,6 +27,7 @@ const PrivacyPolicy  = lazy(() => import('@/pages/PrivacyPolicy'));
 const DisclaimerPage = lazy(() => import('@/pages/Disclaimer'));
 const TermsOfService = lazy(() => import('@/pages/TermsOfService'));
 const NotFound       = lazy(() => import('@/pages/not-found'));
+const ContactPage    = lazy(() => import('@/pages/Contact'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -97,6 +98,7 @@ function AppShell() {
                 <Route path="/privacy" component={PrivacyPolicy} />
                 <Route path="/disclaimer" component={DisclaimerPage} />
                 <Route path="/terms" component={TermsOfService} />
+                <Route path="/contact" component={ContactPage} />
                 <Route component={NotFound} />
               </Switch>
             </Suspense>

@@ -44,6 +44,10 @@ export function SiteFooter() {
         <Link href="/terms" className="text-[12px] text-muted-foreground/60 hover:text-foreground transition-colors">
           Terms of Service
         </Link>
+        <span className="text-muted-foreground/30 text-[12px]">·</span>
+        <Link href="/contact" className="text-[12px] text-muted-foreground/60 hover:text-foreground transition-colors">
+          Contact
+        </Link>
       </div>
 
       {/* Social icons */}
