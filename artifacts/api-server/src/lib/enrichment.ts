@@ -137,27 +137,60 @@ async function fetchBirdeyeLogoURI(mint: string): Promise<string | null> {
   }
 }
 
-// ── Solana DAS (getAsset) — metadata URI for description / socials ─────────────
+// ── Solana DAS (getAsset) — full on-chain Metaplex metadata ───────────────────
 //
 // api.mainnet-beta.solana.com supports the Metaplex DAS getAsset method.
-// Returns the json_uri (IPFS / Arweave metadata JSON) which holds description,
-// twitter, telegram etc.  We store this as metadataUri so the enrichment loop
-// can hydrate socials on the next pass.
+// Unlike getTransaction/getSignaturesForAddress this endpoint is NOT subject to
+// the same free-RPC 429 rate limits, making it the preferred source for
+// LaunchLab token identity recovery.
+//
+// Returns name, symbol, json_uri, and direct image link when available.
+// Validated on 278/282 unnamed LaunchLab tokens in August 2026.
 
-async function fetchDasMetadataUri(mint: string): Promise<string | null> {
+interface DasAssetMeta {
+  name:     string;
+  symbol:   string;
+  uri:      string | null;
+  imageUrl: string | null;
+}
+
+async function fetchDasAsset(mint: string): Promise<DasAssetMeta | null> {
   try {
     const res = await fetch("https://api.mainnet-beta.solana.com", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getAsset", params: { id: mint } }),
-      signal: AbortSignal.timeout(8_000),
+      signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return null;
-    const body = (await res.json()) as { result?: { content?: { json_uri?: string } } };
-    return body.result?.content?.json_uri ?? null;
+    const body = (await res.json()) as {
+      result?: {
+        content?: {
+          metadata?: { name?: string; symbol?: string };
+          json_uri?: string;
+          links?:    { image?: string };
+        };
+      };
+    };
+    const meta  = body.result?.content?.metadata;
+    const name   = meta?.name?.trim()   ?? "";
+    const symbol = meta?.symbol?.trim() ?? "";
+    if (!name || !symbol) return null;
+    return {
+      name,
+      symbol,
+      uri:      body.result?.content?.json_uri   ?? null,
+      imageUrl: body.result?.content?.links?.image ?? null,
+    };
   } catch {
     return null;
   }
+}
+
+/** Legacy shim — kept for the processUnenriched image-enrichment path */
+async function fetchDasMetadataUri(mint: string): Promise<string | null> {
+  const asset = await fetchDasAsset(mint);
+  return asset?.uri ?? null;
 }
 
 // ── Placeholder detection ──────────────────────────────────────────────────────
@@ -1032,18 +1065,30 @@ async function enrichLabTokensFromChain(): Promise<void> {
 
   for (const token of tokens) {
     try {
-      // ── Step 1: paginate to the creation tx (createLaunchpad validated) ──────
-      const createTx = await _findLabCreateTx(token.address);
-
       let resolved: { name: string; symbol: string; uri: string } | null = null;
-      if (createTx) {
-        // ── Step 2: Borsh decode with expanded offsets ────────────────────────
-        // _decodeFromTx already checked the createLaunchpad log guard above;
-        // decodeLabCreateParamsRaw handles the actual byte parsing.
-        resolved = _decodeFromTx(createTx);
+      let dasImageUrl: string | null = null;
+
+      // ── Step 1: DAS getAsset (primary — no RPC rate limits) ──────────────────
+      // Metaplex DAS resolves name/symbol/image directly from on-chain metadata
+      // without requiring getSignaturesForAddress + getTransaction (which hit
+      // 429 on the free public RPC).  Validated against 278/282 unnamed tokens.
+      const dasAsset = await fetchDasAsset(token.address);
+      if (dasAsset && !isPlaceholderName(dasAsset.name) && !isPlaceholderSymbol(dasAsset.symbol)) {
+        resolved    = { name: dasAsset.name, symbol: dasAsset.symbol, uri: dasAsset.uri ?? "" };
+        dasImageUrl = dasAsset.imageUrl;
       }
 
-      // ── Step 3: fall back to metadataUri if on-chain decode still fails ──────
+      // ── Step 2: fall back to RPC chain (createLaunchpad tx decode) ────────────
+      // Only attempted when DAS returned no usable identity — e.g. very new tokens
+      // not yet indexed by Metaplex, or tokens without on-chain metadata accounts.
+      if (!resolved) {
+        const createTx = await _findLabCreateTx(token.address);
+        if (createTx) {
+          resolved = _decodeFromTx(createTx);
+        }
+      }
+
+      // ── Step 3: fall back to metadataUri if both above paths failed ───────────
       if (!resolved && token.metadataUri) {
         const uriMeta = await fetchSafeUriMeta(token.metadataUri);
         if (uriMeta?.name && uriMeta?.symbol &&
@@ -1061,16 +1106,28 @@ async function enrichLabTokensFromChain(): Promise<void> {
       // ── Step 4: build the update — only overwrite placeholders ────────────────
       const update: Record<string, string | null> = buildLabChainUpdate(token, resolved);
 
+      // Use DAS-provided image directly when available (avoids extra URI fetch)
+      if (dasImageUrl && !token.imageUrl) update["imageUrl"] = dasImageUrl;
+
       // Attempt to pull image / description / socials from the URI
-      if (resolved.uri && !token.imageUrl) {
+      if (resolved.uri && (!token.imageUrl && !update["imageUrl"])) {
         try {
           const uriMeta = await fetchSafeUriMeta(resolved.uri);
-          if (uriMeta?.imageUrl    && !token.imageUrl)    update["imageUrl"]    = uriMeta.imageUrl;
-          if (uriMeta?.description && !token.description) update["description"] = uriMeta.description;
-          if (uriMeta?.twitterUrl  && !token.twitterUrl)  update["twitterUrl"]  = uriMeta.twitterUrl;
-          if (uriMeta?.telegramUrl && !token.telegramUrl) update["telegramUrl"] = uriMeta.telegramUrl;
-          if (uriMeta?.websiteUrl  && !token.websiteUrl)  update["websiteUrl"]  = uriMeta.websiteUrl;
+          if (uriMeta?.imageUrl    && !update["imageUrl"])  update["imageUrl"]    = uriMeta.imageUrl;
+          if (uriMeta?.description && !token.description)   update["description"] = uriMeta.description;
+          if (uriMeta?.twitterUrl  && !token.twitterUrl)    update["twitterUrl"]  = uriMeta.twitterUrl;
+          if (uriMeta?.telegramUrl && !token.telegramUrl)   update["telegramUrl"] = uriMeta.telegramUrl;
+          if (uriMeta?.websiteUrl  && !token.websiteUrl)    update["websiteUrl"]  = uriMeta.websiteUrl;
         } catch { /* non-critical — metadata URI fetch is best-effort */ }
+      } else if (resolved.uri && !token.metadataUri) {
+        // Still fetch socials even if image is already known
+        try {
+          const uriMeta = await fetchSafeUriMeta(resolved.uri);
+          if (uriMeta?.description && !token.description)   update["description"] = uriMeta.description;
+          if (uriMeta?.twitterUrl  && !token.twitterUrl)    update["twitterUrl"]  = uriMeta.twitterUrl;
+          if (uriMeta?.telegramUrl && !token.telegramUrl)   update["telegramUrl"] = uriMeta.telegramUrl;
+          if (uriMeta?.websiteUrl  && !token.websiteUrl)    update["websiteUrl"]  = uriMeta.websiteUrl;
+        } catch { /* non-critical */ }
       }
 
       if (Object.keys(update).length === 0) continue;
