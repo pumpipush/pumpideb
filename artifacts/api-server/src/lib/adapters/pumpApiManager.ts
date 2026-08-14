@@ -87,16 +87,6 @@ class PumpStreamManager {
 
   private _everConnected   = false;
 
-  /**
-   * Set to true when the data-staleness watchdog fires on the active pumpapi
-   * connection. Cleared once the chain fallback is actually running (or when
-   * pumpapi delivers real data again).  Used to prevent _onConnected from
-   * cancelling a fallback that was scheduled due to a stale connection — which
-   * would create an infinite loop where pumpapi always reconnects before the
-   * fallback timer fires.
-   */
-  private _pendingStaleFallback = false;
-
   /** Wall-clock time when the chain fallback was last activated (for duration reporting). */
   private _fallbackActivatedAt: number | null = null;
 
@@ -105,6 +95,7 @@ class PumpStreamManager {
       onConnected:    () => this._onConnected(),
       onDisconnected: () => this._onDisconnected(),
       onDataStale:    () => this._onDataStale(),
+      onRealData:     () => this._onRealData(),
     });
   }
 
@@ -121,9 +112,7 @@ class PumpStreamManager {
     // Data-staleness watchdog fired — pumpapi.io is connected but delivering no
     // trade data. Schedule chain fallback immediately (2 s) so it activates
     // BEFORE pumpapi.io reconnects (~5 s). Without this, the normal 30 s
-    // fallback is always cancelled by the fast reconnect, leaving the app with
-    // no live data indefinitely.
-    this._pendingStaleFallback = true;
+    // fallback timer is always cancelled by pumpapi's fast reconnect.
     managerLog.warn(
       { delayMs: STALE_FALLBACK_DELAY_MS },
       "pumpApiManager: data stale — scheduling immediate chain fallback"
@@ -133,56 +122,50 @@ class PumpStreamManager {
 
   private _onConnected(): void {
     this._everConnected = true;
-
-    // If a stale-triggered fallback is pending (timer scheduled but not yet
-    // fired), do NOT cancel it. pumpapi.io has reconnected but we don't yet
-    // know if it will deliver real data. The fallback will start in ~2 s; if
-    // pumpapi.io is actually healthy this time, _onConnected will be called
-    // again with a running _chainFallback and will stop it normally.
-    if (this._pendingStaleFallback) {
-      managerLog.info(
-        "pumpApiManager: pumpapi.io reconnected after stale disconnect — keeping fallback scheduled"
-      );
-      // Do not cancel the fallback timer. Let it fire and start the chain
-      // adapters. They will stop once pumpapi.io proves it is delivering data
-      // (next _onConnected call after the fallback is running will stop them).
-      return;
-    }
-
-    managerLog.info("pumpApiManager: pumpapi.io connected — cancelling chain fallback");
-
-    // Cancel any pending fallback timer (normal reconnect after network blip).
+    // Cancel any pending fallback TIMER so we don't start the chain adapters
+    // if pumpapi.io connects quickly (cold start or brief network blip).
+    // However, if chain adapters are already RUNNING, we do NOT stop them here —
+    // reconnecting is not proof that pumpapi.io is healthy; it can reconnect and
+    // immediately go stale again. The adapters stop only in _onRealData() once
+    // pumpapi.io proves it is delivering real trade data.
     if (this._fallbackTimer !== null) {
       clearTimeout(this._fallbackTimer);
       this._fallbackTimer = null;
-    }
-
-    // Stop chain fallback if it started during a downtime window.
-    if (this._chainFallback !== null) {
-      const durationSec = this._fallbackActivatedAt !== null
-        ? Math.round((Date.now() - this._fallbackActivatedAt) / 1_000)
-        : null;
-      this._fallbackActivatedAt = null;
-
-      // pumpapi.io is back and this _onConnected was not skipped (i.e. the
-      // previous stale fallback has already started). Clear the stale flag now.
-      this._pendingStaleFallback = false;
-
+      managerLog.info("pumpApiManager: pumpapi.io connected — cancelled pending fallback timer");
+    } else if (this._chainFallback !== null) {
       managerLog.info(
-        { durationSec },
-        "pumpApiManager: stopping chain fallback adapters — pumpapi.io recovered"
+        "pumpApiManager: pumpapi.io reconnected — chain fallback still running until real data arrives"
       );
-      this._chainFallback.pumpFun.stop();
-      this._chainFallback.pumpSwap.stop();
-      this._chainFallback.launchLab.stop();
-      this._chainFallback = null;
-
-      const durationStr = durationSec !== null ? ` after ${durationSec}s` : "";
-      void slackAlert(
-        `✅ *pumpapi.io recovered${durationStr}* — chain-RPC fallback stopped.\n` +
-        `Alchemy CU spend is back to baseline.`
-      );
+    } else {
+      managerLog.info("pumpApiManager: pumpapi.io connected");
     }
+  }
+
+  private _onRealData(): void {
+    // pumpapi.io just delivered the first real trade/create event on this
+    // connection — it is genuinely healthy. Stop the chain-RPC fallback if
+    // it was running as a safety net.
+    if (this._chainFallback === null) return;
+
+    const durationSec = this._fallbackActivatedAt !== null
+      ? Math.round((Date.now() - this._fallbackActivatedAt) / 1_000)
+      : null;
+    this._fallbackActivatedAt = null;
+
+    managerLog.info(
+      { durationSec },
+      "pumpApiManager: pumpapi.io delivering real data — stopping chain fallback adapters"
+    );
+    this._chainFallback.pumpFun.stop();
+    this._chainFallback.pumpSwap.stop();
+    this._chainFallback.launchLab.stop();
+    this._chainFallback = null;
+
+    const durationStr = durationSec !== null ? ` after ${durationSec}s` : "";
+    void slackAlert(
+      `✅ *pumpapi.io recovered${durationStr}* — chain-RPC fallback stopped.\n` +
+      `Alchemy CU spend is back to baseline.`
+    );
   }
 
   private _onDisconnected(): void {
@@ -201,8 +184,6 @@ class PumpStreamManager {
     this._fallbackTimer = setTimeout(() => {
       this._fallbackTimer = null;
       if (this._chainFallback !== null) return; // already running
-      // Fallback is now activating — the stale-pending flag moves to "running".
-      this._pendingStaleFallback = false;
       this._fallbackActivatedAt = Date.now();
       managerLog.warn("pumpApiManager: activating chain RPC fallback adapters");
       const pumpFun   = new PumpFunChainIndexer();

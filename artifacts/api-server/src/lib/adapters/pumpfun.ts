@@ -985,6 +985,17 @@ export class PumpApiAdapter {
    * has already reconnected, causing the fallback to be cancelled prematurely.
    */
   private readonly _onDataStale?:    () => void;
+  /**
+   * Called the FIRST time pumpapi.io delivers a real trade/create event on the
+   * current connection (fires at most once per connect/reconnect cycle).
+   * The manager uses this as proof that pumpapi.io is genuinely healthy and can
+   * safely stop the chain-RPC fallback adapters.  Reconnecting alone is NOT
+   * sufficient — pumpapi.io can reconnect but immediately go stale again.
+   */
+  private readonly _onRealData?:     () => void;
+
+  /** True once _onRealData has been called for the current WS connection. Reset on each reconnect. */
+  private _realDataFired = false;
 
   /**
    * Raw-silence watchdog window — defaults to PUMPAPI_WATCHDOG_MS.
@@ -1018,6 +1029,15 @@ export class PumpApiAdapter {
      */
     onDataStale?:    () => void;
     /**
+     * Called once per connection the first time pumpapi.io delivers a real
+     * trade or create event. The manager uses this as proof that pumpapi.io is
+     * genuinely healthy so it can stop the chain-RPC fallback adapters.
+     * Reconnecting alone is not enough — pumpapi.io can reconnect but stay stale.
+     *
+     * TEST-INJECTION POINT — do not remove.
+     */
+    onRealData?:     () => void;
+    /**
      * Override raw-silence watchdog window (ms). Default: PUMPAPI_WATCHDOG_MS (60 000).
      *
      * TEST-INJECTION POINT — do not remove.
@@ -1049,6 +1069,7 @@ export class PumpApiAdapter {
     this._onConnected    = opts?.onConnected;
     this._onDisconnected = opts?.onDisconnected;
     this._onDataStale    = opts?.onDataStale;
+    this._onRealData     = opts?.onRealData;
     this._watchdogMs     = opts?.watchdogMs  ?? PUMPAPI_WATCHDOG_MS;
     this._dataStaleMs    = opts?.dataStaleMs ?? PUMPAPI_DATA_STALE_MS;
     this._wsFactory      = opts?.wsFactory   ?? ((url) => new WebSocket(url));
@@ -1167,6 +1188,7 @@ export class PumpApiAdapter {
 
       ws.addEventListener("open", () => {
         this._delay = 5_000;
+        this._realDataFired = false; // reset per-connection; fires once on first real event
         pumpApiLog.info({ wss: PUMPAPI_WSS }, "pumpapi: connected");
         this._onConnected?.();
 
@@ -1218,6 +1240,12 @@ export class PumpApiAdapter {
           (pool === "raydium-launchpad" && (action === "create" || action === "buy" || action === "sell"));
         if (isRealDataAction) {
           this._armDataStaleWatchdog(ws);
+          // Notify the manager the first time real data flows — proof pumpapi.io
+          // is genuinely healthy, not just reconnected-but-stale.
+          if (!this._realDataFired) {
+            this._realDataFired = true;
+            this._onRealData?.();
+          }
         }
 
         // Dedup by (signature + action) — allows the same tx to emit both a

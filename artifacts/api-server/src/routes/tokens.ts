@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, ilike, and, not, sql } from "drizzle-orm";
+import { eq, desc, ilike, and, not, sql, gte } from "drizzle-orm";
 import { db, pool, tokensTable } from "@workspace/db";
 import {
   ListTokensQueryParams,
@@ -17,6 +17,7 @@ import {
 import { searchJupiterTokens } from "../lib/jupiter-tokens";
 import { verifyWalletSignature, isValidIndexerSecret, parseWalletAuthFields } from "../lib/wallet-auth";
 import { asyncWrap } from "../lib/asyncHandler.js";
+import { SERVER_START_TIME } from "../lib/serverMeta.js";
 
 const router: IRouter = Router();
 
@@ -296,6 +297,13 @@ router.get("/tokens", asyncWrap(async (req, res) => {
       conditions.push(eq(tokensTable.platform, platform));
     }
   }
+  // For the "newest" sort, only show tokens that appeared AFTER this server
+  // session started.  If the server boots at 11:00, the New tab shows coins
+  // from 11:00 onwards — not historical data already in the database.
+  if (sort === "newest") {
+    conditions.push(gte(tokensTable.createdAt, SERVER_START_TIME));
+  }
+
   if (conditions.length > 0) {
     query = query.where(and(...conditions));
   }
