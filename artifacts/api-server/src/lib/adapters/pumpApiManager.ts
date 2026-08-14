@@ -46,6 +46,22 @@ const COLD_START_DELAY_MS = 15_000;
  */
 const STALE_FALLBACK_DELAY_MS = 2_000;
 
+/**
+ * Minimum time (ms) pumpapi.io must deliver real data continuously before the
+ * chain fallback is considered safe to stop.
+ *
+ * Without this guard, a partial pumpapi.io outage where it delivers one trade
+ * then immediately goes stale again causes a "stale loop":
+ *   stale (30s) → fallback activates → 1 real event → fallback stops →
+ *   stale (30s) → fallback activates → ... repeat indefinitely.
+ * Each loop burns 30+ seconds of silence visible to users.
+ *
+ * With this guard, the fallback stays running for at least 10 s after the first
+ * real event. If pumpapi.io goes stale again within that window, the confirmation
+ * timer is cancelled and the fallback continues uninterrupted.
+ */
+const REAL_DATA_CONFIRM_MS = 10_000;
+
 // ── Slack alert helper ─────────────────────────────────────────────────────────
 
 /**
@@ -84,7 +100,15 @@ class PumpStreamManager {
     launchLab: RaydiumLaunchLabIndexer;
   } | null = null;
 
-  private _fallbackTimer:    ReturnType<typeof setTimeout> | null = null;
+  private _fallbackTimer:      ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Confirmation timer: set when pumpapi.io delivers the first real event after a
+   * fallback period. The chain fallback stops only after REAL_DATA_CONFIRM_MS of
+   * continuous real data — not immediately on the first event.  Cancelled if
+   * pumpapi.io goes stale again before the window expires.
+   */
+  private _confirmTimer:       ReturnType<typeof setTimeout> | null = null;
 
   private _everConnected   = false;
 
@@ -114,6 +138,14 @@ class PumpStreamManager {
     // trade data. Schedule chain fallback immediately (2 s) so it activates
     // BEFORE pumpapi.io reconnects (~5 s). Without this, the normal 30 s
     // fallback timer is always cancelled by pumpapi's fast reconnect.
+    //
+    // Also cancel any pending confirmation timer — if pumpapi.io delivered one
+    // event and immediately went stale again, we must NOT stop the chain fallback.
+    if (this._confirmTimer !== null) {
+      clearTimeout(this._confirmTimer);
+      this._confirmTimer = null;
+      managerLog.warn("pumpApiManager: data stale again before confirm window — keeping chain fallback running");
+    }
     managerLog.warn(
       { delayMs: STALE_FALLBACK_DELAY_MS },
       "pumpApiManager: data stale — scheduling immediate chain fallback"
@@ -123,6 +155,12 @@ class PumpStreamManager {
 
   private _onConnected(): void {
     this._everConnected = true;
+    // Cancel any pending confirmation timer — this is a new connection, so the
+    // previous connection's "first real event" is no longer proof of health.
+    if (this._confirmTimer !== null) {
+      clearTimeout(this._confirmTimer);
+      this._confirmTimer = null;
+    }
     // Cancel any pending fallback TIMER so we don't start the chain adapters
     // if pumpapi.io connects quickly (cold start or brief network blip).
     // However, if chain adapters are already RUNNING, we do NOT stop them here —
@@ -144,29 +182,48 @@ class PumpStreamManager {
 
   private _onRealData(): void {
     // pumpapi.io just delivered the first real trade/create event on this
-    // connection — it is genuinely healthy. Stop the chain-RPC fallback if
-    // it was running as a safety net.
+    // connection. Do NOT stop the chain fallback immediately — pumpapi.io can
+    // deliver one event then go stale again (partial outage), which would cause
+    // a "stale loop": fallback stops → stale → fallback activates → one event →
+    // fallback stops → repeat, burning 30+ s of silence per cycle.
+    //
+    // Instead, start a REAL_DATA_CONFIRM_MS confirmation window. The chain
+    // fallback only stops after pumpapi.io has been delivering data continuously
+    // for that window. If _onDataStale fires before the window expires, the
+    // confirmation timer is cancelled and the fallback keeps running.
     if (this._chainFallback === null) return;
-
-    const durationSec = this._fallbackActivatedAt !== null
-      ? Math.round((Date.now() - this._fallbackActivatedAt) / 1_000)
-      : null;
-    this._fallbackActivatedAt = null;
+    if (this._confirmTimer !== null) return; // confirmation already counting down
 
     managerLog.info(
-      { durationSec },
-      "pumpApiManager: pumpapi.io delivering real data — stopping chain fallback adapters"
+      { confirmMs: REAL_DATA_CONFIRM_MS },
+      "pumpApiManager: pumpapi.io real data received — starting confirmation window before stopping fallback"
     );
-    this._chainFallback.pumpFun.stop();
-    this._chainFallback.pumpSwap.stop();
-    this._chainFallback.launchLab.stop();
-    this._chainFallback = null;
 
-    const durationStr = durationSec !== null ? ` after ${durationSec}s` : "";
-    void slackAlert(
-      `✅ *pumpapi.io recovered${durationStr}* — chain-RPC fallback stopped.\n` +
-      `Alchemy CU spend is back to baseline.`
-    );
+    const fallbackActivatedAt = this._fallbackActivatedAt;
+    this._confirmTimer = setTimeout(() => {
+      this._confirmTimer = null;
+      if (this._chainFallback === null) return; // already stopped
+
+      const durationSec = fallbackActivatedAt !== null
+        ? Math.round((Date.now() - fallbackActivatedAt) / 1_000)
+        : null;
+      this._fallbackActivatedAt = null;
+
+      managerLog.info(
+        { durationSec },
+        "pumpApiManager: pumpapi.io confirmed healthy — stopping chain fallback adapters"
+      );
+      this._chainFallback.pumpFun.stop();
+      this._chainFallback.pumpSwap.stop();
+      this._chainFallback.launchLab.stop();
+      this._chainFallback = null;
+
+      const durationStr = durationSec !== null ? ` after ${durationSec}s` : "";
+      void slackAlert(
+        `✅ *pumpapi.io recovered${durationStr}* — chain-RPC fallback stopped.\n` +
+        `Alchemy CU spend is back to baseline.`
+      );
+    }, REAL_DATA_CONFIRM_MS);
   }
 
   private _onDisconnected(): void {
