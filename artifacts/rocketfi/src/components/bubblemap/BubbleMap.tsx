@@ -523,7 +523,12 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
 
   // ── Initialize / re-layout when tokens change ──────────────────────────────
   useEffect(() => {
-    if (!tokens || tokens.length === 0) return;
+    if (!tokens || tokens.length === 0) {
+      bubblesRef.current = [];
+      hoverIdxRef.current = -1;
+      setTooltip({ visible: false, x: 0, y: 0, token: null });
+      return;
+    }
 
     // Use container CSS dimensions (available before ResizeObserver fires)
     const W = containerRef.current?.offsetWidth ?? 600;
@@ -696,6 +701,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
       // and hover radius stay live.
       for (let i = 0; i < bubbles.length; i++) {
         const b = bubbles[i];
+        if (!b) continue; // guard: bubblesRef may be replaced mid-frame by the 5s poll useEffect
         b.colorR += (b.targetR - b.colorR) * 0.04;
         b.colorG += (b.targetG - b.colorG) * 0.04;
         b.colorB += (b.targetB - b.colorB) * 0.04;
@@ -711,7 +717,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
       // Pass 1: text labels (rank ≥ TOP_CIRCLES), back to front within that group
       for (let i = bubbles.length - 1; i >= TOP_CIRCLES; i--) {
         const b = bubbles[i];
-        if (b === hoveredBubble) continue;
+        if (!b || b === hoveredBubble) continue;
         b.dispR += (b.r - b.dispR) * 0.018; // slow grow matches XY spread speed
         drawBubble(ctx, b, false, pctToColors(b.pctChange), dpr, i);
       }
@@ -719,7 +725,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
       // Pass 2: top circles (rank 0–4), smallest-first so rank 0 is on top
       for (let i = TOP_CIRCLES - 1; i >= 0; i--) {
         const b = bubbles[i];
-        if (b === hoveredBubble) continue;
+        if (!b || b === hoveredBubble) continue;
         b.dispR += (b.r - b.dispR) * 0.018;
         drawBubble(ctx, b, false, pctToColors(b.pctChange), dpr, i);
       }

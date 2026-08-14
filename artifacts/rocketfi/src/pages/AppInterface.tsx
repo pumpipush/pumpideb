@@ -2012,7 +2012,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         </div>
 
         {/* Description */}
-        {token.description && (() => {
+        {typeof token.description === "string" && token.description.length > 0 && (() => {
           const LIMIT = 120;
           const isLong = token.description.length > LIMIT;
           return (

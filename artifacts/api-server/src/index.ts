@@ -1,12 +1,13 @@
 import { fileURLToPath } from "url";
 import path from "path";
+import http from "http";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startAdapters } from "./lib/adapters/index";
 import { startEnrichmentLoop } from "./lib/enrichment";
 import { startJupiterTokenSync } from "./lib/jupiter-tokens";
 import { startLaunchLabBackfill } from "./lib/launchlabBackfill";
-import { runMigrations } from "@workspace/db";
+import { runMigrations, pool } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
 
@@ -20,6 +21,15 @@ const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
+}
+
+// Warn clearly if NODE_ENV is not production — several security defaults
+// (CORS, JWT secret fallback, OTP code logging) depend on this being set.
+if (process.env["NODE_ENV"] !== "production") {
+  logger.warn(
+    { NODE_ENV: process.env["NODE_ENV"] ?? "(unset)" },
+    "NODE_ENV is not 'production' — CORS and JWT defaults are permissive; set NODE_ENV=production for VPS deployment",
+  );
 }
 
 async function start(): Promise<void> {
@@ -37,8 +47,10 @@ async function start(): Promise<void> {
   await runMigrations(migrationsFolder);
   logger.info("db: migrations complete");
 
+  const server = http.createServer(app);
+
   await new Promise<void>((resolve, reject) => {
-    app.listen(port, (err?: Error) => {
+    server.listen(port, (err?: Error) => {
       if (err) {
         logger.error({ err }, "Error listening on port");
         reject(err);
@@ -65,6 +77,32 @@ async function start(): Promise<void> {
       resolve();
     });
   });
+
+  // ── Graceful shutdown (SIGTERM / SIGINT) ─────────────────────────────────────
+  // On VPS: process manager (systemd/PM2) sends SIGTERM; Ctrl+C sends SIGINT.
+  // Stop accepting new connections, wait for in-flight requests, then close DB.
+  const shutdown = (signal: string) => {
+    logger.info({ signal }, "Received shutdown signal — draining server");
+    server.close(() => {
+      logger.info("HTTP server closed — ending DB pool");
+      pool.end().then(() => {
+        logger.info("DB pool closed — process exit");
+        process.exit(0);
+      }).catch((err) => {
+        logger.error({ err }, "Error closing DB pool");
+        process.exit(1);
+      });
+    });
+
+    // Force-kill if graceful drain takes too long
+    setTimeout(() => {
+      logger.error("Graceful shutdown timed out — forcing exit");
+      process.exit(1);
+    }, 10_000).unref();
+  };
+
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT",  () => shutdown("SIGINT"));
 }
 
 start().catch((err) => {

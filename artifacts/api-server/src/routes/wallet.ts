@@ -144,7 +144,8 @@ router.get("/wallet/:address/portfolio", asyncWrap(async (req, res) => {
 // the result is always wallet-specific, regardless of global trade volume.
 router.get("/wallet/:address/activity", asyncWrap(async (req, res) => {
   const address = String(req.params["address"] ?? "");
-  const limit = Math.min(Number(req.query["limit"] ?? 100), 200);
+  const rawLimit = parseInt(String(req.query["limit"] ?? "100"), 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 100;
 
   if (!address || address.length < 32) {
     res.status(400).json({ error: "Invalid address" });
