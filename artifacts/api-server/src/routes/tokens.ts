@@ -272,6 +272,115 @@ router.get("/tokens", asyncWrap(async (req, res) => {
     return;
   }
 
+  // ── Volume: tokens ranked by 24-hour SOL trading volume ─────────────────────
+  // Uses a raw SQL JOIN against the trades table so we get a live 24h window
+  // instead of the all-time cumulative volume_eth column.
+  if (sort === "volume") {
+    const params: unknown[] = [];
+    const where: string[] = [`t.platform NOT IN ('raydium', 'orca', 'meteora')`];
+    if (platform !== "raydium_launchlab") {
+      where.push(`t.symbol != '???'`);
+    }
+    if (search) {
+      params.push(`%${search}%`);
+      where.push(`(t.name ILIKE $${params.length} OR t.symbol ILIKE $${params.length})`);
+    }
+    if (graduated !== undefined) {
+      params.push(graduated);
+      where.push(`t.graduated = $${params.length}`);
+    }
+    if (platform) {
+      if (platform === "raydium_launchlab") {
+        where.push(`t.platform = 'raydium_launchlab'`);
+      } else if (platform === "pumpswap") {
+        where.push(`t.platform = 'pumpswap'`);
+      } else {
+        params.push(platform);
+        where.push(`t.platform = $${params.length}`);
+      }
+    }
+    // Only tokens with at least one trade in the 24h window
+    where.push(`COALESCE(r24h.vol_sol, 0) > 0`);
+    const whereSql = `WHERE ${where.join(" AND ")}`;
+    const fetchLimit = Number(limit) * 4;
+    params.push(fetchLimit);
+    const limitIdx = params.length;
+    params.push(Number(offset));
+    const offsetIdx = params.length;
+
+    const { rows } = await pool.query<Record<string, unknown>>(`
+      SELECT t.*,
+             COALESCE(r24h.vol_sol, 0)    AS vol_sol_24h,
+             COALESCE(r24h.trades,   0)   AS trades_24h,
+             COALESCE(r24h.buys,     0)   AS buys_24h,
+             COALESCE(r24h.sellers,  0)   AS sellers_24h
+      FROM   tokens t
+      LEFT JOIN (
+        SELECT token_address,
+               SUM(CAST(NULLIF(eth_amount, '') AS NUMERIC)) AS vol_sol,
+               COUNT(*)                                      AS trades,
+               COUNT(CASE WHEN is_buy  THEN 1 END)          AS buys,
+               COUNT(DISTINCT trader_address)                AS sellers
+        FROM   trades
+        WHERE  timestamp > NOW() - INTERVAL '24 hours'
+        GROUP  BY token_address
+      ) r24h ON r24h.token_address = t.address
+      ${whereSql}
+      ORDER  BY r24h.vol_sol DESC NULLS LAST
+      LIMIT  $${limitIdx}
+      OFFSET $${offsetIdx}
+    `, params);
+
+    const seen = new Set<string>();
+    const deduped = rows.filter(r => {
+      const sym = String(r["symbol"] ?? "");
+      const key = sym === "???" ? String(r["address"]) : sym.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, Number(limit));
+
+    // Map raw snake_case rows → camelCase shape expected by formatToken
+    const mapped = deduped.map(r => ({
+      id:                   r["id"] as string,
+      address:              r["address"] as string,
+      name:                 r["name"] as string,
+      symbol:               r["symbol"] as string,
+      description:          r["description"] as string | null,
+      imageUrl:             r["image_url"] as string | null,
+      creatorAddress:       r["creator_address"] as string,
+      totalSupply:          r["total_supply"] as string,
+      virtualTokenReserves: r["virtual_token_reserves"] as string,
+      virtualEthReserves:   r["virtual_eth_reserves"] as string,
+      realTokenReserves:    r["real_token_reserves"] as string,
+      realEthReserves:      r["real_eth_reserves"] as string,
+      marketCapEth:         r["market_cap_eth"] as string | null,
+      priceEth:             r["price_eth"] as string | null,
+      volumeEth:            r["volume_eth"] as string | null,
+      twitterUrl:           r["twitter_url"] as string | null,
+      telegramUrl:          r["telegram_url"] as string | null,
+      websiteUrl:           r["website_url"] as string | null,
+      platform:             r["platform"] as string,
+      chain:                r["chain"] as string,
+      graduated:            r["graduated"] as boolean,
+      graduatedAt:          r["graduated_at"] as string | null,
+      tradeCount:           Number(r["trade_count"] ?? 0),
+      holderCount:          Number(r["holder_count"] ?? 0),
+      createdAt:            r["created_at"] as string,
+      updatedAt:            r["updated_at"] as string,
+      trades1h:             0,
+    }));
+
+    const pctChanges = await fetch24hPctChanges(mapped.map(r => r.address));
+    const payload = ListTokensResponse.parse(mapped.map(r => formatToken(r, pctChanges.get(r.address))));
+    _cacheSet(cacheKey, payload);
+    res.setHeader("Cache-Control", `public, max-age=${Math.floor(TOKEN_LIST_TTL / 1_000)}, stale-while-revalidate=${Math.floor(TOKEN_LIST_TTL / 1_000)}`);
+    res.setHeader("X-Cache", "MISS");
+    res.json(payload);
+    return;
+  }
+
+  // ── All other sorts: marketcap / newest ──────────────────────────────────────
   let query = db.select().from(tokensTable).$dynamic();
 
   const conditions = [];
@@ -315,9 +424,6 @@ router.get("/tokens", asyncWrap(async (req, res) => {
   }
 
   switch (sort) {
-    case "volume":
-      query = query.orderBy(desc(sql<number>`CAST(COALESCE(NULLIF(${tokensTable.volumeEth},''), '0') AS NUMERIC)`));
-      break;
     case "marketcap":
       query = query.orderBy(desc(sql<number>`CAST(COALESCE(NULLIF(${tokensTable.marketCapEth},''), '0') AS NUMERIC)`));
       break;
