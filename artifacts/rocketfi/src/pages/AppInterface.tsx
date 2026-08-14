@@ -2124,22 +2124,24 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             )}
           </div>}</div>
 
-          {/* ── MOBILE: Row 3 — Vol 24h (left) + 5m / 1h / 6h / 24h % (right) ── */}
-          <div className="flex items-center justify-between mt-2 md:hidden">
-            <div className="flex flex-col justify-center">
-              <span className="text-[12px] font-medium mb-0.5" style={{ color: "#94a3b8" }}>Vol 24h</span>
-              <span className="font-mono font-bold text-[18px] tabular-nums leading-tight" style={{ color: "#e2e8f0" }}>
-                {solPrice && priceStats.vol24h > 0 ? formatUSD(priceStats.vol24h * solPrice) : "—"}
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
+          {/* ── MOBILE: Row 3 — Vol 24h + 5m / 1h / 6h / 24h % (scrollable) ── */}
+          <div className="overflow-x-auto scrollbar-none mt-2 md:hidden">
+            <div className="flex items-center gap-4 min-w-max">
+              {/* Vol 24h */}
+              <div className="shrink-0 flex flex-col justify-center pr-3" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
+                <span className="text-[12px] font-medium mb-0.5" style={{ color: "#94a3b8" }}>Vol 24h</span>
+                <span className="font-mono font-bold text-[18px] tabular-nums leading-tight" style={{ color: "#e2e8f0" }}>
+                  {solPrice && priceStats.vol24h > 0 ? formatUSD(priceStats.vol24h * solPrice) : "—"}
+                </span>
+              </div>
+              {/* % change stats */}
               {([
                 { label: "5m",  data: priceStats.p5m },
                 { label: "1h",  data: priceStats.p1h },
                 { label: "6h",  data: priceStats.p6h },
                 { label: "24h", data: priceStats.p24h },
               ] as { label: string; data: { val: string; up: boolean } | null }[]).map(({ label, data }) => (
-                <div key={label} className="flex flex-col items-center">
+                <div key={label} className="shrink-0 flex flex-col items-center">
                   <span className="text-[12px] font-medium mb-0.5" style={{ color: label === "24h" ? "#94a3b8" : "#64748b" }}>{label}</span>
                   <span
                     className="font-mono font-bold text-[14px] tabular-nums leading-tight"
