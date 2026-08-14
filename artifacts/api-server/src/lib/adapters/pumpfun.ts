@@ -502,9 +502,21 @@ export class PumpFunChainIndexer extends SolanaRpcIndexer {
     // the last valid price stored in the token row.
     // price_eth = SOL per token = (lamports / base_unit) / 1000
     // (1e9 lamports/SOL ÷ 1e6 base_unit/token = 1e3 factor)
-    const priceEth = tokenAmount !== "0" && solLamports !== "0"
+    const tokBig = BigInt(tokenAmount);
+    const priceEth = tokBig > 0n && solLamports !== "0"
       ? (Number(solLamports) / Number(tokenAmount) / 1000).toFixed(15)
       : null;
+
+    // ── Dust trade guard ──────────────────────────────────────────────────────
+    // Trades with fewer than 1 000 atomic token units (~0.001 display tokens)
+    // produce astronomically wrong prices and pollute trade history / volume
+    // stats.  Skip the INSERT entirely so they have no downstream effects.
+    const MIN_PRICE_ATOMS = 1_000n;
+    if (tokBig < MIN_PRICE_ATOMS) {
+      this.log.debug({ mint, tokenAmount, solLamports },
+        "pump_fun: dust trade skipped (tokenAmount < MIN_PRICE_ATOMS)");
+      return;
+    }
 
     const [trade] = await db.insert(tradesTable).values({
       tokenAddress:  mint,
