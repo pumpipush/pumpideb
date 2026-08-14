@@ -36,6 +36,7 @@ import {
   type DexScreenerPair,
 } from "./dexscreener";
 import { bs58Decode as _bs58Decode, decodeLabCreateParamsRaw } from "./adapters/launchlabDecode";
+import { fetchBirdeyeTokenOverview, getSolPriceUsd } from "./birdeye";
 
 const POLL_INTERVAL_MS       = 30_000;
 const IDENTITY_BATCH_SIZE    = 20;  // max tokens per identity tick
@@ -548,6 +549,8 @@ async function backfillBondingCurves(): Promise<void> {
 
 const GRADUATION_DETECT_INTERVAL_MS  = 5 * 60_000; // every 5 minutes
 const PUMPSWAP_ENRICH_INTERVAL_MS    = 5 * 60_000; // every 5 minutes
+const LL_PRICE_ENRICH_INTERVAL_MS    =     60_000; // every 60 s
+const LL_PRICE_ENRICH_BATCH          = 30;          // tokens per tick (5 CU each → 150 CU/min)
 const GRADUATION_DETECT_BATCH        = 20;          // mints per DexScreener call
 const GRADUATION_DEX_IDS = new Set(["pumpswap", "raydium", "raydium-clmm", "raydium-cp"]);
 
@@ -685,6 +688,108 @@ async function enrichPumpSwapPrices(): Promise<void> {
 
   if (updated > 0) {
     log.info({ updated }, "enrichment: pumpswap prices refreshed from DexScreener");
+  }
+}
+
+// ── LaunchLab Birdeye price enrichment ────────────────────────────────────────
+//
+// Fetches authoritative USD price + market cap from Birdeye for the most active
+// LaunchLab tokens every 60 s.  This fixes two root problems:
+//
+//   1. Placeholder tokens (missed CREATE) start with an incorrect initial MC.
+//   2. Any single dust trade can briefly corrupt the on-chain-derived price.
+//
+// Conversion:
+//   priceEth (SOL/token)  = price_usd / solPriceUsd
+//   marketCapEth (lamps)  = (mc_usd / solPriceUsd) × 1e9
+//
+// Tokens are processed sequentially (not parallel) to respect Birdeye's
+// per-second rate limit.  ~150 CU/min for 30 tokens at 5 CU each.
+
+async function enrichLaunchLabPrices(): Promise<void> {
+  // Most-active tokens first — best use of our Birdeye quota.
+  const tokens = await db
+    .select({ address: tokensTable.address })
+    .from(tokensTable)
+    .where(eq(tokensTable.platform, "raydium_launchlab"))
+    .orderBy(desc(tokensTable.tradeCount))
+    .limit(LL_PRICE_ENRICH_BATCH);
+
+  if (tokens.length === 0) return;
+
+  const solPrice = await getSolPriceUsd();
+  if (!solPrice) {
+    log.warn("enrichment: launchlab price refresh skipped — SOL price unavailable");
+    return;
+  }
+
+  let updated = 0;
+
+  for (const { address } of tokens) {
+    try {
+      const overview = await fetchBirdeyeTokenOverview(address);
+      if (!overview || !overview.price || overview.price <= 0) continue;
+
+      // Convert Birdeye USD fields → DB storage format
+      const priceUsd    = overview.price;
+      const mcUsd       = overview.mc;
+
+      // priceEth: SOL per token (text column)
+      const priceEth = (priceUsd / solPrice).toFixed(15);
+
+      // marketCapEth: total market cap in lamports (text column)
+      const marketCapEth = mcUsd != null && mcUsd > 0
+        ? String(Math.round((mcUsd / solPrice) * 1e9))
+        : null;
+
+      type DbUpdate = {
+        priceUsd: number;
+        priceEth: string;
+        marketCapUsd?: number;
+        marketCapEth?: string;
+        pctChange24h?: number;
+      };
+
+      const update: DbUpdate = { priceUsd, priceEth };
+      if (mcUsd        != null) update.marketCapUsd  = mcUsd;
+      if (marketCapEth != null) update.marketCapEth  = marketCapEth;
+      if (overview.priceChange24hPercent != null)
+        update.pctChange24h = overview.priceChange24hPercent;
+
+      const [updatedRow] = await db
+        .update(tokensTable)
+        .set(update)
+        .where(eq(tokensTable.address, address))
+        .returning();
+
+      if (updatedRow) {
+        // Push live price update to any open SSE detail-page viewers
+        emitSnapshot({
+          type: "snapshot",
+          token: {
+            address:              updatedRow.address,
+            name:                 updatedRow.name,
+            symbol:               updatedRow.symbol,
+            imageUrl:             updatedRow.imageUrl,
+            priceEth:             updatedRow.priceEth,
+            marketCapEth:         updatedRow.marketCapEth,
+            volumeEth:            updatedRow.volumeEth,
+            virtualEthReserves:   updatedRow.virtualEthReserves,
+            virtualTokenReserves: updatedRow.virtualTokenReserves,
+            tradeCount:           Number(updatedRow.tradeCount),
+            platform:             updatedRow.platform,
+            chain:                updatedRow.chain,
+          },
+        });
+        updated++;
+      }
+    } catch (err) {
+      log.warn({ address, err }, "enrichment: launchlab birdeye price refresh failed for token");
+    }
+  }
+
+  if (updated > 0) {
+    log.info({ updated, solPrice }, "enrichment: launchlab prices refreshed from Birdeye");
   }
 }
 
@@ -1026,6 +1131,13 @@ export function startEnrichmentLoop(): void {
     void enrichLabTokensFromChain();
     setInterval(() => void enrichLabTokensFromChain(), LL_CHAIN_ENRICH_INTERVAL_MS);
   }, 10_000);
+  // Refresh LaunchLab price + market cap from Birdeye every 60 s.
+  // This gives accurate USD-derived values regardless of on-chain trade quality,
+  // fixing both placeholder-MC and dust-trade price corruption for display.
+  setTimeout(() => {
+    void enrichLaunchLabPrices();
+    setInterval(() => void enrichLaunchLabPrices(), LL_PRICE_ENRICH_INTERVAL_MS);
+  }, 15_000);
   // First tick slightly delayed so adapters can connect and insert initial records
   setTimeout(() => {
     void enrichTick();
