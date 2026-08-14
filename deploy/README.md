@@ -4,67 +4,48 @@ Scripts and config for the production VPS (`pumpi.io`).
 
 ## Full Release Checklist
 
-```
-1. git push origin main          # push code
-2. ./deploy/deploy-api.sh        # build + graceful reload API (zero dropped connections)
-3. ./deploy/deploy-frontend.sh   # build + write new static files (nginx serves instantly)
-4. ./deploy/deploy-nginx.sh      # only when nginx config changed
+```bash
+# Every release:
+./deploy/deploy-api.sh      root@155.103.50.121   # rolling reload, zero dropped connections
+./deploy/deploy-frontend.sh root@155.103.50.121   # atomic symlink swap, no partial-asset window
+
+# Only when nginx config changed:
+./deploy/deploy-nginx.sh    root@155.103.50.121
 ```
 
-All three scripts accept `user@host` as the first argument (or via `VPS_USER_HOST`).
+All three scripts accept `user@host` as the first argument or via `VPS_USER_HOST`.
 
 ---
 
-## API Server (`deploy/deploy-api.sh`)
+## One-time VPS Setup (first deploy only)
 
-Builds the Node.js API on the VPS and reloads it **gracefully** via PM2:
-- In-flight HTTP requests get up to 10 s to finish before the old process exits
-- New process starts in parallel — zero dropped connections
-- Falls back to `pm2 start` if the process isn't running yet
-
+### 1. Nginx proxy cache directory
 ```bash
-./deploy/deploy-api.sh root@155.103.50.121
-# or
-export VPS_USER_HOST=root@155.103.50.121
-./deploy/deploy-api.sh
+sudo mkdir -p /var/cache/nginx/pumpi
+sudo chown www-data:www-data /var/cache/nginx/pumpi
 ```
 
-### How graceful reload works
-
-```
-Old process  ←── SIGINT sent by PM2 reload
-                  │  finishes in-flight requests (≤ 10 s)
-                  └──────────────────────── exits
-
-New process  ─────────────── starts in parallel, takes traffic immediately
+Add to the `http {}` block in `/etc/nginx/nginx.conf`:
+```nginx
+proxy_cache_path /var/cache/nginx/pumpi levels=1:2
+    keys_zone=pumpi_images:10m max_size=2g inactive=7d use_temp_path=off;
 ```
 
-`kill_timeout: 10000` and `listen_timeout: 8000` are set in `ecosystem.config.cjs`.
-
-### Environment variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `VPS_USER_HOST` | _(required if not passed as arg)_ | `user@host` of the VPS |
-| `APP_DIR` | `/opt/rocketfi` | Absolute path to the repo on the VPS |
-| `PM2_APP_NAME` | `rocketfi-api` | PM2 process name in `ecosystem.config.cjs` |
-
----
-
-## Frontend (`deploy/deploy-frontend.sh`)
-
-Builds the Vite SPA on the VPS and writes it to the nginx root.  
-nginx keeps serving the old build until the new bundle is fully written — no downtime.
-
+### 2. Frontend release directory
 ```bash
-./deploy/deploy-frontend.sh root@155.103.50.121
+mkdir -p /opt/rocketfi/releases
 ```
 
-### Build env file
+Run `./deploy/deploy-frontend.sh` once — it creates `/opt/rocketfi/current` (the nginx root symlink).
 
-The frontend requires `VITE_*` variables at build time.  
-Create this file once on the VPS:
+### 3. Deploy the nginx config
+```bash
+./deploy/deploy-nginx.sh root@155.103.50.121
+```
 
+This sets `root /opt/rocketfi/current` (the symlink) in nginx.
+
+### 4. Create the frontend build env file
 ```bash
 cat > /opt/rocketfi/artifacts/rocketfi/.env.build << 'EOF'
 VITE_ALCHEMY_API_KEY=<your-alchemy-key>
@@ -75,22 +56,74 @@ BASE_PATH=/
 EOF
 ```
 
-The deploy script reads this file automatically via `source .env.build`.
+---
+
+## API Server (`deploy/deploy-api.sh`)
+
+Builds the Node.js API on the VPS and does a **rolling reload** across 2 PM2 cluster workers:
+
+```
+Worker A: handles traffic → stops (drains ≤10 s) → restarts with new code
+Worker B: handles all traffic during A's restart → then restarts the same way
+```
+
+At least one worker is always serving requests. Zero dropped connections.
+
+Only worker 0 runs background jobs (stream adapters, enrichment, backfill) —
+`NODE_APP_INSTANCE` guards prevent duplicate indexing across workers.
+
+```bash
+./deploy/deploy-api.sh root@155.103.50.121
+```
 
 ### Environment variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `VPS_USER_HOST` | _(required if not passed as arg)_ | `user@host` of the VPS |
-| `APP_DIR` | `/opt/rocketfi` | Absolute path to the repo on the VPS |
-| `ENV_FILE` | `$APP_DIR/artifacts/rocketfi/.env.build` | Path to the build env file |
+| `VPS_USER_HOST` | _(required)_ | `user@host` |
+| `APP_DIR` | `/opt/rocketfi` | Repo root on VPS |
+| `PM2_APP_NAME` | `rocketfi-api` | Name in `ecosystem.config.cjs` |
+
+---
+
+## Frontend (`deploy/deploy-frontend.sh`)
+
+Builds into a **timestamped release directory**, then atomically swaps the nginx root symlink.
+nginx keeps serving the old release while the build runs — no downtime, no partial assets.
+
+```
+/opt/rocketfi/releases/
+  20260814_185500/   ← previous release (kept for rollback)
+  20260814_190012/   ← new release
+/opt/rocketfi/current  →  releases/20260814_190012   (nginx root)
+```
+
+`ln -sfn` on Linux is atomic — nginx sees the new release the instant the symlink is swapped.
+
+**Rollback** to a previous release in one command:
+```bash
+ln -sfn /opt/rocketfi/releases/<prev-timestamp> /opt/rocketfi/current
+```
+
+```bash
+./deploy/deploy-frontend.sh root@155.103.50.121
+```
+
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `VPS_USER_HOST` | _(required)_ | `user@host` |
+| `APP_DIR` | `/opt/rocketfi` | Repo root on VPS |
+| `RELEASES_DIR` | `$APP_DIR/releases` | Release snapshot directory |
+| `ENV_FILE` | `$APP_DIR/artifacts/rocketfi/.env.build` | VITE_* build env file |
+| `KEEP_RELEASES` | `3` | Old releases to retain for rollback |
 
 ---
 
 ## Nginx (`deploy/deploy-nginx.sh`)
 
-Only needed when `deploy/nginx/rocketfi` has changed.  
-Copies the config, enables the site, tests it, and **reloads nginx** (zero-downtime).
+Only run when `deploy/nginx/rocketfi` has changed. Copies config, enables site, tests, reloads.
 
 ```bash
 ./deploy/deploy-nginx.sh root@155.103.50.121
@@ -98,49 +131,41 @@ Copies the config, enables the site, tests it, and **reloads nginx** (zero-downt
 
 ### Cache strategy
 
-| Resource | Cache-Control | Why |
+| Resource | Cache-Control | Notes |
 |---|---|---|
-| `index.html` / SPA routes | `no-cache, no-store, must-revalidate` | Vite hashes JS/CSS filenames on every build; a cached HTML referencing old chunk names → blank page |
-| `*.js`, `*.css`, fonts | `public, max-age=31536000, immutable` | Filenames contain a content hash — safe to cache forever |
-| `/api/storage/public-objects/*` | `public, max-age=31536000, immutable` + nginx proxy cache 7d | Token images are content-addressed; cached on disk after first fetch |
+| `index.html` / SPA routes | `no-cache, no-store, must-revalidate` | Stale HTML + new hashed JS chunks = blank page |
+| `*.js`, `*.css`, fonts | `public, max-age=31536000, immutable` | Content-hashed filenames — safe forever |
+| `/api/storage/public-objects/*` | `public, max-age=31536000, immutable` + nginx disk cache 7d | Token images are immutable; cached after first fetch |
 | `/api/*` | no caching (proxied) | Dynamic API responses |
-
-### Environment variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `VPS_USER_HOST` | _(required if not passed as arg)_ | `user@host` of the VPS |
-| `NGINX_SITE` | `rocketfi` | Site name under `sites-available/` |
-| `NGINX_DIR` | `/etc/nginx` | Root nginx directory on the VPS |
 
 ---
 
 ## Manual steps (reference)
 
 ### API server
-
 ```bash
 ssh root@155.103.50.121
-cd /opt/rocketfi
-git pull origin main
+cd /opt/rocketfi && git pull origin main
 cd artifacts/api-server && pnpm run build
 cd /opt/rocketfi
 pm2 reload ecosystem.config.cjs --update-env --only rocketfi-api
-pm2 save
+pm2 logs rocketfi-api --lines 20 --nostream
 ```
 
 ### Frontend
-
 ```bash
 ssh root@155.103.50.121
-cd /opt/rocketfi/artifacts/rocketfi
-set -a && source .env.build && set +a
-pnpm run build
+cd /opt/rocketfi && git pull origin main
+RELEASE=/opt/rocketfi/releases/$(date +%Y%m%d_%H%M%S)
+mkdir -p $RELEASE
+set -a && source /opt/rocketfi/artifacts/rocketfi/.env.build && set +a
+cd /opt/rocketfi/artifacts/rocketfi && pnpm run build
+mv dist/public/* $RELEASE/
+ln -sfn $RELEASE /opt/rocketfi/current
 ```
 
 ### Check PM2 status
-
 ```bash
 pm2 list
-pm2 logs rocketfi-api --lines 50
+pm2 logs rocketfi-api --lines 50 --nostream
 ```

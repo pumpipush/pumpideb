@@ -67,20 +67,29 @@ async function start(): Promise<void> {
 
       logger.info({ port }, "Server listening");
 
-      // Start all platform data adapters (Pump.fun, Moonshot, LetsBONK)
-      // Each adapter is isolated — a crash in one will not affect the server
-      void startAdapters();
+      // In PM2 cluster mode, NODE_APP_INSTANCE identifies each worker.
+      // Only worker 0 (or a non-clustered single process) runs background jobs
+      // so adapters, enrichment, and backfill never run twice in parallel.
+      const isPrimaryWorker =
+        !process.env["NODE_APP_INSTANCE"] ||
+        process.env["NODE_APP_INSTANCE"] === "0";
 
-      // Start background enrichment loop — retries metadata for tokens that
-      // got placeholder names/symbols because the upstream API wasn't ready yet
-      startEnrichmentLoop();
+      if (isPrimaryWorker) {
+        // Start all platform data adapters (Pump.fun, PumpSwap, LaunchLab)
+        // Each adapter is isolated — a crash in one will not affect the server
+        void startAdapters();
 
-      // Download and cache Jupiter strict token list (enables "All Solana Tokens" search)
-      startJupiterTokenSync();
+        // Start background enrichment loop — retries metadata for tokens that
+        // got placeholder names/symbols because the upstream API wasn't ready yet
+        startEnrichmentLoop();
 
-      // Backfill historical LaunchLab tokens from on-chain creation transactions.
-      // Runs 10 s after startup (to let adapters connect first), then every 10 min.
-      startLaunchLabBackfill();
+        // Download and cache Jupiter strict token list (enables "All Solana Tokens" search)
+        startJupiterTokenSync();
+
+        // Backfill historical LaunchLab tokens from on-chain creation transactions.
+        // Runs 10 s after startup (to let adapters connect first), then every 10 min.
+        startLaunchLabBackfill();
+      }
 
       resolve();
     });
