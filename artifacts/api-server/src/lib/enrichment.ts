@@ -586,9 +586,33 @@ const PUMPSWAP_ENRICH_INTERVAL_MS    = 5 * 60_000; // every 5 minutes
 const LL_PRICE_ENRICH_INTERVAL_MS    =     60_000; // every 60 s
 const LL_PRICE_ENRICH_BATCH          = 60;          // tokens per tick — primary pass (most active)
 /** Min trades a long-tail token must have before it triggers a one-time Birdeye check. */
-const LL_PRICE_VERIFY_MIN_TRADES     = 10;
+export const LL_PRICE_VERIFY_MIN_TRADES = 10;
 /** Max extra Birdeye calls per 60 s tick for the secondary (long-tail) pass. */
-const LL_PRICE_VERIFY_BATCH          =  5;
+export const LL_PRICE_VERIFY_BATCH      =  5;
+
+/**
+ * Pure selection helper: given the full set of qualifying long-tail candidates
+ * (unverified LL tokens with enough trades) and the addresses already claimed
+ * by the primary pass, return up to `limit` addresses that should be processed
+ * by the secondary pass — ordered by trade_count descending (most-active first).
+ *
+ * Exported for unit testing so the overlap-exclusion logic can be verified
+ * without a database.
+ */
+export function selectLongTailCandidates(
+  candidates:   ReadonlyArray<{ address: string; tradeCount: number }>,
+  primaryAddrs: ReadonlySet<string>,
+  limit:        number,
+): string[] {
+  const result: string[] = [];
+  // Candidates arrive pre-sorted (DESC trade_count) from the DB query.
+  for (const { address } of candidates) {
+    if (primaryAddrs.has(address)) continue; // already handled by primary pass
+    result.push(address);
+    if (result.length >= limit) break;
+  }
+  return result;
+}
 const GRADUATION_DETECT_BATCH        = 20;          // mints per DexScreener call
 const GRADUATION_DEX_IDS = new Set(["pumpswap", "raydium", "raydium-clmm", "raydium-cp"]);
 
@@ -847,6 +871,12 @@ async function enrichLaunchLabPrices(): Promise<void> {
     .orderBy(desc(tokensTable.tradeCount))
     .limit(LL_PRICE_ENRICH_BATCH);
 
+  // Collect the primary addresses BEFORE calling Birdeye so the secondary
+  // query below can exclude them regardless of whether each Birdeye call
+  // succeeds or fails (a failed call leaves price_usd NULL, which would
+  // otherwise let that token consume a secondary slot too).
+  const primaryAddrs = new Set(tokens.map(t => t.address));
+
   let updated = 0;
   for (const { address } of tokens) {
     try {
@@ -860,31 +890,48 @@ async function enrichLaunchLabPrices(): Promise<void> {
   }
 
   // ── Secondary pass: first-time Birdeye verification for long-tail tokens ──
-  // Picks tokens outside the primary batch that:
-  //   a) have accumulated enough trades to be worth verifying (≥ LL_PRICE_VERIFY_MIN_TRADES)
-  //   b) have never had a Birdeye price set (price_usd IS NULL)
+  // Picks tokens that:
+  //   a) are NOT already covered by the primary pass (excluded by address)
+  //   b) have accumulated enough trades to be worth a Birdeye call (≥ LL_PRICE_VERIFY_MIN_TRADES)
+  //   c) have never had a Birdeye price set (price_usd IS NULL)
   //
-  // Once price_usd is populated the token exits this pass and enters the
-  // primary batch on the next tick.  This guarantees every actively-traded
-  // LaunchLab token — regardless of its position in the trade-count ranking —
-  // eventually gets an accurate Birdeye-sourced market cap, closing the gap
-  // for long-tail tokens that would otherwise keep their bonding-curve MC forever.
-  const unverified = await db
-    .select({ address: tokensTable.address })
+  // Excluding primary addresses in SQL (not just filtering on price_usd) is
+  // essential: if Birdeye returns no data for a primary token its price_usd
+  // stays NULL, which would let it consume a secondary slot and starve the
+  // genuinely long-tail tokens this pass is meant to serve.
+  //
+  // Once a long-tail token's price_usd is populated it stops appearing in
+  // both this query (condition c) and the secondary pass is no longer needed
+  // for it.  The primary pass continues to cover the top-60 by trade_count
+  // on every subsequent tick.
+  const longTailCandidates = await db
+    .select({ address: tokensTable.address, tradeCount: tokensTable.tradeCount })
     .from(tokensTable)
     .where(
       and(
         eq(tokensTable.platform, "raydium_launchlab"),
         isNull(tokensTable.priceUsd),
         sql`${tokensTable.tradeCount}::int >= ${LL_PRICE_VERIFY_MIN_TRADES}`,
+        // Exclude all addresses the primary pass already holds, even if their
+        // Birdeye call failed and left price_usd NULL.
+        primaryAddrs.size > 0
+          ? not(inArray(tokensTable.address, [...primaryAddrs]))
+          : sql`true`,
       ),
     )
-    .orderBy(desc(tokensTable.tradeCount))  // most-active unverified first
+    .orderBy(desc(tokensTable.tradeCount)) // most-active unverified first
     .limit(LL_PRICE_VERIFY_BATCH);
 
-  if (unverified.length > 0) {
+  // Use the pure helper so the selection logic is independently testable.
+  const secondaryAddrs = selectLongTailCandidates(
+    longTailCandidates.map(r => ({ address: r.address, tradeCount: Number(r.tradeCount) })),
+    primaryAddrs,
+    LL_PRICE_VERIFY_BATCH,
+  );
+
+  if (secondaryAddrs.length > 0) {
     let verified = 0;
-    for (const { address } of unverified) {
+    for (const address of secondaryAddrs) {
       try {
         if (await enrichOneLaunchLabToken(address, solPrice)) verified++;
       } catch (err) {

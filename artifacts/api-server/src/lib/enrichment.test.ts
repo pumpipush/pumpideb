@@ -16,7 +16,10 @@ import {
   computeEnrichmentUpdate,
   buildLabChainUpdate,
   computeSupplyBackfillUpdate,
+  selectLongTailCandidates,
   LL_DEFAULT_SUPPLY_STR,
+  LL_PRICE_VERIFY_MIN_TRADES,
+  LL_PRICE_VERIFY_BATCH,
   ENRICHABLE_PLATFORMS_EXPORT,
 } from "./enrichment";
 
@@ -417,5 +420,94 @@ describe("computeSupplyBackfillUpdate", () => {
     expect(results[2]!.marketCapEth).toBe(
       String(Math.round(42_000_000 * 0.00005 * 1000)),
     );
+  });
+});
+
+// ── selectLongTailCandidates ───────────────────────────────────────────────────
+//
+// Guards the overlap-exclusion logic that prevents the secondary Birdeye pass
+// from consuming quota on addresses already handled (or attempted) by the
+// primary pass in the same tick.
+
+describe("selectLongTailCandidates", () => {
+  /** Build a token row with the given trade count. */
+  function tok(address: string, tradeCount: number) {
+    return { address, tradeCount };
+  }
+
+  it("returns addresses not in the primary set, most-active first", () => {
+    const primary = new Set(["addr-A", "addr-B"]);
+    const candidates = [
+      tok("addr-C", 50), // long-tail, high activity
+      tok("addr-D", 30), // long-tail, lower activity
+    ];
+    const result = selectLongTailCandidates(candidates, primary, 5);
+    expect(result).toEqual(["addr-C", "addr-D"]);
+  });
+
+  it("excludes addresses already in the primary set regardless of price_usd status", () => {
+    // addr-A is a high-activity primary token whose Birdeye call failed —
+    // it is still in the primary set and must NOT appear in the secondary batch.
+    const primary = new Set(["addr-A"]);
+    const candidates = [
+      tok("addr-A", 200), // primary token — must be excluded
+      tok("addr-B", 15),  // genuine long-tail
+    ];
+    const result = selectLongTailCandidates(candidates, primary, 5);
+    expect(result).not.toContain("addr-A");
+    expect(result).toContain("addr-B");
+  });
+
+  it("returns at most `limit` addresses", () => {
+    const primary = new Set<string>();
+    const candidates = Array.from({ length: 10 }, (_, i) =>
+      tok(`addr-${i}`, 100 - i),
+    );
+    const result = selectLongTailCandidates(candidates, primary, LL_PRICE_VERIFY_BATCH);
+    expect(result.length).toBeLessThanOrEqual(LL_PRICE_VERIFY_BATCH);
+  });
+
+  it("returns an empty array when all candidates are in the primary set", () => {
+    const primary = new Set(["addr-X", "addr-Y", "addr-Z"]);
+    const candidates = [tok("addr-X", 80), tok("addr-Y", 50), tok("addr-Z", 20)];
+    expect(selectLongTailCandidates(candidates, primary, 5)).toEqual([]);
+  });
+
+  it("returns an empty array when there are no candidates", () => {
+    expect(selectLongTailCandidates([], new Set(), 5)).toEqual([]);
+  });
+
+  it("preserves the DESC trade_count order from the DB (pre-sorted input)", () => {
+    // Input is already ordered DESC as returned by the SQL query.
+    const primary = new Set<string>();
+    const candidates = [
+      tok("addr-high",  200),
+      tok("addr-mid",   100),
+      tok("addr-low",    15),
+    ];
+    const result = selectLongTailCandidates(candidates, primary, 5);
+    expect(result).toEqual(["addr-high", "addr-mid", "addr-low"]);
+  });
+
+  it("excludes a high-trade-count primary record and selects the lower-ranked long-tail token", () => {
+    // Simulates: addr-TOP is rank #1 (in primary) but has price_usd NULL;
+    // addr-LONGTAIL is rank #65 (outside primary), also price_usd NULL.
+    // The secondary pass must pick addr-LONGTAIL and never touch addr-TOP.
+    const primary = new Set(["addr-TOP"]);
+    const candidates = [
+      tok("addr-TOP",      5000), // primary — excluded even though highest activity
+      tok("addr-LONGTAIL",   12), // genuine long-tail — should be selected
+    ];
+    const result = selectLongTailCandidates(candidates, primary, LL_PRICE_VERIFY_BATCH);
+    expect(result).not.toContain("addr-TOP");
+    expect(result).toContain("addr-LONGTAIL");
+  });
+
+  it("exposes LL_PRICE_VERIFY_MIN_TRADES and LL_PRICE_VERIFY_BATCH as module constants", () => {
+    // Regression guard: if either constant is renamed or removed, imports above fail.
+    expect(typeof LL_PRICE_VERIFY_MIN_TRADES).toBe("number");
+    expect(LL_PRICE_VERIFY_MIN_TRADES).toBeGreaterThan(0);
+    expect(typeof LL_PRICE_VERIFY_BATCH).toBe("number");
+    expect(LL_PRICE_VERIFY_BATCH).toBeGreaterThan(0);
   });
 });
