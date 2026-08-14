@@ -24,6 +24,7 @@
 import { PumpApiAdapter, PumpFunChainIndexer, startZeroHealJob } from "./pumpfun.js";
 import { PumpSwapIndexer } from "./pumpswap.js";
 import { RaydiumLaunchLabIndexer } from "./raydium-launchlab.js";
+import { PUBLICNODE_WSS } from "./solanaRpcBase.js";
 import { logger as rootLogger } from "../logger.js";
 
 const managerLog = rootLogger.child({ component: "PumpStreamManager" });
@@ -186,9 +187,12 @@ class PumpStreamManager {
       if (this._chainFallback !== null) return; // already running
       this._fallbackActivatedAt = Date.now();
       managerLog.warn("pumpApiManager: activating chain RPC fallback adapters");
-      const pumpFun   = new PumpFunChainIndexer();
-      const pumpSwap  = new PumpSwapIndexer();
-      const launchLab = new RaydiumLaunchLabIndexer();
+      // Fallback adapters use PublicNode WSS (free) — not Alchemy.
+      // These run only briefly while pumpapi.io reconnects; they don't need
+      // Alchemy's premium reliability, and pump.fun volume drains Alchemy CUs fast.
+      const pumpFun   = new PumpFunChainIndexer({ wssUrl: PUBLICNODE_WSS });
+      const pumpSwap  = new PumpSwapIndexer({ wssUrl: PUBLICNODE_WSS });
+      const launchLab = new RaydiumLaunchLabIndexer({ wssUrl: PUBLICNODE_WSS });
       pumpFun.start();
       pumpSwap.start();
       launchLab.start();
@@ -199,8 +203,8 @@ class PumpStreamManager {
         : "pumpapi.io has been disconnected for 30+ seconds";
       void slackAlert(
         `🔴 *pumpapi.io fallback activated* — ${reason}.\n` +
-        `Chain-RPC adapters (PublicNode → Alchemy) are now indexing pump.fun + PumpSwap + Raydium LaunchLab.\n` +
-        `Alchemy CU spend is elevated until pumpapi.io reconnects.`
+        `Chain-RPC adapters (PublicNode free WSS) are now indexing pump.fun + PumpSwap + Raydium LaunchLab.\n` +
+        `Alchemy CUs unaffected — fallback uses PublicNode only.`
       );
     }, delay);
   }

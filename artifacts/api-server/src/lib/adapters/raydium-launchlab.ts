@@ -218,13 +218,14 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
     }
   }
 
-  constructor() {
+  constructor(opts?: { wssUrl?: string }) {
     super({
       programId:   LAUNCHLAB_PROGRAM,
       adapterName: "raydium_launchlab",
       // 5-minute watchdog — LaunchLab creates ~100 tokens/day (low volume vs pump.fun),
       // so we tolerate longer silences before concluding the connection is dead.
       watchdogMs: 300_000,
+      wssUrl:     opts?.wssUrl,
     });
   }
 

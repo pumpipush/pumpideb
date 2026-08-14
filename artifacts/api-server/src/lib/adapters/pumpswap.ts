@@ -52,8 +52,8 @@ export class PumpSwapIndexer extends SolanaRpcIndexer {
   // ~6 samples/minute for price discovery without hammering public RPCs.
   private readonly _tradeIntervalMs = process.env["ALCHEMY_API_KEY"] ? 10_000 : 30_000;
 
-  constructor() {
-    super({ programId: PUMPSWAP_PROGRAM, adapterName: PLATFORM });
+  constructor(opts?: { wssUrl?: string }) {
+    super({ programId: PUMPSWAP_PROGRAM, adapterName: PLATFORM, wssUrl: opts?.wssUrl });
   }
 
   /**

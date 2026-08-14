@@ -277,8 +277,8 @@ export class PumpFunChainIndexer extends SolanaRpcIndexer {
     });
   }
 
-  constructor() {
-    super({ programId: PUMP_PROGRAM, adapterName: "pump_fun" });
+  constructor(opts?: { wssUrl?: string }) {
+    super({ programId: PUMP_PROGRAM, adapterName: "pump_fun", wssUrl: opts?.wssUrl });
   }
 
   protected override shouldProcess(logs: string[]): boolean {
