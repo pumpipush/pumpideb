@@ -19,6 +19,35 @@ import { asyncWrap } from "../lib/asyncHandler.js";
 // Platforms that use Birdeye for OHLCV + price-history (no internal trade stream in prod yet)
 const DEX_PLATFORMS = new Set(["pumpswap", "raydium_launchlab"]);
 
+// ── OHLCV server-side cache ────────────────────────────────────────────────────
+// Prevents the SQL aggregation (or Birdeye call) from running for every polling
+// tick from every connected client. TTL is shorter than the client refetch interval
+// so the first poll after expiry always gets fresh data.
+const _ohlcvCache = new Map<string, { payload: unknown; expiresAt: number }>();
+const OHLCV_CACHE_TTL: Record<string, number> = {
+  "1m":  6_000,   // client polls 8 s  → cache 6 s
+  "5m":  6_000,
+  "15m": 12_000,  // client polls 15 s → cache 12 s
+  "1H":  12_000,
+  "4H":  25_000,  // client polls 30 s → cache 25 s
+  "1D":  25_000,
+  "1W":  25_000,
+};
+function _ohlcvCacheGet(key: string): unknown | null {
+  const entry = _ohlcvCache.get(key);
+  if (!entry || Date.now() > entry.expiresAt) return null;
+  return entry.payload;
+}
+function _ohlcvCacheSet(key: string, payload: unknown, tf: string): void {
+  const ttl = OHLCV_CACHE_TTL[tf] ?? 10_000;
+  _ohlcvCache.set(key, { payload, expiresAt: Date.now() + ttl });
+  // Evict stale entries periodically so the map doesn't grow unbounded
+  if (_ohlcvCache.size > 2_000) {
+    const now = Date.now();
+    for (const [k, v] of _ohlcvCache) { if (now > v.expiresAt) _ohlcvCache.delete(k); }
+  }
+}
+
 // ── Birdeye backfill helper ────────────────────────────────────────────────────
 // Fetches the last 50 trades from Birdeye for a DEX token and persists them to
 // the trades table (ON CONFLICT DO NOTHING on tx_hash). Fully idempotent — safe
@@ -262,6 +291,15 @@ router.get("/tokens/:address/ohlcv", asyncWrap(async (req, res) => {
     return;
   }
 
+  // ── Cache check — short TTL so live trades still feel real-time ──────────────
+  const cacheKey = `${address}:${tf}`;
+  const cached = _ohlcvCacheGet(cacheKey);
+  if (cached !== null) {
+    res.setHeader("X-Cache", "HIT");
+    res.json(cached);
+    return;
+  }
+
   // ── Early DEX path: skip internal aggregation, go straight to Birdeye ───────
   // Our indexer samples PumpSwap/Raydium at low frequency; internal DB has at
   // most a handful of trades and would produce a misleading chart.
@@ -327,7 +365,10 @@ router.get("/tokens/:address/ohlcv", asyncWrap(async (req, res) => {
         }
       }
 
-      res.json({ bars, maxTradeId: 0 });
+      const payload = { bars, maxTradeId: 0 };
+      _ohlcvCacheSet(cacheKey, payload, tf);
+      res.setHeader("X-Cache", "MISS");
+      res.json(payload);
       return;
     }
   }
@@ -468,7 +509,10 @@ router.get("/tokens/:address/ohlcv", asyncWrap(async (req, res) => {
     }
   }
 
-  res.json({ bars, maxTradeId });
+  const payload = { bars, maxTradeId };
+  _ohlcvCacheSet(cacheKey, payload, tf);
+  res.setHeader("X-Cache", "MISS");
+  res.json(payload);
 }));
 
 // GET /tokens/:address/holders — net token balance per wallet across ALL trades in DB.
