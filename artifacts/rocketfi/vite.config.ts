@@ -142,6 +142,24 @@ export default defineConfig(async ({ command, mode }) => {
     build: {
       outDir: path.resolve(import.meta.dirname, 'dist/public'),
       emptyOutDir: true,
+      rollupOptions: {
+        output: {
+          manualChunks: (id) => {
+            // Solana SDK + wallet adapters — very large, loaded only on /coin/* and /app
+            if (id.includes('@solana/web3.js') || id.includes('@solana/spl-token')) return 'vendor-solana';
+            if (id.includes('@solana/wallet-adapter') || id.includes('@solana/wallet-standard')) return 'vendor-wallet';
+            if (id.includes('@project-serum') || id.includes('@raydium-io') || id.includes('@coral-xyz')) return 'vendor-defi';
+            // React core — cached aggressively by browsers
+            if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) return 'vendor-react';
+            // Data fetching
+            if (id.includes('@tanstack/react-query')) return 'vendor-query';
+            // UI component libraries
+            if (id.includes('@radix-ui') || id.includes('cmdk') || id.includes('vaul')) return 'vendor-ui';
+            // Charts / canvas
+            if (id.includes('recharts') || id.includes('d3-') || id.includes('three')) return 'vendor-charts';
+          },
+        },
+      },
     },
     server: {
       port,

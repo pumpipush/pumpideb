@@ -3,14 +3,7 @@ import { HelmetProvider } from 'react-helmet-async';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { Route, Switch, Redirect, Router as WouterRouter, useLocation, useSearch, useParams } from 'wouter';
-import { useEffect, useLayoutEffect, useRef } from 'react';
-import NotFound from '@/pages/not-found';
-import Dashboard from '@/pages/Dashboard';
-import AppInterface from '@/pages/AppInterface';
-import ProfilePage from '@/pages/Profile';
-import PrivacyPolicy from '@/pages/PrivacyPolicy';
-import DisclaimerPage from '@/pages/Disclaimer';
-import TermsOfService from '@/pages/TermsOfService';
+import { useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react';
 import { Sidebar, BottomNav } from '@/components/layout/Sidebar';
 import { Navbar } from '@/components/layout/Navbar';
 import { WalletProvider } from '@/contexts/WalletContext';
@@ -22,6 +15,18 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { UsernameNudgeBanner } from '@/components/shared/UsernameNudgeBanner';
 import { PlatformFeeBanner } from '@/components/shared/PlatformFeeBanner';
 import { SiteFooter } from '@/components/layout/SiteFooter';
+
+// Dashboard is the homepage — eagerly loaded so the first paint is instant.
+import Dashboard from '@/pages/Dashboard';
+
+// All other pages are lazy-loaded: they are not needed on first visit and
+// each carries heavy dependencies (Solana SDK, wallet adapters, etc.).
+const AppInterface   = lazy(() => import('@/pages/AppInterface'));
+const ProfilePage    = lazy(() => import('@/pages/Profile'));
+const PrivacyPolicy  = lazy(() => import('@/pages/PrivacyPolicy'));
+const DisclaimerPage = lazy(() => import('@/pages/Disclaimer'));
+const TermsOfService = lazy(() => import('@/pages/TermsOfService'));
+const NotFound       = lazy(() => import('@/pages/not-found'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,6 +48,15 @@ function LegacyTokenRedirect() {
   return <Redirect to={`/coin/${params.address}`} />;
 }
 
+/** Minimal spinner shown while a lazy chunk is downloading. */
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+    </div>
+  );
+}
+
 function AppShell() {
   const [location, navigate] = useLocation();
   const search = useSearch();
@@ -53,7 +67,6 @@ function AppShell() {
   const authOpen = isSignIn || isSignUp;
 
   // Scroll to top on every route change.
-  // window is the real scroll container (main has no fixed height ancestor).
   useLayoutEffect(() => {
     window.scrollTo(0, 0);
   }, [location]);
@@ -66,25 +79,27 @@ function AppShell() {
         <main ref={mainRef} className="flex-1 overflow-y-auto overflow-x-hidden pb-24 md:pb-0 pt-[60px]">
           <UsernameNudgeBanner />
           <ErrorBoundary>
-            <Switch>
-              <Route path="/" component={Dashboard} />
-              <Route path="/explore"><Redirect to="/" /></Route>
-              <Route path="/dashboard"><Redirect to="/" /></Route>
-              {/* Legacy /app route — redirects to /coin/:address when ?token= is present */}
-              <Route path="/app" component={AppRoute} />
-              {/* Legacy /token/:address — redirect to canonical /coin/:address */}
-              <Route path="/token/:address" component={LegacyTokenRedirect} />
-              {/* Canonical SEO-friendly coin pages */}
-              <Route path="/coin/:address" component={TokenPage} />
-              <Route path="/profile/:slug" component={ProfilePage} />
-              {/* signin/signup show the explore page behind the auth modal */}
-              <Route path="/signin"><Dashboard /></Route>
-              <Route path="/signup"><Dashboard /></Route>
-              <Route path="/privacy" component={PrivacyPolicy} />
-              <Route path="/disclaimer" component={DisclaimerPage} />
-              <Route path="/terms" component={TermsOfService} />
-              <Route component={NotFound} />
-            </Switch>
+            <Suspense fallback={<PageLoader />}>
+              <Switch>
+                <Route path="/" component={Dashboard} />
+                <Route path="/explore"><Redirect to="/" /></Route>
+                <Route path="/dashboard"><Redirect to="/" /></Route>
+                {/* Legacy /app route — redirects to /coin/:address when ?token= is present */}
+                <Route path="/app" component={AppRoute} />
+                {/* Legacy /token/:address — redirect to canonical /coin/:address */}
+                <Route path="/token/:address" component={LegacyTokenRedirect} />
+                {/* Canonical SEO-friendly coin pages */}
+                <Route path="/coin/:address" component={TokenPage} />
+                <Route path="/profile/:slug" component={ProfilePage} />
+                {/* signin/signup show the explore page behind the auth modal */}
+                <Route path="/signin"><Dashboard /></Route>
+                <Route path="/signup"><Dashboard /></Route>
+                <Route path="/privacy" component={PrivacyPolicy} />
+                <Route path="/disclaimer" component={DisclaimerPage} />
+                <Route path="/terms" component={TermsOfService} />
+                <Route component={NotFound} />
+              </Switch>
+            </Suspense>
           </ErrorBoundary>
           <SiteFooter />
         </main>
@@ -122,8 +137,6 @@ function App() {
     </HelmetProvider>
   );
 
-  // Only mount GoogleOAuthProvider when a client ID is configured.
-  // Without a client ID the GSI library throws "Missing required parameter client_id".
   return GOOGLE_CLIENT_ID
     ? <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>{inner}</GoogleOAuthProvider>
     : inner;
@@ -142,5 +155,3 @@ function AppRoute() {
   if (tokenParam) return <Redirect to={`/coin/${tokenParam}`} />;
   return <AppInterface />;
 }
-
-
