@@ -1240,7 +1240,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     // candle's close as currentPrice so the price panel stays in sync with the chart.
     const _isDexToken = ["pumpswap","raydium_launchlab"].includes(token?.platform ?? "");
     const dexOhlcvPrice = _isDexToken ? (serverOhlcv?.bars?.slice(-1)[0]?.close ?? null) : null;
-    const currentPrice = livePrice ?? dexOhlcvPrice ?? (token?.priceEth ? parseFloat(token.priceEth) : 0);
+    // DEX tokens: skip livePrice entirely — the adapter computes priceEth with a
+    // pump.fun-specific /1000 decimal correction (assumes 6-decimal tokens).
+    // DEX tokens can have any decimal count (e.g. WSOL has 9 → price comes out
+    // 1000× too small).  Birdeye OHLCV is always correct for DEX tokens.
+    const currentPrice = _isDexToken
+      ? (dexOhlcvPrice ?? (token?.priceEth ? parseFloat(token.priceEth) : 0))
+      : (livePrice ?? dexOhlcvPrice ?? (token?.priceEth ? parseFloat(token.priceEth) : 0));
     const allTradesForVol = [...liveTrades, ...(history ?? [])];
 
     // ── Client-side fallback (limited to 100-row history + live SSE trades) ──
