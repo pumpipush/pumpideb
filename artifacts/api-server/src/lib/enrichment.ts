@@ -583,7 +583,7 @@ async function backfillBondingCurves(): Promise<void> {
 const GRADUATION_DETECT_INTERVAL_MS  = 5 * 60_000; // every 5 minutes
 const PUMPSWAP_ENRICH_INTERVAL_MS    = 5 * 60_000; // every 5 minutes
 const LL_PRICE_ENRICH_INTERVAL_MS    =     60_000; // every 60 s
-const LL_PRICE_ENRICH_BATCH          = 30;          // tokens per tick (5 CU each → 150 CU/min)
+const LL_PRICE_ENRICH_BATCH          = 60;          // tokens per tick (5 CU each → 300 CU/min)
 const GRADUATION_DETECT_BATCH        = 20;          // mints per DexScreener call
 const GRADUATION_DEX_IDS = new Set(["pumpswap", "raydium", "raydium-clmm", "raydium-cp"]);
 
@@ -1195,6 +1195,29 @@ export function startEnrichmentLoop(): void {
     void enrichLaunchLabPrices();
     setInterval(() => void enrichLaunchLabPrices(), LL_PRICE_ENRICH_INTERVAL_MS);
   }, 15_000);
+  // Periodically mark LaunchLab tokens as graduated when virtual_eth_reserves
+  // exceeds 115 SOL (30 virtual floor + 85 raised = graduation threshold).
+  // This catches tokens where the adapter's reserve estimate drifted past the
+  // threshold without triggering the in-trade guard (e.g. tokens seen before
+  // the guard was added, or replayed events).
+  const sweepLaunchLabGraduations = async () => {
+    try {
+      await db
+        .update(tokensTable)
+        .set({ graduated: true })
+        .where(
+          and(
+            eq(tokensTable.platform, "raydium_launchlab"),
+            eq(tokensTable.graduated, false),
+            sql`CAST(${tokensTable.virtualEthReserves} AS NUMERIC) > 115`,
+          ),
+        );
+    } catch (err) {
+      log.warn({ err }, "enrichment: launchlab graduation sweep failed");
+    }
+  };
+  void sweepLaunchLabGraduations();
+  setInterval(() => void sweepLaunchLabGraduations(), 5 * 60_000); // every 5 min
   // First tick slightly delayed so adapters can connect and insert initial records
   setTimeout(() => {
     void enrichTick();

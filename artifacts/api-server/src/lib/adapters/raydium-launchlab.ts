@@ -614,9 +614,13 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
           if (newVSolLam > 0n) {
             const newVTok  = k / newVSolLam;
             const vSolStr  = (Number(newVSolLam) / 1e9).toFixed(6).replace(/\.?0+$/, "");
+            // Auto-detect graduation: LaunchLab graduates at 85 SOL raised above
+            // the 30 SOL virtual floor, i.e. vSol > 115 SOL total.
+            const graduatedNow = Number(newVSolLam) / 1e9 > 115;
             await db.update(tokensTable).set({
               virtualEthReserves:   vSolStr,
               virtualTokenReserves: newVTok.toString(),
+              ...(graduatedNow ? { graduated: true } : {}),
             }).where(eq(tokensTable.address, mint));
           }
         } catch { /* non-critical — keep existing reserves */ }
@@ -728,13 +732,18 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
       } catch { /* keep existing */ }
     }
 
+    // Auto-detect graduation from updated reserves
+    const newVSolNum = updVSolStr ? parseFloat(updVSolStr) : null;
+    const graduatedNow = newVSolNum !== null && newVSolNum > 115;
+
     await db.update(tokensTable).set({
       tradeCount: sql`${tokensTable.tradeCount} + 1`,
       volumeEth:  sql`CAST(CAST(${tokensTable.volumeEth} AS NUMERIC) + ${solLamports} AS TEXT)`,
-      ...(priceEth   ? { priceEth }                           : {}),
-      ...(updMCStr   ? { marketCapEth: updMCStr }             : {}),
-      ...(updVSolStr ? { virtualEthReserves:  updVSolStr }    : {}),
-      ...(updVTokStr ? { virtualTokenReserves: updVTokStr }   : {}),
+      ...(priceEth      ? { priceEth }                           : {}),
+      ...(updMCStr      ? { marketCapEth: updMCStr }             : {}),
+      ...(updVSolStr    ? { virtualEthReserves:  updVSolStr }    : {}),
+      ...(updVTokStr    ? { virtualTokenReserves: updVTokStr }   : {}),
+      ...(graduatedNow  ? { graduated: true }                    : {}),
     }).where(eq(tokensTable.address, mint));
 
     const [tokenRow] = await db
