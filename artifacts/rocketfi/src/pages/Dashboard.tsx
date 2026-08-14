@@ -109,6 +109,32 @@ function setPlatformInUrl(platform: string) {
   window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
 }
 
+/** Read / write the active tab to the URL search params.
+ *  Trending is the default — its param is omitted so the homepage stays clean. */
+const TAB_PARAM_MAP: Record<string, SortTab> = {
+  new:       "New",
+  volume:    "Volume",
+  graduated: "Graduated",
+};
+const TAB_TO_PARAM: Partial<Record<SortTab, string>> = {
+  New:       "new",
+  Volume:    "volume",
+  Graduated: "graduated",
+  // Trending intentionally absent — it is the default and needs no param
+};
+function getTabFromUrl(): SortTab {
+  const raw = new URLSearchParams(window.location.search).get("tab") ?? "";
+  return TAB_PARAM_MAP[raw] ?? "Trending";
+}
+function setTabInUrl(tab: SortTab) {
+  const params = new URLSearchParams(window.location.search);
+  const param = TAB_TO_PARAM[tab];
+  if (param) params.set("tab", param);
+  else params.delete("tab"); // Trending → clean URL
+  const qs = params.toString();
+  window.history.pushState(null, "", qs ? `?${qs}` : window.location.pathname);
+}
+
 // ─── Token image with broken-URL fallback ────────────────────────────────────
 function TokenImage({ imageUrl, symbol, className, textSize = "text-5xl" }: {
   imageUrl?: string | null;
@@ -690,6 +716,19 @@ export default function Dashboard() {
     setSeenLiveAddresses(new Set());
   }
 
+  function handleTabChange(tab: SortTab) {
+    setActiveTab(tab);
+    setPage(1);
+    setTabInUrl(tab);
+  }
+
+  // Sync tab state with browser back / forward navigation
+  useEffect(() => {
+    const onPopState = () => setActiveTab(getTabFromUrl());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
   // ── Mobile detection ─────────────────────────────────────────────────────
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   useEffect(() => {
@@ -698,8 +737,8 @@ export default function Dashboard() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // ── Sort / filter state ───────────────────────────────────────────────────
-  const [activeTab, setActiveTab]   = useState<SortTab>("Trending");
+  // ── Sort / filter state (tab is URL-synced; Trending is the clean default) ─
+  const [activeTab, setActiveTab]   = useState<SortTab>(getTabFromUrl);
   const [viewMode, setViewMode]     = useState<ViewMode>("grid");
   const [search, setSearch]         = useState("");
   const [minMcap, setMinMcap]       = useState("");
@@ -1015,7 +1054,7 @@ export default function Dashboard() {
                 {(["Trending", "New", "Volume", "Graduated"] as SortTab[]).map((tab) => (
                   <button
                     key={tab}
-                    onClick={() => { setActiveTab(tab); setPage(1); }}
+                    onClick={() => handleTabChange(tab)}
                     className={cn(
                       "px-3 py-1 text-[14px] font-bold rounded-[3px] transition-all duration-150",
                       activeTab === tab
