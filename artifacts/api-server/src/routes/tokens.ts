@@ -126,7 +126,9 @@ router.get("/tokens", asyncWrap(async (req, res) => {
   const cacheKey = JSON.stringify({ sort, limit, offset, search, graduated, platform });
   const cached = _cacheGet(cacheKey);
   if (cached !== null) {
-    res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
+    const hitTtl    = sort === "newest" ? TOKEN_LIST_TTL_NEWEST : TOKEN_LIST_TTL;
+    const hitMaxAge = Math.floor(hitTtl / 1_000);
+    res.setHeader("Cache-Control", `public, max-age=${hitMaxAge}, stale-while-revalidate=${hitMaxAge}`);
     res.setHeader("X-Cache", "HIT");
     res.json(cached);
     return;

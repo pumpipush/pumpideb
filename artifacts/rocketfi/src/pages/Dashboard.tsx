@@ -849,7 +849,9 @@ export default function Dashboard() {
           // Pull volume + trade count from the live trade snapshot so cards
           // show real numbers from the first trade rather than blanks/zeros.
           volumeEth:    tradeSnap?.volumeEth    ?? "0",
-          tradeCount:   tradeSnap?.tradeCount   ?? 0,
+          // Fall back to the token-level count carried in the SSE replay payload
+          // so replayed tokens (already traded) aren't hidden by the tradeCount > 0 filter.
+          tradeCount:   tradeSnap?.tradeCount   ?? t.tradeCount ?? 0,
           // 24h change and trades/hr have no history yet for brand-new tokens
           pctChange24h: null,
           trades1h:     null,

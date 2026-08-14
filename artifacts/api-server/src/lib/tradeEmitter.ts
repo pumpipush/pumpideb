@@ -49,6 +49,9 @@ export interface NewTokenEvent {
     platform: string;
     chain: string;
     createdAt: string;
+    /** Known trade count at emission time — non-zero for SSE replay (DB-sourced);
+     *  zero/absent for live launches (first trade event hasn't arrived yet). */
+    tradeCount?: number;
   };
 }
 

@@ -39,6 +39,9 @@ export interface FeedToken {
   graduated?: boolean;
   /** True for the first BADGE_TTL_MS after arrival — drives the "NEW" badge */
   isNew: boolean;
+  /** Trade count at the moment the token was received (non-zero for SSE replay tokens,
+   *  zero for brand-new live launches before their first trade event arrives). */
+  tradeCount?: number;
 }
 
 /** Latest trade-derived stats for a token — overlaid on Dashboard cards */
@@ -161,7 +164,7 @@ export function useFeedStream(): UseFeedStreamResult {
 
         // ── New token launch ──────────────────────────────────────────────────
         if (event.type === "newToken") {
-          const token: FeedToken = { ...event.token, isNew: true };
+          const token: FeedToken = { ...event.token, isNew: true, tradeCount: event.token.tradeCount ?? 0 };
 
           setLiveTokens((prev) => {
             const filtered = prev.filter((t) => t.address !== token.address);
