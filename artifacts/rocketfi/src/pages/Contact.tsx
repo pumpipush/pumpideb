@@ -1,5 +1,4 @@
 import { SEO } from "@/components/seo/SEO";
-import { Link } from "wouter";
 import { ArrowUpRight, ChevronRight } from "lucide-react";
 
 /* ─── Data ────────────────────────────────────────────────────────── */
@@ -42,25 +41,6 @@ const SOCIALS = [
         <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
       </svg>
     ),
-  },
-];
-
-const FAQ = [
-  {
-    q: "How quickly do you reply?",
-    a: "Within 24 hours on weekdays. Support queries are usually faster.",
-  },
-  {
-    q: "Found a security vulnerability?",
-    a: 'Email hello@pumpi.io with "[SECURITY]" in the subject. Please don\'t post it publicly.',
-  },
-  {
-    q: "My token isn't showing on Pumpi.",
-    a: "Tokens are auto-indexed from pump.fun, PumpSwap, and Raydium LaunchLab. If yours is still missing after 30 minutes, send the mint address to support.",
-  },
-  {
-    q: "How do I report a scam token?",
-    a: "Send the token address and a short description to support@pumpi.io. We review every report.",
   },
 ];
 
@@ -250,32 +230,6 @@ export default function Contact() {
             </div>
           </div>
 
-          {/* ── FAQ ─────────────────────────────────────────────────── */}
-          <div className="mb-16">
-            <h2 className="text-[11px] font-semibold tracking-[0.15em] uppercase text-muted-foreground/50 mb-6">
-              Common questions
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-white/[0.05] rounded-2xl overflow-hidden border border-white/[0.06]">
-              {FAQ.map((item, i) => (
-                <div key={i} className="bg-background p-6 hover:bg-white/[0.02] transition-colors">
-                  <p className="text-[14px] font-semibold text-foreground mb-2">{item.q}</p>
-                  <p className="text-[13px] text-muted-foreground/70 leading-relaxed">{item.a}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ── Footer strip ─────────────────────────────────────────── */}
-          <div className="pt-8 border-t border-white/[0.06] flex flex-wrap items-center justify-between gap-4">
-            <span className="text-[12px] text-muted-foreground/40">
-              © {new Date().getFullYear()} Pumpi · <a href="https://pumpi.io" className="hover:text-foreground/60 transition-colors">pumpi.io</a>
-            </span>
-            <div className="flex items-center gap-4 text-[12px] text-muted-foreground/40">
-              {[["Privacy", "/privacy"], ["Terms", "/terms"], ["Disclaimer", "/disclaimer"]].map(([label, href]) => (
-                <Link key={href} href={href} className="hover:text-foreground/60 transition-colors">{label}</Link>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </>
