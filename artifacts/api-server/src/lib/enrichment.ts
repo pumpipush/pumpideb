@@ -584,7 +584,11 @@ async function backfillBondingCurves(): Promise<void> {
 const GRADUATION_DETECT_INTERVAL_MS  = 5 * 60_000; // every 5 minutes
 const PUMPSWAP_ENRICH_INTERVAL_MS    = 5 * 60_000; // every 5 minutes
 const LL_PRICE_ENRICH_INTERVAL_MS    =     60_000; // every 60 s
-const LL_PRICE_ENRICH_BATCH          = 60;          // tokens per tick (5 CU each → 300 CU/min)
+const LL_PRICE_ENRICH_BATCH          = 60;          // tokens per tick — primary pass (most active)
+/** Min trades a long-tail token must have before it triggers a one-time Birdeye check. */
+const LL_PRICE_VERIFY_MIN_TRADES     = 10;
+/** Max extra Birdeye calls per 60 s tick for the secondary (long-tail) pass. */
+const LL_PRICE_VERIFY_BATCH          =  5;
 const GRADUATION_DETECT_BATCH        = 20;          // mints per DexScreener call
 const GRADUATION_DEX_IDS = new Set(["pumpswap", "raydium", "raydium-clmm", "raydium-cp"]);
 
@@ -762,8 +766,80 @@ async function enrichPumpSwapPrices(): Promise<void> {
 // Tokens are processed sequentially (not parallel) to respect Birdeye's
 // per-second rate limit.  ~150 CU/min for 30 tokens at 5 CU each.
 
+/**
+ * Enrich a single LaunchLab token with Birdeye price data and persist to DB.
+ * Returns true when the token was successfully updated, false otherwise.
+ *
+ * Shared by both the primary (top-60) pass and the secondary (long-tail) pass
+ * so the enrichment logic stays in one place.
+ */
+async function enrichOneLaunchLabToken(address: string, solPrice: number): Promise<boolean> {
+  const overview = await fetchBirdeyeTokenOverview(address);
+  if (!overview || !overview.price || overview.price <= 0) return false;
+
+  const priceUsd = overview.price;
+  const mcUsd    = overview.mc;
+
+  // priceEth: SOL per token (text column)
+  const priceEth = (priceUsd / solPrice).toFixed(15);
+
+  // marketCapEth: total market cap in lamports (text column)
+  const marketCapEth = mcUsd != null && mcUsd > 0
+    ? String(Math.round((mcUsd / solPrice) * 1e9))
+    : null;
+
+  type DbUpdate = {
+    priceUsd: number;
+    priceEth: string;
+    marketCapUsd?: number;
+    marketCapEth?: string;
+    pctChange24h?: number;
+  };
+
+  const update: DbUpdate = { priceUsd, priceEth };
+  if (mcUsd        != null) update.marketCapUsd  = mcUsd;
+  if (marketCapEth != null) update.marketCapEth  = marketCapEth;
+  if (overview.priceChange24hPercent != null)
+    update.pctChange24h = overview.priceChange24hPercent;
+
+  const [updatedRow] = await db
+    .update(tokensTable)
+    .set(update)
+    .where(eq(tokensTable.address, address))
+    .returning();
+
+  if (updatedRow) {
+    emitSnapshot({
+      type: "snapshot",
+      token: {
+        address:              updatedRow.address,
+        name:                 updatedRow.name,
+        symbol:               updatedRow.symbol,
+        imageUrl:             updatedRow.imageUrl,
+        priceEth:             updatedRow.priceEth,
+        marketCapEth:         updatedRow.marketCapEth,
+        volumeEth:            updatedRow.volumeEth,
+        virtualEthReserves:   updatedRow.virtualEthReserves,
+        virtualTokenReserves: updatedRow.virtualTokenReserves,
+        tradeCount:           Number(updatedRow.tradeCount),
+        platform:             updatedRow.platform,
+        chain:                updatedRow.chain,
+      },
+    });
+    return true;
+  }
+  return false;
+}
+
 async function enrichLaunchLabPrices(): Promise<void> {
-  // Most-active tokens first — best use of our Birdeye quota.
+  const solPrice = await getSolPriceUsd();
+  if (!solPrice) {
+    log.warn("enrichment: launchlab price refresh skipped — SOL price unavailable");
+    return;
+  }
+
+  // ── Primary pass: top LL_PRICE_ENRICH_BATCH tokens by activity ───────────
+  // Best use of Birdeye quota — keeps prices fresh for the most-traded tokens.
   const tokens = await db
     .select({ address: tokensTable.address })
     .from(tokensTable)
@@ -771,81 +847,53 @@ async function enrichLaunchLabPrices(): Promise<void> {
     .orderBy(desc(tokensTable.tradeCount))
     .limit(LL_PRICE_ENRICH_BATCH);
 
-  if (tokens.length === 0) return;
-
-  const solPrice = await getSolPriceUsd();
-  if (!solPrice) {
-    log.warn("enrichment: launchlab price refresh skipped — SOL price unavailable");
-    return;
-  }
-
   let updated = 0;
-
   for (const { address } of tokens) {
     try {
-      const overview = await fetchBirdeyeTokenOverview(address);
-      if (!overview || !overview.price || overview.price <= 0) continue;
-
-      // Convert Birdeye USD fields → DB storage format
-      const priceUsd    = overview.price;
-      const mcUsd       = overview.mc;
-
-      // priceEth: SOL per token (text column)
-      const priceEth = (priceUsd / solPrice).toFixed(15);
-
-      // marketCapEth: total market cap in lamports (text column)
-      const marketCapEth = mcUsd != null && mcUsd > 0
-        ? String(Math.round((mcUsd / solPrice) * 1e9))
-        : null;
-
-      type DbUpdate = {
-        priceUsd: number;
-        priceEth: string;
-        marketCapUsd?: number;
-        marketCapEth?: string;
-        pctChange24h?: number;
-      };
-
-      const update: DbUpdate = { priceUsd, priceEth };
-      if (mcUsd        != null) update.marketCapUsd  = mcUsd;
-      if (marketCapEth != null) update.marketCapEth  = marketCapEth;
-      if (overview.priceChange24hPercent != null)
-        update.pctChange24h = overview.priceChange24hPercent;
-
-      const [updatedRow] = await db
-        .update(tokensTable)
-        .set(update)
-        .where(eq(tokensTable.address, address))
-        .returning();
-
-      if (updatedRow) {
-        // Push live price update to any open SSE detail-page viewers
-        emitSnapshot({
-          type: "snapshot",
-          token: {
-            address:              updatedRow.address,
-            name:                 updatedRow.name,
-            symbol:               updatedRow.symbol,
-            imageUrl:             updatedRow.imageUrl,
-            priceEth:             updatedRow.priceEth,
-            marketCapEth:         updatedRow.marketCapEth,
-            volumeEth:            updatedRow.volumeEth,
-            virtualEthReserves:   updatedRow.virtualEthReserves,
-            virtualTokenReserves: updatedRow.virtualTokenReserves,
-            tradeCount:           Number(updatedRow.tradeCount),
-            platform:             updatedRow.platform,
-            chain:                updatedRow.chain,
-          },
-        });
-        updated++;
-      }
+      if (await enrichOneLaunchLabToken(address, solPrice)) updated++;
     } catch (err) {
       log.warn({ address, err }, "enrichment: launchlab birdeye price refresh failed for token");
     }
   }
-
   if (updated > 0) {
     log.info({ updated, solPrice }, "enrichment: launchlab prices refreshed from Birdeye");
+  }
+
+  // ── Secondary pass: first-time Birdeye verification for long-tail tokens ──
+  // Picks tokens outside the primary batch that:
+  //   a) have accumulated enough trades to be worth verifying (≥ LL_PRICE_VERIFY_MIN_TRADES)
+  //   b) have never had a Birdeye price set (price_usd IS NULL)
+  //
+  // Once price_usd is populated the token exits this pass and enters the
+  // primary batch on the next tick.  This guarantees every actively-traded
+  // LaunchLab token — regardless of its position in the trade-count ranking —
+  // eventually gets an accurate Birdeye-sourced market cap, closing the gap
+  // for long-tail tokens that would otherwise keep their bonding-curve MC forever.
+  const unverified = await db
+    .select({ address: tokensTable.address })
+    .from(tokensTable)
+    .where(
+      and(
+        eq(tokensTable.platform, "raydium_launchlab"),
+        isNull(tokensTable.priceUsd),
+        sql`${tokensTable.tradeCount}::int >= ${LL_PRICE_VERIFY_MIN_TRADES}`,
+      ),
+    )
+    .orderBy(desc(tokensTable.tradeCount))  // most-active unverified first
+    .limit(LL_PRICE_VERIFY_BATCH);
+
+  if (unverified.length > 0) {
+    let verified = 0;
+    for (const { address } of unverified) {
+      try {
+        if (await enrichOneLaunchLabToken(address, solPrice)) verified++;
+      } catch (err) {
+        log.warn({ address, err }, "enrichment: launchlab long-tail birdeye verify failed");
+      }
+    }
+    if (verified > 0) {
+      log.info({ verified }, "enrichment: launchlab long-tail tokens Birdeye-verified");
+    }
   }
 }
 
