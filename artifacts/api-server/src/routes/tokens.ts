@@ -411,11 +411,10 @@ router.get("/tokens", asyncWrap(async (req, res) => {
       conditions.push(eq(tokensTable.platform, platform));
     }
   }
-  // For the "newest" sort, only show tokens that appeared AFTER this server
-  // session started AND have been traded at least once — zero-activity coins
-  // are likely scam/rug launches that were never touched.
+  // For the "newest" sort, only show tokens that have been traded at least once
+  // — zero-activity coins are likely scam/rug launches that were never touched.
+  // No SERVER_START_TIME restriction so pagination works across all historical coins.
   if (sort === "newest") {
-    conditions.push(gte(tokensTable.createdAt, SERVER_START_TIME));
     conditions.push(gt(tokensTable.tradeCount, "0"));
   }
 

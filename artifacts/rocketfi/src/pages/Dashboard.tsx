@@ -746,8 +746,8 @@ export default function Dashboard() {
   const [onlyWithImage, setOnlyWithImage] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage]               = useState(1);
-  const PAGE_SIZE     = isMobile ? 24 : 50;   // paginated tabs
-  const NEW_TAB_LIMIT = isMobile ? 50 : 150;  // New tab: fixed pool, no pagination
+  const PAGE_SIZE     = isMobile ? 24 : 50;   // paginated tabs (Trending / Volume / Graduated)
+  const NEW_PAGE_SIZE = isMobile ? 50 : 100;  // New tab: 100 per page with pagination
 
   // ── Live feed ─────────────────────────────────────────────────────────────
   const { liveTokens, liveTradeStats, connected } = useFeedStream();
@@ -775,13 +775,13 @@ export default function Dashboard() {
   useEffect(() => { setPage(1); }, [activeTab, platformFilter, search, minMcap, onlyGraduated, onlyWithImage]);
 
   const isNewTab = activeTab === "New";
+  const activePageSize = isNewTab ? NEW_PAGE_SIZE : PAGE_SIZE;
   const listParams = {
     sort: sortMap[activeTab],
     // Graduated tab uses client-side mcap threshold — no server-side flag needed
     graduated: undefined as boolean | undefined,
-    // New tab: fetch a large pool in one shot — no pagination
-    limit: isNewTab ? NEW_TAB_LIMIT : PAGE_SIZE,
-    offset: isNewTab ? 0 : (page - 1) * PAGE_SIZE,
+    limit: activePageSize,
+    offset: (page - 1) * activePageSize,
     platform: platformFilter === "all" ? undefined : platformFilter as ListTokensPlatform,
   };
   const { data: rawTokens, isLoading: loadingTokens } = useListTokens(listParams, {
@@ -954,8 +954,6 @@ export default function Dashboard() {
     const apiLive    = apiDisplay.filter((t) => t.isLive);
     const apiNonLive = apiDisplay.filter((t) => !t.isLive);
     const combined = [...filteredLiveOnly, ...apiLive, ...apiNonLive];
-    // New tab: cap pool at NEW_TAB_LIMIT — coins past that position sink off the bottom
-    if (activeTab === "New") return combined.slice(0, NEW_TAB_LIMIT);
     return combined;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawTokens, liveTokens, liveTradeStats, platformFilter, search, onlyGraduated, onlyWithImage, minMcap, activeTab, solPrice, page]);
@@ -981,8 +979,7 @@ export default function Dashboard() {
     setPage(1);
   };
 
-  // New tab uses a fixed pool — no next-page button
-  const hasMore = !isNewTab && (rawTokens?.length ?? 0) >= PAGE_SIZE;
+  const hasMore = (rawTokens?.length ?? 0) >= activePageSize;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -1219,12 +1216,12 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="mt-1">
-                <TableView tokens={tokens} solPrice={solPrice} activeTab={activeTab} startRank={(page - 1) * PAGE_SIZE + 1} />
+                <TableView tokens={tokens} solPrice={solPrice} activeTab={activeTab} startRank={(page - 1) * activePageSize + 1} />
               </div>
             )}
 
-            {/* ── Pagination — hidden on New tab (fixed 150-coin pool) ── */}
-            {!loadingTokens && tokens && tokens.length > 0 && !isNewTab && (
+            {/* ── Pagination ── */}
+            {!loadingTokens && tokens && tokens.length > 0 && (
               <div className="flex items-center justify-center gap-1.5 pt-4 pb-2">
                 {/* Previous */}
                 <button
