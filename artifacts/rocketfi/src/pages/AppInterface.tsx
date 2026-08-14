@@ -2284,8 +2284,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           const holders = serverHolders ?? [];
           // Use on-chain total supply as denominator so % of supply is accurate.
           // token.totalSupply is in atomic units (pump.fun: 1e15 = 1B × 10^6).
-          // Fall back to sum of tracked balances only if the field is missing/zero.
-          const onChainSupply = token?.totalSupply ? parseFloat(token.totalSupply) : 0;
+          // Guard: some DB rows have 1e27 (DB migration bug, now repaired).
+          // For pump_fun / pumpswap the supply is always 1B × 10^6 = 1e15.
+          const PUMP_SUPPLY = 1_000_000_000_000_000;
+          const isPumpPlatform = token?.platform === "pump_fun" || token?.platform === "pumpswap";
+          const rawSupply = token?.totalSupply ? parseFloat(token.totalSupply) : 0;
+          const onChainSupply = rawSupply > 0 && (!isPumpPlatform || rawSupply <= PUMP_SUPPLY)
+            ? rawSupply
+            : (isPumpPlatform ? PUMP_SUPPLY : 0);
           const totalSupply = onChainSupply > 0
             ? onChainSupply
             : (holders.reduce((s, h) => s + Math.max(0, parseFloat(h.balance) || 0), 0) || 1);

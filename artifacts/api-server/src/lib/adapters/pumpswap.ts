@@ -117,6 +117,10 @@ export class PumpSwapIndexer extends SolanaRpcIndexer {
       // `existing.length === 0` check (async SELECT races). onConflictDoNothing
       // ensures only one row is written; checking the RETURNING result ensures
       // only the winning handler broadcasts the SSE event.
+      // pump.fun total supply is constant: 1B tokens × 10^6 decimals = 1e15 atomic.
+      // Must be set explicitly — the schema default (now "0") and any value from
+      // DexScreener fields must not override this known-correct constant.
+      const PUMP_TOTAL_SUPPLY = "1000000000000000";
       const [inserted] = await db.insert(tokensTable).values({
         address:        mint,
         name,
@@ -128,6 +132,8 @@ export class PumpSwapIndexer extends SolanaRpcIndexer {
         graduated:      true,
         ...socialFields,
         ...(fields ?? {}),
+        // Pin totalSupply last so it always wins over the spread above
+        totalSupply:    PUMP_TOTAL_SUPPLY,
         // Use on-chain price from this trade if DexScreener has nothing yet
         ...(priceEth && !fields?.priceEth ? { priceEth } : {}),
       }).onConflictDoNothing().returning({ id: tokensTable.id });
