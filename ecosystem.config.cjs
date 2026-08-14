@@ -46,6 +46,7 @@ module.exports = {
       env: {
         ...env,
         NODE_ENV: "production",
+        PLATFORM_TREASURY_ADDRESS: "JBCqngc3TYcz3Rtv5Md3CZyw8X6AxLik7gswCCttRS5E",
       },
     },
   ],

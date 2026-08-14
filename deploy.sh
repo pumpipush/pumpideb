@@ -27,6 +27,7 @@ echo ""
 # ── 3. Build frontend ─────────────────────────────────────────────────────────
 # Env vars Vite needs at build time — set here so no separate .env file needed.
 export VITE_PLATFORM_FEE_RECIPIENT="JBCqngc3TYcz3Rtv5Md3CZyw8X6AxLik7gswCCttRS5E"
+export VITE_PUMP_FEE_RECIPIENT="JBCqngc3TYcz3Rtv5Md3CZyw8X6AxLik7gswCCttRS5E"
 
 echo "▶ Building frontend..."
 pnpm --filter @workspace/rocketfi run build
