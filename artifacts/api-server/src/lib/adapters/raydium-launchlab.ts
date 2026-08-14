@@ -500,6 +500,17 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
         });
       }
 
+      // ── Dust trade guard ─────────────────────────────────────────────────
+      // Trades with fewer than MIN_PRICE_ATOMS (~0.001 display tokens) are
+      // atomically meaningless: they corrupt price/MC and add noise to trade
+      // history, volume stats, and holder positions.  Token row was still
+      // auto-created above when missing — that placeholder is legitimate.
+      if (tokBig < MIN_PRICE_ATOMS) {
+        this.log.debug({ mint, tokenAmount, solLamports },
+          "raydium_launchlab: fast-path dust trade skipped (tokenAmount < MIN_PRICE_ATOMS)");
+        return;
+      }
+
       // ── Update token price + market cap immediately ───────────────────────
       await db.update(tokensTable).set({
         tradeCount: sql`${tokensTable.tradeCount} + 1`,
@@ -657,6 +668,15 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
         platform:             PLATFORM,
         chain:                CHAIN,
       }).onConflictDoNothing();
+    }
+
+    // ── Dust trade guard (fallback path) ─────────────────────────────────────
+    // Same threshold as fast path: skip INSERT + token stats for atomically
+    // tiny token amounts.  Token placeholder was still created above when missing.
+    if (tokBig < MIN_PRICE_ATOMS) {
+      this.log.debug({ mint, tokenAmount, solLamports },
+        "raydium_launchlab: fallback dust trade skipped (tokenAmount < MIN_PRICE_ATOMS)");
+      return;
     }
 
     const [trade] = await db.insert(tradesTable).values({
