@@ -584,7 +584,7 @@ export default function ProfilePage() {
 
             {/* ══ TABS ═════════════════════════════════════════════════════════════ */}
             <div
-              className="flex gap-1 p-1 mb-6 rounded-xl w-fit"
+              className="flex gap-1 p-1 mb-6 rounded-xl overflow-x-auto scrollbar-none"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
             >
               {(["activity", "wallet", ...(isOwner ? ["creator-fee"] : [])] as Tab[]).map((tab) => (
@@ -592,7 +592,7 @@ export default function ProfilePage() {
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={cn(
-                    "flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                    "flex shrink-0 items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all duration-200",
                     activeTab === tab
                       ? "bg-white/[0.08] text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground",
