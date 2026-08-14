@@ -80,7 +80,7 @@ export function SEO({
       <meta name="twitter:title" content={computedTitle} />
       <meta name="twitter:description" content={description} />
       <meta name="twitter:image" content={computedImage} />
-      <meta name="twitter:site" content="@PumpiApp" />
+      <meta name="twitter:site" content="@pumpi_dex" />
     </Helmet>
   );
 }

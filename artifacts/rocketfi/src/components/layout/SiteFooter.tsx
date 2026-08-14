@@ -53,7 +53,7 @@ export function SiteFooter() {
       {/* Social icons */}
       <div className="flex items-center gap-3">
         <a
-          href="https://x.com/pumpi_io"
+          href="https://x.com/pumpi_dex"
           target="_blank"
           rel="noopener noreferrer"
           className="text-muted-foreground/50 hover:text-foreground transition-colors"
@@ -62,7 +62,7 @@ export function SiteFooter() {
           <XIcon />
         </a>
         <a
-          href="https://t.me/pumpi_io"
+          href="https://t.me/pumpi_dex"
           target="_blank"
           rel="noopener noreferrer"
           className="text-muted-foreground/50 hover:text-foreground transition-colors"
