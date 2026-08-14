@@ -16,7 +16,7 @@ import { useWallet } from "@/contexts/WalletContext";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   formatAddress, formatSol, timeAgo, cn, diceBearUrl,
-  resolveImageUrl, formatAtomicTokenAmount,
+  resolveImageUrl, formatAtomicTokenAmount, formatMCUsd,
 } from "@/lib/utils";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
@@ -1003,15 +1003,7 @@ export default function ProfilePage() {
                               )}
                             </span>
                             <span className="text-sm font-mono text-right w-20 sm:w-24 tabular-nums">
-                              {(() => {
-                                try {
-                                  if (!token.marketCapEth) return <span className="text-muted-foreground/40">—</span>;
-                                  const mc = BigInt(Math.round(parseFloat(token.marketCapEth)));
-                                  return formatSol((mc / BigInt(1e9)).toString());
-                                } catch {
-                                  return <span className="text-muted-foreground/40">—</span>;
-                                }
-                              })()}
+                              {formatMCUsd(token.marketCapEth, solPrice)}
                             </span>
                           </div>
                         ))}
@@ -1146,13 +1138,7 @@ export default function ProfilePage() {
                             {token.tradeCount ? Number(token.tradeCount).toLocaleString() : "0"}
                           </span>
                           <span className="text-sm font-mono text-right w-20 tabular-nums">
-                            {(() => {
-                              try {
-                                if (!token.marketCapEth) return <span className="text-muted-foreground/40">—</span>;
-                                const mc = BigInt(Math.round(parseFloat(token.marketCapEth)));
-                                return formatSol((mc / BigInt(1e9)).toString());
-                              } catch { return <span className="text-muted-foreground/40">—</span>; }
-                            })()}
+                            {formatMCUsd(token.marketCapEth, solPrice)}
                           </span>
                           <span className="w-20 text-right">
                             {token.graduated ? (

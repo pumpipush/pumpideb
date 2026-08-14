@@ -131,12 +131,29 @@ export function pairToSolPrice(pair: DexScreenerPair): number {
  *   priceUsd    = price in USD            (string)
  *   marketCapUsd = market cap in USD      (string)
  */
+/**
+ * Maximum plausible price in SOL per token for any meme/DeFi token on pump.fun or PumpSwap.
+ * Tokens above this threshold are almost certainly garbage data from DexScreener
+ * (thin-liquidity pairs, test transactions, or data feed errors).
+ * ~10 SOL/token = ~$750 at $75 SOL — far above any legitimate meme token.
+ */
+const MAX_PRICE_NATIVE_SOL = 10;
+
 export function pairToDbFields(pair: DexScreenerPair) {
   const solPrice    = pairToSolPrice(pair);
   const priceNative = parseFloat(pair.priceNative);
   const priceUsd    = pair.priceUsd ? parseFloat(pair.priceUsd) : null;
   const mcapUsd     = pair.marketCap ?? null;
   const volUsd24h   = pair.volume?.h24 ?? null;
+
+  // Sanity check: reject absurdly high prices (thin-liquidity / DexScreener data errors).
+  // A legitimate pump.fun / PumpSwap meme token cannot trade at >10 SOL/token.
+  if (priceNative > MAX_PRICE_NATIVE_SOL) {
+    return {
+      poolAddress: pair.pairAddress ?? undefined,
+      // Deliberately omit all price/MC/volume fields — let existing DB values stand.
+    };
+  }
 
   const priceEth = priceNative > 0 ? priceNative.toFixed(15) : undefined;
 
