@@ -116,6 +116,55 @@ export async function fetchMintTotalSupply(mint: string): Promise<bigint | null>
   }
 }
 
+/**
+ * Compute the initial token parameters for a newly-created LaunchLab token
+ * from its actual on-chain total supply.
+ *
+ * At t=0 (no trades yet) the bonding-curve invariant gives:
+ *   MC = supply × vSol/vTok = supply × vSol/supply = vSol (always 30 SOL)
+ * So initMcLamports is constant regardless of supply.
+ *
+ * priceEth IS supply-dependent: smaller supply → higher price per token.
+ *
+ * Exported for unit testing so the create-path formula is verified without
+ * touching the DB or RPC layer.
+ */
+export function computeInitialTokenParams(realSupply: bigint): {
+  totalSupply:    string;
+  initMcLamports: string;
+  initPriceEth:   string;
+} {
+  // fetchMintTotalSupply already filters 0 → null; callers use ?? LL_TOTAL_SUPPLY.
+  // Guard here for defensiveness in tests.
+  const supply = realSupply > 0n ? realSupply : LL_TOTAL_SUPPLY;
+  return {
+    totalSupply:    supply.toString(),
+    // MC at t=0 = supply × vSol/vTok = supply × 30e9 / supply = 30e9 (constant)
+    initMcLamports: LL_INIT_VSOL_LAMPORTS.toString(),
+    initPriceEth:   (Number(LL_INIT_VSOL_LAMPORTS) / Number(supply) / 1000).toFixed(15),
+  };
+}
+
+/**
+ * Compute the market cap for a LaunchLab trade from the token's stored total
+ * supply and the trade's SOL / token ratio.
+ *
+ * Using the stored totalSupply (not the hardcoded 1B constant) is essential
+ * for non-standard-supply tokens to show accurate market caps.
+ *
+ * Returns undefined when amounts fall below the dust threshold so the caller
+ * can skip the price update safely.  Exported for unit testing.
+ */
+export function computeTradeMarketCap(
+  totalSupply:   bigint,
+  solLamports:   bigint,
+  tokenAmount:   bigint,
+  minPriceAtoms: bigint = 1_000n,
+): string | undefined {
+  if (tokenAmount < minPriceAtoms || solLamports === 0n) return undefined;
+  return (totalSupply * solLamports / tokenAmount).toString();
+}
+
 const SKIP_MINTS = new Set([
   "So11111111111111111111111111111111111111112",
   "11111111111111111111111111111111",
@@ -434,15 +483,8 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
     // Fetch the actual on-chain total supply so tokens with non-standard supplies
     // (e.g. tokens with a different total supply than 1B) don't show wildly wrong
     // market caps.  Falls back to LL_TOTAL_SUPPLY if the RPC call fails.
-    const realSupply    = await fetchMintTotalSupply(mint) ?? LL_TOTAL_SUPPLY;
-    const initMcLamports =
-      realSupply > 0n
-        ? (realSupply * LL_INIT_VSOL_LAMPORTS / realSupply).toString() // = LL_INIT_VSOL_LAMPORTS at t=0
-        : LL_INIT_MC_LAMPORTS;
-    const initPriceEth =
-      realSupply > 0n
-        ? (Number(LL_INIT_VSOL_LAMPORTS) / Number(realSupply) / 1000).toFixed(15)
-        : LL_INIT_PRICE_ETH;
+    const realSupply = await fetchMintTotalSupply(mint) ?? LL_TOTAL_SUPPLY;
+    const { totalSupply, initMcLamports, initPriceEth } = computeInitialTokenParams(realSupply);
 
     await db.insert(tokensTable).values({
       address:              mint,
@@ -451,8 +493,8 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
       description:          null,
       imageUrl:             null,
       creatorAddress,
-      totalSupply:          realSupply.toString(),
-      virtualTokenReserves: realSupply.toString(),
+      totalSupply,
+      virtualTokenReserves: totalSupply,
       virtualEthReserves:   LL_INIT_VSOL_SOL,
       marketCapEth:         initMcLamports,
       priceEth:             initPriceEth,
@@ -461,7 +503,7 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
       metadataUri:          uri ?? null,
     }).onConflictDoNothing();
 
-    this.log.info({ mint, name, symbol, marketCapEth: initMcLamports, totalSupply: realSupply.toString() },
+    this.log.info({ mint, name, symbol, marketCapEth: initMcLamports, totalSupply },
       "raydium_launchlab: new token ingested");
 
     // Broadcast to live feed — wait up to 3 s for image, then broadcast anyway
@@ -566,9 +608,7 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
           : LL_TOTAL_SUPPLY;
       }
 
-      const updMCStr = tokBig >= MIN_PRICE_ATOMS && solLamports !== "0"
-        ? (tradeSupply * BigInt(solLamports) / tokBig).toString()
-        : undefined;
+      const updMCStr = computeTradeMarketCap(tradeSupply, BigInt(solLamports), tokBig);
 
       if (!existing) {
         this.log.warn({ mint, totalSupply: tradeSupply.toString() },
@@ -869,8 +909,8 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
     let updVSolStr: string | undefined;
     let updVTokStr: string | undefined;
 
-    if (tokBig >= MIN_PRICE_ATOMS && solLamports !== "0") {
-      updMCStr = (fallbackSupply * BigInt(solLamports) / tokBig).toString();
+    updMCStr = computeTradeMarketCap(fallbackSupply, BigInt(solLamports), tokBig);
+    if (updMCStr !== undefined) {
       try {
         const [cur] = await db
           .select({ virtualEthReserves: tokensTable.virtualEthReserves,
