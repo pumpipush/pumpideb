@@ -130,6 +130,9 @@ function StatChip({
 }: { label: string; value: string | number; sub?: string; color?: string }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center py-3 px-3 min-w-0 relative">
+      <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 mb-1.5 font-medium">
+        {label}
+      </span>
       <span
         className="text-lg font-bold tabular-nums leading-none tracking-tight"
         style={{ color: color ?? "var(--foreground)" }}
@@ -141,9 +144,6 @@ function StatChip({
           {sub}
         </span>
       )}
-      <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 mt-1.5 font-medium">
-        {label}
-      </span>
     </div>
   );
 }
