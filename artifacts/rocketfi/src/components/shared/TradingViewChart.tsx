@@ -72,7 +72,7 @@ export function TradingViewChart({
 
       const chart = createChart(el, {
         layout: {
-          background:  { type: ColorType.Solid, color: "#000000" },
+          background:  { type: ColorType.Solid, color: "#111111" },
           textColor:   "#666666",
           fontFamily:  "'Trebuchet MS', system-ui, sans-serif",
           fontSize:    10,
