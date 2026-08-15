@@ -817,7 +817,11 @@ export default function ProfilePage() {
 
               // ── Social user on their own profile with no linked wallet ──────────
               // Show a helpful CTA rather than a confusing error/empty state.
-              const isSocialNoWallet = isOwner && !!socialUser && !socialUser.linkedWallet;
+              // Wallet-auth users: their address IS their wallet — no "link wallet" CTA needed.
+              // Only show the CTA for social (Google/email) users who haven't linked a wallet yet.
+              const isSocialNoWallet = isOwner && !!socialUser
+                && socialUser.authType !== "wallet"
+                && !socialUser.linkedWallet;
 
               return (
                 <div className="space-y-4">
