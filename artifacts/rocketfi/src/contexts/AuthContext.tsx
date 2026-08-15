@@ -423,6 +423,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await lr.json() as {
       token: string;
       profile: { address: string; username: string; avatarUrl?: string | null; email?: string | null; linkedWallet?: string | null };
+      authType?: "google" | "email" | "wallet";
     };
     storeToken(data.token);
     const p = data.profile;
