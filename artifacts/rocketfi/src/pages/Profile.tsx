@@ -155,7 +155,7 @@ export default function ProfilePage() {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const { wallet, openWalletModal } = useWallet();
-  const { socialUser, unlinkWallet } = useAuth();
+  const { socialUser, unlinkWallet, authHeaders } = useAuth();
   const solPrice = useSolPrice();
 
   const looksLikeAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(slug);
@@ -188,6 +188,22 @@ export default function ProfilePage() {
     (!!wallet && !!address && wallet.toLowerCase() === address.toLowerCase()) ||
     (!!socialUser && !!address && socialUser.address === address);
 
+  // ── In-app balance (owner only, fetched after isOwner is known) ───────────
+  const { data: inAppBalance } = useQuery<string>({
+    queryKey: ["in-app-balance", address],
+    queryFn: async () => {
+      const hdrs = authHeaders();
+      if (!hdrs.Authorization) return "0";
+      const res = await fetch("/api/deposits/balance", { headers: hdrs });
+      if (!res.ok) return "0";
+      const data = await res.json() as { solBalance: string };
+      return data.solBalance;
+    },
+    enabled: isOwner && !!address,
+    staleTime: 15_000,
+    refetchOnWindowFocus: true,
+  });
+
   const autoOpenedRef = useRef(false);
   useEffect(() => {
     if (!editUsernameParam || !isOwner || autoOpenedRef.current || isLoading) return;
@@ -197,14 +213,14 @@ export default function ProfilePage() {
   }, [editUsernameParam, isOwner, isLoading]);
 
   const { data: portfolio, isLoading: portfolioLoading, error: portfolioError } = useQuery<WalletPortfolio>({
-    queryKey: ["wallet-portfolio", address],
+    queryKey: ["wallet-portfolio", solanaAddress],
     queryFn: async () => {
-      const res = await fetch(`/api/wallet/${address}/portfolio`);
+      const res = await fetch(`/api/wallet/${solanaAddress}/portfolio`);
       if (!res.ok) throw new Error("Failed to fetch portfolio");
       return res.json() as Promise<WalletPortfolio>;
     },
-    // Prefetch wallet data as soon as address is known, not only when tab is clicked
-    enabled: !!address,
+    // Only fetch for valid Solana addresses — UUIDs from social auth will 500
+    enabled: !!solanaAddress,
     staleTime: 20_000,
     refetchOnWindowFocus: true,
     refetchInterval: activeTab === "wallet" ? 30_000 : false,
@@ -569,6 +585,38 @@ export default function ProfilePage() {
                 </div>
               )}
             </div>
+
+            {/* ══ IN-APP BALANCE CARD (owner only) ═════════════════════════════════ */}
+            {isOwner && (
+              <div
+                className="flex items-center justify-between px-4 py-3.5 rounded-xl mb-4"
+                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+              >
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/50 font-medium mb-0.5">
+                    In-app balance
+                  </p>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-xl font-bold tabular-nums text-white">
+                      {inAppBalance ?? "0"} SOL
+                    </span>
+                    {solPrice && inAppBalance && (
+                      <span className="text-xs text-muted-foreground">
+                        ${(parseFloat(inAppBalance) * solPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setDepositOpen(true); }}
+                  className="h-9 px-4 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5"
+                  style={{ background: "#9aed2c", color: "#000" }}
+                >
+                  <ArrowDownToLine className="w-3.5 h-3.5" />
+                  Deposit
+                </button>
+              </div>
+            )}
 
             {/* Creator fee badge — quick hint to switch to the tab */}
             {isOwner && claimableLamports > 1_000_000n && activeTab !== "creator-fee" && (
