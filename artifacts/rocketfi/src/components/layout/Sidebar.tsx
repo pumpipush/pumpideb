@@ -115,7 +115,7 @@ export function Sidebar() {
         <Link href="/app" className="block w-full">
           <LaunchTokenButton />
         </Link>
-        <span className="text-center text-[11px]" style={{ color: "#64748b" }}>v1.0 beta</span>
+        <span className="text-center text-[11px] text-muted-foreground">v1.0 beta</span>
       </div>
     </div>
   );
