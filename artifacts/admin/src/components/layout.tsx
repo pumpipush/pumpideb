@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'wouter';
 import {
   LayoutDashboard, Users, Coins, ArrowRightLeft,
-  Settings, LogOut, TrendingUp, Menu, X,
+  Settings, LogOut, TrendingUp, Menu, X, BarChart2,
 } from 'lucide-react';
 import { useAdmin } from '@/contexts/AdminContext';
 import { cn } from '@/lib/utils';
@@ -12,8 +12,9 @@ const NAV_ITEMS = [
   { href: '/users',   label: 'Users',    icon: Users },
   { href: '/tokens',  label: 'Tokens',   icon: Coins },
   { href: '/trades',  label: 'Trades',   icon: ArrowRightLeft },
-  { href: '/fees',    label: 'Fees',     icon: TrendingUp },
-  { href: '/system',  label: 'System',   icon: Settings },
+  { href: '/fees',      label: 'Fees',      icon: TrendingUp },
+  { href: '/analytics', label: 'Analytics', icon: BarChart2  },
+  { href: '/system',    label: 'System',    icon: Settings   },
 ];
 
 function SidebarContent({

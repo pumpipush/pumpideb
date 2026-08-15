@@ -16,6 +16,7 @@ import Tokens from '@/pages/tokens';
 import Trades from '@/pages/trades';
 import System from '@/pages/system';
 import Fees from '@/pages/fees';
+import Analytics from '@/pages/analytics';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -51,6 +52,7 @@ function ProtectedRoutes() {
         <Route path="/trades" component={Trades} />
         <Route path="/system" component={System} />
         <Route path="/fees" component={Fees} />
+        <Route path="/analytics" component={Analytics} />
         <Route component={NotFound} />
       </Switch>
     </AdminLayout>

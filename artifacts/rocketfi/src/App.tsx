@@ -76,6 +76,20 @@ function AppShell() {
     window.scrollTo(0, 0);
   }, [location]);
 
+  // Analytics beacon — fire-and-forget on every navigation.
+  // Uses sendBeacon so it doesn't block tab close / navigation.
+  useEffect(() => {
+    try {
+      const payload = JSON.stringify({
+        path:     location + (search ? `?${search}` : ''),
+        referrer: document.referrer || null,
+      });
+      navigator.sendBeacon('/api/track', new Blob([payload], { type: 'application/json' }));
+    } catch {
+      // Never throw — analytics must not break the app.
+    }
+  }, [location, search]);
+
   return (
     <div className="flex min-h-[100dvh] w-full overflow-x-hidden">
       <Sidebar />

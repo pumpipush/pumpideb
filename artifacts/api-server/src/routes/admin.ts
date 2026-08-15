@@ -80,9 +80,9 @@ router.get("/admin/overview", asyncWrap(async (_req: Request, res: Response) => 
     getSolPriceUsd().catch(() => null),
   ]);
 
-  const u = (users as { rows: Record<string, string>[] }).rows[0];
-  const t = (tokens as { rows: Record<string, string>[] }).rows[0];
-  const tr = (trades as { rows: Record<string, string>[] }).rows[0];
+  const u = (users as unknown as { rows: Record<string, string>[] }).rows[0];
+  const t = (tokens as unknown as { rows: Record<string, string>[] }).rows[0];
+  const tr = (trades as unknown as { rows: Record<string, string>[] }).rows[0];
 
   const lamToSol = (lam: string) => (Number(lam) / 1e9).toFixed(4);
 
@@ -150,9 +150,9 @@ router.get("/admin/charts/daily", asyncWrap(async (_req: Request, res: Response)
   ]);
 
   type DayRow = { day: string; count?: string; trades?: string; volume_sol?: string };
-  const uRows  = (userRows  as { rows: DayRow[] }).rows;
-  const tRows  = (tokenRows as { rows: DayRow[] }).rows;
-  const trRows = (tradeRows as { rows: DayRow[] }).rows;
+  const uRows  = (userRows  as unknown as { rows: DayRow[] }).rows;
+  const tRows  = (tokenRows as unknown as { rows: DayRow[] }).rows;
+  const trRows = (tradeRows as unknown as { rows: DayRow[] }).rows;
 
   // Build a unified day index for last 30 days
   const days: string[] = [];
@@ -219,7 +219,7 @@ router.get("/admin/users", asyncWrap(async (req: Request, res: Response) => {
     ),
   ]);
 
-  const total = Number((countResult as { rows: { count: string }[] }).rows[0]?.count ?? 0);
+  const total = Number((countResult as unknown as { rows: { count: string }[] }).rows[0]?.count ?? 0);
   res.json({ total, rows });
 }));
 
@@ -336,7 +336,7 @@ router.get("/admin/trades", asyncWrap(async (req: Request, res: Response) => {
     db.execute(sql`SELECT COUNT(*) FROM trades`),
   ]);
 
-  const total = Number((countResult as { rows: { count: string }[] }).rows[0]?.count ?? 0);
+  const total = Number((countResult as unknown as { rows: { count: string }[] }).rows[0]?.count ?? 0);
   res.json({ total, rows });
 }));
 
@@ -446,7 +446,7 @@ router.get("/admin/fees", asyncWrap(async (req: Request, res: Response) => {
     `),
   ]);
 
-  const t = (totals as { rows: Record<string, string>[] }).rows[0]!;
+  const t = (totals as unknown as { rows: Record<string, string>[] }).rows[0]!;
   res.json({
     totals: {
       creators:      Number(t.total_creators),
@@ -454,7 +454,7 @@ router.get("/admin/fees", asyncWrap(async (req: Request, res: Response) => {
       volumeSol:     (Number(t.total_volume_lamports) / 1e9).toFixed(4),
       trades:        Number(t.total_trades),
     },
-    rows: (leaderboard as { rows: Record<string, unknown>[] }).rows.map(r => ({
+    rows: (leaderboard as unknown as { rows: Record<string, unknown>[] }).rows.map(r => ({
       creatorAddress:   r.creator_address,
       username:         r.username ?? null,
       avatarUrl:        r.avatar_url ?? null,
@@ -541,7 +541,7 @@ router.get("/admin/dex-market-cap-stats", asyncWrap(async (_req: Request, res: R
     GROUP BY platform
     ORDER BY platform
   `);
-  res.json({ stats: (stats as unknown as { rows: unknown[] }).rows });
+  res.json({ stats: (stats as unknown as unknown as { rows: unknown[] }).rows });
 }));
 
 export default router;

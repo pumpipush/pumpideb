@@ -12,6 +12,7 @@ import authRouter from "./auth";
 import blockhashRouter from "./blockhash";
 import creatorFeesRouter from "./creator-fees";
 import adminRouter from "./admin";
+import analyticsRouter from "./analytics";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(walletRouter);
 router.use(authRouter);
 router.use(creatorFeesRouter);
 router.use(adminRouter);
+router.use(analyticsRouter);
 
 export default router;
