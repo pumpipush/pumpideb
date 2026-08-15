@@ -71,7 +71,7 @@ function makeMcFormatter(solPrice: number | null, totalSupply = 1_000_000_000): 
 /* ── Constants ─────────────────────────────────────────────────────── */
 const UP   = "#089981";
 const DOWN = "#f23645";
-const BG   = "#0B1220";
+const BG   = "#000000";
 
 const IND_COLOR: Record<string, string> = {
   MA20: "#fbbf24", MA50: "#fb923c", MA200: "#a78bfa",
@@ -966,7 +966,7 @@ export const ChartCanvas = memo(function ChartCanvas({
             className="group relative flex items-center justify-center select-none"
             style={{
               width: 28, height: 28,
-              background: "rgba(11,18,32,0.88)",
+              background: "rgba(0,0,0,0.88)",
               border: "1px solid rgba(255,255,255,0.20)",
               borderRadius: 4,
               color: "#888888",
@@ -985,7 +985,7 @@ export const ChartCanvas = memo(function ChartCanvas({
             }}
             onMouseLeave={e => {
               const b = e.currentTarget as HTMLButtonElement;
-              b.style.background  = "rgba(11,18,32,0.88)";
+              b.style.background  = "rgba(0,0,0,0.88)";
               b.style.color       = "#888888";
               b.style.borderColor = "rgba(255,255,255,0.20)";
             }}
@@ -995,7 +995,7 @@ export const ChartCanvas = memo(function ChartCanvas({
               className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 whitespace-nowrap rounded px-2 py-0.5 text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity"
               style={{
                 transform: "translateX(-50%)",
-                background: "rgba(11,18,32,0.95)",
+                background: "rgba(0,0,0,0.95)",
                 border: "1px solid rgba(255,255,255,0.15)",
                 color: "#bbbbbb",
                 zIndex: 30,

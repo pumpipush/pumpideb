@@ -1477,8 +1477,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     // Shared wrapper — matches real chart dimensions exactly to prevent layout jump.
     // Toolbar spacer (36px) + same responsive canvas height as the real ChartCanvas container.
     const ChartPlaceholder = ({ children }: { children: React.ReactNode }) => (
-      <div className="border border-border/20 rounded-sm overflow-hidden mb-0" style={{ background: "#0B1220" }}>
-        <div style={{ height: 36, background: "#0d1726", borderBottom: "1px solid rgba(255,255,255,0.08)" }} />
+      <div className="border border-border/20 rounded-sm overflow-hidden mb-0" style={{ background: "#000000" }}>
+        <div style={{ height: 36, background: "#0a0a0a", borderBottom: "1px solid rgba(255,255,255,0.08)" }} />
         <div className="h-[260px] sm:h-[340px] lg:h-[400px] xl:h-[440px] flex items-center justify-center">
           {children}
         </div>
@@ -1516,9 +1516,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     }
 
     return (
-      <div className="border border-border/20 rounded-sm overflow-hidden mb-0" style={{ background: "#0B1220" }}>
+      <div className="border border-border/20 rounded-sm overflow-hidden mb-0" style={{ background: "#000000" }}>
         {/* Toolbar */}
-        <div className="flex items-stretch overflow-x-auto" style={{ background: "#0d1726", borderBottom: "1px solid rgba(255,255,255,0.08)", scrollbarWidth: "none" }}>
+        <div className="flex items-stretch overflow-x-auto" style={{ background: "#0a0a0a", borderBottom: "1px solid rgba(255,255,255,0.08)", scrollbarWidth: "none" }}>
           {/* Candle / Line / Indicators — tab style */}
           <div className="flex items-center gap-1.5 px-2 shrink-0" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
 
@@ -1955,8 +1955,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       <div className="flex flex-col md:flex-row w-full min-w-[320px] md:min-w-[680px]">
         {/* Left column — spinner only in the chart area */}
         <div className="flex-1 min-w-0 border-r border-border/20 px-3 pt-3 md:px-5 md:pt-4 pb-6 flex flex-col gap-4">
-          <div className="border border-border/20 rounded-sm overflow-hidden" style={{ background: "#0B1220" }}>
-            <div style={{ height: 36, background: "#0d1726", borderBottom: "1px solid rgba(255,255,255,0.08)" }} />
+          <div className="border border-border/20 rounded-sm overflow-hidden" style={{ background: "#000000" }}>
+            <div style={{ height: 36, background: "#0a0a0a", borderBottom: "1px solid rgba(255,255,255,0.08)" }} />
             <div className="h-[260px] sm:h-[340px] lg:h-[400px] xl:h-[440px] flex items-center justify-center">
               <svg width="36" height="36" viewBox="0 0 36 36"
                 style={{ animation: "chartSpinnerRotate 0.9s linear infinite", flexShrink: 0 }}>

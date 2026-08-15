@@ -72,27 +72,27 @@ export function TradingViewChart({
 
       const chart = createChart(el, {
         layout: {
-          background:  { type: ColorType.Solid, color: "#0B1220" },
+          background:  { type: ColorType.Solid, color: "#000000" },
           textColor:   "#666666",
           fontFamily:  "'Trebuchet MS', system-ui, sans-serif",
           fontSize:    10,
         },
         grid: {
-          vertLines: { color: "#1a2540", style: 1 },
-          horzLines: { color: "#1a2540", style: 1 },
+          vertLines: { color: "#1a1a1a", style: 1 },
+          horzLines: { color: "#1a1a1a", style: 1 },
         },
         crosshair: {
           mode: CrosshairMode.Normal,
-          vertLine: { color: "#3B82F6", width: 1, labelBackgroundColor: "#1e2d45" },
-          horzLine: { color: "#3B82F6", width: 1, labelBackgroundColor: "#1e2d45" },
+          vertLine: { color: "#3B82F6", width: 1, labelBackgroundColor: "#111111" },
+          horzLine: { color: "#3B82F6", width: 1, labelBackgroundColor: "#111111" },
         },
         rightPriceScale: {
-          borderColor:  "#1e2d45",
+          borderColor:  "#1a1a1a",
           textColor:    "#666666",
           scaleMargins: { top: 0.08, bottom: 0.08 },
         },
         timeScale: {
-          borderColor:    "#1e2d45",
+          borderColor:    "#1a1a1a",
           timeVisible:    true,
           secondsVisible: false,
           fixLeftEdge:    true,
@@ -152,10 +152,10 @@ export function TradingViewChart({
   const price  = hoverClose ?? (last ? last.close : null);
 
   return (
-    <div ref={wrapperRef} className="relative w-full h-full bg-[#0B1220] border border-border/30 rounded-sm overflow-hidden flex flex-col">
+    <div ref={wrapperRef} className="relative w-full h-full bg-[#000000] border border-border/30 rounded-sm overflow-hidden flex flex-col">
       {/* ── Toolbar ── */}
       <div
-        className="shrink-0 flex items-center px-2.5 gap-1 border-b border-border/20 bg-[#0B1220]"
+        className="shrink-0 flex items-center px-2.5 gap-1 border-b border-border/20 bg-[#000000]"
         style={{ height: TOOLBAR_H }}
       >
         <div className="flex items-center gap-0.5">
