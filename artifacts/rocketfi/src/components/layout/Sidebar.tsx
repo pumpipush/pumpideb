@@ -13,7 +13,7 @@ function LaunchTokenButton() {
   const [hovered, setHovered] = useState(false);
   return (
     <Button
-      className="w-full rounded-[8px] font-bold text-sm h-9 transition-all duration-200 active:scale-[0.98] flex items-center gap-2"
+      className="w-full rounded-[8px] font-medium text-sm h-9 transition-all duration-200 active:scale-[0.98] flex items-center gap-2"
       style={{
         background: hovered
           ? "linear-gradient(135deg, #7ecf1a 0%, #9aed2c 100%)"
