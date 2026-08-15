@@ -960,8 +960,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     query: {
       enabled: !!selectedAddress,
       queryKey: ["topWallets", selectedAddress],
-      refetchInterval: 10_000,
-      staleTime: 8_000,
+      refetchInterval: 15_000,
+      staleTime: 12_000,
+      // Keep showing last good data on 429 / any transient error — same pattern as holders
+      placeholderData: (prev: typeof topWalletsData) => prev,
     }
   });
   const topWallets = topWalletsData?.wallets ?? [];
@@ -2631,7 +2633,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                                 <td className="hidden lg:table-cell px-3 py-3 text-right"><Skeleton className="h-3 w-10 ml-auto" /></td>
                               </tr>
                             ))
-                          ) : topWalletsError ? (
+                          ) : topWalletsError && topWallets.length === 0 ? (
                             <tr>
                               <td colSpan={8} className="px-4 py-12 text-center">
                                 <div className="flex flex-col items-center gap-2">
