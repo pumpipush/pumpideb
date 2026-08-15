@@ -77,7 +77,7 @@ interface TooltipState {
 const MIN_R      = 14;
 const MAX_R      = 80;
 const GAP        = 2;
-const TOP_CIRCLES = 5;   // only these get a transparent circle; rest = text label
+const TOP_CIRCLES = 8;   // top N get a circle; rest = floating text label
 const SOL_PRICE_USD = 160;  // fallback if no solPrice prop
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
@@ -134,9 +134,9 @@ function toHex(n: number) { return Math.round(Math.max(0, Math.min(255, n))).toS
 // rank 0 = highest volume → MAX_R; rank n-1 = lowest → MIN_R.
 
 function calcRadius(rank: number, _total: number): number {
-  // Top 5 → explicit large circle sizes; rest → uniform small for text-label layout
-  const topSizes = [80, 70, 62, 56, 50];
-  if (rank < TOP_CIRCLES) return topSizes[rank];
+  // Top 8 → explicit circle sizes; rest → uniform small for text-label layout
+  const topSizes = [80, 70, 62, 56, 50, 46, 42, 38];
+  if (rank < TOP_CIRCLES) return topSizes[rank] ?? 38;
   return 26; // text-label layout radius (no circle drawn)
 }
 
@@ -610,7 +610,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
           ? 0.000165 + Math.random() * 0.000121
           : 0,
         floatAmp:    i < TOP_CIRCLES
-          ? [9, 8, 7, 6.5, 6][i]                 // rank-based, always regenerate
+          ? ([9, 8, 7, 6.5, 6, 5.5, 5, 4.5][i] ?? 4) // rank-based, always regenerate
           : 0,
         pulsePhase:  prev?.pulsePhase ?? Math.random() * Math.PI * 2,
         pulseFreq:   0.00079 + Math.random() * 0.00047,
@@ -695,19 +695,23 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
       const hIdx  = hoverIdxRef.current;
       const bubbles = bubblesRef.current;
 
-      // ── No continuous animation — bubbles lock to layout positions ───────────
-      // The spread effect comes from runLayout (inflate-and-pack on mount).
-      // After layout settles, everything is static. Only color transitions
-      // and hover radius stay live.
+      // ── Per-frame updates ────────────────────────────────────────────────────
+      // Colors lerp toward target; top-N circles float with a gentle circular
+      // orbit; text labels are static after initial layout spread.
+      const now = performance.now();
       for (let i = 0; i < bubbles.length; i++) {
         const b = bubbles[i];
         if (!b) continue; // guard: bubblesRef may be replaced mid-frame by the 5s poll useEffect
         b.colorR += (b.targetR - b.colorR) * 0.04;
         b.colorG += (b.targetG - b.colorG) * 0.04;
         b.colorB += (b.targetB - b.colorB) * 0.04;
-        // Slow lerp → visible ~3s spread animation on open; static after settling
-        b.dispX += (b.x - b.dispX) * 0.018;
-        b.dispY += (b.y - b.dispY) * 0.018;
+        // Top circles: gentle circular orbit
+        const amp = (i < TOP_CIRCLES && b.floatAmp > 0 && b.floatFreqX > 0) ? b.floatAmp : 0;
+        const floatX = amp ? amp * Math.cos(b.floatFreqX * now + b.floatPhaseX) : 0;
+        const floatY = amp ? amp * Math.sin(b.floatFreqY * now + b.floatPhaseY) : 0;
+        // Slow lerp → visible ~3s spread animation on open; gentle float after
+        b.dispX += (b.x + floatX - b.dispX) * 0.018;
+        b.dispY += (b.y + floatY - b.dispY) * 0.018;
       }
 
       // Z-ordering: draw text labels first (back), then large circles on top.
