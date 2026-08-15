@@ -628,7 +628,17 @@ router.post("/auth/wallet/login", authLimiter, asyncWrap(async (req, res) => {
     return void res.status(401).json({ error: "Wallet signature verification failed" });
   }
 
-  // Find or create the wallet profile
+  // ── Find or create the wallet profile ────────────────────────────────────
+  //
+  // Priority order:
+  //   1. Direct wallet-primary row (address = walletAddress, authType = 'wallet')
+  //   2. Social profile that has this wallet linked (linkedWallet = walletAddress)
+  //      This handles the post-merge case: the wallet-primary row was deleted by the
+  //      cleanup migration but the user's identity now lives under the social row.
+  //      Returning a token for the social profile prevents a duplicate row being
+  //      silently re-created on the next wallet login.
+  //   3. Create a new wallet-primary row (first-ever login with this wallet)
+
   let profile = (await db
     .select()
     .from(profilesTable)
@@ -636,6 +646,16 @@ router.post("/auth/wallet/login", authLimiter, asyncWrap(async (req, res) => {
     .limit(1))[0];
 
   if (!profile) {
+    // Check whether this wallet is already linked to a social profile (post-merge).
+    profile = (await db
+      .select()
+      .from(profilesTable)
+      .where(eq(profilesTable.linkedWallet, walletAddress))
+      .limit(1))[0];
+  }
+
+  if (!profile) {
+    // First-ever login — create a fresh wallet-primary row.
     // uniqueUsername does a DB-checked search with 10 retries + full-UUID fallback,
     // so the chosen name is free at the time of the check.  The only remaining
     // constraint that can fire on the INSERT is the address PK (handled below).
@@ -660,7 +680,9 @@ router.post("/auth/wallet/login", authLimiter, asyncWrap(async (req, res) => {
     return void res.status(500).json({ error: "Failed to find or create profile" });
   }
 
-  const token = signToken({ sub: walletAddress, authType: "wallet" });
+  // Issue the JWT for the resolved profile (may be social authType if post-merge).
+  const resolvedAuthType = (profile.authType ?? "wallet") as "wallet" | "google" | "email";
+  const token = signToken({ sub: profile.address, authType: resolvedAuthType });
   return void res.json({
     token,
     profile: {
