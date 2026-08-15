@@ -10,7 +10,6 @@ import storageRouter from "./storage";
 import walletRouter from "./wallet";
 import authRouter from "./auth";
 import blockhashRouter from "./blockhash";
-import depositsRouter from "./deposits";
 import creatorFeesRouter from "./creator-fees";
 import adminRouter from "./admin";
 
@@ -27,7 +26,6 @@ router.use(proxyRouter);
 router.use(storageRouter);
 router.use(walletRouter);
 router.use(authRouter);
-router.use(depositsRouter);
 router.use(creatorFeesRouter);
 router.use(adminRouter);
 

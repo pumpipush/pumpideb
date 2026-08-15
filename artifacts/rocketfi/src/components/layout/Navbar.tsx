@@ -14,60 +14,18 @@ import { formatAddress, diceBearUrl } from "@/lib/utils";
 import { buildNavbarDisplayInfo } from "@/lib/profileDisplayUtils";
 import { Link, useLocation } from "wouter";
 import { openSearch } from "@/components/shared/SearchDialog";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { copyToClipboard } from "@/components/shared/CopyToast";
 import { ProfileEditModal } from "@/components/shared/ProfileEditModal";
-import { DepositModal } from "@/components/shared/DepositModal";
 
 function WalletButton() {
   const { wallet, walletName, disconnect } = useWallet();
-  const { socialUser, signOut, authHeaders } = useAuth();
+  const { socialUser, signOut } = useAuth();
   const [, navigate] = useLocation();
   const [editOpen, setEditOpen] = useState(false);
-  const [depositOpen, setDepositOpen] = useState(false);
-  const [solBalance, setSolBalance] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
-  const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const jwtHeaders = authHeaders();
-  const hasJwt = !!jwtHeaders.Authorization;
-
-  const fetchSolBalance = useCallback(async () => {
-    if (!hasJwt) return;
-    try {
-      const res = await fetch("/api/deposits/balance", { headers: jwtHeaders });
-      if (res.ok) {
-        const data = await res.json() as { solBalance: string };
-        setSolBalance(data.solBalance);
-      }
-    } catch { /* ignore */ }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasJwt]);
-
-  // Fetch balance on mount / when auth changes, poll every 10 s, and
-  // immediately re-fetch when the browser tab becomes visible again
-  // (user may have deposited in another tab or returned after a transaction).
-  useEffect(() => {
-    void fetchSolBalance();
-    if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
-    if (hasJwt) {
-      refreshTimerRef.current = setInterval(() => void fetchSolBalance(), 10_000);
-    }
-    const onVisible = () => { if (!document.hidden) void fetchSolBalance(); };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [fetchSolBalance, hasJwt]);
-
-  // Re-fetch after deposit modal closes (user may have deposited)
-  const handleDepositOpenChange = useCallback((open: boolean) => {
-    setDepositOpen(open);
-    if (!open) void fetchSolBalance();
-  }, [fetchSolBalance]);
 
   async function handleLogout() {
     if (wallet) await disconnect();
@@ -118,18 +76,6 @@ function WalletButton() {
 
   return (
     <>
-    {/* SOL balance chip — only for authenticated users */}
-    {hasJwt && solBalance !== null && (
-      <button
-        onClick={() => setDepositOpen(true)}
-        className="flex items-center gap-1.5 h-8 px-2 sm:px-2.5 rounded-full border border-border/60 bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-150 shrink-0 group"
-        title="In-app SOL balance — click to deposit"
-      >
-        <Wallet className="w-3 h-3 text-primary/70 group-hover:text-primary transition-colors shrink-0" />
-        <span className="text-[12px] font-semibold text-foreground tabular-nums">{solBalance} SOL</span>
-      </button>
-    )}
-
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <button
@@ -240,7 +186,6 @@ function WalletButton() {
     </DropdownMenu>
 
     <ProfileEditModal open={editOpen} onOpenChange={setEditOpen} />
-    <DepositModal open={depositOpen} onOpenChange={handleDepositOpenChange} />
     </>
   );
 }

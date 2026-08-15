@@ -6,7 +6,6 @@ import {
   Profile,
 } from "@workspace/api-client-react";
 import { ProfileEditModal } from "@/components/shared/ProfileEditModal";
-import { DepositModal } from "@/components/shared/DepositModal";
 import { AddEmailModal } from "@/components/shared/AddEmailModal";
 import { generateUsername } from "@/lib/username";
 import { Button } from "@/components/ui/button";
@@ -25,8 +24,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation, useSearch } from "wouter";
 import {
   Globe, Copy, Share2, Edit2, Camera, Coins,
-  ExternalLink, AlertCircle, ArrowDownToLine,
-  TrendingUp, TrendingDown, Wallet, Activity, ShieldAlert, Gift, Loader2,
+  ExternalLink, AlertCircle,
+  TrendingUp, TrendingDown, Wallet, Activity, Gift, Loader2,
 } from "lucide-react";
 import { useTxToast } from "@/hooks/useTxToast";
 import { fetchClaimableLamports, buildCollectCreatorFeeTx } from "@/lib/pumpfun-creator-fees";
@@ -155,7 +154,7 @@ export default function ProfilePage() {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const { wallet, openWalletModal } = useWallet();
-  const { socialUser, unlinkWallet, authHeaders } = useAuth();
+  const { socialUser, unlinkWallet } = useAuth();
   const solPrice = useSolPrice();
 
   const looksLikeAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(slug);
@@ -163,7 +162,6 @@ export default function ProfilePage() {
 
   const [activeTab, setActiveTab] = useState<Tab>("activity");
   const [editOpen, setEditOpen] = useState(false);
-  const [depositOpen, setDepositOpen] = useState(false);
   const [addEmailOpen, setAddEmailOpen] = useState(false);
   const [claimLoading, setClaimLoading] = useState(false);
   const [unlinkLoading, setUnlinkLoading] = useState(false);
@@ -187,22 +185,6 @@ export default function ProfilePage() {
   const isOwner =
     (!!wallet && !!address && wallet.toLowerCase() === address.toLowerCase()) ||
     (!!socialUser && !!address && socialUser.address === address);
-
-  // ── In-app balance (owner only, fetched after isOwner is known) ───────────
-  const { data: inAppBalance } = useQuery<string>({
-    queryKey: ["in-app-balance", address],
-    queryFn: async () => {
-      const hdrs = authHeaders();
-      if (!hdrs.Authorization) return "0";
-      const res = await fetch("/api/deposits/balance", { headers: hdrs });
-      if (!res.ok) return "0";
-      const data = await res.json() as { solBalance: string };
-      return data.solBalance;
-    },
-    enabled: isOwner && !!address,
-    staleTime: 15_000,
-    refetchOnWindowFocus: true,
-  });
 
   const autoOpenedRef = useRef(false);
   useEffect(() => {
@@ -456,15 +438,6 @@ export default function ProfilePage() {
                 </button>
                 {isOwner && (
                   <button
-                    onClick={() => setDepositOpen(true)}
-                    className="h-8 px-3 flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] transition-colors text-xs text-muted-foreground font-medium"
-                  >
-                    <ArrowDownToLine className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Deposit</span>
-                  </button>
-                )}
-                {isOwner && (
-                  <button
                     onClick={() => setEditOpen(true)}
                     className="h-8 px-3 flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] transition-colors text-xs text-muted-foreground font-medium"
                   >
@@ -586,38 +559,6 @@ export default function ProfilePage() {
               )}
             </div>
 
-            {/* ══ IN-APP BALANCE CARD (owner only) ═════════════════════════════════ */}
-            {isOwner && (
-              <div
-                className="flex items-center justify-between px-4 py-3.5 rounded-xl mb-4"
-                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
-              >
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/50 font-medium mb-0.5">
-                    In-app balance
-                  </p>
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-xl font-bold tabular-nums text-white">
-                      {inAppBalance ?? "0"} SOL
-                    </span>
-                    {solPrice && inAppBalance && (
-                      <span className="text-xs text-muted-foreground">
-                        ${(parseFloat(inAppBalance) * solPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <button
-                  onClick={() => { setDepositOpen(true); }}
-                  className="h-9 px-4 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5"
-                  style={{ background: "#9aed2c", color: "#000" }}
-                >
-                  <ArrowDownToLine className="w-3.5 h-3.5" />
-                  Deposit
-                </button>
-              </div>
-            )}
-
             {/* Creator fee badge — quick hint to switch to the tab */}
             {isOwner && claimableLamports > 1_000_000n && activeTab !== "creator-fee" && (
               <button
@@ -631,31 +572,6 @@ export default function ProfilePage() {
                 </span>
                 <span className="text-xs text-muted-foreground ml-auto">View →</span>
               </button>
-            )}
-
-            {/* ══ WALLET RECOVERY PROMPT ══════════════════════════════════════════ */}
-            {isOwner && socialUser?.authType === "wallet" && !socialUser?.email && (
-              <div
-                className="flex items-start gap-3 px-4 py-3.5 rounded-xl mb-5 cursor-pointer hover:opacity-90 transition-opacity"
-                style={{
-                  background: "rgba(245,158,11,0.06)",
-                  border: "1px solid rgba(245,158,11,0.2)",
-                }}
-                onClick={() => setAddEmailOpen(true)}
-              >
-                <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "#ffffff" }} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium" style={{ color: "#ffffff" }}>
-                    Protect your balance
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    If you lose wallet access your in-app balance will be unrecoverable.{" "}
-                    <span className="underline underline-offset-2" style={{ color: "#ffffff" }}>
-                      Add an email or Google backup →
-                    </span>
-                  </p>
-                </div>
-              </div>
             )}
 
             {/* ══ LINKED WALLET (social users only) ════════════════════════════════ */}
@@ -1300,7 +1216,6 @@ export default function ProfilePage() {
       )}
 
       <AddEmailModal open={addEmailOpen} onClose={() => setAddEmailOpen(false)} />
-      <DepositModal open={depositOpen} onOpenChange={setDepositOpen} />
       <ProfileEditModal
         open={editOpen}
         onOpenChange={setEditOpen}
