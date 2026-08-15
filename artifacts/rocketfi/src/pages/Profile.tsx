@@ -197,6 +197,18 @@ export default function ProfilePage() {
     query: { enabled: !!slug, retry: false, queryKey: getGetProfileQueryKey(slug) },
   });
 
+  // ── Canonical URL redirect ────────────────────────────────────────────────
+  // If the URL uses a wallet address or UUID instead of the profile username,
+  // silently replace it so the browser always shows /profile/<username>.
+  // This covers: direct navigation after wallet login, NudgeBanner links, etc.
+  useEffect(() => {
+    const username = profile?.username;
+    if (!username || username === slug) return;
+    // Preserve query params (e.g. ?editUsername=1)
+    const qs = searchString ? `?${searchString}` : "";
+    setLocation(`/profile/${username}${qs}`, { replace: true });
+  }, [profile?.username, slug, searchString, setLocation]);
+
   const address = profile?.address ?? (looksLikeAddress ? slug : "");
 
   // Only valid Solana base58 addresses should link to Solscan.
