@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTokens } from '@/hooks/use-admin-api';
+import { useAdmin } from '@/contexts/AdminContext';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatAddress, formatNumber, formatSol } from '@/lib/utils';
-import { Search, ChevronLeft, ChevronRight, Copy, ExternalLink } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Copy, ExternalLink, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Tokens() {
@@ -15,8 +17,11 @@ export default function Tokens() {
   const [searchInput, setSearchInput] = useState('');
   const [platform, setPlatform] = useState('');
   const [graduated, setGraduated] = useState('');
+  const [hiddenFilter, setHiddenFilter] = useState('');
   
-  const { data, isLoading } = useTokens(page, search, platform, graduated);
+  const { data, isLoading } = useTokens(page, search, platform, graduated, hiddenFilter);
+  const { apiFetch } = useAdmin();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const handleSearch = (e: React.FormEvent) => {
@@ -41,6 +46,28 @@ export default function Tokens() {
     return map[p] || p;
   };
 
+  const handleHide = async (address: string) => {
+    try {
+      await apiFetch(`/admin/tokens/${address}/hide`, { method: 'POST' });
+      toast({ description: 'Token hidden from public feed' });
+      queryClient.invalidateQueries({ queryKey: ['admin-tokens'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-overview'] });
+    } catch (e: any) {
+      toast({ variant: 'destructive', description: e.message || 'Failed to hide token' });
+    }
+  };
+
+  const handleUnhide = async (address: string) => {
+    try {
+      await apiFetch(`/admin/tokens/${address}/hide`, { method: 'DELETE' });
+      toast({ description: 'Token restored to public feed' });
+      queryClient.invalidateQueries({ queryKey: ['admin-tokens'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-overview'] });
+    } catch (e: any) {
+      toast({ variant: 'destructive', description: e.message || 'Failed to restore token' });
+    }
+  };
+
   return (
     <div className="flex flex-col h-full gap-4">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -52,6 +79,7 @@ export default function Tokens() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               className="pl-8 bg-card font-mono text-sm"
+              data-testid="input-search-tokens"
             />
           </div>
           <Button type="submit" variant="secondary">Search</Button>
@@ -59,7 +87,7 @@ export default function Tokens() {
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <Select value={platform} onValueChange={(v) => { setPlatform(v === 'all' ? '' : v); setPage(1); }}>
-            <SelectTrigger className="w-[140px] bg-card">
+            <SelectTrigger className="w-[120px] bg-card">
               <SelectValue placeholder="Platform" />
             </SelectTrigger>
             <SelectContent>
@@ -73,13 +101,24 @@ export default function Tokens() {
           </Select>
 
           <Select value={graduated} onValueChange={(v) => { setGraduated(v === 'all' ? '' : v); setPage(1); }}>
-            <SelectTrigger className="w-[140px] bg-card">
+            <SelectTrigger className="w-[120px] bg-card">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
               <SelectItem value="true">Graduated</SelectItem>
               <SelectItem value="false">Live</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={hiddenFilter} onValueChange={(v) => { setHiddenFilter(v === 'all' ? '' : v); setPage(1); }}>
+            <SelectTrigger className="w-[120px] bg-card">
+              <SelectValue placeholder="Visibility" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="false">Visible</SelectItem>
+              <SelectItem value="true">Hidden</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -98,13 +137,14 @@ export default function Tokens() {
               <TableHead className="text-right">Holders</TableHead>
               <TableHead className="text-center">Status</TableHead>
               <TableHead className="text-right">Created</TableHead>
+              <TableHead className="text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={9} className="h-24 text-center">Loading...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="h-24 text-center">Loading...</TableCell></TableRow>
             ) : !data?.rows.length ? (
-              <TableRow><TableCell colSpan={9} className="h-24 text-center text-muted-foreground">No tokens found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="h-24 text-center text-muted-foreground">No tokens found</TableCell></TableRow>
             ) : (
               data.rows.map(token => (
                 <TableRow key={token.id} className="py-1">
@@ -116,8 +156,11 @@ export default function Tokens() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-bold text-xs">{token.name} <span className="text-muted-foreground font-normal">${token.symbol}</span></span>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs">{token.name} <span className="text-muted-foreground font-normal">${token.symbol}</span></span>
+                        {token.hidden && <Badge variant="secondary" className="text-[9px] py-0 h-4">HIDDEN</Badge>}
+                      </div>
                       <div className="flex items-center gap-1 font-mono text-[10px] text-muted-foreground">
                         {formatAddress(token.address)}
                         <button onClick={() => copyToClipboard(token.address)} className="hover:text-primary"><Copy className="w-3 h-3" /></button>
@@ -145,6 +188,17 @@ export default function Tokens() {
                   </TableCell>
                   <TableCell className="text-right text-[10px] text-muted-foreground whitespace-nowrap">
                     {new Date(token.created_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {token.hidden ? (
+                      <Button variant="outline" size="sm" className="h-7 text-xs border-green-500/30 text-green-500 hover:bg-green-500/10 hover:text-green-500" onClick={() => handleUnhide(token.address)} data-testid={`show-${token.address}`}>
+                        <Eye className="w-3 h-3 mr-1" /> Show
+                      </Button>
+                    ) : (
+                      <Button variant="outline" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => handleHide(token.address)} data-testid={`hide-${token.address}`}>
+                        <EyeOff className="w-3 h-3 mr-1" /> Hide
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))

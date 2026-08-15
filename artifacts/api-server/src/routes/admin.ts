@@ -48,6 +48,7 @@ router.get("/admin/overview", asyncWrap(async (_req: Request, res: Response) => 
         COUNT(*) FILTER (WHERE auth_type = 'wallet')                    AS wallet,
         COUNT(*) FILTER (WHERE auth_type = 'email')                     AS email,
         COUNT(*) FILTER (WHERE linked_wallet IS NOT NULL)               AS linked,
+        COUNT(*) FILTER (WHERE banned_at IS NOT NULL)                   AS banned,
         COUNT(*) FILTER (WHERE created_at >= ${yesterday.toISOString()}) AS last_24h,
         COUNT(*) FILTER (WHERE created_at >= ${last7d.toISOString()})   AS last_7d
       FROM profiles
@@ -56,6 +57,7 @@ router.get("/admin/overview", asyncWrap(async (_req: Request, res: Response) => 
       SELECT
         COUNT(*)                                                         AS total,
         COUNT(*) FILTER (WHERE graduated = true)                        AS graduated,
+        COUNT(*) FILTER (WHERE hidden = true)                           AS hidden,
         COUNT(*) FILTER (WHERE platform = 'pump_fun')                   AS pump_fun,
         COUNT(*) FILTER (WHERE platform = 'pumpswap')                   AS pumpswap,
         COUNT(*) FILTER (WHERE platform = 'raydium_launchlab')          AS raydium_launchlab,
@@ -91,19 +93,21 @@ router.get("/admin/overview", asyncWrap(async (_req: Request, res: Response) => 
       wallet:  Number(u.wallet),
       email:   Number(u.email),
       linked:  Number(u.linked),
+      banned:  Number(u.banned),
       last24h: Number(u.last_24h),
       last7d:  Number(u.last_7d),
     },
     tokens: {
-      total:           Number(t.total),
-      graduated:       Number(t.graduated),
-      pump_fun:        Number(t.pump_fun),
-      pumpswap:        Number(t.pumpswap),
+      total:             Number(t.total),
+      graduated:         Number(t.graduated),
+      hidden:            Number(t.hidden),
+      pump_fun:          Number(t.pump_fun),
+      pumpswap:          Number(t.pumpswap),
       raydium_launchlab: Number(t.raydium_launchlab),
-      moonshot:        Number(t.moonshot),
-      letsbonk:        Number(t.letsbonk),
-      last24h:         Number(t.last_24h),
-      last7d:          Number(t.last_7d),
+      moonshot:          Number(t.moonshot),
+      letsbonk:          Number(t.letsbonk),
+      last24h:           Number(t.last_24h),
+      last7d:            Number(t.last_7d),
     },
     trades: {
       total:        Number(tr.total),
@@ -310,6 +314,152 @@ router.get("/admin/trades", asyncWrap(async (req: Request, res: Response) => {
 
   const total = Number((countResult as { rows: { count: string }[] }).rows[0]?.count ?? 0);
   res.json({ total, rows });
+}));
+
+// ── POST /admin/users/:address/ban ───────────────────────────────────────────
+
+router.post("/admin/users/:address/ban", asyncWrap(async (req: Request, res: Response) => {
+  const { address } = req.params as { address: string };
+  const reason = (req.body as { reason?: string })?.reason?.trim() ?? "Banned by admin";
+
+  const rows = await db
+    .update(profilesTable)
+    .set({ bannedAt: new Date(), banReason: reason })
+    .where(eq(profilesTable.address, address))
+    .returning({ address: profilesTable.address });
+
+  if (!rows.length) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+  res.json({ ok: true, address, bannedAt: rows[0]!.address });
+}));
+
+// ── DELETE /admin/users/:address/ban ─────────────────────────────────────────
+
+router.delete("/admin/users/:address/ban", asyncWrap(async (req: Request, res: Response) => {
+  const { address } = req.params as { address: string };
+
+  const rows = await db
+    .update(profilesTable)
+    .set({ bannedAt: null, banReason: null })
+    .where(eq(profilesTable.address, address))
+    .returning({ address: profilesTable.address });
+
+  if (!rows.length) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+  res.json({ ok: true, address });
+}));
+
+// ── POST /admin/tokens/:address/hide ─────────────────────────────────────────
+
+router.post("/admin/tokens/:address/hide", asyncWrap(async (req: Request, res: Response) => {
+  const { address } = req.params as { address: string };
+
+  const rows = await db
+    .update(tokensTable)
+    .set({ hidden: true })
+    .where(eq(tokensTable.address, address))
+    .returning({ address: tokensTable.address });
+
+  if (!rows.length) {
+    res.status(404).json({ error: "Token not found." });
+    return;
+  }
+  res.json({ ok: true, address });
+}));
+
+// ── DELETE /admin/tokens/:address/hide ───────────────────────────────────────
+
+router.delete("/admin/tokens/:address/hide", asyncWrap(async (req: Request, res: Response) => {
+  const { address } = req.params as { address: string };
+
+  const rows = await db
+    .update(tokensTable)
+    .set({ hidden: false })
+    .where(eq(tokensTable.address, address))
+    .returning({ address: tokensTable.address });
+
+  if (!rows.length) {
+    res.status(404).json({ error: "Token not found." });
+    return;
+  }
+  res.json({ ok: true, address });
+}));
+
+// ── GET /admin/fees ───────────────────────────────────────────────────────────
+// Top creators by tokens launched + trading volume generated. No on-chain calls.
+
+router.get("/admin/fees", asyncWrap(async (req: Request, res: Response) => {
+  const limit  = Math.min(Number(req.query.limit  ?? 50), 200);
+  const offset = Number(req.query.offset ?? 0);
+
+  const [leaderboard, totals] = await Promise.all([
+    db.execute(sql`
+      SELECT
+        t.creator_address,
+        p.username,
+        p.avatar_url,
+        COUNT(DISTINCT t.address)::int          AS token_count,
+        COALESCE(SUM(t.volume_eth::numeric), 0) AS total_volume_lamports,
+        COALESCE(SUM(t.trade_count::numeric), 0)::int AS total_trades,
+        COUNT(DISTINCT t.address) FILTER (WHERE t.graduated = true)::int AS graduated_tokens,
+        MAX(t.created_at)                       AS last_token_at
+      FROM tokens t
+      LEFT JOIN profiles p ON p.address = t.creator_address
+      GROUP BY t.creator_address, p.username, p.avatar_url
+      ORDER BY total_volume_lamports DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `),
+    db.execute(sql`
+      SELECT
+        COUNT(DISTINCT creator_address)             AS total_creators,
+        COALESCE(SUM(volume_eth::numeric), 0)       AS total_volume_lamports,
+        COALESCE(SUM(trade_count::numeric), 0)::int AS total_trades
+      FROM tokens
+    `),
+  ]);
+
+  const t = (totals as { rows: Record<string, string>[] }).rows[0]!;
+  res.json({
+    totals: {
+      creators:      Number(t.total_creators),
+      volumeLamports: t.total_volume_lamports,
+      volumeSol:     (Number(t.total_volume_lamports) / 1e9).toFixed(4),
+      trades:        Number(t.total_trades),
+    },
+    rows: (leaderboard as { rows: Record<string, unknown>[] }).rows.map(r => ({
+      creatorAddress:   r.creator_address,
+      username:         r.username ?? null,
+      avatarUrl:        r.avatar_url ?? null,
+      tokenCount:       Number(r.token_count),
+      totalVolumeLamports: String(r.total_volume_lamports),
+      totalVolumeSol:   (Number(r.total_volume_lamports) / 1e9).toFixed(4),
+      totalTrades:      Number(r.total_trades),
+      graduatedTokens:  Number(r.graduated_tokens),
+      lastTokenAt:      r.last_token_at,
+    })),
+  });
+}));
+
+// ── GET /admin/fees/creator/:address ─────────────────────────────────────────
+// Checks the on-chain pump.fun creator vault balance for a given wallet.
+
+router.get("/admin/fees/creator/:address", asyncWrap(async (req: Request, res: Response) => {
+  const { address } = req.params as { address: string };
+  try {
+    // Proxy to the public creator-fees endpoint logic inline
+    const proxyRes = await fetch(
+      `http://localhost:${process.env.PORT ?? 8080}/api/creator-fees/${address}`,
+      { signal: AbortSignal.timeout(10_000) },
+    );
+    const data = await proxyRes.json();
+    res.status(proxyRes.status).json(data);
+  } catch {
+    res.status(503).json({ error: "RPC unavailable" });
+  }
 }));
 
 // ── POST /admin/fix-dex-market-caps ─────────────────────────────────────────

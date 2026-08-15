@@ -19,6 +19,9 @@ export const profilesTable = pgTable("profiles", {
   linkedWallet: text("linked_wallet").unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  // Moderation
+  bannedAt:  timestamp("banned_at",  { withTimezone: true }),
+  banReason: text("ban_reason"),
 });
 
 export const insertProfileSchema = createInsertSchema(profilesTable).omit({

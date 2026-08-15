@@ -42,6 +42,8 @@ export const tokensTable = pgTable("tokens", {
    *  Raydium /mint/ids registry has not yet indexed the token. Null for platforms that
    *  don't embed a URI in their creation instruction (pump.fun uses the pump API instead). */
   metadataUri: text("metadata_uri"),
+  // Moderation
+  hidden: boolean("hidden").notNull().default(false),
 });
 
 export const insertTokenSchema = createInsertSchema(tokensTable).omit({

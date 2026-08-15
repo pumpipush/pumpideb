@@ -2,8 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAdmin } from '@/contexts/AdminContext';
 
 export interface OverviewData {
-  users: { total: number; google: number; wallet: number; email: number; linked: number; last24h: number; last7d: number };
-  tokens: { total: number; graduated: number; pump_fun: number; pumpswap: number; raydium_launchlab: number; moonshot: number; letsbonk: number; last24h: number; last7d: number };
+  users: { total: number; banned: number; google: number; wallet: number; email: number; linked: number; last24h: number; last7d: number };
+  tokens: { total: number; hidden: number; graduated: number; pump_fun: number; pumpswap: number; raydium_launchlab: number; moonshot: number; letsbonk: number; last24h: number; last7d: number };
   trades: { total: number; buys: number; sells: number; last24h: number; volumeSol: number; volume24hSol: number };
   solPrice: number | null;
 }
@@ -24,6 +24,8 @@ export interface UserRow {
   linkedWallet: boolean;
   createdAt: string;
   avatarUrl: string | null;
+  bannedAt: string | null;
+  banReason: string | null;
 }
 
 export interface TokenRow {
@@ -33,6 +35,7 @@ export interface TokenRow {
   symbol: string;
   platform: string;
   graduated: boolean;
+  hidden: boolean;
   market_cap_usd: string;
   price_usd: string;
   volume_eth: string;
@@ -94,13 +97,13 @@ export function useUsers(page: number, search: string) {
   });
 }
 
-export function useTokens(page: number, search: string, platform: string, graduated: string) {
+export function useTokens(page: number, search: string, platform: string, graduated: string, hidden: string = '') {
   const { apiFetch, secret } = useAdmin();
   const limit = 50;
   const offset = (page - 1) * limit;
   return useQuery({
-    queryKey: ['admin-tokens', page, search, platform, graduated],
-    queryFn: () => apiFetch<{ total: number; rows: TokenRow[] }>(`/admin/tokens?limit=${limit}&offset=${offset}&search=${encodeURIComponent(search)}&platform=${platform}&graduated=${graduated}`),
+    queryKey: ['admin-tokens', page, search, platform, graduated, hidden],
+    queryFn: () => apiFetch<{ total: number; rows: TokenRow[] }>(`/admin/tokens?limit=${limit}&offset=${offset}&search=${encodeURIComponent(search)}&platform=${platform}&graduated=${graduated}&hidden=${hidden}`),
     enabled: !!secret,
   });
 }
@@ -114,6 +117,33 @@ export function useTrades(page: number) {
     queryFn: () => apiFetch<{ total: number; rows: TradeRow[] }>(`/admin/trades?limit=${limit}&offset=${offset}`),
     enabled: !!secret,
     refetchInterval: 10000,
+  });
+}
+
+export interface FeeLeaderboardRow {
+  creatorAddress: string;
+  username: string | null;
+  avatarUrl: string | null;
+  tokenCount: number;
+  totalVolumeSol: string;
+  totalTrades: number;
+  graduatedTokens: number;
+  lastTokenAt: string;
+}
+
+export interface FeeLeaderboardData {
+  totals: { creators: number; volumeSol: string; trades: number };
+  rows: FeeLeaderboardRow[];
+}
+
+export function useFees(page: number) {
+  const { apiFetch, secret } = useAdmin();
+  const limit = 50;
+  const offset = (page - 1) * limit;
+  return useQuery({
+    queryKey: ['admin-fees', page],
+    queryFn: () => apiFetch<FeeLeaderboardData>(`/admin/fees?limit=${limit}&offset=${offset}`),
+    enabled: !!secret,
   });
 }
 

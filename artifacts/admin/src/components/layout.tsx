@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'wouter';
-import { LayoutDashboard, Users, Coins, ArrowRightLeft, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, Coins, ArrowRightLeft, Settings, LogOut, TrendingUp } from 'lucide-react';
 import { useAdmin } from '@/contexts/AdminContext';
 import { cn } from '@/lib/utils';
 
@@ -13,6 +13,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
     { href: '/users', label: 'Users', icon: Users },
     { href: '/tokens', label: 'Tokens', icon: Coins },
     { href: '/trades', label: 'Trades', icon: ArrowRightLeft },
+    { href: '/fees', label: 'Fees', icon: TrendingUp },
     { href: '/system', label: 'System', icon: Settings },
   ];
 
