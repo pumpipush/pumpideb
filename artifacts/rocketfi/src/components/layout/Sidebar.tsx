@@ -18,7 +18,7 @@ function LaunchTokenButton() {
         background: hovered
           ? "linear-gradient(135deg, #7ecf1a 0%, #9aed2c 100%)"
           : "linear-gradient(135deg, #6ab515 0%, #7ecf1a 100%)",
-        color: "#ffffff",
+        color: "#000000",
         boxShadow: hovered ? "0 0 16px rgba(22,163,74,0.45)" : "0 0 8px rgba(22,163,74,0.2)",
         border: "1px solid rgba(74,222,128,0.25)",
       }}
