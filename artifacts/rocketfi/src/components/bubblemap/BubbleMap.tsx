@@ -517,6 +517,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
   const hoverIdxRef   = useRef<number>(-1);
   const rafRef        = useRef<number>(0);
   const initPricesRef = useRef<Map<string, number>>(new Map());
+  const layoutTimeRef = useRef<number>(0); // perf.now() when last layout ran → drives fast-open lerp
   // drag + zoom intentionally disabled — map is static (no pan/zoom)
 
   const [tooltip, setTooltip] = useState<TooltipState>({ visible: false, x: 0, y: 0, token: null });
@@ -639,6 +640,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
 
     // Run layout synchronously — 300 steps balances quality vs blocking time
     runLayout(newBubbles, W, H, 300);
+    layoutTimeRef.current = performance.now(); // mark layout time for fast-open lerp
   }, [tokens]);
 
   // ── Update colors when live prices come in (no layout recalc) ─────────────
@@ -709,20 +711,26 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
         const amp = (i < TOP_CIRCLES && b.floatAmp > 0 && b.floatFreqX > 0) ? b.floatAmp : 0;
         const floatX = amp ? amp * Math.cos(b.floatFreqX * now + b.floatPhaseX) : 0;
         const floatY = amp ? amp * Math.sin(b.floatFreqY * now + b.floatPhaseY) : 0;
-        // Slow lerp → visible ~3s spread animation on open; gentle float after
-        b.dispX += (b.x + floatX - b.dispX) * 0.018;
-        b.dispY += (b.y + floatY - b.dispY) * 0.018;
+        // Fast lerp for first 1.2s after layout (snappy open), slow float after
+        const age = now - layoutTimeRef.current;
+        const lerpXY = age < 1200 ? 0.075 : 0.018;
+        b.dispX += (b.x + floatX - b.dispX) * lerpXY;
+        b.dispY += (b.y + floatY - b.dispY) * lerpXY;
       }
 
       // Z-ordering: draw text labels first (back), then large circles on top.
       // bubbles[] is sorted largest-first → index 0–4 = top circles, 5+ = text labels.
       const hoveredBubble = hIdx >= 0 && hIdx < bubbles.length ? bubbles[hIdx] : null;
 
+      // Lerp speed: fast during first 1.2s, slow float after
+      const ageNow = now - layoutTimeRef.current;
+      const lerpR  = ageNow < 1200 ? 0.075 : 0.018;
+
       // Pass 1: text labels (rank ≥ TOP_CIRCLES), back to front within that group
       for (let i = bubbles.length - 1; i >= TOP_CIRCLES; i--) {
         const b = bubbles[i];
         if (!b || b === hoveredBubble) continue;
-        b.dispR += (b.r - b.dispR) * 0.018; // slow grow matches XY spread speed
+        b.dispR += (b.r - b.dispR) * lerpR;
         drawBubble(ctx, b, false, pctToColors(b.pctChange), dpr, i);
       }
 
@@ -730,7 +738,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
       for (let i = TOP_CIRCLES - 1; i >= 0; i--) {
         const b = bubbles[i];
         if (!b || b === hoveredBubble) continue;
-        b.dispR += (b.r - b.dispR) * 0.018;
+        b.dispR += (b.r - b.dispR) * lerpR;
         drawBubble(ctx, b, false, pctToColors(b.pctChange), dpr, i);
       }
 
