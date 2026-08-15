@@ -49,7 +49,6 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 px-3 py-2 flex flex-col gap-1">
-        <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest" style={{ color: "#334155" }}>Menu</p>
         <Link
           href="/"
           className={cn(
