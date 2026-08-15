@@ -1,4 +1,4 @@
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { Rocket, LayoutGrid, ArrowRightLeft, Plus, UserCircle2, Wallet } from "lucide-react";
 import { cn, diceBearUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,8 @@ function LaunchTokenButton() {
 
 export function Sidebar() {
   const [location] = useLocation();
+  const search = useSearch();
+  const isPortfolio = location === "/app" && search.includes("tab=portfolio");
   const { wallet, walletName } = useWallet();
 
   const { data: profile } = useGetProfile(wallet ?? "", {
@@ -65,7 +67,7 @@ export function Sidebar() {
           href="/app"
           className={cn(
             "flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-all duration-200 rounded-sm group",
-            location === "/app"
+            location === "/app" && !isPortfolio
               ? "bg-primary/15 text-foreground nav-active-bar"
               : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
           )}
@@ -78,7 +80,7 @@ export function Sidebar() {
           href="/app?tab=portfolio"
           className={cn(
             "flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-all duration-200 rounded-sm group",
-            location === "/app" && typeof window !== "undefined" && window.location.search.includes("tab=portfolio")
+            isPortfolio
               ? "bg-primary/15 text-foreground nav-active-bar"
               : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
           )}
