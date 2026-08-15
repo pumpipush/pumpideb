@@ -992,13 +992,18 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     queryFn: async (): Promise<{ address: string; balance: string }[]> => {
       if (!selectedAddress) return [];
       const res = await fetch(`/api/tokens/${selectedAddress}/holders`);
-      if (!res.ok) return [];
+      // Throw on error so React Query keeps the previous data instead of
+      // clearing it to []. A 429 from heavyLimiter or any server error would
+      // previously return [] and make the holder badge vanish.
+      if (!res.ok) throw new Error(`holders fetch failed: ${res.status}`);
       const json = await res.json();
       return json.holders ?? [];
     },
     enabled: !!selectedAddress,
-    refetchInterval: 8_000,
-    staleTime: 6_000,
+    refetchInterval: 15_000,   // 15 s is plenty — holders change slowly
+    staleTime: 12_000,
+    // Keep showing the last good data during any background refetch or error
+    placeholderData: (prev: { address: string; balance: string }[] | undefined) => prev,
   });
 
   // ── Server-side position (SQL aggregate across ALL trades — no 100-row cap) ─
@@ -1082,14 +1087,19 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // Live SSE stream — real-time trade events
   const { liveTrades, liveToken, connected } = useTokenStream(selectedAddress);
 
-  // Re-fetch holders + position whenever a genuinely new live trade arrives.
+  // Re-fetch position whenever a genuinely new live trade arrives.
   // We watch liveTrades[0]?.id instead of liveTrades.length because the stream
   // caps at ~200 events — after that, length never changes but the newest
   // trade ID keeps incrementing, so we still detect every arrival.
+  //
+  // NOTE: holders is intentionally NOT refetched here. For high-volume tokens
+  // this effect fires dozens of times per minute and hits the heavyLimiter
+  // (30 req/min), causing 429 responses that cleared the holder list.
+  // The 15 s refetchInterval on the holders query is sufficient — holder
+  // rankings change much more slowly than individual trades.
   const latestLiveTradeId = liveTrades[0]?.id ?? null;
   useEffect(() => {
     if (latestLiveTradeId != null) {
-      refetchHolders();
       if (wallet) refetchPosition();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
