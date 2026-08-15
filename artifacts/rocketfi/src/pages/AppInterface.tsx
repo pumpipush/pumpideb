@@ -2017,9 +2017,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         <div className="flex gap-3 items-start mb-2 px-3 pt-3 md:px-0 md:pt-0">
           <TokenAvatar symbol={displaySymbol} imageUrl={displayImageUrl} size={52} shape="square" className="border border-border/40 shadow-sm" />
           <div className="flex-1 min-w-0">
-            <div className="flex items-baseline gap-2 flex-wrap leading-tight">
-              <h1 className="text-lg font-bold text-foreground">{displayName}</h1>
-              <span className="text-[#b3b3b3] font-mono text-sm font-semibold whitespace-nowrap tracking-wide">${displaySymbol}</span>
+            <div className="flex items-baseline gap-2 leading-tight min-w-0">
+              <h1 className="text-lg font-bold text-foreground truncate min-w-0">{displayName}</h1>
+              <span className="text-[#b3b3b3] font-mono text-sm font-semibold whitespace-nowrap tracking-wide shrink-0">${displaySymbol}</span>
             </div>
             <div className="flex items-center gap-2 mt-2">
               {(token as any).twitterUrl && (
