@@ -51,14 +51,14 @@ export function SiteFooter() {
           <span className="text-[13px] text-muted-foreground">© {YEAR} Pumpi</span>
           <SocialIcons />
         </div>
-        {/* Row 2: legal links */}
-        <div className="flex items-center gap-2.5 flex-wrap">
+        {/* Row 2: legal links — dot after each item so it never orphans on wrap */}
+        <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
           {LEGAL_LINKS.map((l, i) => (
-            <span key={l.href} className="flex items-center gap-2.5">
-              {i > 0 && <span className="text-muted-foreground/30">·</span>}
+            <span key={l.href} className="flex items-center gap-2">
               <Link href={l.href} className="text-[13px] text-muted-foreground hover:text-foreground transition-colors">
                 {l.label}
               </Link>
+              {i < LEGAL_LINKS.length - 1 && <span className="text-muted-foreground/30">·</span>}
             </span>
           ))}
         </div>
