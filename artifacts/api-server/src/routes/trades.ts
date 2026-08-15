@@ -567,6 +567,77 @@ router.get("/tokens/:address/holders", heavyLimiter, asyncWrap(async (req, res) 
   res.json({ holders, count: holders.length });
 }));
 
+// GET /tokens/:address/snipers — wallets whose FIRST buy was within 5 min of token launch.
+// Returns ALL trade stats for those wallets (buys + sells) so the UI can show
+// current holding %, sold %, and P&L.
+router.get("/tokens/:address/snipers", heavyLimiter, asyncWrap(async (req, res) => {
+  const address = req.params.address as string;
+  if (!address) { res.status(400).json({ error: "address required" }); return; }
+
+  const { rows } = await pool.query<{
+    trader_address: string;
+    first_buy_at: string;
+    seconds_after_launch: string;
+    total_sol_in: string;
+    total_bought: string;
+    net_balance: string;
+    buy_count: string;
+    sell_count: string;
+  }>(`
+    WITH token_start AS (
+      SELECT created_at FROM tokens WHERE address = $1
+    ),
+    early_buyers AS (
+      SELECT trader_address, MIN(timestamp) AS first_buy_at
+      FROM trades
+      WHERE token_address = $1
+        AND is_buy = true
+        AND timestamp <= (SELECT created_at FROM token_start) + INTERVAL '5 minutes'
+        AND token_amount IS NOT NULL AND token_amount <> '' AND token_amount <> '0'
+      GROUP BY trader_address
+    ),
+    sniper_stats AS (
+      SELECT
+        t.trader_address,
+        eb.first_buy_at,
+        GREATEST(0, EXTRACT(EPOCH FROM (eb.first_buy_at - ts.created_at))::int) AS seconds_after_launch,
+        SUM(CASE WHEN t.is_buy THEN CAST(NULLIF(t.eth_amount,  '') AS NUMERIC) ELSE 0 END)  AS total_sol_in,
+        SUM(CASE WHEN t.is_buy THEN CAST(NULLIF(t.token_amount,'') AS NUMERIC) ELSE 0 END)  AS total_bought,
+        GREATEST(0, SUM(
+          CASE WHEN t.is_buy
+            THEN  CAST(NULLIF(t.token_amount,'') AS NUMERIC)
+            ELSE -CAST(NULLIF(t.token_amount,'') AS NUMERIC)
+          END
+        )) AS net_balance,
+        COUNT(*) FILTER (WHERE t.is_buy)      AS buy_count,
+        COUNT(*) FILTER (WHERE NOT t.is_buy)  AS sell_count
+      FROM trades t
+      JOIN early_buyers eb ON t.trader_address = eb.trader_address
+      CROSS JOIN token_start ts
+      WHERE t.token_address = $1
+        AND t.token_amount IS NOT NULL AND t.token_amount <> '' AND t.token_amount <> '0'
+        AND t.eth_amount   IS NOT NULL AND t.eth_amount   <> ''
+      GROUP BY t.trader_address, eb.first_buy_at, ts.created_at
+    )
+    SELECT * FROM sniper_stats
+    ORDER BY first_buy_at ASC
+    LIMIT 100
+  `, [address]);
+
+  const snipers = rows.map(r => ({
+    address:            r.trader_address,
+    firstBuyAt:         r.first_buy_at,
+    secondsAfterLaunch: Number(r.seconds_after_launch),
+    totalSolIn:         r.total_sol_in,
+    totalBought:        r.total_bought,
+    netBalance:         r.net_balance,
+    buyCount:           Number(r.buy_count),
+    sellCount:          Number(r.sell_count),
+  }));
+
+  res.json({ snipers, count: snipers.length });
+}));
+
 // GET /wallet/:address/holdings — tokens held by a wallet (net balance > 0 across ALL trades)
 router.get("/wallet/:address/holdings", asyncWrap(async (req, res) => {
   const wallet = req.params.address as string;

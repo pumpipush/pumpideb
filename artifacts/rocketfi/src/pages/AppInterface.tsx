@@ -963,10 +963,32 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       refetchInterval: 15_000,
       staleTime: 12_000,
       // Keep showing last good data on 429 / any transient error — same pattern as holders
-      placeholderData: (prev: typeof topWalletsData) => prev,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      placeholderData: (prev: any) => prev,
     }
   });
   const topWallets = topWalletsData?.wallets ?? [];
+
+  // ── Snipers — wallets that bought within 5 min of launch ────────────────────
+  const { data: snipersData, isLoading: loadingSnipers } = useQuery({
+    queryKey: ["snipers", selectedAddress],
+    queryFn: async (): Promise<{
+      address: string; firstBuyAt: string; secondsAfterLaunch: number;
+      totalSolIn: string; totalBought: string; netBalance: string;
+      buyCount: number; sellCount: number;
+    }[]> => {
+      if (!selectedAddress) return [];
+      const res = await fetch(`/api/tokens/${selectedAddress}/snipers`);
+      if (!res.ok) throw new Error(`snipers fetch failed: ${res.status}`);
+      const json = await res.json();
+      return json.snipers ?? [];
+    },
+    enabled: !!selectedAddress,
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+    placeholderData: (prev) => prev,
+  });
+  const snipers = snipersData ?? [];
 
   // ── Server-side reference prices for % change (SQL — no 100-row cap) ────────
   // High-volume tokens exhaust the 100-row history in < 2 min, so we query DB
@@ -1123,7 +1145,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [timeframe, setTimeframe] = useState<Timeframe>("1h");
   const [shareOpen, setShareOpen] = useState(false);
   // Bug fix: React state for tx/holders sub-tab instead of imperative DOM manipulation
-  const [activeSubTab, setActiveSubTab] = useState<"tx" | "holders" | "wallets" | "positions">("tx");
+  const [activeSubTab, setActiveSubTab] = useState<"tx" | "holders" | "wallets" | "positions" | "snipers">("tx");
   const [descExpanded, setDescExpanded] = useState(false);
   const [tradeDisplayLimit, setTradeDisplayLimit] = useState(50);
 
@@ -2361,6 +2383,23 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 >
                   <TrendingUp className="h-3.5 w-3.5" /> Positions
                 </button>
+                <button
+                  onClick={() => setActiveSubTab("snipers")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all shrink-0"
+                  style={{
+                    background: activeSubTab === "snipers" ? "rgba(251,191,36,0.15)" : "rgba(255,255,255,0.04)",
+                    color: activeSubTab === "snipers" ? "#fbbf24" : "#64748b",
+                    border: "1px solid " + (activeSubTab === "snipers" ? "rgba(251,191,36,0.3)" : "rgba(255,255,255,0.06)"),
+                  }}
+                >
+                  <Zap className="h-3.5 w-3.5" /> Snipers
+                  {snipers.length > 0 && (
+                    <span className="ml-1 text-[11px] font-bold px-1.5 py-0.5 rounded-full"
+                      style={{ background: activeSubTab === "snipers" ? "rgba(251,191,36,0.2)" : "rgba(255,255,255,0.08)", color: activeSubTab === "snipers" ? "#fbbf24" : "#94a3b8" }}>
+                      {snipers.length}
+                    </span>
+                  )}
+                </button>
               </div>
               {/* Reconnecting indicator — shown when per-token SSE stream is down */}
               {!connected && <ReconnectingChip />}
@@ -3137,6 +3176,190 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   </table>
                 </div>
               </div>
+
+              {/* Snipers panel */}
+              {activeSubTab === "snipers" && (() => {
+                const LAMPORTS_PER_SOL = 1e9;
+                return (
+                  <div className="rounded-lg overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-4 py-2.5"
+                      style={{ background: "rgba(255,255,255,0.025)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                      <div className="flex items-center gap-2">
+                        <Zap className="h-3.5 w-3.5" style={{ color: "#fbbf24" }} />
+                        <span className="text-[14px] font-semibold" style={{ color: "#e2e8f0" }}>
+                          {snipers.length} sniper{snipers.length !== 1 ? "s" : ""}
+                        </span>
+                        <span className="text-[12px]" style={{ color: "#475569" }}>detected in first 5 min</span>
+                      </div>
+                      {snipers.length > 0 && (() => {
+                        const sold = snipers.filter(s => {
+                          const b = parseFloat(s.totalBought) || 0;
+                          const n = parseFloat(s.netBalance)  || 0;
+                          return b > 0 && (b - n) / b >= 0.99;
+                        }).length;
+                        return sold > 0 ? (
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                            style={{ background: "rgba(248,113,113,0.12)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)" }}>
+                            {sold} sold out
+                          </span>
+                        ) : null;
+                      })()}
+                    </div>
+
+                    {/* Table */}
+                    <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                      <table style={{ minWidth: "520px", width: "100%", borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}>
+                            <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569", width: 40 }}>#</th>
+                            <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Address</th>
+                            <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Speed</th>
+                            <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>SOL Spent</th>
+                            <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Tokens</th>
+                            <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Status</th>
+                            <th style={{ width: 36 }} />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {loadingSnipers ? (
+                            [...Array(6)].map((_, i) => (
+                              <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                                <td className="px-3 py-3 text-center"><Skeleton className="h-3.5 w-4 mx-auto" /></td>
+                                <td className="px-3 py-3"><Skeleton className="h-3.5 w-28" /></td>
+                                <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-10 ml-auto" /></td>
+                                <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-14 ml-auto" /></td>
+                                <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-16 ml-auto" /></td>
+                                <td className="px-3 py-3 text-center"><Skeleton className="h-5 w-16 mx-auto rounded-full" /></td>
+                                <td style={{ width: 36 }} />
+                              </tr>
+                            ))
+                          ) : snipers.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="px-4 py-14 text-center">
+                                <div className="flex flex-col items-center gap-2">
+                                  <Zap className="h-5 w-5" style={{ color: "#334155" }} />
+                                  <p className="text-[13px] font-semibold" style={{ color: "#475569" }}>No snipers detected</p>
+                                  <p className="text-[11px]" style={{ color: "#334155" }}>No buys recorded in the first 5 minutes</p>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : snipers.map((s, idx) => {
+                            const totalBought = Math.max(0, parseFloat(s.totalBought) || 0);
+                            const netBalance  = Math.max(0, parseFloat(s.netBalance)  || 0);
+                            const soldAmt     = Math.max(0, totalBought - netBalance);
+                            const soldPct     = totalBought > 0 ? (soldAmt / totalBought) * 100 : 0;
+                            const isSoldOut   = soldPct >= 99;
+                            const isHolding   = soldPct < 1;
+                            const solSpent    = parseFloat(s.totalSolIn) / LAMPORTS_PER_SOL;
+                            const sec         = s.secondsAfterLaunch;
+                            const fmtSpeed    = sec < 60
+                              ? `${sec}s`
+                              : sec < 3600
+                              ? `${Math.floor(sec / 60)}m ${sec % 60}s`
+                              : `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
+                            const speedColor  = sec <= 10 ? "#f87171" : sec <= 30 ? "#fb923c" : sec <= 60 ? "#fbbf24" : "#94a3b8";
+
+                            return (
+                              <tr key={s.address}
+                                className="group"
+                                style={{ borderBottom: "1px solid rgba(255,255,255,0.035)", transition: "background 0.12s" }}
+                                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+                                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                              >
+                                {/* Rank */}
+                                <td className="px-3 py-2.5 text-center" style={{ width: 40 }}>
+                                  <span className="font-mono text-[13px] font-bold"
+                                    style={{ color: idx < 3 ? "#fbbf24" : "#475569" }}>
+                                    #{idx + 1}
+                                  </span>
+                                </td>
+
+                                {/* Address */}
+                                <td className="px-3 py-2.5">
+                                  <button
+                                    className="flex items-center gap-1.5 group/addr"
+                                    onClick={() => copyToClipboard(s.address)}
+                                    title={s.address}
+                                  >
+                                    <span className="font-mono text-[13px] transition-colors group-hover/addr:text-slate-200"
+                                      style={{ color: "#94a3b8" }}>
+                                      {s.address.slice(0, 6)}…{s.address.slice(-4)}
+                                    </span>
+                                  </button>
+                                </td>
+
+                                {/* Speed */}
+                                <td className="px-3 py-2.5 text-right">
+                                  <span className="font-mono text-[12px] font-bold" style={{ color: speedColor }}>
+                                    ⚡ {fmtSpeed}
+                                  </span>
+                                </td>
+
+                                {/* SOL Spent */}
+                                <td className="px-3 py-2.5 text-right">
+                                  <span className="font-mono text-[13px]" style={{ color: "#cbd5e1" }}>
+                                    {solSpent < 0.001 ? "<0.001" : solSpent.toFixed(3)} SOL
+                                  </span>
+                                </td>
+
+                                {/* Tokens bought */}
+                                <td className="px-3 py-2.5 text-right">
+                                  <span className="font-mono text-[13px]" style={{ color: "#94a3b8" }}>
+                                    {formatAtomicTokenAmount(s.totalBought)}
+                                  </span>
+                                </td>
+
+                                {/* Status badge */}
+                                <td className="px-3 py-2.5 text-center">
+                                  {isSoldOut ? (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
+                                      style={{ background: "rgba(248,113,113,0.12)", color: "#f87171", border: "1px solid rgba(248,113,113,0.25)" }}>
+                                      SOLD OUT
+                                    </span>
+                                  ) : isHolding ? (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
+                                      style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.25)" }}>
+                                      HOLDING
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
+                                      style={{ background: "rgba(251,191,36,0.12)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.25)" }}>
+                                      {soldPct.toFixed(0)}% SOLD
+                                    </span>
+                                  )}
+                                </td>
+
+                                {/* Explorer */}
+                                <td className="pr-3 py-2.5 text-center" style={{ width: 36 }}>
+                                  <a
+                                    href={`https://solscan.io/account/${s.address}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="View on Solscan"
+                                    className="inline-flex items-center justify-center w-7 h-7 rounded-md transition-all"
+                                    style={{ background: "rgba(255,255,255,0.06)", color: "#475569" }}
+                                    onMouseEnter={e => {
+                                      (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.12)";
+                                      (e.currentTarget as HTMLAnchorElement).style.color = "#cbd5e1";
+                                    }}
+                                    onMouseLeave={e => {
+                                      (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.06)";
+                                      (e.currentTarget as HTMLAnchorElement).style.color = "#475569";
+                                    }}
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                  </a>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}
