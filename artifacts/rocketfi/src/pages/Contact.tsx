@@ -72,15 +72,15 @@ export default function Contact() {
                 className="group relative rounded-2xl border border-white/[0.07] bg-white/[0.025] hover:bg-white/[0.04] hover:border-white/[0.12] transition-all duration-200 p-5 flex flex-col gap-3 overflow-hidden"
               >
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/40 mb-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/40 mb-2">
                     {ch.label}
                   </p>
-                  <p className="text-[15px] font-semibold text-white group-hover:opacity-80 transition-opacity">
+                  <p className="text-[18px] font-semibold text-white group-hover:opacity-80 transition-opacity">
                     {ch.email}
                   </p>
                 </div>
 
-                <p className="text-[12px] text-muted-foreground/55 leading-relaxed flex-1">
+                <p className="text-[14px] text-muted-foreground/55 leading-relaxed flex-1">
                   {ch.description}
                 </p>
 
@@ -88,7 +88,7 @@ export default function Contact() {
                   {ch.topics.map((t) => (
                     <span
                       key={t}
-                      className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-white/[0.08] text-muted-foreground/50 bg-white/[0.03]"
+                      className="text-[12px] font-medium px-2.5 py-1 rounded-full border border-white/[0.08] text-muted-foreground/50 bg-white/[0.03]"
                     >
                       {t}
                     </span>
@@ -118,8 +118,8 @@ export default function Contact() {
                       {s.icon}
                     </div>
                     <div>
-                      <p className="text-[13px] font-semibold text-white leading-tight">{s.label}</p>
-                      <p className="text-[11px] text-muted-foreground/40">{s.handle}</p>
+                      <p className="text-[15px] font-semibold text-white leading-tight">{s.label}</p>
+                      <p className="text-[13px] text-muted-foreground/40">{s.handle}</p>
                     </div>
                   </div>
                   <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground/20 group-hover:text-muted-foreground/60 transition-colors" />
@@ -132,7 +132,7 @@ export default function Contact() {
               {INFO.map((item, i) => (
                 <div key={i} className="flex items-center gap-2.5">
                   <span className="text-muted-foreground/30 shrink-0">{item.icon}</span>
-                  <span className="text-[12px] text-muted-foreground/55">{item.text}</span>
+                  <span className="text-[13px] text-muted-foreground/55">{item.text}</span>
                 </div>
               ))}
             </div>
