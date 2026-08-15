@@ -135,6 +135,10 @@ pnpm --filter @workspace/api-server run build
 
 # Build the frontend (reads .env.production; outputs to artifacts/rocketfi/dist/public/)
 pnpm --filter @workspace/rocketfi run build
+
+# Build the admin dashboard (outputs to artifacts/admin/dist/public/)
+# BASE_PATH must be /admin/ — all asset URLs in the build will use this prefix.
+BASE_PATH=/admin/ pnpm --filter @workspace/admin run build
 ```
 
 ---
@@ -203,55 +207,42 @@ sudo journalctl -u rocketfi-api -f
 
 ## 8. Nginx
 
+Use the production-ready config from `deploy/nginx/rocketfi` (already has `/admin/` routing).
+Copy it to your VPS and reload:
+
 ```bash
-sudo nano /etc/nginx/sites-available/rocketfi
+# Copy config to VPS (from your local machine)
+scp deploy/nginx/rocketfi user@your-vps:/etc/nginx/sites-available/pumpi
+
+# On the VPS: enable site, test, reload
+sudo ln -sf /etc/nginx/sites-available/pumpi /etc/nginx/sites-enabled/pumpi
+sudo nginx -t
+sudo systemctl reload nginx
 ```
 
-```nginx
-server {
-    listen 80;
-    server_name yourdomain.com www.yourdomain.com;
-    return 301 https://$host$request_uri;
-}
+The config serves three paths:
+- `/api/` → proxy to API server (port 8080)
+- `/admin/` → static files from `/opt/rocketfi/admin-current/` (admin dashboard SPA)
+- `/` → static files from `/opt/rocketfi/current/` (rocketfi SPA, SPA fallback)
 
-server {
-    listen 443 ssl http2;
-    server_name yourdomain.com www.yourdomain.com;
+**First-time setup** — create the directories the nginx config expects before the first deploy:
 
-    ssl_certificate     /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+```bash
+# On the VPS:
+mkdir -p /opt/rocketfi/releases
 
-    # Frontend — static files
-    root /opt/rocketfi/artifacts/rocketfi/dist/public;
-    index index.html;
+# Build and place admin files for the first time
+cd /opt/rocketfi
+BASE_PATH=/admin/ pnpm --filter @workspace/admin run build
+mkdir -p /opt/rocketfi/admin-initial
+mv artifacts/admin/dist/public/* /opt/rocketfi/admin-initial/
+ln -s /opt/rocketfi/admin-initial /opt/rocketfi/admin-current
 
-    # Proxy /api/* → API server
-    location /api/ {
-        proxy_pass         http://127.0.0.1:8080;
-        proxy_http_version 1.1;
-        proxy_set_header   Host              $host;
-        proxy_set_header   X-Real-IP         $remote_addr;
-        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto $scheme;
-
-        # SSE: disable buffering for /api/*/stream — live feed won't work without this
-        proxy_buffering    off;
-        proxy_cache        off;
-        proxy_read_timeout 3600s;
-    }
-
-    # SPA fallback — all non-API paths serve index.html
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Aggressive cache for hashed static assets
-    location ~* \.(js|css|png|jpg|svg|ico|woff2?)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-}
+# Build and place rocketfi files for the first time (run deploy-frontend.sh — it creates /opt/rocketfi/current)
+./deploy/deploy-frontend.sh user@your-vps
 ```
+
+After that, `./deploy/deploy-frontend.sh` handles both rocketfi and admin on every deploy.
 
 ```bash
 sudo ln -s /etc/nginx/sites-available/rocketfi /etc/nginx/sites-enabled/

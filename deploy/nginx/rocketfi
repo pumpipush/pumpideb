@@ -59,6 +59,26 @@ server {
         proxy_no_cache         $http_x_purge_cache;
     }
 
+    # ── Admin dashboard ──────────────────────────────────────────────────────
+    # Static SPA served from a separate directory so it can be deployed
+    # independently of the main rocketfi frontend.
+    # Build output: artifacts/admin/dist/public/ → /opt/rocketfi/admin-current/
+    # Protected by X-Admin-Secret header (validated at login, stored in localStorage).
+    # ^~ prefix takes priority over the SPA catch-all `location /` below.
+    location ^~ /admin/ {
+        alias /opt/rocketfi/admin-current/;
+        index index.html;
+        # SPA fallback — unknown routes (e.g. /admin/tokens) serve index.html
+        try_files $uri $uri/ /admin/index.html;
+        # index.html must never be cached — Vite hashes all other assets
+        location = /admin/index.html {
+            alias /opt/rocketfi/admin-current/index.html;
+            add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+            add_header Pragma        "no-cache" always;
+            add_header Expires       "0" always;
+        }
+    }
+
     # ── API reverse proxy ────────────────────────────────────────────────────
     location /api/ {
         proxy_pass         http://127.0.0.1:8080;
