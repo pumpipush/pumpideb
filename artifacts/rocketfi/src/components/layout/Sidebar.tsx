@@ -111,10 +111,11 @@ export function Sidebar() {
         )}
       </nav>
 
-      <div className="p-4 border-t border-border/50 flex flex-col gap-4">
+      <div className="p-4 border-t border-border/50 flex flex-col gap-3">
         <Link href="/app" className="block w-full">
           <LaunchTokenButton />
         </Link>
+        <span className="text-center text-[11px]" style={{ color: "#334155" }}>v1.0 beta</span>
       </div>
     </div>
   );

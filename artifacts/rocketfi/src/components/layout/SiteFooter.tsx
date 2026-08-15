@@ -26,9 +26,6 @@ export function SiteFooter() {
         <span className="text-[12px] text-muted-foreground/60">
           © {YEAR} Pumpi. All rights reserved.
         </span>
-        <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-primary/10 text-primary/70 border border-primary/20 leading-none">
-          v1.0 beta
-        </span>
       </div>
 
       {/* Legal links */}
