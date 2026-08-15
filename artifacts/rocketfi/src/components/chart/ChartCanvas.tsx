@@ -296,7 +296,7 @@ function makeChart(
   opts: { timeVisible?: boolean; rightScale?: boolean; priceFormatter?: (p: number) => string } = {},
 ) {
   return createChart(el, {
-    layout: { background: { type: ColorType.Solid, color: BG }, textColor: "#94a3b8", fontSize: 11, fontFamily: "'Trebuchet MS', system-ui, sans-serif" },
+    layout: { background: { type: ColorType.Solid, color: BG }, textColor: "#888888", fontSize: 11, fontFamily: "'Trebuchet MS', system-ui, sans-serif" },
     grid: { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
     crosshair: {
       vertLine: { color: "rgba(59,130,246,0.4)", width: 1, style: 3 },
@@ -315,7 +315,7 @@ function makeChart(
 function SubPaneLabel({ label }: { label: string }) {
   return (
     <div className="absolute top-1 left-2 z-10 pointer-events-none"
-      style={{ fontSize: 9, fontWeight: 600, color: "#475569", letterSpacing: "0.05em" }}>
+      style={{ fontSize: 9, fontWeight: 600, color: "#555555", letterSpacing: "0.05em" }}>
       {label}
     </div>
   );
@@ -425,13 +425,13 @@ export const ChartCanvas = memo(function ChartCanvas({
     // showing "O $x H $x L $x C $x" is redundant — just show the price.
     const allSame = bar.open === bar.high && bar.high === bar.low && bar.low === bar.close;
     if (allSame) {
-      el.innerHTML = `<span style="color:#94a3b8">MC</span><span style="color:${VAL}"> ${fmt(bar.close)}</span>`;
+      el.innerHTML = `<span style="color:#888888">MC</span><span style="color:${VAL}"> ${fmt(bar.close)}</span>`;
     } else {
       el.innerHTML =
-        `<span style="color:#94a3b8">O</span><span style="color:${VAL}"> ${fmt(bar.open)}</span> ` +
-        `<span style="color:#94a3b8">H</span><span style="color:${UP}"> ${fmt(bar.high)}</span> ` +
-        `<span style="color:#94a3b8">L</span><span style="color:${DN}"> ${fmt(bar.low)}</span> ` +
-        `<span style="color:#94a3b8">C</span><span style="color:${VAL}"> ${fmt(bar.close)}</span>`;
+        `<span style="color:#888888">O</span><span style="color:${VAL}"> ${fmt(bar.open)}</span> ` +
+        `<span style="color:#888888">H</span><span style="color:${UP}"> ${fmt(bar.high)}</span> ` +
+        `<span style="color:#888888">L</span><span style="color:${DN}"> ${fmt(bar.low)}</span> ` +
+        `<span style="color:#888888">C</span><span style="color:${VAL}"> ${fmt(bar.close)}</span>`;
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const writeInnerOhlcRef = useRef(writeInnerOhlc);
@@ -924,7 +924,7 @@ export const ChartCanvas = memo(function ChartCanvas({
         {symbol && (
           <span
             className="font-bold tracking-wide shrink-0"
-            style={{ fontSize: 12, color: "#e2e8f0", letterSpacing: "0.03em" }}
+            style={{ fontSize: 12, color: "#e0e0e0", letterSpacing: "0.03em" }}
           >
             {symbol.toUpperCase()}/MC
           </span>
@@ -969,7 +969,7 @@ export const ChartCanvas = memo(function ChartCanvas({
               background: "rgba(11,18,32,0.88)",
               border: "1px solid rgba(255,255,255,0.20)",
               borderRadius: 4,
-              color: "#94a3b8",
+              color: "#888888",
               fontSize: 17,
               fontWeight: 600,
               lineHeight: 1,
@@ -986,7 +986,7 @@ export const ChartCanvas = memo(function ChartCanvas({
             onMouseLeave={e => {
               const b = e.currentTarget as HTMLButtonElement;
               b.style.background  = "rgba(11,18,32,0.88)";
-              b.style.color       = "#94a3b8";
+              b.style.color       = "#888888";
               b.style.borderColor = "rgba(255,255,255,0.20)";
             }}
           >
@@ -997,7 +997,7 @@ export const ChartCanvas = memo(function ChartCanvas({
                 transform: "translateX(-50%)",
                 background: "rgba(11,18,32,0.95)",
                 border: "1px solid rgba(255,255,255,0.15)",
-                color: "#cbd5e1",
+                color: "#bbbbbb",
                 zIndex: 30,
               }}
             >

@@ -73,7 +73,7 @@ export function TradingViewChart({
       const chart = createChart(el, {
         layout: {
           background:  { type: ColorType.Solid, color: "#0B1220" },
-          textColor:   "#64748b",
+          textColor:   "#666666",
           fontFamily:  "'Trebuchet MS', system-ui, sans-serif",
           fontSize:    10,
         },
@@ -88,7 +88,7 @@ export function TradingViewChart({
         },
         rightPriceScale: {
           borderColor:  "#1e2d45",
-          textColor:    "#64748b",
+          textColor:    "#666666",
           scaleMargins: { top: 0.08, bottom: 0.08 },
         },
         timeScale: {

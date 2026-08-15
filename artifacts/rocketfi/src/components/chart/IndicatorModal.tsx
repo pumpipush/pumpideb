@@ -25,7 +25,7 @@ const ALL_INDICATORS: IndicatorDef[] = [
   { id: "EMA9",  name: "Exponential MA 9",        shortLabel: "EMA 9",        group: "Moving Averages", color: "#22d3ee", description: "Exponential moving average over 9 bars" },
   { id: "EMA21", name: "Exponential MA 21",       shortLabel: "EMA 21",       group: "Moving Averages", color: "#60a5fa", description: "Exponential moving average over 21 bars" },
   // Overlays
-  { id: "BB",    name: "Bollinger Bands",         shortLabel: "BB 20",        group: "Overlays",        color: "#94a3b8", description: "Volatility bands ±2σ around SMA 20" },
+  { id: "BB",    name: "Bollinger Bands",         shortLabel: "BB 20",        group: "Overlays",        color: "#888888", description: "Volatility bands ±2σ around SMA 20" },
   { id: "VWAP",  name: "VWAP",                    shortLabel: "VWAP",         group: "Overlays",        color: "#f472b6", description: "Volume Weighted Average Price" },
   { id: "PSAR",  name: "Parabolic SAR",           shortLabel: "PSAR",         group: "Overlays",        color: "#34d399", description: "Parabolic stop-and-reverse dots" },
   // Oscillators
@@ -288,7 +288,7 @@ function Row({
       <div className="flex items-center gap-3">
         <span
           className="text-[13px] transition-colors"
-          style={{ color: isActive ? "#fff" : isHovered ? "#e2e8f0" : "#cbd5e1" }}
+          style={{ color: isActive ? "#fff" : isHovered ? "#e0e0e0" : "#bbbbbb" }}
         >
           {def.name}
         </span>

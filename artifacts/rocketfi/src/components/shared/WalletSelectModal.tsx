@@ -83,20 +83,20 @@ export function WalletSelectModal({ open, onOpenChange, onSuccess }: WalletSelec
             <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
               style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)" }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <rect x="2" y="6" width="20" height="14" rx="3" stroke="#94a3b8" strokeWidth="1.8"/>
-                <path d="M2 10h20" stroke="#94a3b8" strokeWidth="1.8"/>
-                <circle cx="17" cy="15" r="1.5" fill="#94a3b8"/>
+                <rect x="2" y="6" width="20" height="14" rx="3" stroke="#888888" strokeWidth="1.8"/>
+                <path d="M2 10h20" stroke="#888888" strokeWidth="1.8"/>
+                <circle cx="17" cy="15" r="1.5" fill="#888888"/>
               </svg>
             </div>
-            <Dialog.Title className="flex-1 text-[15px] font-semibold" style={{ color: "#f1f5f9" }}>
+            <Dialog.Title className="flex-1 text-[15px] font-semibold" style={{ color: "#f2f2f2" }}>
               Connect Wallet
             </Dialog.Title>
             <Dialog.Close asChild>
               <button
                 className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
-                style={{ background: "rgba(255,255,255,0.05)", color: "#64748b" }}
-                onMouseEnter={e => (e.currentTarget.style.color = "#e2e8f0")}
-                onMouseLeave={e => (e.currentTarget.style.color = "#64748b")}
+                style={{ background: "rgba(255,255,255,0.05)", color: "#666666" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#e0e0e0")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#666666")}
                 aria-label="Close"
               >
                 <X className="w-4 h-4" />
@@ -129,7 +129,7 @@ export function WalletSelectModal({ open, onOpenChange, onSuccess }: WalletSelec
                       style={{ opacity: 0 }}
                       onLoad={(e) => { (e.currentTarget as HTMLImageElement).style.opacity = "1"; }}
                     />
-                    <span className="flex-1 text-[14px] font-semibold" style={{ color: "#e2e8f0" }}>{descriptor.name}</span>
+                    <span className="flex-1 text-[14px] font-semibold" style={{ color: "#e0e0e0" }}>{descriptor.name}</span>
                     {installed && !isConnecting && (
                       <span className="text-[12px] font-medium mr-1" style={{ color: "#4ade80" }}>
                         Installed
@@ -137,7 +137,7 @@ export function WalletSelectModal({ open, onOpenChange, onSuccess }: WalletSelec
                     )}
                     {isConnecting
                       ? <Loader2 className="w-4 h-4 animate-spin shrink-0" style={{ color: "#4ade80" }} />
-                      : <ChevronRight className="w-4 h-4 shrink-0" style={{ color: "#64748b" }} />
+                      : <ChevronRight className="w-4 h-4 shrink-0" style={{ color: "#666666" }} />
                     }
                   </button>
                 );

@@ -243,7 +243,7 @@ function ActivityBar({ value, max }: { value: number; max: number }) {
   const fmtTrades = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${n}`;
   return (
     <div className="flex items-center gap-2 justify-end">
-      <span className="font-mono text-[12px] tabular-nums" style={{ color: pct > 60 ? "#f59e0b" : "#64748b" }}>
+      <span className="font-mono text-[12px] tabular-nums" style={{ color: pct > 60 ? "#f59e0b" : "#666666" }}>
         {fmtTrades(value)}
       </span>
       <div className="w-14 h-1.5 rounded-full bg-border/30 overflow-hidden">
@@ -255,7 +255,7 @@ function ActivityBar({ value, max }: { value: number; max: number }) {
               ? "linear-gradient(90deg,#f59e0b,#ef4444)"
               : pct > 25
                 ? "linear-gradient(90deg,#3b82f6,#06b6d4)"
-                : "#334155",
+                : "#3a3a3a",
           }}
         />
       </div>
@@ -306,7 +306,7 @@ function MobileListRow({ token, rank, solPrice, isTrending, isVolume }: {
       {/* Name + ticker row */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
-          <span className="font-semibold text-[14px] leading-tight truncate" style={{ color: "#e2e8f0" }}>
+          <span className="font-semibold text-[14px] leading-tight truncate" style={{ color: "#e0e0e0" }}>
             {token.name}
           </span>
           {isHot && <span className="shrink-0 text-[9px] font-black px-1 py-0.5 rounded leading-none" style={{ color: "#fbbf24", background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.22)" }}>HOT</span>}
@@ -314,12 +314,12 @@ function MobileListRow({ token, rank, solPrice, isTrending, isVolume }: {
           {token.graduated && <span className="shrink-0 text-[9px] font-black px-1 py-0.5 rounded leading-none" style={{ color: "#60a5fa", background: "rgba(96,165,250,0.1)", border: "1px solid rgba(96,165,250,0.22)" }}>GRAD</span>}
         </div>
         <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="text-[12px] font-mono" style={{ color: "#475569" }}>{displaySymbol(token.symbol)}</span>
-          <span style={{ color: "#1e293b" }}>·</span>
-          <span className="text-[11px]" style={{ color: "#334155" }}>{timeAgo(token.createdAt)}</span>
+          <span className="text-[12px] font-mono" style={{ color: "#555555" }}>{displaySymbol(token.symbol)}</span>
+          <span style={{ color: "#141414" }}>·</span>
+          <span className="text-[11px]" style={{ color: "#3a3a3a" }}>{timeAgo(token.createdAt)}</span>
           {isTrending && (token.trades1h ?? 0) > 0 && (
             <>
-              <span style={{ color: "#1e293b" }}>·</span>
+              <span style={{ color: "#141414" }}>·</span>
               <span className="text-[11px] font-mono" style={{ color: "#f59e0b" }}>
                 {token.trades1h! >= 1000 ? `${(token.trades1h! / 1000).toFixed(1)}K` : token.trades1h}/hr
               </span>
@@ -330,11 +330,11 @@ function MobileListRow({ token, rank, solPrice, isTrending, isVolume }: {
 
       {/* Right: MC/Vol + 24h% */}
       <div className="shrink-0 text-right flex flex-col items-end gap-0.5">
-        <span className="font-mono text-[13px] font-bold tabular-nums leading-tight" style={{ color: "#f1f5f9" }}>
+        <span className="font-mono text-[13px] font-bold tabular-nums leading-tight" style={{ color: "#f2f2f2" }}>
           {metricValue}
         </span>
         <div className="flex items-center gap-1">
-          <span className="text-[10px]" style={{ color: "#334155" }}>{metricLabel}</span>
+          <span className="text-[10px]" style={{ color: "#3a3a3a" }}>{metricLabel}</span>
           {pct != null ? (
             <span
               className="font-mono text-[12px] font-bold tabular-nums"
@@ -343,7 +343,7 @@ function MobileListRow({ token, rank, solPrice, isTrending, isVolume }: {
               {fmtPct(pct)}
             </span>
           ) : (
-            <span style={{ color: "#334155" }} className="text-[12px]">—</span>
+            <span style={{ color: "#3a3a3a" }} className="text-[12px]">—</span>
           )}
         </div>
       </div>
@@ -401,8 +401,8 @@ function TableView({ tokens, solPrice, activeTab, startRank }: {
       <div className="sm:hidden">
         {/* Column header strip */}
         <div className="flex items-center justify-between px-3 py-2" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
-          <span className="text-[11px] font-medium uppercase tracking-widest" style={{ color: "#334155" }}>Token</span>
-          <span className="text-[11px] font-medium uppercase tracking-widest" style={{ color: "#334155" }}>{isVolume ? "Vol / 24h%" : "MC / 24h%"}</span>
+          <span className="text-[11px] font-medium uppercase tracking-widest" style={{ color: "#3a3a3a" }}>Token</span>
+          <span className="text-[11px] font-medium uppercase tracking-widest" style={{ color: "#3a3a3a" }}>{isVolume ? "Vol / 24h%" : "MC / 24h%"}</span>
         </div>
         {sorted.map((token, idx) => (
           <MobileListRow
@@ -470,7 +470,7 @@ function TableView({ tokens, solPrice, activeTab, startRank }: {
                       <span
                         className="inline-flex items-center justify-center w-6 h-6 rounded-md text-[11px] font-black"
                         style={{
-                          background: rank === 1 ? "linear-gradient(135deg,#f59e0b,#d97706)" : rank === 2 ? "linear-gradient(135deg,#94a3b8,#64748b)" : "linear-gradient(135deg,#b45309,#92400e)",
+                          background: rank === 1 ? "linear-gradient(135deg,#f59e0b,#d97706)" : rank === 2 ? "linear-gradient(135deg,#888888,#666666)" : "linear-gradient(135deg,#b45309,#92400e)",
                           color: rank === 1 ? "#000" : rank === 2 ? "#fff" : "#fde68a",
                         }}
                       >{rank}</span>
@@ -586,7 +586,7 @@ function TableView({ tokens, solPrice, activeTab, startRank }: {
 // ─── Rank badge config ────────────────────────────────────────────────────────
 const RANK_STYLES: Record<number, { bg: string; text: string; border: string }> = {
   1: { bg: "linear-gradient(135deg,#f59e0b,#d97706)", text: "#000", border: "rgba(251,191,36,0.5)" },
-  2: { bg: "linear-gradient(135deg,#94a3b8,#64748b)", text: "#fff", border: "rgba(148,163,184,0.4)" },
+  2: { bg: "linear-gradient(135deg,#888888,#666666)", text: "#fff", border: "rgba(136,136,136,0.4)" },
   3: { bg: "linear-gradient(135deg,#b45309,#92400e)", text: "#fde68a", border: "rgba(180,83,9,0.4)" },
 };
 
@@ -647,7 +647,7 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
             className="absolute top-2 left-2 min-w-[26px] h-[22px] flex items-center justify-center rounded-md text-[11px] font-black px-1.5 backdrop-blur-sm"
             style={{
               background: rankStyle?.bg ?? "rgba(0,0,0,0.55)",
-              color: rankStyle?.text ?? "#94a3b8",
+              color: rankStyle?.text ?? "#888888",
               border: `1px solid ${rankStyle?.border ?? "rgba(255,255,255,0.12)"}`,
               textShadow: rank <= 3 ? "0 1px 2px rgba(0,0,0,0.4)" : "none",
             }}
@@ -715,7 +715,7 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
               </span>
             );
             if (fallback > 0) return (
-              <span className="flex items-center gap-1 text-[12px] font-mono" style={{ color: "#94a3b8" }}>
+              <span className="flex items-center gap-1 text-[12px] font-mono" style={{ color: "#888888" }}>
                 <BarChart2 className="w-3 h-3" />
                 {fmtTrades(fallback)}
               </span>
@@ -1078,7 +1078,7 @@ export default function Dashboard() {
                 <div className="relative group">
                   <Info
                     className="w-4 h-4 cursor-pointer transition-colors duration-150"
-                    style={{ color: bubbleInfoOpen ? "#94a3b8" : "rgba(148,163,184,0.75)" }}
+                    style={{ color: bubbleInfoOpen ? "#888888" : "rgba(136,136,136,0.75)" }}
                     onClick={() => setBubbleInfoOpen(v => !v)}
                   />
                   {/* Desktop: hover tooltip / Mobile: tap toggle */}
@@ -1087,9 +1087,9 @@ export default function Dashboard() {
                     bubbleInfoOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
                   ].join(" ")}>
                     <div className="absolute left-3 -top-1.5 w-0 h-0"
-                      style={{ borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: "6px solid #1e293b" }} />
+                      style={{ borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: "6px solid #141414" }} />
                     <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
-                      style={{ background: "#1e293b", border: "1px solid rgba(255,255,255,0.1)", color: "#cbd5e1", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
+                      style={{ background: "#141414", border: "1px solid rgba(255,255,255,0.1)", color: "#bbbbbb", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
                       Shows the hottest tokens right now — ranked by volume. Bubble size reflects rank. Green = price up, red = price down in the last 24h.
                     </div>
                   </div>
@@ -1102,7 +1102,7 @@ export default function Dashboard() {
             </div>
             <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
               {bubbleTokens.length === 0 ? (
-                <div className="flex items-center justify-center" style={{ height: 360, background: "#050508" }}>
+                <div className="flex items-center justify-center" style={{ height: 360, background: "#000000" }}>
                   {bubbleError ? (
                     <p className="text-sm text-muted-foreground">Failed to load bubble map — retrying…</p>
                   ) : (

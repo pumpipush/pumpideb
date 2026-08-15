@@ -119,7 +119,7 @@ function pctToColors(pct: number): {
       edge:   { r: 16, g: 18, b: 30 },
       glow:   "rgba(55,62,100,0.25)",
       border: "rgba(90,100,150,0.50)",
-      pctHex: "#94a3b8",
+      pctHex: "#888888",
     };
   }
 }
@@ -277,7 +277,7 @@ function circleColors(pct: number): CircleStyle {
     fillCenter: "rgba(28,34,68,0.08)",
     fillMid:    "rgba(40,50,95,0.22)",
     fillEdge:   "rgba(65,80,145,0.48)",
-    text:       "#94a3b8",
+    text:       "#888888",
   };
 }
 
@@ -678,13 +678,13 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Dark navy background — matches project's --background: hsl(220 49% 8%)
+      // Pure black background
       const bgGrad = ctx.createRadialGradient(
         canvas.width / 2, canvas.height / 2, 0,
         canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) * 0.7
       );
-      bgGrad.addColorStop(0,   "#0e1628");
-      bgGrad.addColorStop(1,   "#080d18");
+      bgGrad.addColorStop(0,   "#0a0a0a");
+      bgGrad.addColorStop(1,   "#000000");
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -837,7 +837,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
       <canvas
         ref={canvasRef}
         className="rounded-xl block"
-        style={{ width: "100%", height, cursor: "default", background: "#050508" }}
+        style={{ width: "100%", height, cursor: "default", background: "#000000" }}
         onMouseMove={onMouseMove}
         onMouseLeave={onMouseLeave}
         onClick={onClick}
@@ -852,14 +852,14 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
           : mcUsd >= 1e6 ? `$${(mcUsd/1e6).toFixed(2)}M`
           : mcUsd >= 1e3 ? `$${(mcUsd/1e3).toFixed(1)}K`
           : `$${mcUsd.toFixed(0)}`;
-        const pctColor = pct > 0.3 ? "#4ade80" : pct < -0.3 ? "#f87171" : "#94a3b8";
+        const pctColor = pct > 0.3 ? "#4ade80" : pct < -0.3 ? "#f87171" : "#888888";
         return (
           <div
             className="pointer-events-none absolute z-50 px-3 py-2.5 rounded-xl text-[12px] font-medium"
             style={{
               left: Math.min(tooltip.x + 14, (containerRef.current?.offsetWidth ?? 400) - 160),
               top:  Math.max(tooltip.y - 80, 8),
-              background: "rgba(8,10,20,0.92)",
+              background: "rgba(0,0,0,0.92)",
               border: "1px solid rgba(255,255,255,0.10)",
               backdropFilter: "blur(12px)",
               minWidth: 140,
@@ -867,20 +867,20 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
             }}
           >
             <div className="font-bold text-[14px] text-white mb-0.5">{b.symbol.replace(/^\$/, "")}</div>
-            <div className="text-[11px] mb-2" style={{ color: "#64748b" }}>{b.name}</div>
+            <div className="text-[11px] mb-2" style={{ color: "#666666" }}>{b.name}</div>
             <div className="flex justify-between gap-4">
-              <span style={{ color: "#94a3b8" }}>Mkt Cap</span>
+              <span style={{ color: "#888888" }}>Mkt Cap</span>
               <span className="font-mono text-white">{fmtMc}</span>
             </div>
             <div className="flex justify-between gap-4 mt-0.5">
-              <span style={{ color: "#94a3b8" }}>Change</span>
+              <span style={{ color: "#888888" }}>Change</span>
               <span className="font-mono font-bold" style={{ color: pctColor }}>
                 {formatPct(pct)}
               </span>
             </div>
             <div className="flex justify-between gap-4 mt-0.5">
-              <span style={{ color: "#94a3b8" }}>Chain</span>
-              <span style={{ color: "#94a3b8" }}>{b.platform}</span>
+              <span style={{ color: "#888888" }}>Chain</span>
+              <span style={{ color: "#888888" }}>{b.platform}</span>
             </div>
           </div>
         );

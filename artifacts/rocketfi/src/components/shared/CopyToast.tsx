@@ -114,14 +114,14 @@ export function CopyToastProvider() {
             {notif.label}
           </span>
           {notif.sub && (
-            <span className="text-[10px] font-mono text-[#64748b] mt-0.5">
+            <span className="text-[10px] font-mono text-[#666666] mt-0.5">
               {notif.sub}
             </span>
           )}
         </div>
 
         {/* Subtle copy icon */}
-        <Copy className="h-3.5 w-3.5 text-[#334155] shrink-0 ml-0.5" />
+        <Copy className="h-3.5 w-3.5 text-[#3a3a3a] shrink-0 ml-0.5" />
       </div>
     </div>,
     document.body,
