@@ -126,7 +126,7 @@
   --chart-5: 0 84% 60%;
 
   /* Typography & geometry */
-  --app-font-sans: 'Inter', 'DM Sans', system-ui, sans-serif;
+  --app-font-sans: 'DM Sans', 'Inter', system-ui, sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: 'JetBrains Mono', Menlo, monospace;
   --radius: 0.375rem;

@@ -44,9 +44,9 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm flex flex-col items-center gap-8">
-        <div className="flex items-center gap-2 text-primary font-mono font-bold tracking-widest text-2xl">
-          <div className="w-4 h-4 bg-primary rounded-sm brand-glow"></div>
-          PUMPI<span className="text-muted-foreground font-sans text-sm">/OPS</span>
+        <div className="flex items-center gap-3">
+          <img src="/admin/pumpi-logo.png" alt="Pumpi" className="h-8 w-auto object-contain" />
+          <span className="text-muted-foreground font-mono text-sm tracking-widest">/OPS</span>
         </div>
         
         <Card className="w-full border-border bg-card">

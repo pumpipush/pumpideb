@@ -19,11 +19,9 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
       <aside className="w-64 flex-shrink-0 border-r border-border bg-sidebar flex flex-col">
-        <div className="h-14 flex items-center px-4 border-b border-border">
-          <div className="flex items-center gap-2 text-primary font-mono font-bold tracking-tight text-lg">
-            <div className="w-3 h-3 bg-primary rounded-sm brand-glow"></div>
-            PUMPI<span className="text-muted-foreground font-sans text-xs">/OPS</span>
-          </div>
+        <div className="h-14 flex items-center px-4 border-b border-border gap-3">
+          <img src="/admin/pumpi-logo.png" alt="Pumpi" className="h-6 w-auto object-contain" />
+          <span className="text-muted-foreground font-mono text-xs tracking-widest">/OPS</span>
         </div>
         <nav className="flex-1 py-4 flex flex-col gap-1 px-2">
           {navItems.map((item) => {
