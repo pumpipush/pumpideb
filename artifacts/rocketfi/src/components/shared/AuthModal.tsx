@@ -7,7 +7,7 @@
  */
 
 import { useState } from "react";
-import { X, Loader2 } from "lucide-react";
+import { X, Loader2, Wallet } from "lucide-react";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWallet } from "@/contexts/WalletContext";
@@ -82,18 +82,20 @@ interface AuthModalProps {
 /* ── component ───────────────────────────────────────────────────────────── */
 
 export function AuthModal({ open, onOpenChange }: AuthModalProps) {
-  const { handleGoogleToken, loginOrLinkWallet, linkGoogle, socialUser } = useAuth();
+  const { handleGoogleToken, loginOrLinkWallet, linkGoogle, mergeWallet, socialUser } = useAuth();
   const { connectWallet, signMessage } = useWallet();
   const { toast } = useToast();
 
-  const [loading, setLoading] = useState<string | null>(null);
-  const [error, setError]     = useState<string | null>(null);
+  const [loading, setLoading]       = useState<string | null>(null);
+  const [error, setError]           = useState<string | null>(null);
+  const [mergeNonce, setMergeNonce] = useState<string | null>(null);
+  const [merging, setMerging]       = useState(false);
   const mobile = isMobile();
 
   const recentWallet = localStorage.getItem(LAST_WALLET_KEY);
 
   function close() { onOpenChange(false); }
-  function reset() { setError(null); setLoading(null); }
+  function reset() { setError(null); setLoading(null); setMergeNonce(null); }
 
   // ── Google ─────────────────────────────────────────────────────────────────
   const handleGoogleSuccess = async (accessToken: string) => {
@@ -149,7 +151,12 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
     try {
       const address = await connectWallet(provider, descriptor.name);
       try {
-        await loginOrLinkWallet(address, signMessage);
+        const result = await loginOrLinkWallet(address, signMessage);
+        if (result?.mergeNonce) {
+          // Wallet already has its own account — surface merge confirmation inside this modal.
+          setMergeNonce(result.mergeNonce);
+          return; // keep modal open
+        }
       } catch {
         // Non-fatal — wallet is connected even if sign/link fails (e.g. user dismissed).
       }
@@ -250,6 +257,50 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                   );
                 })}
               </div>
+
+              {/* ── Merge confirmation — wallet already has its own account ── */}
+              {mergeNonce && (
+                <div className="rounded-xl p-3.5 border border-white/10 bg-white/[0.04]">
+                  <div className="flex items-center gap-2.5 mb-2">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "rgba(154,237,44,0.12)" }}>
+                      <Wallet className="w-3.5 h-3.5" style={{ color: "#9aed2c" }} />
+                    </div>
+                    <p className="text-[13px] font-semibold text-white">Wallet has its own account</p>
+                  </div>
+                  <p className="text-[12px] text-white/50 leading-relaxed mb-3">
+                    This wallet already has a separate Pumpi account. Merge to link it to your Google account — trade history stays intact.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => {
+                        setMerging(true);
+                        try {
+                          await mergeWallet(mergeNonce);
+                          reset();
+                          close();
+                          toast({ title: "Accounts merged", description: "Your wallet is now linked to your profile." });
+                        } catch (e) {
+                          setError(e instanceof Error ? e.message : "Merge failed");
+                        } finally {
+                          setMerging(false);
+                        }
+                      }}
+                      disabled={merging}
+                      className="flex-1 h-8 rounded-lg text-[12.5px] font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                      style={{ background: "#9aed2c", color: "#000" }}
+                    >
+                      {merging ? <Loader2 className="w-3 h-3 animate-spin" /> : "Merge accounts"}
+                    </button>
+                    <button
+                      onClick={() => { setMergeNonce(null); setError(null); }}
+                      disabled={merging}
+                      className="h-8 px-3 rounded-lg text-[12.5px] text-white/40 hover:text-white/70 border border-white/10 transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Error */}
               {error && (
