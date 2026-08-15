@@ -16,8 +16,8 @@ function LaunchTokenButton() {
       className="w-full rounded-[8px] font-bold text-sm h-9 transition-all duration-200 active:scale-[0.98] flex items-center gap-2"
       style={{
         background: hovered
-          ? "linear-gradient(135deg, #16a34a 0%, #22c55e 100%)"
-          : "linear-gradient(135deg, #15803d 0%, #16a34a 100%)",
+          ? "linear-gradient(135deg, #7ecf1a 0%, #9aed2c 100%)"
+          : "linear-gradient(135deg, #6ab515 0%, #7ecf1a 100%)",
         color: "#ffffff",
         boxShadow: hovered ? "0 0 16px rgba(22,163,74,0.45)" : "0 0 8px rgba(22,163,74,0.2)",
         border: "1px solid rgba(74,222,128,0.25)",
