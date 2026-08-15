@@ -1,5 +1,5 @@
 import { SEO } from "@/components/seo/SEO";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Clock, Shield, MessageCircle, Zap } from "lucide-react";
 
 const XIcon = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current" aria-hidden>
@@ -13,71 +13,131 @@ const TelegramIcon = () => (
   </svg>
 );
 
+const CHANNELS = [
+  {
+    label: "General & Partnerships",
+    email: "hello@pumpi.io",
+    description: "Business inquiries, media coverage, partnership proposals, and general feedback.",
+    topics: ["Partnerships", "Press", "Feedback"],
+  },
+  {
+    label: "User Support",
+    email: "support@pumpi.io",
+    description: "Account issues, token display problems, trade questions, and bug reports.",
+    topics: ["Login issues", "Token missing", "Bug reports"],
+  },
+];
+
+const SOCIALS = [
+  { label: "X / Twitter", handle: "@pumpi_dex", href: "https://x.com/pumpi_dex", icon: <XIcon /> },
+  { label: "Telegram", handle: "t.me/pumpi_dex", href: "https://t.me/pumpi_dex", icon: <TelegramIcon /> },
+];
+
+const INFO = [
+  { icon: <Zap className="w-3.5 h-3.5" />, text: "Average reply under 24 hours" },
+  { icon: <Shield className="w-3.5 h-3.5" />, text: "Security reports? Mark subject [SECURITY]" },
+  { icon: <MessageCircle className="w-3.5 h-3.5" />, text: "Token missing? Include the mint address" },
+  { icon: <Clock className="w-3.5 h-3.5" />, text: "Active Mon – Fri" },
+];
+
 export default function Contact() {
   return (
     <>
       <SEO
         title="Contact Us"
-        description="Get in touch with the Pumpi team — support, partnerships, and more."
+        description="Get in touch with the Pumpi team — support, partnerships, press, and more."
       />
-      <div className="min-h-screen bg-background text-foreground flex items-start justify-center px-4 py-20">
-        <div className="w-full max-w-md">
+      <div className="min-h-screen bg-background text-foreground">
+        <div className="max-w-3xl mx-auto px-5 py-16">
 
           {/* Header */}
-          <h1 className="text-3xl font-extrabold text-white mb-2">Contact</h1>
-          <p className="text-sm text-muted-foreground mb-10">
-            Small team, big focus. We read every message and reply within 24 hours.
-          </p>
+          <div className="mb-12">
+            <p className="text-[10px] font-semibold tracking-[0.18em] uppercase text-muted-foreground/40 mb-3">
+              Pumpi · Contact
+            </p>
+            <h1 className="text-4xl font-extrabold text-white tracking-tight mb-3">
+              Get in touch
+            </h1>
+            <p className="text-[15px] text-muted-foreground/60 max-w-md leading-relaxed">
+              Small team, big focus. We read every message and reply as fast as we can — usually within a day.
+            </p>
+          </div>
 
-          {/* Email rows */}
-          <div className="space-y-px mb-10">
-            {[
-              { label: "General & Partnerships", email: "hello@pumpi.io" },
-              { label: "Support", email: "support@pumpi.io" },
-            ].map((ch) => (
+          {/* Email channels */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+            {CHANNELS.map((ch) => (
               <a
                 key={ch.email}
                 href={`mailto:${ch.email}`}
-                className="group flex items-center justify-between py-4 border-b border-white/[0.07] hover:border-white/20 transition-colors"
+                className="group relative rounded-2xl border border-white/[0.07] bg-white/[0.025] hover:bg-white/[0.04] hover:border-white/[0.12] transition-all duration-200 p-5 flex flex-col gap-3 overflow-hidden"
               >
                 <div>
-                  <p className="text-[11px] uppercase tracking-widest text-muted-foreground/50 mb-0.5 font-medium">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/40 mb-2">
                     {ch.label}
                   </p>
-                  <p className="text-base font-semibold text-white">{ch.email}</p>
+                  <p className="text-[15px] font-semibold text-white group-hover:opacity-80 transition-opacity">
+                    {ch.email}
+                  </p>
                 </div>
-                <ArrowUpRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-white transition-colors" />
+
+                <p className="text-[12px] text-muted-foreground/55 leading-relaxed flex-1">
+                  {ch.description}
+                </p>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {ch.topics.map((t) => (
+                    <span
+                      key={t}
+                      className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-white/[0.08] text-muted-foreground/50 bg-white/[0.03]"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+
+                <ArrowUpRight className="absolute top-4 right-4 w-3.5 h-3.5 text-muted-foreground/20 group-hover:text-muted-foreground/60 transition-colors" />
               </a>
             ))}
           </div>
 
-          {/* Social links */}
-          <div className="space-y-px">
-            {[
-              { label: "X / Twitter", handle: "@pumpi_dex", href: "https://x.com/pumpi_dex", icon: <XIcon /> },
-              { label: "Telegram", handle: "t.me/pumpi_dex", href: "https://t.me/pumpi_dex", icon: <TelegramIcon /> },
-            ].map((s) => (
-              <a
-                key={s.href}
-                href={s.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group flex items-center justify-between py-4 border-b border-white/[0.07] hover:border-white/20 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-muted-foreground/50 group-hover:text-white transition-colors">{s.icon}</span>
-                  <div>
-                    <p className="text-[11px] uppercase tracking-widest text-muted-foreground/50 mb-0.5 font-medium">
-                      {s.label}
-                    </p>
-                    <p className="text-base font-semibold text-white">{s.handle}</p>
+          {/* Social + info row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+            {/* Social links */}
+            <div className="space-y-2">
+              {SOCIALS.map((s) => (
+                <a
+                  key={s.href}
+                  href={s.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-center justify-between gap-3 px-4 py-3.5 rounded-xl border border-white/[0.07] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.12] transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg border border-white/[0.08] bg-white/[0.05] flex items-center justify-center text-muted-foreground/50 group-hover:text-white transition-colors">
+                      {s.icon}
+                    </div>
+                    <div>
+                      <p className="text-[13px] font-semibold text-white leading-tight">{s.label}</p>
+                      <p className="text-[11px] text-muted-foreground/40">{s.handle}</p>
+                    </div>
                   </div>
-                </div>
-                <ArrowUpRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-white transition-colors" />
-              </a>
-            ))}
-          </div>
+                  <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground/20 group-hover:text-muted-foreground/60 transition-colors" />
+                </a>
+              ))}
+            </div>
 
+            {/* Info card */}
+            <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] px-5 py-4 flex flex-col justify-center gap-3">
+              {INFO.map((item, i) => (
+                <div key={i} className="flex items-center gap-2.5">
+                  <span className="text-muted-foreground/30 shrink-0">{item.icon}</span>
+                  <span className="text-[12px] text-muted-foreground/55">{item.text}</span>
+                </div>
+              ))}
+            </div>
+
+          </div>
         </div>
       </div>
     </>
