@@ -91,6 +91,20 @@ interface AuthContextValue {
    * already claimed by another profile.
    */
   linkGoogle: (accessToken: string) => Promise<void>;
+  /**
+   * Smart wallet connect — call this after the wallet extension approves
+   * the connection.  Automatically decides:
+   *   • Already signed in (Google / email JWT present) → links the wallet to the
+   *     existing social profile via /auth/wallet/link (no new row created).
+   *   • Not signed in → creates / retrieves a wallet-primary profile and issues
+   *     a JWT via /auth/wallet/login.
+   * This prevents the duplicate-profile scenario where one person ends up with
+   * both a UUID-addressed Google row and a separate wallet-address row.
+   */
+  loginOrLinkWallet: (
+    walletAddress: string,
+    signMessage: (msg: Uint8Array) => Promise<Uint8Array>,
+  ) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -106,6 +120,7 @@ const AuthContext = createContext<AuthContextValue>({
   linkWallet: async () => {},
   unlinkWallet: async () => {},
   loginWithWallet: async () => {},
+  loginOrLinkWallet: async () => {},
   linkEmailSend: async () => {},
   linkEmailVerify: async () => {},
   linkGoogle: async () => {},
@@ -361,6 +376,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       : u);
   }, [authHeaders]);
 
+  // ── Shared base58 encoder (used by both login and link flows) ─────────────
+  function encodeBase58(sigBytes: Uint8Array): string {
+    const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let n = 0n;
+    for (const byte of sigBytes) n = n * 256n + BigInt(byte);
+    const chars: string[] = [];
+    while (n > 0n) { chars.unshift(B58[Number(n % 58n)]); n /= 58n; }
+    let leading = 0;
+    for (const byte of sigBytes) { if (byte !== 0) break; leading++; }
+    return "1".repeat(leading) + chars.join("");
+  }
+
   // ── Wallet-only login ─────────────────────────────────────────────────────
   // Fetches a one-time challenge, has the wallet sign it, then exchanges the
   // signature for a JWT — giving wallet-only users the same auth capabilities
@@ -380,15 +407,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 2. Sign with the wallet (Ed25519 over UTF-8 encoded message)
     const sigBytes = await signMessage(new TextEncoder().encode(message));
 
-    // 3. Base58-encode the raw 64-byte signature (canonical: preserve leading zeros)
-    const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    let n = 0n;
-    for (const byte of sigBytes) n = n * 256n + BigInt(byte);
-    const chars: string[] = [];
-    while (n > 0n) { chars.unshift(B58[Number(n % 58n)]); n /= 58n; }
-    let leading = 0;
-    for (const byte of sigBytes) { if (byte !== 0) break; leading++; }
-    const signature = "1".repeat(leading) + chars.join("");
+    // 3. Base58-encode the raw 64-byte signature
+    const signature = encodeBase58(sigBytes);
 
     // 4. Exchange for JWT
     const lr = await fetch(apiUrl("/auth/wallet/login"), {
@@ -416,6 +436,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  /**
+   * Smart connect: if a social JWT is already present, link the wallet to the
+   * existing profile. Otherwise, create / retrieve a wallet-primary profile.
+   * This prevents duplicate profile rows when a Google/email user also connects
+   * a wallet extension.
+   */
+  const loginOrLinkWallet = useCallback(async (
+    walletAddress: string,
+    signMessage: (msg: Uint8Array) => Promise<Uint8Array>,
+  ) => {
+    const token = getToken();
+
+    if (token) {
+      // ── Already signed in → link wallet to existing social profile ──────
+      // Uses /auth/wallet/link/challenge + /auth/wallet/link (no new row).
+      const cr = await fetch(apiUrl(`/auth/wallet/link/challenge?wallet=${encodeURIComponent(walletAddress)}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!cr.ok) {
+        const e = await cr.json().catch(() => ({})) as { error?: string };
+        throw new Error(e.error ?? "Failed to get wallet link challenge");
+      }
+      const { message } = await cr.json() as { nonce: string; message: string };
+      const sigBytes  = await signMessage(new TextEncoder().encode(message));
+      const signature = encodeBase58(sigBytes);
+      await linkWallet(walletAddress, signature, message);
+    } else {
+      // ── Not signed in → create / retrieve wallet profile and issue JWT ──
+      await loginWithWallet(walletAddress, signMessage);
+    }
+  }, [linkWallet, loginWithWallet]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -431,6 +483,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         linkWallet,
         unlinkWallet,
         loginWithWallet,
+        loginOrLinkWallet,
         linkEmailSend,
         linkEmailVerify,
         linkGoogle,
