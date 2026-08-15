@@ -343,7 +343,9 @@ export default function ProfilePage() {
           </div>
           <div>
             <h2 className="text-xl font-bold">{displayUsername}</h2>
-            <p className="text-xs font-mono text-muted-foreground mt-1">{formatAddress(address)}</p>
+            {solanaAddress && (
+              <p className="text-xs font-mono text-muted-foreground mt-1">{formatAddress(solanaAddress)}</p>
+            )}
           </div>
           <p className="text-sm text-muted-foreground max-w-xs">
             Your profile isn't set up yet. Add a username and bio so the community knows who you are.
@@ -462,14 +464,16 @@ export default function ProfilePage() {
               <div className="flex items-center gap-2.5 flex-wrap mb-1">
                 <h1 className="text-2xl font-bold tracking-tight">{displayUsername}</h1>
               </div>
-              {/* Wallet address copy */}
-              <button
-                onClick={() => copyToClipboard(address)}
-                className="inline-flex items-center gap-1.5 text-xs font-mono text-muted-foreground/60 hover:text-muted-foreground transition-colors group"
-              >
-                {formatAddress(profile.address)}
-                <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </button>
+              {/* Wallet address copy — only for valid Solana addresses, never for internal UUIDs */}
+              {solanaAddress && (
+                <button
+                  onClick={() => copyToClipboard(solanaAddress)}
+                  className="inline-flex items-center gap-1.5 text-xs font-mono text-muted-foreground/60 hover:text-muted-foreground transition-colors group"
+                >
+                  {formatAddress(solanaAddress)}
+                  <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              )}
             </div>
 
             {/* Bio */}
