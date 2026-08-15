@@ -532,6 +532,7 @@ router.get("/tokens/:address/holders", heavyLimiter, asyncWrap(async (req, res) 
   const { rows } = await pool.query<{
     trader_address: string;
     balance: string;
+    tx_count: string;
   }>(`
     SELECT
       trader_address,
@@ -540,7 +541,8 @@ router.get("/tokens/:address/holders", heavyLimiter, asyncWrap(async (req, res) 
           THEN  CAST(NULLIF(token_amount, '') AS NUMERIC)
           ELSE -CAST(NULLIF(token_amount, '') AS NUMERIC)
         END
-      ) AS balance
+      ) AS balance,
+      COUNT(*) AS tx_count
     FROM trades
     WHERE token_address = $1
       AND token_amount IS NOT NULL
@@ -559,6 +561,7 @@ router.get("/tokens/:address/holders", heavyLimiter, asyncWrap(async (req, res) 
   const holders = rows.map(r => ({
     address: r.trader_address,
     balance: r.balance,
+    txCount: Number(r.tx_count),
   }));
 
   res.json({ holders, count: holders.length });

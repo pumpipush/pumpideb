@@ -989,7 +989,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // tokens. This endpoint aggregates every trade in the DB for this token.
   const { data: serverHolders, isLoading: loadingHolders, refetch: refetchHolders } = useQuery({
     queryKey: ["holders", selectedAddress],
-    queryFn: async (): Promise<{ address: string; balance: string }[]> => {
+    queryFn: async (): Promise<{ address: string; balance: string; txCount: number }[]> => {
       if (!selectedAddress) return [];
       const res = await fetch(`/api/tokens/${selectedAddress}/holders`);
       // Throw on error so React Query keeps the previous data instead of
@@ -1003,7 +1003,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     refetchInterval: 15_000,   // 15 s is plenty — holders change slowly
     staleTime: 12_000,
     // Keep showing the last good data during any background refetch or error
-    placeholderData: (prev: { address: string; balance: string }[] | undefined) => prev,
+    placeholderData: (prev: { address: string; balance: string; txCount: number }[] | undefined) => prev,
   });
 
   // ── Server-side position (SQL aggregate across ALL trades — no 100-row cap) ─
@@ -2954,7 +2954,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 );
               })()}
 
-              {/* Holders panel */}
+              {/* Holders panel — DexScreener-style layout */}
               <div className={`rounded-lg overflow-hidden ${activeSubTab !== "holders" ? "hidden" : ""}`}
                 style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
 
@@ -2974,45 +2974,53 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                           {holders.length.toLocaleString()} holders
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[12px]" style={{ color: "#94a3b8" }}>Top 10 own</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[12px]" style={{ color: "#64748b" }}>Top 10 own</span>
                         <span className="text-[13px] font-bold font-mono"
                           style={{ color: isConcentrated ? "#f87171" : "#94a3b8" }}>
                           {top10Pct.toFixed(1)}%
                         </span>
+                        {isConcentrated && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                            style={{ background: "rgba(248,113,113,0.12)", color: "#f87171", border: "1px solid rgba(248,113,113,0.25)" }}>
+                            CONCENTRATED
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
                 })()}
 
-                {/* Holder rows — table layout consistent with Traders tab */}
+                {/* Holder rows — DexScreener layout */}
                 <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                  <table style={{ minWidth: "560px", width: "100%", borderCollapse: "collapse" }}>
+                  <table style={{ minWidth: "580px", width: "100%", borderCollapse: "collapse" }}>
                     <thead>
-                      <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.025)" }}>
-                        <th style={{ width: 3, padding: 0 }} />
-                        <th className="text-center px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8", width: 36 }}>#</th>
-                        <th className="text-left px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Wallet</th>
-                        <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Holdings</th>
-                        <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8", width: 72 }}>Share</th>
+                      <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}>
+                        <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569", width: 40 }}>Rank</th>
+                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Address</th>
+                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569", minWidth: 140 }}>%</th>
+                        <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Amount</th>
+                        <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Value</th>
+                        <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569", width: 60 }}>Txns</th>
                         <th style={{ width: 36 }} />
                       </tr>
                     </thead>
                     <tbody>
                       {loadingHolders ? (
-                        [...Array(5)].map((_, i) => (
+                        [...Array(8)].map((_, i) => (
                           <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                            <td style={{ width: 3, padding: 0 }}><div style={{ width: 3, height: 40, background: "rgba(255,255,255,0.06)" }} /></td>
                             <td className="px-3 py-3 text-center"><Skeleton className="h-3.5 w-5 mx-auto" /></td>
-                            <td className="px-3 py-3"><div className="flex items-center gap-2"><Skeleton className="h-5 w-5 rounded-full" /><Skeleton className="h-3.5 w-28" /></div></td>
+                            <td className="px-3 py-3"><Skeleton className="h-3.5 w-28" /></td>
+                            <td className="px-3 py-3"><div className="flex items-center gap-2"><Skeleton className="h-2 w-24 rounded-full" /><Skeleton className="h-3 w-10" /></div></td>
                             <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-16 ml-auto" /></td>
-                            <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-10 ml-auto" /></td>
+                            <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-12 ml-auto" /></td>
+                            <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-8 ml-auto" /></td>
                             <td style={{ width: 36 }} />
                           </tr>
                         ))
                       ) : holders.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="px-4 py-14 text-center">
+                          <td colSpan={7} className="px-4 py-14 text-center">
                             <div className="flex flex-col items-center gap-2">
                               <Users className="h-5 w-5" style={{ color: "#334155" }} />
                               <p className="text-[13px] font-semibold" style={{ color: "#475569" }}>No holders yet</p>
@@ -3020,94 +3028,124 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                             </div>
                           </td>
                         </tr>
-                      ) : holders.map(({ address: addr, balance }, idx) => {
-                        const bal = Math.max(0, parseFloat(balance) || 0);
-                        const pct = (bal / totalSupply) * 100;
+                      ) : (() => {
+                        // Max balance for normalising the progress bar (top holder = 100%)
+                        const maxBal = Math.max(0, parseFloat(holders[0]?.balance ?? "0") || 0);
+                        return holders.map(({ address: addr, balance, txCount }, idx) => {
+                          const bal    = Math.max(0, parseFloat(balance) || 0);
+                          const pct    = totalSupply > 0 ? (bal / totalSupply) * 100 : 0;
+                          // Bar width relative to top holder so it always fills meaningfully
+                          const barW   = maxBal > 0 ? (bal / maxBal) * 100 : 0;
 
-                        const rankColor = idx === 0 ? "#4ade80" : idx === 1 ? "#94a3b8" : idx === 2 ? "#6ee7b7" : "#94a3b8";
-                        const rankBg    = idx === 0 ? "rgba(74,222,128,0.14)" : idx === 1 ? "rgba(148,163,184,0.10)" : idx === 2 ? "rgba(110,231,183,0.10)" : "rgba(148,163,184,0.07)";
-                        const barColor  = idx === 0 ? "#4ade80" : idx === 1 ? "#94a3b8" : idx === 2 ? "#6ee7b7" : "#16a34a";
+                          // USD value: atomic balance → tokens → SOL → USD
+                          const priceSol = priceStats.currentPrice ?? 0;
+                          const valUsd   = (bal / 1e6) * priceSol * (solPrice ?? 0);
+                          const fmtVal   = valUsd >= 1_000_000
+                            ? `$${(valUsd / 1_000_000).toFixed(2)}M`
+                            : valUsd >= 1_000
+                            ? `$${(valUsd / 1_000).toFixed(1)}K`
+                            : valUsd >= 1
+                            ? `$${valUsd.toFixed(2)}`
+                            : valUsd > 0 ? `$${valUsd.toFixed(4)}` : "—";
 
-                        return (
-                          <tr key={addr}
-                            className="group"
-                            style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background 0.15s" }}
-                            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.02)")}
-                            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                          >
-                            {/* Left strip — brightness reflects share size */}
-                            <td style={{ width: 3, padding: 0 }}>
-                              <div style={{ width: 3, minHeight: 44, background: barColor, opacity: Math.max(0.25, Math.min(1, pct / 5)) }} />
-                            </td>
+                          const rankColor = idx === 0 ? "#f59e0b" : idx === 1 ? "#94a3b8" : idx === 2 ? "#2dd4bf" : "#475569";
+                          const barColor  = idx === 0 ? "#4ade80" : idx < 3 ? "#22d3ee" : "#3b82f6";
 
-                            {/* Rank */}
-                            <td className="px-3 py-3 text-center">
-                              <div className="w-6 h-6 rounded-md flex items-center justify-center mx-auto text-[11px] font-bold tabular-nums"
-                                style={{ background: rankBg, color: rankColor }}>
-                                {idx + 1}
-                              </div>
-                            </td>
-
-                            {/* Avatar + Address */}
-                            <td className="px-3 py-3">
-                              <button
-                                className="flex items-center gap-2 min-w-0 text-left"
-                                onClick={() => copyToClipboard(addr)}
-                                title={addr}
-                              >
-                                <TokenAvatar symbol={addr.slice(0, 4)} size={22} shape="circle" />
-                                <span className="font-mono text-[13px] transition-colors group-hover:text-slate-300 truncate"
-                                  style={{ color: "#94a3b8" }}>
-                                  {formatAddress(addr)}
+                          return (
+                            <tr key={addr}
+                              className="group"
+                              style={{ borderBottom: "1px solid rgba(255,255,255,0.035)", transition: "background 0.12s" }}
+                              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+                              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                            >
+                              {/* Rank */}
+                              <td className="px-3 py-2.5 text-center" style={{ width: 40 }}>
+                                <span className="font-mono text-[13px] font-bold" style={{ color: rankColor }}>
+                                  #{idx + 1}
                                 </span>
-                                {idx === 0 && (
-                                  <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide"
-                                    style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.3)" }}>
-                                    TOP
+                              </td>
+
+                              {/* Address + copy */}
+                              <td className="px-3 py-2.5">
+                                <button
+                                  className="flex items-center gap-1.5 min-w-0 group/addr"
+                                  onClick={() => copyToClipboard(addr)}
+                                  title={addr}
+                                >
+                                  <span className="font-mono text-[13px] transition-colors group-hover/addr:text-slate-200"
+                                    style={{ color: "#94a3b8" }}>
+                                    {addr.slice(0, 6)}…{addr.slice(-4)}
                                   </span>
-                                )}
-                              </button>
-                            </td>
+                                  {idx === 0 && (
+                                    <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide"
+                                      style={{ background: "rgba(245,158,11,0.14)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.3)" }}>
+                                      TOP
+                                    </span>
+                                  )}
+                                </button>
+                              </td>
 
-                            {/* Balance */}
-                            <td className="px-3 py-3 text-right">
-                              <p className="font-mono text-[13px] font-semibold" style={{ color: "#e2e8f0" }}>
-                                {formatAtomicTokenAmount(String(bal))}
-                              </p>
-                              <p className="text-[10px]" style={{ color: "#475569" }}>{token.symbol}</p>
-                            </td>
+                              {/* % with progress bar */}
+                              <td className="px-3 py-2.5" style={{ minWidth: 140 }}>
+                                <div className="flex items-center gap-2">
+                                  {/* Bar */}
+                                  <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.07)", maxWidth: 80 }}>
+                                    <div className="h-full rounded-full transition-all duration-500"
+                                      style={{ width: `${barW}%`, background: barColor, opacity: 0.85 }} />
+                                  </div>
+                                  {/* Percentage text */}
+                                  <span className="font-mono text-[12px] font-semibold shrink-0" style={{ color: "#e2e8f0" }}>
+                                    {pct.toFixed(2)}%
+                                  </span>
+                                </div>
+                              </td>
 
-                            {/* Share % */}
-                            <td className="px-3 py-3 text-right" style={{ width: 72 }}>
-                              <span className="font-mono text-[13px] font-bold" style={{ color: idx < 3 ? rankColor : "#64748b" }}>
-                                {pct.toFixed(1)}%
-                              </span>
-                            </td>
+                              {/* Amount */}
+                              <td className="px-3 py-2.5 text-right">
+                                <span className="font-mono text-[13px]" style={{ color: "#cbd5e1" }}>
+                                  {formatAtomicTokenAmount(String(bal))}
+                                </span>
+                              </td>
 
-                            {/* Explorer link */}
-                            <td className="pr-3 py-3 text-center" style={{ width: 36 }}>
-                              <a
-                                href={`https://solscan.io/account/${addr}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title="View on Solscan"
-                                className="inline-flex items-center justify-center w-7 h-7 rounded-md transition-all"
-                                style={{ background: "rgba(255,255,255,0.07)", color: "#64748b" }}
-                                onMouseEnter={e => {
-                                  (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.13)";
-                                  (e.currentTarget as HTMLAnchorElement).style.color = "#cbd5e1";
-                                }}
-                                onMouseLeave={e => {
-                                  (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.07)";
-                                  (e.currentTarget as HTMLAnchorElement).style.color = "#64748b";
-                                }}
-                              >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </a>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                              {/* Value USD */}
+                              <td className="px-3 py-2.5 text-right">
+                                <span className="font-mono text-[13px] font-semibold" style={{ color: valUsd > 0 ? "#e2e8f0" : "#334155" }}>
+                                  {fmtVal}
+                                </span>
+                              </td>
+
+                              {/* Txns */}
+                              <td className="px-3 py-2.5 text-right" style={{ width: 60 }}>
+                                <span className="font-mono text-[13px]" style={{ color: "#64748b" }}>
+                                  {txCount ?? 0}
+                                </span>
+                              </td>
+
+                              {/* Explorer link */}
+                              <td className="pr-3 py-2.5 text-center" style={{ width: 36 }}>
+                                <a
+                                  href={`https://solscan.io/account/${addr}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="View on Solscan"
+                                  className="inline-flex items-center justify-center w-7 h-7 rounded-md transition-all"
+                                  style={{ background: "rgba(255,255,255,0.06)", color: "#475569" }}
+                                  onMouseEnter={e => {
+                                    (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.12)";
+                                    (e.currentTarget as HTMLAnchorElement).style.color = "#cbd5e1";
+                                  }}
+                                  onMouseLeave={e => {
+                                    (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.06)";
+                                    (e.currentTarget as HTMLAnchorElement).style.color = "#475569";
+                                  }}
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
                     </tbody>
                   </table>
                 </div>
