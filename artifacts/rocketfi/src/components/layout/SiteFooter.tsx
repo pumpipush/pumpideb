@@ -18,56 +18,68 @@ function TelegramIcon() {
   );
 }
 
+const LEGAL_LINKS = [
+  { href: "/privacy",    label: "Privacy Policy" },
+  { href: "/disclaimer", label: "Disclaimer" },
+  { href: "/terms",      label: "Terms of Service" },
+  { href: "/contact",    label: "Contact" },
+];
+
+function SocialIcons() {
+  return (
+    <div className="flex items-center gap-3">
+      <a href="https://x.com/pumpi_dex" target="_blank" rel="noopener noreferrer"
+        className="text-muted-foreground/50 hover:text-foreground transition-colors" aria-label="X / Twitter">
+        <XIcon />
+      </a>
+      <a href="https://t.me/pumpi_dex" target="_blank" rel="noopener noreferrer"
+        className="text-muted-foreground/50 hover:text-foreground transition-colors" aria-label="Telegram">
+        <TelegramIcon />
+      </a>
+    </div>
+  );
+}
+
 export function SiteFooter() {
   return (
-    <footer className="mt-auto border-t border-border/40 px-5 py-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-      {/* Copyright + version */}
-      <div className="flex items-center gap-2 shrink-0">
-        <span className="text-[14px] text-muted-foreground">
-          © {YEAR} Pumpi. All rights reserved.
-        </span>
+    <footer className="mt-auto border-t border-border/40 px-5 py-4">
+
+      {/* ── Mobile (< md): 2 rows ── */}
+      <div className="md:hidden flex flex-col gap-2.5">
+        {/* Row 1: copyright + social */}
+        <div className="flex items-center justify-between">
+          <span className="text-[13px] text-muted-foreground">© {YEAR} Pumpi</span>
+          <SocialIcons />
+        </div>
+        {/* Row 2: legal links */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {LEGAL_LINKS.map((l, i) => (
+            <span key={l.href} className="flex items-center gap-2.5">
+              {i > 0 && <span className="text-muted-foreground/30">·</span>}
+              <Link href={l.href} className="text-[13px] text-muted-foreground hover:text-foreground transition-colors">
+                {l.label}
+              </Link>
+            </span>
+          ))}
+        </div>
       </div>
 
-      {/* Legal links */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <Link href="/privacy" className="text-[14px] text-muted-foreground hover:text-foreground transition-colors">
-          Privacy Policy
-        </Link>
-        <span className="text-muted-foreground/40 text-[14px]">·</span>
-        <Link href="/disclaimer" className="text-[14px] text-muted-foreground hover:text-foreground transition-colors">
-          Disclaimer
-        </Link>
-        <span className="text-muted-foreground/40 text-[14px]">·</span>
-        <Link href="/terms" className="text-[14px] text-muted-foreground hover:text-foreground transition-colors">
-          Terms of Service
-        </Link>
-        <span className="text-muted-foreground/40 text-[14px]">·</span>
-        <Link href="/contact" className="text-[14px] text-muted-foreground hover:text-foreground transition-colors">
-          Contact
-        </Link>
+      {/* ── Desktop (md+): single horizontal row ── */}
+      <div className="hidden md:flex items-center justify-between gap-x-6 gap-y-3 flex-wrap">
+        <span className="text-[14px] text-muted-foreground shrink-0">© {YEAR} Pumpi. All rights reserved.</span>
+        <div className="flex items-center gap-3 flex-wrap">
+          {LEGAL_LINKS.map((l, i) => (
+            <span key={l.href} className="flex items-center gap-3">
+              {i > 0 && <span className="text-muted-foreground/40">·</span>}
+              <Link href={l.href} className="text-[14px] text-muted-foreground hover:text-foreground transition-colors">
+                {l.label}
+              </Link>
+            </span>
+          ))}
+        </div>
+        <SocialIcons />
       </div>
 
-      {/* Social icons */}
-      <div className="flex items-center gap-3">
-        <a
-          href="https://x.com/pumpi_dex"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-muted-foreground/50 hover:text-foreground transition-colors"
-          aria-label="X / Twitter"
-        >
-          <XIcon />
-        </a>
-        <a
-          href="https://t.me/pumpi_dex"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-muted-foreground/50 hover:text-foreground transition-colors"
-          aria-label="Telegram"
-        >
-          <TelegramIcon />
-        </a>
-      </div>
     </footer>
   );
 }
