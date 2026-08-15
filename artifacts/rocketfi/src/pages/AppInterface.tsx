@@ -1166,7 +1166,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [timeframe, setTimeframe] = useState<Timeframe>("1h");
   const [shareOpen, setShareOpen] = useState(false);
   // Bug fix: React state for tx/holders sub-tab instead of imperative DOM manipulation
-  const [activeSubTab, setActiveSubTab] = useState<"tx" | "holders" | "wallets" | "positions" | "snipers">("tx");
+  const [activeSubTab, setActiveSubTab] = useState<"tx" | "holders" | "wallets" | "positions" | "snipers" | "dev">("tx");
   const [descExpanded, setDescExpanded] = useState(false);
   const [tradeDisplayLimit, setTradeDisplayLimit] = useState(50);
 
@@ -2086,12 +2086,38 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         {typeof token.description === "string" && token.description.length > 0 && (() => {
           const LIMIT = 120;
           const isLong = token.description.length > LIMIT;
+          const displayText = isLong && !descExpanded
+            ? token.description.slice(0, LIMIT).trimEnd() + "…"
+            : token.description;
+
+          // Linkify URLs so "discord.gg/xyz" and "https://..." are clickable
+          const URL_RE = /https?:\/\/[^\s]+|(?:discord\.gg|t\.me|twitter\.com|x\.com|telegram\.me)\/[^\s]*/gi;
+          const renderWithLinks = (text: string) => {
+            const parts: React.ReactNode[] = [];
+            let last = 0;
+            let m: RegExpExecArray | null;
+            URL_RE.lastIndex = 0;
+            while ((m = URL_RE.exec(text)) !== null) {
+              if (m.index > last) parts.push(text.slice(last, m.index));
+              const raw = m[0];
+              const href = raw.startsWith("http") ? raw : `https://${raw}`;
+              parts.push(
+                <a key={m.index} href={href} target="_blank" rel="noopener noreferrer"
+                  className="underline underline-offset-2 transition-colors hover:text-slate-200"
+                  style={{ color: "#60a5fa" }}>
+                  {raw}
+                </a>
+              );
+              last = m.index + raw.length;
+            }
+            if (last < text.length) parts.push(text.slice(last));
+            return parts;
+          };
+
           return (
             <div className="mb-2 px-3 md:px-0">
-              <p className="text-[14px] text-muted-foreground leading-relaxed">
-                {isLong && !descExpanded
-                  ? token.description.slice(0, LIMIT).trimEnd() + "…"
-                  : token.description}
+              <p className="text-[14px] leading-relaxed" style={{ color: "#94a3b8" }}>
+                {renderWithLinks(displayText)}
               </p>
               {isLong && (
                 <button

@@ -411,11 +411,18 @@ export const ChartCanvas = memo(function ChartCanvas({
     const DN   = "#f87171";
     const VAL  = isUp ? UP : DN;
     el.style.opacity = "1";
-    el.innerHTML =
-      `<span style="color:#94a3b8">O</span><span style="color:${VAL}"> ${fmt(bar.open)}</span> ` +
-      `<span style="color:#94a3b8">H</span><span style="color:${UP}"> ${fmt(bar.high)}</span> ` +
-      `<span style="color:#94a3b8">L</span><span style="color:${DN}"> ${fmt(bar.low)}</span> ` +
-      `<span style="color:#94a3b8">C</span><span style="color:${VAL}"> ${fmt(bar.close)}</span>`;
+    // When all four OHLC values are identical (single trade / flat candle),
+    // showing "O $x H $x L $x C $x" is redundant — just show the price.
+    const allSame = bar.open === bar.high && bar.high === bar.low && bar.low === bar.close;
+    if (allSame) {
+      el.innerHTML = `<span style="color:#94a3b8">Price</span><span style="color:${VAL}"> ${fmt(bar.close)}</span>`;
+    } else {
+      el.innerHTML =
+        `<span style="color:#94a3b8">O</span><span style="color:${VAL}"> ${fmt(bar.open)}</span> ` +
+        `<span style="color:#94a3b8">H</span><span style="color:${UP}"> ${fmt(bar.high)}</span> ` +
+        `<span style="color:#94a3b8">L</span><span style="color:${DN}"> ${fmt(bar.low)}</span> ` +
+        `<span style="color:#94a3b8">C</span><span style="color:${VAL}"> ${fmt(bar.close)}</span>`;
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const writeInnerOhlcRef = useRef(writeInnerOhlc);
   useEffect(() => { writeInnerOhlcRef.current = writeInnerOhlc; }, [writeInnerOhlc]);

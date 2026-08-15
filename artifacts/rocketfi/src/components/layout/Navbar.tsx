@@ -101,7 +101,7 @@ function WalletButton() {
           onClick={() => navigate("/signin")}
           className="hidden md:flex items-center gap-1.5 h-8 text-xs font-semibold rounded-[8px] bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-150 shrink-0"
         >
-          <Plus className="h-3.5 w-3.5" />
+          <LogIn className="h-3.5 w-3.5" />
           Sign In
         </Button>
       </>
