@@ -1951,7 +1951,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
   if (loadingToken && !token) {
     return (
-      <div className="flex flex-col md:flex-row w-full md:h-[calc(100dvh-96px)] min-w-[320px] md:min-w-[680px]">
+      <div className="flex flex-col md:flex-row w-full min-w-[320px] md:min-w-[680px]">
         {/* Left column — spinner only in the chart area */}
         <div className="flex-1 min-w-0 border-r border-border/20 px-3 pt-3 md:px-5 md:pt-4 pb-6 flex flex-col gap-4">
           <div className="border border-border/20 rounded-sm overflow-hidden" style={{ background: "#0B1220" }}>
@@ -1999,7 +1999,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
   return (
     /* Full-bleed two-column layout — mirrors pump.fun */
-    <div className="relative flex flex-col md:flex-row w-full animate-slideDown md:h-[calc(100dvh-96px)] min-w-[320px] md:min-w-[680px]">
+    <div className="relative flex flex-col md:flex-row w-full animate-slideDown min-w-[320px] md:min-w-[680px]">
       <SEO
         fullTitle={`${displayName} ($${displaySymbol}) | Pumpi`}
         description={`Trade ${displayName} ($${displaySymbol}) on Pumpi — real-time chart, trade history, and one-click buy/sell on Solana.`}
@@ -2010,7 +2010,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       />
 
       {/* ── LEFT: scrollable chart + info ── */}
-      <div data-token-panel className="flex-1 min-w-0 overflow-y-auto border-r border-border/20 px-0 md:px-5 py-0 md:py-4 pb-20 md:pb-6">
+      <div data-token-panel className="flex-1 min-w-0 border-r border-border/20 px-0 md:px-5 py-0 md:py-4 pb-20 md:pb-6">
 
         {/* Compact Token Header */}
         <div className="flex gap-3 items-start mb-2 px-3 pt-3 md:px-0 md:pt-0">
@@ -3525,7 +3525,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       </div>
 
       {/* ── RIGHT: sticky buy panel — hidden on mobile (buy/sell is inlined below chart) ── */}
-      <div className="hidden md:flex md:flex-col w-full md:w-[280px] xl:w-[300px] shrink-0 md:overflow-y-auto md:h-full px-3 py-3 md:px-4 md:py-4 space-y-3">
+      <div className="hidden md:flex md:flex-col w-full md:w-[280px] xl:w-[300px] shrink-0 px-3 py-3 md:px-4 md:py-4 space-y-3 md:sticky md:top-[60px] md:self-start md:max-h-[calc(100dvh-60px)] md:overflow-y-auto">
 
         {/* Stats: Price / Vol 24h / % changes */}
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}>
@@ -4505,10 +4505,10 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
   };
 
   return (
-    <div className="flex flex-col md:flex-row w-full animate-slideDown md:h-[calc(100dvh-96px)] min-w-[320px] md:min-w-[680px]">
+    <div className="flex flex-col md:flex-row w-full animate-slideDown min-w-[320px] md:min-w-[680px]">
 
       {/* ── LEFT: token info ── */}
-      <div className="flex-1 min-w-0 overflow-y-auto border-r border-border/20 px-3 md:px-5 py-4 pb-20 md:pb-6">
+      <div className="flex-1 min-w-0 border-r border-border/20 px-3 md:px-5 py-4 pb-20 md:pb-6">
 
         {/* Header */}
         <div className="flex gap-3 items-start mb-6">
