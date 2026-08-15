@@ -51,15 +51,12 @@ export function SiteFooter() {
           <span className="text-[13px] text-muted-foreground">© {YEAR} Pumpi</span>
           <SocialIcons />
         </div>
-        {/* Row 2: legal links — dot after each item so it never orphans on wrap */}
-        <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
-          {LEGAL_LINKS.map((l, i) => (
-            <span key={l.href} className="flex items-center gap-2">
-              <Link href={l.href} className="text-[13px] text-muted-foreground hover:text-foreground transition-colors">
-                {l.label}
-              </Link>
-              {i < LEGAL_LINKS.length - 1 && <span className="text-muted-foreground/30">·</span>}
-            </span>
+        {/* Row 2: legal links — 2×2 grid so layout is always clean */}
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+          {LEGAL_LINKS.map(l => (
+            <Link key={l.href} href={l.href} className="text-[13px] text-muted-foreground hover:text-foreground transition-colors">
+              {l.label}
+            </Link>
           ))}
         </div>
       </div>
