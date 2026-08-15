@@ -59,7 +59,89 @@ import { eq, sql, inArray } from "drizzle-orm";
 
 const DRY_RUN = process.env.DRY_RUN === "1";
 
-// ── helpers ────────────────────────────────────────────────────────────────
+// ── pure helpers (exported so they can be unit-tested) ─────────────────────
+
+/**
+ * Deterministic adjective+noun username from a wallet address.
+ * Must stay in sync with generateWalletUsername() in routes/auth.ts.
+ */
+export function generateWalletUsername(address: string): string {
+  const ADJECTIVES = ["Swift","Neon","Cyber","Lunar","Solar","Cosmic","Dark","Hyper","Turbo","Iron","Laser","Void","Sonic","Alpha","Omega","Nova","Quantum","Pixel","Atomic","Prism","Shadow","Blazing","Golden","Silver","Stealth","Nitro","Rapid","Apex","Ultra","Infra"];
+  const NOUNS = ["Ape","Doge","Wolf","Fox","Bear","Eagle","Shark","Tiger","Panda","Hawk","Bull","Lynx","Viper","Cobra","Raven","Drake","Sphinx","Phoenix","Dragon","Jaguar","Falcon","Rhino","Manta","Bison","Badger","Gecko","Mantis","Panther","Raptor","Titan"];
+  const s1 = (parseInt(address.slice(2, 10), 16) || 0) >>> 0;
+  const s2 = (parseInt(address.slice(-8), 16) || 0) >>> 0;
+  const combined = (s1 ^ s2) >>> 0;
+  const adj  = ADJECTIVES[combined % ADJECTIVES.length];
+  const noun = NOUNS[Math.floor(combined / ADJECTIVES.length) % NOUNS.length];
+  const num  = (s1 % 90) + (s2 % 910);
+  return `${adj}${noun}${num}`;
+}
+
+/** Slugify a display name the same way auth.ts does before storing it. */
+export function slugifyName(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 20);
+}
+
+/**
+ * Returns true when `username` is the auto-generated default for `walletAddress`
+ * (i.e. the user never customised it).
+ *
+ * The default base is `slugifyName(generateWalletUsername(addr))`, e.g. "swiftape123".
+ * uniqueUsername() may have appended a "_NNNN" suffix if the base was already taken,
+ * so we also accept "swiftape123_4567" as a default.
+ */
+export function isDefaultWalletUsername(username: string, walletAddress: string): boolean {
+  const base = slugifyName(generateWalletUsername(walletAddress));
+  return username === base || username.startsWith(base + "_");
+}
+
+/**
+ * Returns true when `username` looks like a system-generated social default.
+ *
+ * The only pattern we can detect reliably at merge time is the full-UUID fallback
+ * written by uniqueUsername() when all 10 slug-based attempts are taken:
+ *   "user_" + 32 lowercase hex chars
+ *
+ * Usernames derived from the user's Google display name (e.g. "john_smith") are
+ * indistinguishable from a custom choice, so we conservatively treat them as custom.
+ */
+export function isDefaultSocialUsername(username: string): boolean {
+  return /^user_[0-9a-f]{32}$/.test(username);
+}
+
+/**
+ * Pick the best username to keep on the merged social profile.
+ *
+ * Rules (in priority order):
+ *   1. Wallet username is custom AND social username is the UUID fallback default
+ *      → use wallet username (the user actually chose it).
+ *   2. Any other combination → keep social username (the canonical profile going forward).
+ *
+ * We don't try to detect whether a Google-name-derived slug (e.g. "john_smith") is
+ * "custom" — it could have been set by the user or auto-generated.  Keeping the social
+ * side is the safer default; users can always edit it afterwards.
+ */
+export function pickBestUsername(
+  socialUsername: string,
+  walletUsername: string,
+  walletAddress: string,
+): string {
+  const walletIsDefault = isDefaultWalletUsername(walletUsername, walletAddress);
+  const socialIsDefault = isDefaultSocialUsername(socialUsername);
+
+  if (!walletIsDefault && socialIsDefault) {
+    // Wallet username was customised; social is the UUID fallback → use wallet's
+    return walletUsername;
+  }
+  return socialUsername;
+}
+
+// ── private log helper ─────────────────────────────────────────────────────
 
 function log(msg: string) {
   const ts = new Date().toISOString();
@@ -172,7 +254,12 @@ async function main() {
         const mergedTwitter   = pickBest(lockedSocial.twitter_handle, lockedWallet.twitter_handle);
         const mergedWebsite   = pickBest(lockedSocial.website_url,  lockedWallet.website_url);
 
+        // Username: prefer wallet's custom name when social has the UUID fallback default.
+        const mergedUsername  = pickBestUsername(lockedSocial.username, lockedWallet.username, walletAddr);
+        const usernameSource  = mergedUsername === lockedWallet.username ? "wallet" : "social";
+
         log(`  merged balance  : ${mergedBalance} lamports`);
+        log(`  merged username : ${mergedUsername} (kept from ${usernameSource})`);
 
         // ── Step 1: Re-attribute deposits wallet → social ─────────────
         // MUST happen before deleting wallet row; FK onDelete:cascade
@@ -192,6 +279,7 @@ async function main() {
         await tx
           .update(profilesTable)
           .set({
+            username:           mergedUsername,
             solBalanceLamports: mergedBalance,
             followersCount:     mergedFollowers,
             followingCount:     mergedFollowing,

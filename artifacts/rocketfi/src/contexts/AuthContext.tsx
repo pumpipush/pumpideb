@@ -426,12 +426,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     storeToken(data.token);
     const p = data.profile;
+    // The server may resolve this wallet to a social profile (post-merge case:
+    // wallet-primary row was deleted but identity lives under a Google/email row).
+    // Use the authType from the JWT's sub claim via /auth/me rather than hardcoding
+    // "wallet" — decode it from the response if present, otherwise default to "wallet".
+    const resolvedAuthType = (data.authType ?? "wallet") as "google" | "email" | "wallet";
     setSocialUser({
       address:      p.address,
       username:     p.username,
       avatarUrl:    p.avatarUrl ?? null,
       email:        p.email ?? null,
-      authType:     "wallet",
+      authType:     resolvedAuthType,
       linkedWallet: p.linkedWallet ?? null,
     });
   }, []);

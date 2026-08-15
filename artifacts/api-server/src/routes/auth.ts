@@ -685,6 +685,9 @@ router.post("/auth/wallet/login", authLimiter, asyncWrap(async (req, res) => {
   const token = signToken({ sub: profile.address, authType: resolvedAuthType });
   return void res.json({
     token,
+    // Include authType so the client can set socialUser.authType correctly even for
+    // post-merge profiles where the resolved row has authType 'google' or 'email'.
+    authType: resolvedAuthType,
     profile: {
       address:      profile.address,
       username:     profile.username,
