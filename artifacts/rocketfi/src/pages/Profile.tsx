@@ -175,6 +175,15 @@ export default function ProfilePage() {
   });
 
   const address = profile?.address ?? (looksLikeAddress ? slug : "");
+
+  // Only valid Solana base58 addresses should link to Solscan.
+  // Social (Google/email) users have an internal address — use their linkedWallet instead.
+  const IS_SOLANA = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+  const solanaAddress: string | null =
+    IS_SOLANA.test(address) ? address
+    : (socialUser?.linkedWallet && IS_SOLANA.test(socialUser.linkedWallet)) ? socialUser.linkedWallet
+    : null;
+
   const isOwner =
     (!!wallet && !!address && wallet.toLowerCase() === address.toLowerCase()) ||
     (!!socialUser && !!address && socialUser.address === address);
@@ -409,15 +418,17 @@ export default function ProfilePage() {
 
               {/* Action buttons */}
               <div className="flex items-center gap-2 pb-1">
-                <a
-                  href={`https://solscan.io/account/${address}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="h-8 px-3 flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] transition-colors text-xs text-muted-foreground font-medium"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Solscan</span>
-                </a>
+                {solanaAddress && (
+                  <a
+                    href={`https://solscan.io/account/${solanaAddress}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="h-8 px-3 flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] transition-colors text-xs text-muted-foreground font-medium"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Solscan</span>
+                  </a>
+                )}
                 <button
                   onClick={() => copyToClipboard(window.location.href, "Link copied")}
                   className="h-8 w-8 flex items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] transition-colors text-muted-foreground"
@@ -1080,18 +1091,20 @@ export default function ProfilePage() {
                         ))}
                       </div>
 
-                      {/* Solscan link */}
-                      <div className="flex justify-end pt-1">
-                        <a
-                          href={`https://solscan.io/account/${address}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          View on Solscan
-                        </a>
-                      </div>
+                      {/* Solscan link — only shown when a valid Solana address is available */}
+                      {solanaAddress && (
+                        <div className="flex justify-end pt-1">
+                          <a
+                            href={`https://solscan.io/account/${solanaAddress}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            View on Solscan
+                          </a>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
