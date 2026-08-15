@@ -18,10 +18,17 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
-      await apiFetch('/admin/overview', {
-        headers: { 'X-Admin-Secret': inputSecret }
+      // Use raw fetch here — apiFetch reads secret from context state which is
+      // still null at login time, so we bypass it entirely.
+      const res = await fetch('/api/admin/overview', {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Secret': inputSecret.trim(),
+        },
       });
-      setSecret(inputSecret);
+      if (res.status === 401) throw new Error('Unauthorized');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setSecret(inputSecret.trim());
       setLocation('/');
     } catch (err) {
       toast({
