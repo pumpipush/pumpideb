@@ -173,7 +173,7 @@ export default function ProfilePage() {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const { wallet, openWalletModal, signMessage, signAndSendTransaction } = useWallet();
-  const { socialUser, unlinkWallet, getWalletLinkChallenge, linkWallet, refreshSocialUser } = useAuth();
+  const { socialUser, unlinkWallet, getWalletLinkChallenge, linkWallet, mergeWallet, refreshSocialUser } = useAuth();
   const { toast } = useToast();
   const solPrice = useSolPrice();
 
@@ -186,6 +186,8 @@ export default function ProfilePage() {
   const [claimLoading, setClaimLoading] = useState(false);
   const [unlinkLoading, setUnlinkLoading] = useState(false);
   const [linkingWallet, setLinkingWallet] = useState(false);
+  const [mergeNonce, setMergeNonce] = useState<string | null>(null);
+  const [mergingAccounts, setMergingAccounts] = useState(false);
   // Set to true when user clicks "Connect wallet" from the social-no-wallet CTA,
   // so we auto-run the link flow the moment the wallet extension connects.
   const pendingLinkRef = useRef(false);
@@ -222,7 +224,12 @@ export default function ProfilePage() {
         throw new Error("Wallet returned an invalid signature — please try again");
       }
       const signature = bs58Encode(sigRaw);
-      await linkWallet(walletAddr, signature, challengeMsg);
+      const result = await linkWallet(walletAddr, signature, challengeMsg);
+      if (result?.mergeNonce) {
+        // Wallet already has its own account — surface a merge confirmation.
+        setMergeNonce(result.mergeNonce);
+        return; // don't clear linkingWallet yet — button stays loading until merge dialog shows
+      }
       await refreshSocialUser();
       toast({ title: "Wallet linked", description: "Your wallet is now connected to your profile." });
     } catch (e) {
@@ -246,6 +253,23 @@ export default function ProfilePage() {
     if (socialUser?.linkedWallet === wallet) return;   // already linked
     void doWalletLink(wallet);
   }, [wallet, socialUser?.linkedWallet, doWalletLink]);
+
+  // Called when user confirms the merge dialog.
+  const handleMergeAccounts = useCallback(async () => {
+    if (!mergeNonce) return;
+    setMergingAccounts(true);
+    try {
+      await mergeWallet(mergeNonce);
+      await refreshSocialUser();
+      setMergeNonce(null);
+      toast({ title: "Accounts merged", description: "Your wallet is now linked to your profile." });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Merge failed";
+      toast({ title: "Merge failed", description: msg, variant: "destructive" });
+    } finally {
+      setMergingAccounts(false);
+    }
+  }, [mergeNonce, mergeWallet, refreshSocialUser, toast]);
 
   // Shortcut used by both CTA buttons: connect first if needed, then link.
   const handleConnectAndLink = useCallback(() => {
@@ -1280,6 +1304,55 @@ export default function ProfilePage() {
       )}
 
       <AddEmailModal open={addEmailOpen} onClose={() => setAddEmailOpen(false)} />
+
+      {/* ── Merge accounts confirmation dialog ── */}
+      {mergeNonce && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl p-6"
+            style={{ background: "#111", border: "1px solid rgba(255,255,255,0.1)" }}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: "rgba(154,237,44,0.1)" }}
+              >
+                <Wallet className="w-5 h-5" style={{ color: "#9aed2c" }} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">Wallet has its own account</p>
+                <p className="text-xs text-muted-foreground">Merge to link it here</p>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed mb-5">
+              This wallet already has a separate Pumpi account. Merging will link the wallet to your current Google account — your trade history will stay intact.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => void handleMergeAccounts()}
+                disabled={mergingAccounts}
+                className="flex-1 h-9 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                style={{ background: "#9aed2c", color: "#000" }}
+              >
+                {mergingAccounts
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Merging…</>
+                  : "Merge accounts"}
+              </button>
+              <button
+                onClick={() => { setMergeNonce(null); setLinkingWallet(false); }}
+                disabled={mergingAccounts}
+                className="h-9 px-4 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors border border-white/10 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ProfileEditModal
         open={editOpen}
         onOpenChange={setEditOpen}

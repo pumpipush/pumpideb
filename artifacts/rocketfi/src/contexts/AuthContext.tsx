@@ -63,9 +63,12 @@ interface AuthContextValue {
    * Persist a linked wallet after the user has signed the challenge.
    * Requires proof-of-ownership: walletAddress + Ed25519 signature + original message.
    */
-  linkWallet: (walletAddress: string, signature: string, message: string) => Promise<void>;
+  /** Returns { mergeNonce } when the wallet is already a primary account — call mergeWallet to finish. */
+  linkWallet: (walletAddress: string, signature: string, message: string) => Promise<{ mergeNonce: string } | undefined>;
   /** Remove the linked wallet from this social account */
   unlinkWallet: () => Promise<void>;
+  /** Merge a wallet-primary account into this social account using the nonce from linkWallet. */
+  mergeWallet: (mergeNonce: string) => Promise<void>;
   /**
    * Authenticate a wallet-only user: fetches a challenge, signs it with the
    * wallet's private key, and exchanges the signature for a JWT.
@@ -117,8 +120,9 @@ const AuthContext = createContext<AuthContextValue>({
   authHeaders: () => ({}),
   refreshSocialUser: async () => {},
   getWalletLinkChallenge: async () => ({ nonce: "", message: "" }),
-  linkWallet: async () => {},
+  linkWallet: async () => undefined,
   unlinkWallet: async () => {},
+  mergeWallet: async () => {},
   loginWithWallet: async () => {},
   loginOrLinkWallet: async () => {},
   linkEmailSend: async () => {},
@@ -296,7 +300,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return r.json() as Promise<{ nonce: string; message: string }>;
   }, [authHeaders]);
 
-  const linkWallet = useCallback(async (walletAddress: string, signature: string, message: string) => {
+  /** Returns { mergeNonce } when the wallet is already a primary account (user must confirm merge). */
+  const linkWallet = useCallback(async (
+    walletAddress: string, signature: string, message: string,
+  ): Promise<{ mergeNonce: string } | undefined> => {
     const headers = authHeaders();
     if (!headers.Authorization) throw new Error("Not signed in");
     const r = await fetch(apiUrl("/auth/wallet/link"), {
@@ -304,9 +311,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify({ walletAddress, signature, message }),
     });
+    if (r.status === 409) {
+      const body = await r.json().catch(() => ({})) as { error?: string; mergeNonce?: string };
+      if (body.error === "wallet_is_primary_account" && body.mergeNonce) {
+        return { mergeNonce: body.mergeNonce };
+      }
+      throw new Error(body.error ?? "Wallet already in use");
+    }
     if (!r.ok) {
       const err = await r.json().catch(() => ({})) as { error?: string };
       throw new Error(err.error ?? "Failed to link wallet");
+    }
+    const data = await r.json() as { profile: { linkedWallet?: string | null } };
+    setSocialUser((u) => u ? { ...u, linkedWallet: data.profile.linkedWallet ?? null } : u);
+    return undefined;
+  }, [authHeaders]);
+
+  const mergeWallet = useCallback(async (mergeNonce: string) => {
+    const headers = authHeaders();
+    if (!headers.Authorization) throw new Error("Not signed in");
+    const r = await fetch(apiUrl("/auth/wallet/merge"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({ mergeNonce }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({})) as { error?: string };
+      throw new Error(err.error ?? "Failed to merge accounts");
     }
     const data = await r.json() as { profile: { linkedWallet?: string | null } };
     setSocialUser((u) => u ? { ...u, linkedWallet: data.profile.linkedWallet ?? null } : u);
@@ -487,6 +518,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         getWalletLinkChallenge,
         linkWallet,
         unlinkWallet,
+        mergeWallet,
         loginWithWallet,
         loginOrLinkWallet,
         linkEmailSend,

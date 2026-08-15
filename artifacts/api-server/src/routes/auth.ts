@@ -114,12 +114,25 @@ interface WalletLinkNonce {
 }
 const walletLinkNonces = new Map<string, WalletLinkNonce>();
 
-// Prune wallet-link and wallet-login nonces periodically.
+// ── Short-lived merge nonces ───────────────────────────────────────────────
+// Issued when a social user tries to link a wallet that is already a primary
+// account. The nonce allows a subsequent merge call without re-signing.
+interface WalletMergeNonce {
+  socialAddress:  string;
+  walletAddress:  string;
+  expiresAt:      number;
+}
+const walletMergeNonces = new Map<string, WalletMergeNonce>();
+
+// Prune wallet-link, wallet-login, and wallet-merge nonces periodically.
 setInterval(() => {
   pruneWalletLoginNonces();
   const now = Date.now();
   for (const [key, entry] of walletLinkNonces) {
     if (now > entry.expiresAt) walletLinkNonces.delete(key);
+  }
+  for (const [key, entry] of walletMergeNonces) {
+    if (now > entry.expiresAt) walletMergeNonces.delete(key);
   }
 }, 60_000).unref();
 
@@ -792,13 +805,24 @@ router.post("/auth/wallet/link", asyncWrap(async (req, res) => {
   }
 
   // ── Ensure wallet isn't a primary address of another profile ──────────
+  // If it is, issue a short-lived merge nonce so the client can offer a
+  // one-click "merge accounts" flow without asking the user to sign again.
   const byPrimary = await db
     .select({ address: profilesTable.address })
     .from(profilesTable)
     .where(eq(profilesTable.address, walletAddress))
     .limit(1);
   if (byPrimary.length > 0) {
-    return void res.status(409).json({ error: "This wallet is already a primary account" });
+    const mergeNonce = randomUUID();
+    walletMergeNonces.set(mergeNonce, {
+      socialAddress: payload.sub,
+      walletAddress,
+      expiresAt: Date.now() + 5 * 60_000, // 5 minutes
+    });
+    return void res.status(409).json({
+      error: "wallet_is_primary_account",
+      mergeNonce,
+    });
   }
 
   // ── Persist the linked wallet ─────────────────────────────────────────
@@ -820,6 +844,66 @@ router.post("/auth/wallet/link", asyncWrap(async (req, res) => {
 
   if (!updated[0]) return void res.status(404).json({ error: "Profile not found" });
   return void res.json({ ok: true, profile: updated[0] });
+}));
+
+// ── POST /api/auth/wallet/merge ───────────────────────────────────────────
+// Merge a wallet-primary profile into the authenticated social profile.
+// Used when the user tries to link a wallet that already has its own primary row.
+// Requires: Authorization: Bearer <social-user JWT>
+// Body: { mergeNonce: string }
+// The nonce proves prior wallet-ownership verification (issued by POST /auth/wallet/link).
+
+router.post("/auth/wallet/merge", asyncWrap(async (req, res) => {
+  const token = extractBearer(req.headers.authorization);
+  if (!token) return void res.status(401).json({ error: "No token" });
+
+  const payload = verifyToken(token);
+  if (!payload) return void res.status(401).json({ error: "Invalid or expired token" });
+  if (payload.authType === "wallet") {
+    return void res.status(400).json({ error: "Wallet-auth accounts cannot merge this way" });
+  }
+
+  const { mergeNonce } = req.body as { mergeNonce?: string };
+  if (!mergeNonce) return void res.status(400).json({ error: "mergeNonce is required" });
+
+  const entry = walletMergeNonces.get(mergeNonce);
+  walletMergeNonces.delete(mergeNonce); // single-use
+  if (!entry || Date.now() > entry.expiresAt || entry.socialAddress !== payload.sub) {
+    return void res.status(401).json({ error: "Invalid or expired merge token — please try again" });
+  }
+
+  const { socialAddress, walletAddress } = entry;
+
+  // Load both profiles
+  const [socialProfile, walletProfile] = await Promise.all([
+    db.select().from(profilesTable).where(eq(profilesTable.address, socialAddress)).limit(1).then(r => r[0]),
+    db.select().from(profilesTable).where(eq(profilesTable.address, walletAddress)).limit(1).then(r => r[0]),
+  ]);
+  if (!socialProfile) return void res.status(404).json({ error: "Social profile not found" });
+  if (!walletProfile) return void res.status(404).json({ error: "Wallet profile not found" });
+
+  // Merge: link the wallet to the social profile, delete the wallet-primary row.
+  // Trades and tokens are stored by raw wallet address, so they remain accessible
+  // once linkedWallet is set on the social profile — no row rewriting needed.
+  // Prefer the social profile's username/bio; fall back to wallet profile's if blank.
+  const mergedUsername = (socialProfile.username && !socialProfile.username.startsWith("user_"))
+    ? socialProfile.username
+    : (walletProfile.username && !walletProfile.username.startsWith("user_"))
+      ? walletProfile.username
+      : socialProfile.username;
+  const mergedBio     = socialProfile.bio     || walletProfile.bio     || null;
+  const mergedAvatar  = socialProfile.avatarUrl || walletProfile.avatarUrl || null;
+
+  const [updated] = await db
+    .update(profilesTable)
+    .set({ linkedWallet: walletAddress, username: mergedUsername, bio: mergedBio, avatarUrl: mergedAvatar, updatedAt: new Date() })
+    .where(eq(profilesTable.address, socialAddress))
+    .returning();
+
+  // Delete the wallet-primary row — its identity now lives under the social profile.
+  await db.delete(profilesTable).where(eq(profilesTable.address, walletAddress));
+
+  return void res.json({ ok: true, profile: updated });
 }));
 
 // ── DELETE /api/auth/wallet/link ───────────────────────────────────────────
