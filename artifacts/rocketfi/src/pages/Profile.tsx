@@ -515,6 +515,9 @@ export default function ProfilePage() {
               />
               {realizedPnlLamports !== null && (
                 <div className="flex-1 flex flex-col items-center justify-center py-3 px-3 min-w-0">
+                  <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 mb-1.5 font-medium">
+                    Realized PNL
+                  </span>
                   <div className="flex items-center gap-1">
                     {realizedPnlLamports > 0
                       ? <TrendingUp className="w-4 h-4" style={{ color: "#22c55e" }} />
@@ -546,9 +549,6 @@ export default function ProfilePage() {
                       ${((realizedPnlLamports / 1e9) * solPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     </span>
                   )}
-                  <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 mt-1.5 font-medium">
-                    Realized PNL
-                  </span>
                 </div>
               )}
             </div>
