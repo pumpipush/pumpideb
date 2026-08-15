@@ -686,8 +686,8 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
             {/* pct change pill — Trending & Volume tabs */}
             {pctStr && (
               <span
-                className="font-mono text-[12px] font-bold px-1.5 py-0.5 rounded-sm"
-                style={{ color: pctColor, background: pctBg, border: `1px solid ${pctColor}30` }}
+                className="font-mono text-[12px] font-bold"
+                style={{ color: pctColor }}
               >
                 {pctStr}
               </span>
