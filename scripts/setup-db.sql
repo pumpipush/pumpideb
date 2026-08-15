@@ -72,22 +72,8 @@ CREATE TABLE IF NOT EXISTS profiles (
   google_id           TEXT UNIQUE,
   auth_type           TEXT NOT NULL DEFAULT 'wallet',
   linked_wallet       TEXT UNIQUE,
-  sol_balance_lamports BIGINT NOT NULL DEFAULT 0,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- ── deposits ─────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS deposits (
-  id               SERIAL PRIMARY KEY,
-  user_address     TEXT NOT NULL REFERENCES profiles(address) ON DELETE CASCADE,
-  reference_pubkey TEXT NOT NULL UNIQUE,
-  amount_lamports  BIGINT NOT NULL,
-  status           TEXT NOT NULL DEFAULT 'pending',
-  tx_signature     TEXT,
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  confirmed_at     TIMESTAMPTZ,
-  expires_at       TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '30 minutes')
 );
 
 -- ── indexes ──────────────────────────────────────────────────
@@ -102,11 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_trades_tx_hash             ON trades (tx_hash);
 CREATE INDEX IF NOT EXISTS idx_trades_timestamp           ON trades (timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_trades_timestamp_token     ON trades (timestamp DESC, token_address);
 
-CREATE INDEX IF NOT EXISTS deposits_user_address_idx      ON deposits (user_address);
-CREATE INDEX IF NOT EXISTS deposits_reference_idx         ON deposits (reference_pubkey);
-CREATE INDEX IF NOT EXISTS deposits_status_idx            ON deposits (status);
-
 -- ── done ─────────────────────────────────────────────────────
 DO $$ BEGIN
-  RAISE NOTICE 'Database setup complete. Tables: tokens, trades, profiles, deposits.';
+  RAISE NOTICE 'Database setup complete. Tables: tokens, trades, profiles.';
 END $$;

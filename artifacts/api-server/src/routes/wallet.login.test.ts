@@ -312,12 +312,10 @@ describe("POST /api/auth/wallet/login", () => {
       .set("Authorization", `Bearer ${token}`)
       .expect(200);
 
-    // Must not fail with 500 (BigInt serialization error) or 401 (bad token)
+    // Must not fail with 500 or 401 (bad token)
     expect(meRes.body.authType).toBe("wallet");
     expect(meRes.body.profile.address).toBe(kp.address);
     expect(meRes.body.profile.username).toBeTruthy();
-    // BigInt field must NOT be present in the response
-    expect(meRes.body.profile.solBalanceLamports).toBeUndefined();
   });
 
   it("leading-zero signature — canonical Base58 encoding survives round-trip through server", async () => {

@@ -15,13 +15,10 @@
  *
  * Merge strategy (per pair)
  * ─────────────────────────
- *   • solBalanceLamports   — SUM (can't lose funds)
  *   • followersCount       — SUM
  *   • followingCount       — SUM
  *   • username             — keep social profile's username (already set by user)
  *   • bio/twitterHandle/websiteUrl/avatarUrl — prefer social's value; fall back to wallet's
- *   • deposits             — re-attributed to social profile BEFORE wallet row is deleted
- *                            (FK has onDelete: cascade — would wipe deposits otherwise)
  *   • trades.traderAddress — plain text, stores on-chain wallet address, NOT a profile PK;
  *                            no migration needed — these remain correct as-is
  *
@@ -35,14 +32,6 @@
  *     (wallet row deleted) are simply not found by the initial query; any pair where
  *     one row has disappeared mid-run is detected inside the transaction and skipped.
  *   • Dry-run mode: set DRY_RUN=1 to preview without writing.
- *   • Note on concurrent deposit confirmations: the deposit confirmation path credits
- *     the balance with an UPDATE on the profile identified by deposits.user_address.
- *     Because we re-attribute deposits (step 1 inside the locked transaction) BEFORE
- *     updating the social balance and BEFORE deleting the wallet row, any confirmation
- *     that races in will either: (a) land before our transaction — its credit is
- *     reflected in the locked wallet-row balance we sum, or (b) land after our
- *     transaction — the deposit row now points to the social profile so the credit goes
- *     to the correct row. There is no window where a credit is silently lost.
  *
  * Usage
  * ─────
@@ -54,8 +43,8 @@
  */
 
 import { db } from "@workspace/db";
-import { profilesTable, depositsTable } from "@workspace/db/schema";
-import { eq, sql, inArray } from "drizzle-orm";
+import { profilesTable } from "@workspace/db/schema";
+import { eq, sql } from "drizzle-orm";
 
 const DRY_RUN = process.env.DRY_RUN === "1";
 
@@ -199,8 +188,6 @@ async function main() {
     }
 
     try {
-      let depositsMoved = 0;
-
       await db.transaction(async (tx) => {
         // ── Step 0: Lock both rows atomically ────────────────────────────
         // SELECT … FOR UPDATE serialises any concurrent balance credits or
@@ -215,7 +202,6 @@ async function main() {
           website_url:          string | null;
           followers_count:      number;
           following_count:      number;
-          sol_balance_lamports: string; // bigint → string from pg driver
         }>(sql`
           SELECT
             address,
@@ -225,8 +211,7 @@ async function main() {
             twitter_handle,
             website_url,
             followers_count,
-            following_count,
-            sol_balance_lamports::text
+            following_count
           FROM profiles
           WHERE address IN (${socialAddr}, ${walletAddr})
           FOR UPDATE
@@ -242,11 +227,8 @@ async function main() {
 
         log(`  social username : ${lockedSocial.username}`);
         log(`  wallet username : ${lockedWallet.username}`);
-        log(`  social balance  : ${lockedSocial.sol_balance_lamports} lamports`);
-        log(`  wallet balance  : ${lockedWallet.sol_balance_lamports} lamports`);
 
         // Compute merged values from the freshly-locked rows.
-        const mergedBalance   = BigInt(lockedSocial.sol_balance_lamports) + BigInt(lockedWallet.sol_balance_lamports);
         const mergedFollowers = (lockedSocial.followers_count ?? 0) + (lockedWallet.followers_count ?? 0);
         const mergedFollowing = (lockedSocial.following_count ?? 0) + (lockedWallet.following_count ?? 0);
         const mergedBio       = pickBest(lockedSocial.bio,          lockedWallet.bio);
@@ -258,42 +240,24 @@ async function main() {
         const mergedUsername  = pickBestUsername(lockedSocial.username, lockedWallet.username, walletAddr);
         const usernameSource  = mergedUsername === lockedWallet.username ? "wallet" : "social";
 
-        log(`  merged balance  : ${mergedBalance} lamports`);
         log(`  merged username : ${mergedUsername} (kept from ${usernameSource})`);
 
-        // ── Step 1: Re-attribute deposits wallet → social ─────────────
-        // MUST happen before deleting wallet row; FK onDelete:cascade
-        // would silently wipe any pending deposits otherwise.
-        const depositResult = await tx
-          .update(depositsTable)
-          .set({ userAddress: socialAddr })
-          .where(eq(depositsTable.userAddress, walletAddr))
-          .returning({ id: depositsTable.id });
-
-        depositsMoved = depositResult.length;
-        if (depositsMoved > 0) {
-          log(`  Moved ${depositsMoved} deposit(s): wallet → social profile`);
-        }
-
-        // ── Step 2: Merge fields into social row ──────────────────────
+        // ── Step 1: Merge fields into social row ─────────────────────
         await tx
           .update(profilesTable)
           .set({
-            username:           mergedUsername,
-            solBalanceLamports: mergedBalance,
-            followersCount:     mergedFollowers,
-            followingCount:     mergedFollowing,
-            bio:                mergedBio,
-            avatarUrl:          mergedAvatar,
-            twitterHandle:      mergedTwitter,
-            websiteUrl:         mergedWebsite,
-            updatedAt:          new Date(),
+            username:       mergedUsername,
+            followersCount: mergedFollowers,
+            followingCount: mergedFollowing,
+            bio:            mergedBio,
+            avatarUrl:      mergedAvatar,
+            twitterHandle:  mergedTwitter,
+            websiteUrl:     mergedWebsite,
+            updatedAt:      new Date(),
           })
           .where(eq(profilesTable.address, socialAddr));
 
-        // ── Step 3: Delete orphaned wallet-primary row ────────────────
-        // Deposits have already been re-attributed in step 1, so the
-        // cascade will find nothing left to delete.
+        // ── Step 2: Delete orphaned wallet-primary row ────────────────
         await tx
           .delete(profilesTable)
           .where(eq(profilesTable.address, walletAddr));

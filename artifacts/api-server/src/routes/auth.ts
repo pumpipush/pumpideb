@@ -549,8 +549,7 @@ router.get("/auth/me", asyncWrap(async (req, res) => {
 
   if (!profiles[0]) return void res.status(404).json({ error: "Profile not found" });
 
-  // Return only safe serializable fields — solBalanceLamports is a BigInt
-  // and cannot be passed through Express's default JSON serializer.
+  // Return only the fields needed by the client.
   const p = profiles[0];
   return void res.json({
     profile: {
