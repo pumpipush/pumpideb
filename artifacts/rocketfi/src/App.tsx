@@ -103,7 +103,8 @@ function AppShell() {
               </Switch>
             </Suspense>
           </ErrorBoundary>
-          <SiteFooter />
+          {/* Hide footer on full-height trade/coin pages */}
+          {!location.startsWith("/coin/") && <SiteFooter />}
         </main>
       </div>
       <BottomNav />
