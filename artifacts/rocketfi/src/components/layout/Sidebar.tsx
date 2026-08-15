@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Rocket, LayoutGrid, ArrowRightLeft, Plus, UserCircle2 } from "lucide-react";
+import { Rocket, LayoutGrid, ArrowRightLeft, Plus, UserCircle2, Wallet } from "lucide-react";
 import { cn, diceBearUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useWallet } from "@/contexts/WalletContext";
@@ -73,6 +73,19 @@ export function Sidebar() {
         >
           <ArrowRightLeft className={cn("w-4 h-4 transition-transform duration-200", location === "/app" ? "text-primary" : "group-hover:scale-110")} />
           Trade
+        </Link>
+
+        <Link
+          href="/app?tab=portfolio"
+          className={cn(
+            "flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-all duration-200 rounded-sm group",
+            location === "/app" && typeof window !== "undefined" && window.location.search.includes("tab=portfolio")
+              ? "bg-primary/15 text-foreground nav-active-bar"
+              : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+          )}
+        >
+          <Wallet className={cn("w-4 h-4 transition-transform duration-200", "group-hover:scale-110")} />
+          My Coins
         </Link>
 
         {/* Profile link — only visible when wallet connected */}

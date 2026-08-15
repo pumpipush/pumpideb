@@ -95,19 +95,12 @@ export default function AppInterface({ tokenAddress: routeAddress }: AppInterfac
   const tabParam   = _params.get("tab"); // "portfolio" makes My Tokens deep-linkable
 
   const { wallet } = useWallet();
-  const [activeTab, setActiveTab] = useState<string>(
-    tokenParam ? "trade" : (tabParam === "portfolio" ? "portfolio" : "launch")
-  );
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(tokenParam);
 
-  // Sync selectedTokenId to URL param; reset per-token state on every address change
+  // Sync selectedTokenId to URL; scroll to top whenever a token is opened
   useEffect(() => {
     if (tokenParam) {
-      setActiveTab("trade");
       setSelectedTokenId(tokenParam);
-      // Double-rAF: first rAF fires after React's paint; second fires after the
-      // browser has laid out and scrolled to any auto-focused/rendered element,
-      // ensuring our reset wins on mobile.
       const scrollToTop = () => {
         window.scrollTo({ top: 0, behavior: "instant" });
         document.documentElement.scrollTo({ top: 0, behavior: "instant" });
@@ -118,59 +111,32 @@ export default function AppInterface({ tokenAddress: routeAddress }: AppInterfac
       requestAnimationFrame(() => requestAnimationFrame(scrollToTop));
     } else {
       setSelectedTokenId(null);
-      // Respect ?tab=portfolio deep-link; otherwise fall back to launch
-      setActiveTab(tabParam === "portfolio" ? "portfolio" : "launch");
     }
   }, [tokenParam, tabParam]);
 
-  // Keep tabs in sync with URL so they are deep-linkable and survive refresh
-  const handleTabChange = (tab: string) => {
-    setActiveTab(tab);
-    if (tab === "portfolio") setLocation("/app?tab=portfolio");
-    else if (tab === "launch") setLocation("/app");
-    // "trade" is token-scoped — URL already set to /coin/:address
-  };
-
   const selectToken = (address: string) => {
     setSelectedTokenId(address);
-    setActiveTab("trade");
-    // Navigate to canonical SEO-friendly path
     setLocation(`/coin/${address}`);
   };
 
-  const TAB_TRIGGER = "rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent px-5 py-2.5 text-sm text-muted-foreground hover:text-foreground transition-all duration-150 data-[state=active]:shadow-none";
-
   return (
     <div className="flex flex-col">
-
-      {/* ── Tab strip ── */}
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col flex-1 min-h-0">
-        <div className="shrink-0 border-b border-border/30 px-4 md:px-5 overflow-x-auto">
-          <TabsList className="flex justify-start bg-transparent p-0 h-auto rounded-none gap-0 min-w-max">
-            <TabsTrigger value="launch"    className={TAB_TRIGGER}><Rocket className="w-3.5 h-3.5 mr-1.5" />Launch</TabsTrigger>
-            <TabsTrigger value="trade"     className={TAB_TRIGGER}><ArrowRightLeft className="w-3.5 h-3.5 mr-1.5" />Trade</TabsTrigger>
-            <TabsTrigger value="portfolio" className={TAB_TRIGGER}><Wallet className="w-3.5 h-3.5 mr-1.5" />My Coins</TabsTrigger>
-          </TabsList>
-        </div>
-
-        {/* ── Token trade view — full-bleed, no container ── */}
-        <TabsContent value="trade" className="flex-1 mt-0 outline-none min-h-0 overflow-x-auto">
+      {selectedTokenId ? (
+        // ── Token trade view — full-bleed ──
+        <div className="flex-1 min-h-0 overflow-x-auto">
           <TradeTab wallet={wallet} selectedAddress={selectedTokenId} onSelectToken={selectToken} />
-        </TabsContent>
-
-        {/* ── Other tabs — contained ── */}
-        <TabsContent value="launch" className="mt-0 outline-none overflow-x-auto">
-          <div className="max-w-[1200px] mx-auto px-3 md:px-6 py-3 md:py-5 min-w-[340px]">
-            <LaunchTab wallet={wallet} onLaunch={(address) => selectToken(address)} />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="portfolio" className="mt-0 outline-none overflow-x-auto">
-          <div className="max-w-[1200px] mx-auto px-3 md:px-6 py-3 md:py-5 min-w-[340px]">
-            <PortfolioTab wallet={wallet} onSelectToken={selectToken} />
-          </div>
-        </TabsContent>
-      </Tabs>
+        </div>
+      ) : tabParam === "portfolio" ? (
+        // ── My Coins ──
+        <div className="max-w-[1200px] mx-auto px-3 md:px-6 py-3 md:py-5 min-w-[340px]">
+          <PortfolioTab wallet={wallet} onSelectToken={selectToken} />
+        </div>
+      ) : (
+        // ── Launch (default) ──
+        <div className="max-w-[1200px] mx-auto px-3 md:px-6 py-3 md:py-5 min-w-[340px]">
+          <LaunchTab wallet={wallet} onLaunch={(address) => selectToken(address)} />
+        </div>
+      )}
     </div>
   );
 }
