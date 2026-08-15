@@ -20,7 +20,7 @@ function TelegramIcon() {
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-border/40 px-5 py-4 mt-8 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+    <footer className="mt-auto border-t border-border/40 px-5 py-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
       {/* Copyright + version */}
       <div className="flex items-center gap-2 shrink-0">
         <span className="text-[12px] text-muted-foreground/60">
