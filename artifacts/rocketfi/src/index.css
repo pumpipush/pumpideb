@@ -6,7 +6,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: 'Poppins', sans-serif;
+  --font-sans: 'DM Sans', sans-serif;
   --font-mono: 'Inter', sans-serif;
 
   --color-background: hsl(var(--background));
