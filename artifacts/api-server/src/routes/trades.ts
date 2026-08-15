@@ -324,7 +324,7 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
 
       if (birdeyeBars && birdeyeBars.length > 0) {
         const solPrice = await getSolPriceUsd();
-        bars = birdeyeBars.map((b: BirdeyeOHLCVBar) => ({
+        const rawBars = birdeyeBars.map((b: BirdeyeOHLCVBar) => ({
           time:   b.time,
           open:   solPrice > 0 ? b.open  / solPrice : b.open,
           high:   solPrice > 0 ? b.high  / solPrice : b.high,
@@ -332,6 +332,14 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
           close:  solPrice > 0 ? b.close / solPrice : b.close,
           volume: b.volume,
         }));
+
+        // Drop Birdeye fill-forward bars: volume=0 AND all OHLC values identical.
+        // Birdeye fills gaps with the last known price when there's no trading
+        // activity. These bars distort the chart by collapsing all real candles
+        // to the bottom when the current price has moved far (e.g. post-graduation).
+        bars = rawBars.filter(b =>
+          !(b.volume === 0 && b.open === b.high && b.high === b.low && b.low === b.close)
+        );
 
         if (overview && overview.price > 0 && solPrice > 0) {
           const currentSol    = overview.price / solPrice;
@@ -467,7 +475,7 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
 
       if (birdeyeBars && birdeyeBars.length > 0) {
         const solPrice = await getSolPriceUsd();
-        bars = birdeyeBars.map((b: BirdeyeOHLCVBar) => ({
+        const rawBars2 = birdeyeBars.map((b: BirdeyeOHLCVBar) => ({
           time:   b.time,
           open:   solPrice > 0 ? b.open  / solPrice : b.open,
           high:   solPrice > 0 ? b.high  / solPrice : b.high,
@@ -475,6 +483,10 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
           close:  solPrice > 0 ? b.close / solPrice : b.close,
           volume: b.volume,
         }));
+        // Drop fill-forward bars (see primary DEX path above for explanation)
+        bars = rawBars2.filter(b =>
+          !(b.volume === 0 && b.open === b.high && b.high === b.low && b.low === b.close)
+        );
 
         // Append / update a synthetic "current" candle so the chart's last point
         // matches the live Birdeye price — prevents stale-price vs chart mismatch.
