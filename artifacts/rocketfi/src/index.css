@@ -58,36 +58,36 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* ─── Midnight + Lunar White Palette ──────────────────────────────── */
+/* ─── Pure Black Palette (OKX-style) ──────────────────────────────── */
 :root, .dark {
   color-scheme: dark;
 
-  --background: 220 49% 8%;
+  --background: 0 0% 0%;
   --foreground: 210 40% 98%;
 
-  --card: 221 39% 11%;
+  --card: 0 0% 7%;
   --card-foreground: 210 40% 98%;
-  --card-border: 220 25% 18%;
+  --card-border: 0 0% 13%;
 
-  --popover: 221 39% 11%;
+  --popover: 0 0% 7%;
   --popover-foreground: 210 40% 98%;
-  --popover-border: 220 25% 18%;
+  --popover-border: 0 0% 13%;
 
   --primary: 0 0% 96%;
-  --primary-foreground: 220 20% 8%;
+  --primary-foreground: 0 0% 5%;
   --primary-border: 0 0% 72%;
 
-  --secondary: 220 30% 15%;
+  --secondary: 0 0% 10%;
   --secondary-foreground: 210 40% 98%;
-  --secondary-border: 220 25% 22%;
+  --secondary-border: 0 0% 16%;
 
-  --muted: 220 30% 14%;
-  --muted-foreground: 215 20% 65%;
-  --muted-border: 220 25% 20%;
+  --muted: 0 0% 9%;
+  --muted-foreground: 0 0% 55%;
+  --muted-border: 0 0% 13%;
 
-  --accent: 220 20% 14%;
+  --accent: 0 0% 9%;
   --accent-foreground: 0 0% 88%;
-  --accent-border: 220 20% 22%;
+  --accent-border: 0 0% 14%;
 
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 98%;
@@ -96,8 +96,8 @@
   --success: 142 72% 36%;
   --success-foreground: 0 0% 100%;
 
-  --border: 220 25% 18%;
-  --input: 220 30% 14%;
+  --border: 0 0% 12%;
+  --input: 0 0% 8%;
   --ring: 0 0% 65%;
 
   --chart-1: 214 100% 68%;
