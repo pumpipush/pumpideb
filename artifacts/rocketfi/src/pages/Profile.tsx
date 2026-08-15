@@ -129,7 +129,7 @@ function StatChip({
   label, value, sub, color,
 }: { label: string; value: string | number; sub?: string; color?: string }) {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center py-5 px-3 min-w-0 relative">
+    <div className="flex-1 flex flex-col items-center justify-center py-3 px-3 min-w-0 relative">
       <span
         className="text-lg font-bold tabular-nums leading-none tracking-tight"
         style={{ color: color ?? "var(--foreground)" }}
@@ -514,7 +514,7 @@ export default function ProfilePage() {
                   : undefined}
               />
               {realizedPnlLamports !== null && (
-                <div className="flex-1 flex flex-col items-center justify-center py-5 px-3 min-w-0">
+                <div className="flex-1 flex flex-col items-center justify-center py-3 px-3 min-w-0">
                   <div className="flex items-center gap-1">
                     {realizedPnlLamports > 0
                       ? <TrendingUp className="w-4 h-4" style={{ color: "#22c55e" }} />
