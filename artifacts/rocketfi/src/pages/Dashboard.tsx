@@ -832,6 +832,7 @@ export default function Dashboard() {
   const { liveTokens, liveTradeStats, connected } = useFeedStream();
   // Track which live token addresses have been seen since last platform switch
   const [seenLiveAddresses, setSeenLiveAddresses] = useState<Set<string>>(new Set());
+  const [bubbleInfoOpen, setBubbleInfoOpen] = useState(false);
 
   useEffect(() => {
     if (liveTokens.length === 0) return;
@@ -1075,17 +1076,27 @@ export default function Dashboard() {
               <div className="flex items-center gap-2">
                 <h2 className="text-[20px] font-medium text-foreground">Bubble Map</h2>
                 <div className="relative group">
-                  <Info className="w-4 h-4 cursor-pointer" style={{ color: "rgba(148,163,184,0.5)" }} />
-                  <div className="absolute left-0 top-full mt-2 z-50
-                    opacity-0 group-hover:opacity-100 pointer-events-none
-                    transition-opacity duration-150 w-64">
+                  <Info
+                    className="w-4 h-4 cursor-pointer transition-colors duration-150"
+                    style={{ color: bubbleInfoOpen ? "#94a3b8" : "rgba(148,163,184,0.75)" }}
+                    onClick={() => setBubbleInfoOpen(v => !v)}
+                  />
+                  {/* Desktop: hover tooltip / Mobile: tap toggle */}
+                  <div className={[
+                    "absolute left-0 top-full mt-2 z-50 transition-opacity duration-150 w-64",
+                    bubbleInfoOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
+                  ].join(" ")}>
                     <div className="absolute left-3 -top-1.5 w-0 h-0"
                       style={{ borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: "6px solid #1e293b" }} />
                     <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
                       style={{ background: "#1e293b", border: "1px solid rgba(255,255,255,0.1)", color: "#cbd5e1", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
-                      Shows the hottest tokens right now — ranked by recent trading activity (last 5 min &amp; 1 hour). Bubble size reflects rank. Green = price up, red = price down in the last 24h.
+                      Shows the hottest tokens right now — ranked by volume. Bubble size reflects rank. Green = price up, red = price down in the last 24h.
                     </div>
                   </div>
+                  {/* Mobile backdrop — tap outside to close */}
+                  {bubbleInfoOpen && (
+                    <div className="fixed inset-0 z-40 md:hidden" onClick={() => setBubbleInfoOpen(false)} />
+                  )}
                 </div>
               </div>
             </div>
