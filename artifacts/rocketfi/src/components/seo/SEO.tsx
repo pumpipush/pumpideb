@@ -49,9 +49,12 @@ export function SEO({
       ? `${window.location.origin}${rawImage}`
       : rawImage;
 
-  // Resolve canonical — prefer explicit prop, fall back to current href (client-only)
+  // Resolve canonical — prefer explicit prop, fall back to origin+pathname only
+  // (exclude query params / hash so the value stays stable across navigations).
   const canonical =
-    url ?? (typeof window !== "undefined" ? window.location.href : "/");
+    url ?? (typeof window !== "undefined"
+      ? window.location.origin + window.location.pathname
+      : "/");
 
   const keywordStr = keywords
     ? `${DEFAULT_KEYWORDS}, ${keywords}`

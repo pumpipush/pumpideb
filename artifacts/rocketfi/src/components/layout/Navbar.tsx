@@ -66,8 +66,11 @@ function WalletButton() {
     );
   }
 
-  // Resolve display info — wallet profile takes priority over social user
-  const profileSlug = profile?.username ?? (socialUser ? socialUser.address : wallet ?? "");
+  // Resolve display info — wallet profile takes priority over social user.
+  // Use profile.username first (always clean), fall back to wallet address
+  // (valid profile URL for wallet-auth users). Never use socialUser.address
+  // raw — it is a UUID for Google users and makes an ugly URL.
+  const profileSlug = profile?.username ?? wallet ?? socialUser?.address ?? "";
   const walletFallback = wallet
     ? { displayName: formatAddress(wallet), avatarUrl: diceBearUrl(wallet) }
     : null;

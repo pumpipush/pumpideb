@@ -55,7 +55,9 @@ export function UsernameNudgeBanner() {
   }
 
   function handleSetUsername() {
-    setLocation(`/profile/${effectiveAddress}?editUsername=1`);
+    // Navigate to the profile by username (even "user_xxx" slugs are valid routes)
+    // rather than the raw wallet address so the URL stays readable.
+    setLocation(`/profile/${profile.username}?editUsername=1`);
   }
 
   return (
