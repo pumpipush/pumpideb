@@ -2,8 +2,8 @@
  * SolanaRpcIndexer — shared WebSocket base for subscribing to Solana program logs.
  *
  * RPC priority order (both WSS and HTTP):
- *   1. Alchemy  — used when ALCHEMY_API_KEY is set (primary, high rate limits)
- *   2. PublicNode / Solana Foundation / Ankr — free public fallbacks
+ *   1. PublicNode  — primary free public endpoint
+ *   2. Solana Foundation / Ankr — free public fallbacks
  *
  * Handles:
  *   - logsSubscribe to a given program ID
@@ -21,37 +21,33 @@ import { logger as rootLogger } from "../logger";
 export const PUBLICNODE_WSS  = "wss://solana-rpc.publicnode.com";
 export const PUBLICNODE_HTTP = "https://solana-rpc.publicnode.com";
 
-/** Alchemy Solana endpoints — used as primary when ALCHEMY_API_KEY is set. */
-function alchemyWss():  string | null {
-  const key = process.env["ALCHEMY_API_KEY"];
-  return key ? `wss://solana-mainnet.g.alchemy.com/v2/${key}` : null;
-}
-function alchemyHttp(): string | null {
-  const key = process.env["ALCHEMY_API_KEY"];
-  return key ? `https://solana-mainnet.g.alchemy.com/v2/${key}` : null;
+/**
+ * Returns the primary HTTP RPC URL — always a free public endpoint.
+ * Exported so consumers outside this module can build their endpoint lists.
+ */
+export function getPrimaryHttpRpc(): string {
+  return PUBLICNODE_HTTP;
 }
 
 /**
- * Returns the primary HTTP RPC URL:
- *   Alchemy (if ALCHEMY_API_KEY set) → PublicNode free fallback.
- * Exported so consumers outside this module can build their endpoint lists
- * with the same priority ordering.
+ * Free public Solana WebSocket RPC endpoints — rotated on silent-drop reconnects.
+ * PublicNode is primary (most reliable free WSS); Solana Foundation and Ankr
+ * are fallbacks for when PublicNode is saturated.
  */
-export function getPrimaryHttpRpc(): string {
-  return alchemyHttp() ?? PUBLICNODE_HTTP;
-}
-
-/** Free public Solana WebSocket RPC endpoints — rotated on silent-drop reconnects. */
 export const FALLBACK_WSS_RPCS = [
-  "wss://solana-rpc.publicnode.com",             // PublicNode
-  "wss://api.mainnet-beta.solana.com",           // Solana Foundation
-  "wss://rpc.ankr.com/solana/ws",                // Ankr free tier
+  "wss://solana-rpc.publicnode.com",   // PublicNode (primary)
+  "wss://api.mainnet-beta.solana.com", // Solana Foundation
+  "wss://rpc.ankr.com/solana/ws",      // Ankr free tier
 ] as const;
 
-/** Free public Solana HTTP RPC endpoints used as fallbacks when the primary is rate-limited. */
+/**
+ * Free public Solana HTTP RPC endpoints — tried in order on rate-limit errors.
+ * Three endpoints give enough rotation headroom under normal indexer load.
+ */
 export const FALLBACK_HTTP_RPCS = [
-  "https://solana-rpc.publicnode.com",    // PublicNode
-  "https://api.mainnet-beta.solana.com",  // Solana Foundation — keyless
+  "https://solana-rpc.publicnode.com",   // PublicNode
+  "https://api.mainnet-beta.solana.com", // Solana Foundation
+  "https://rpc.ankr.com/solana",         // Ankr free tier
 ] as const;
 
 export interface LogEvent {
@@ -176,8 +172,8 @@ export abstract class SolanaRpcIndexer {
   }) {
     this.programId   = opts.programId;
     this._watchdogMs = opts.watchdogMs ?? 30_000;
-    // Round-robin WSS pool: Alchemy (if key set) → caller-supplied → PublicNode, then free fallbacks
-    const primary = opts.wssUrl ?? alchemyWss() ?? PUBLICNODE_WSS;
+    // Round-robin WSS pool: caller-supplied → PublicNode (primary), then free fallbacks
+    const primary = opts.wssUrl ?? PUBLICNODE_WSS;
     this._wssUrls = [primary, ...FALLBACK_WSS_RPCS.filter(u => u !== primary)];
     // HTTP: always PublicNode (free) — Alchemy is reserved for WSS only.
     // HTTP calls (getAccountInfo, getSignaturesForAddress, etc.) don't need
@@ -233,14 +229,13 @@ export abstract class SolanaRpcIndexer {
   // ── RPC helpers ────────────────────────────────────────────────────────────
 
   // ── Concurrency limiter (semaphore with queue) ─────────────────────────────
-  // Cap concurrent getTransaction calls to avoid RPC rate limits.
-  // Alchemy free tier: ~330 req/s → use 16 concurrent.
-  // PublicNode / public endpoints: ~4 req/s → use 4 concurrent.
+  // Cap concurrent getTransaction calls to avoid free RPC rate limits.
+  // Free public endpoints (PublicNode, Solana Foundation, Ankr): ~4 req/s each.
   // Excess calls are queued (up to _rpcQueueMax) so no event is silently
   // discarded while the RPC is temporarily saturated.
   private _rpcInFlight   = 0;
-  private readonly _rpcMaxConcurrent = process.env["ALCHEMY_API_KEY"] ? 16 : 4;
-  private readonly _rpcQueueMax      = 64; // larger queue is fine with Alchemy's headroom
+  private readonly _rpcMaxConcurrent = 4; // conservative: free public RPCs
+  private readonly _rpcQueueMax      = 64;
   private _rpcQueue: Array<() => void> = [];
 
   private _acquireRpcSlot(): Promise<void> {

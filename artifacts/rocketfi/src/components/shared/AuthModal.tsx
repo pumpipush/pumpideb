@@ -87,8 +87,8 @@ type Step = "main" | "otp";
 /* ── component ───────────────────────────────────────────────────────────── */
 
 export function AuthModal({ open, onOpenChange }: AuthModalProps) {
-  const { sendEmailOTP, verifyEmailOTP, handleGoogleToken } = useAuth();
-  const { connectWallet } = useWallet();
+  const { sendEmailOTP, verifyEmailOTP, handleGoogleToken, loginWithWallet } = useAuth();
+  const { connectWallet, signMessage } = useWallet();
   const { toast } = useToast();
 
   const [step, setStep]         = useState<Step>("main");
@@ -176,7 +176,18 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
     if (!provider) { window.open(descriptor.installUrl, "_blank"); return; }
     setLoading(`wallet_${descriptorName}`); setError(null);
     try {
-      await connectWallet(provider, descriptor.name);
+      // Step 1: Connect the wallet extension (approve connection)
+      const address = await connectWallet(provider, descriptor.name);
+
+      // Step 2: Sign in with the wallet to create/retrieve the profile automatically.
+      // This follows the standard Web3 "connect → sign" flow — the user sees one
+      // sign request from their wallet, then they're fully logged in with a profile.
+      try {
+        await loginWithWallet(address, signMessage);
+      } catch {
+        // Non-fatal — wallet is connected even if sign-in fails (e.g. user dismissed).
+      }
+
       reset();
       close();
     } catch (e) {

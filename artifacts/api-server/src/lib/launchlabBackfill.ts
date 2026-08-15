@@ -67,16 +67,12 @@ const SKIP_MINTS = new Set([
 
 // ── HTTP RPC ───────────────────────────────────────────────────────────────────
 
-// HTTP RPC pool — Alchemy first (high rate limits) when key is available,
-// then free public endpoints as fallback.
-function buildHttpRpcs(): string[] {
-  const key = process.env["ALCHEMY_API_KEY"];
-  const rpcs: string[] = [];
-  if (key) rpcs.push(`https://solana-mainnet.g.alchemy.com/v2/${key}`);
-  rpcs.push("https://solana-rpc.publicnode.com", "https://api.mainnet-beta.solana.com");
-  return rpcs;
-}
-const FREE_HTTP_RPCS = buildHttpRpcs();
+// HTTP RPC pool — free public endpoints with round-robin on rate-limit errors.
+const FREE_HTTP_RPCS = [
+  "https://solana-rpc.publicnode.com",   // PublicNode (primary)
+  "https://api.mainnet-beta.solana.com", // Solana Foundation
+  "https://rpc.ankr.com/solana",         // Ankr free tier
+];
 
 async function rpcPost(body: unknown, timeoutMs = 30_000): Promise<unknown> {
   const urlsToTry = FREE_HTTP_RPCS;

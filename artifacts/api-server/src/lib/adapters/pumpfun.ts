@@ -15,7 +15,7 @@
  * FALLBACK PATH: If log parsing fails (e.g. different instruction structure),
  * falls back to getTransaction + parseSwap / decodePumpCreate.
  *
- * RPC: Alchemy when ALCHEMY_API_KEY is set (primary), PublicNode free as fallback.
+ * RPC: PublicNode (primary), Solana Foundation and Ankr as free fallbacks.
  */
 
 import { eq, sql, and, isNull, gt } from "drizzle-orm";

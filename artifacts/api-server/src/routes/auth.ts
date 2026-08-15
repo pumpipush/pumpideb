@@ -159,6 +159,19 @@ const router = Router();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? "";
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID || undefined);
 
+/** Deterministic adjective+noun username from a wallet address — matches client generateUsername(). */
+function generateWalletUsername(address: string): string {
+  const ADJECTIVES = ["Swift","Neon","Cyber","Lunar","Solar","Cosmic","Dark","Hyper","Turbo","Iron","Laser","Void","Sonic","Alpha","Omega","Nova","Quantum","Pixel","Atomic","Prism","Shadow","Blazing","Golden","Silver","Stealth","Nitro","Rapid","Apex","Ultra","Infra"];
+  const NOUNS = ["Ape","Doge","Wolf","Fox","Bear","Eagle","Shark","Tiger","Panda","Hawk","Bull","Lynx","Viper","Cobra","Raven","Drake","Sphinx","Phoenix","Dragon","Jaguar","Falcon","Rhino","Manta","Bison","Badger","Gecko","Mantis","Panther","Raptor","Titan"];
+  const s1 = (parseInt(address.slice(2, 10), 16) || 0) >>> 0;
+  const s2 = (parseInt(address.slice(-8), 16) || 0) >>> 0;
+  const combined = (s1 ^ s2) >>> 0;
+  const adj  = ADJECTIVES[combined % ADJECTIVES.length];
+  const noun = NOUNS[Math.floor(combined / ADJECTIVES.length) % NOUNS.length];
+  const num  = (s1 % 90) + (s2 % 910);
+  return `${adj}${noun}${num}`;
+}
+
 function slugifyName(raw: string): string {
   return raw
     .toLowerCase()
@@ -626,7 +639,7 @@ router.post("/auth/wallet/login", authLimiter, asyncWrap(async (req, res) => {
     // uniqueUsername does a DB-checked search with 10 retries + full-UUID fallback,
     // so the chosen name is free at the time of the check.  The only remaining
     // constraint that can fire on the INSERT is the address PK (handled below).
-    const username = await uniqueUsername(`wallet_${walletAddress.slice(0, 6)}`);
+    const username = await uniqueUsername(generateWalletUsername(walletAddress));
     const rows = await db
       .insert(profilesTable)
       .values({ address: walletAddress, username, authType: "wallet" })

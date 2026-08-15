@@ -15,6 +15,7 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { UsernameNudgeBanner } from '@/components/shared/UsernameNudgeBanner';
 import { PlatformFeeBanner } from '@/components/shared/PlatformFeeBanner';
 import { SiteFooter } from '@/components/layout/SiteFooter';
+import { useAutoProfile } from '@/hooks/useAutoProfile';
 
 // Dashboard is the homepage — eagerly loaded so the first paint is instant.
 import Dashboard from '@/pages/Dashboard';
@@ -62,6 +63,9 @@ function AppShell() {
   const [location, navigate] = useLocation();
   const search = useSearch();
   const mainRef = useRef<HTMLElement>(null);
+
+  // Auto-create/upgrade profile for JWT-authenticated users on first sign-in.
+  useAutoProfile();
 
   const isSignIn = location === '/signin';
   const isSignUp = location === '/signup';

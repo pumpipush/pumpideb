@@ -151,12 +151,11 @@ function getATA(owner: PublicKey, mint: PublicKey): PublicKey {
 }
 
 /** Resolve the Solana RPC endpoint to use.
- *  Priority: VITE_ALCHEMY_API_KEY → VITE_SOLANA_RPC_URL → PublicNode free */
+ *  Priority: VITE_SOLANA_RPC_URL override → PublicNode free */
 export function getRpcUrl(): string {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const env = (import.meta as any).env;
-  if (env?.VITE_ALCHEMY_API_KEY) return `https://solana-mainnet.g.alchemy.com/v2/${env.VITE_ALCHEMY_API_KEY}`;
-  if (env?.VITE_SOLANA_RPC_URL)  return env.VITE_SOLANA_RPC_URL;
+  if (env?.VITE_SOLANA_RPC_URL) return env.VITE_SOLANA_RPC_URL;
   return PUBLIC_RPCS[0];
 }
 
