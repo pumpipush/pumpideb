@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { SEO } from "@/components/seo/SEO";
 import {
   useGetProfile,
@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { copyToClipboard } from "@/components/shared/CopyToast";
 import { useWallet } from "@/contexts/WalletContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 import {
   formatAddress, formatSol, timeAgo, cn, diceBearUrl,
   resolveImageUrl, formatAtomicTokenAmount, formatMCUsd,
@@ -29,6 +30,24 @@ import {
 } from "lucide-react";
 import { useTxToast } from "@/hooks/useTxToast";
 import { fetchClaimableLamports, buildCollectCreatorFeeTx } from "@/lib/pumpfun-creator-fees";
+
+// Base58 encode for wallet signature (mirrors ProfileEditModal helper)
+const BASE58_CHARS = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function bs58Encode(bytes: Uint8Array): string {
+  let result = "", leading = 0;
+  for (const b of bytes) { if (b === 0) leading++; else break; }
+  const digits = [0];
+  for (const byte of bytes) {
+    let carry = byte;
+    for (let i = 0; i < digits.length; i++) {
+      carry += digits[i] << 8;
+      digits[i] = carry % 58;
+      carry = Math.floor(carry / 58);
+    }
+    while (carry > 0) { digits.push(carry % 58); carry = Math.floor(carry / 58); }
+  }
+  return "1".repeat(leading) + digits.reverse().map(d => BASE58_CHARS[d]).join("");
+}
 
 const XIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
@@ -153,8 +172,9 @@ export default function ProfilePage() {
   const slug = params.slug ?? "";
   const [, setLocation] = useLocation();
   const searchString = useSearch();
-  const { wallet, openWalletModal } = useWallet();
-  const { socialUser, unlinkWallet } = useAuth();
+  const { wallet, openWalletModal, signMessage, signAndSendTransaction } = useWallet();
+  const { socialUser, unlinkWallet, getWalletLinkChallenge, linkWallet, refreshSocialUser } = useAuth();
+  const { toast } = useToast();
   const solPrice = useSolPrice();
 
   const looksLikeAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(slug);
@@ -165,8 +185,11 @@ export default function ProfilePage() {
   const [addEmailOpen, setAddEmailOpen] = useState(false);
   const [claimLoading, setClaimLoading] = useState(false);
   const [unlinkLoading, setUnlinkLoading] = useState(false);
+  const [linkingWallet, setLinkingWallet] = useState(false);
+  // Set to true when user clicks "Connect wallet" from the social-no-wallet CTA,
+  // so we auto-run the link flow the moment the wallet extension connects.
+  const pendingLinkRef = useRef(false);
   const { submitTx } = useTxToast();
-  const { signAndSendTransaction } = useWallet();
 
   const { data: profile, isLoading, refetch } = useGetProfile(slug, {
     query: { enabled: !!slug, retry: false, queryKey: getGetProfileQueryKey(slug) },
@@ -185,6 +208,56 @@ export default function ProfilePage() {
   const isOwner =
     (!!wallet && !!address && wallet.toLowerCase() === address.toLowerCase()) ||
     (!!socialUser && !!address && socialUser.address === address);
+
+  // ── Seamless wallet link flow ─────────────────────────────────────────────
+  // Called either directly (wallet already connected) or auto-triggered by
+  // the useEffect below after the extension finishes connecting.
+  const doWalletLink = useCallback(async (walletAddr: string) => {
+    setLinkingWallet(true);
+    try {
+      const { message: challengeMsg } = await getWalletLinkChallenge(walletAddr);
+      const msgBytes = new TextEncoder().encode(challengeMsg);
+      const sigRaw = await signMessage(msgBytes);
+      if (!(sigRaw instanceof Uint8Array) || sigRaw.length !== 64) {
+        throw new Error("Wallet returned an invalid signature — please try again");
+      }
+      const signature = bs58Encode(sigRaw);
+      await linkWallet(walletAddr, signature, challengeMsg);
+      await refreshSocialUser();
+      toast({ title: "Wallet linked", description: "Your wallet is now connected to your profile." });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to link wallet";
+      toast({ title: "Link failed", description: msg, variant: "destructive" });
+    } finally {
+      setLinkingWallet(false);
+      pendingLinkRef.current = false;
+    }
+  }, [getWalletLinkChallenge, signMessage, linkWallet, refreshSocialUser, toast]);
+
+  // When the user clicked "Connect wallet" but had no extension connected yet,
+  // we set pendingLinkRef and open the wallet modal. As soon as the wallet
+  // address lands in state, fire the link automatically — no second click needed.
+  const prevWalletRef = useRef<string | null>(null);
+  useEffect(() => {
+    const hadWallet = prevWalletRef.current;
+    prevWalletRef.current = wallet;
+    if (!pendingLinkRef.current) return;
+    if (!wallet || wallet === hadWallet) return;       // no new wallet
+    if (socialUser?.linkedWallet === wallet) return;   // already linked
+    void doWalletLink(wallet);
+  }, [wallet, socialUser?.linkedWallet, doWalletLink]);
+
+  // Shortcut used by both CTA buttons: connect first if needed, then link.
+  const handleConnectAndLink = useCallback(() => {
+    if (wallet) {
+      // Wallet already connected — link immediately
+      void doWalletLink(wallet);
+    } else {
+      // Open wallet picker; the effect above will finish the job
+      pendingLinkRef.current = true;
+      openWalletModal();
+    }
+  }, [wallet, doWalletLink, openWalletModal]);
 
   const autoOpenedRef = useRef(false);
   useEffect(() => {
@@ -616,10 +689,11 @@ export default function ProfilePage() {
                         <p className="text-xs text-muted-foreground/40">No wallet linked</p>
                       </div>
                       <button
-                        onClick={wallet ? () => setEditOpen(true) : openWalletModal}
-                        className="shrink-0 text-xs font-medium text-primary/80 hover:text-primary transition-colors"
+                        onClick={handleConnectAndLink}
+                        disabled={linkingWallet}
+                        className="shrink-0 text-xs font-medium text-primary/80 hover:text-primary transition-colors disabled:opacity-50"
                       >
-                        {wallet ? "Link wallet →" : "Connect wallet →"}
+                        {linkingWallet ? "Linking…" : wallet ? "Link wallet →" : "Connect wallet →"}
                       </button>
                     </div>
                   )}
@@ -826,27 +900,17 @@ export default function ProfilePage() {
                         </p>
                       </div>
                       <div className="flex flex-col sm:flex-row items-center gap-2 mt-1">
-                        {wallet ? (
-                          /* Phantom/extension already connected — guide to link it */
-                          <Button
-                            size="sm"
-                            className="rounded-lg h-9 px-5 text-sm font-semibold"
-                            onClick={() => setEditOpen(true)}
-                          >
-                            <Wallet className="w-3.5 h-3.5 mr-1.5" />
-                            Link connected wallet
-                          </Button>
-                        ) : (
-                          /* No wallet at all — offer to connect one first */
-                          <Button
-                            size="sm"
-                            className="rounded-lg h-9 px-5 text-sm font-semibold"
-                            onClick={openWalletModal}
-                          >
-                            <Wallet className="w-3.5 h-3.5 mr-1.5" />
-                            Connect wallet
-                          </Button>
-                        )}
+                        <Button
+                          size="sm"
+                          className="rounded-lg h-9 px-5 text-sm font-semibold"
+                          disabled={linkingWallet}
+                          onClick={handleConnectAndLink}
+                        >
+                          {linkingWallet
+                            ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Linking…</>
+                            : <><Wallet className="w-3.5 h-3.5 mr-1.5" />{wallet ? "Link connected wallet" : "Connect wallet"}</>
+                          }
+                        </Button>
                         <Button
                           size="sm"
                           variant="ghost"
