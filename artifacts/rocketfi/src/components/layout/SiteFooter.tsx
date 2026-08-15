@@ -42,7 +42,7 @@ function SocialIcons() {
 
 export function SiteFooter() {
   return (
-    <footer className="mt-auto border-t border-border/40 px-5 py-4">
+    <footer className="border-t border-border/40 px-5 py-4">
 
       {/* ── Mobile (< md): 2 rows ── */}
       <div className="md:hidden flex flex-col gap-2.5">

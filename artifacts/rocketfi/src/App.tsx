@@ -79,32 +79,33 @@ function AppShell() {
         <Navbar />
         <main ref={mainRef} className="flex-1 flex flex-col overflow-y-auto overflow-x-hidden pb-24 md:pb-0 pt-[60px]">
           <UsernameNudgeBanner />
-          <ErrorBoundary>
-            <Suspense fallback={<PageLoader />}>
-              <Switch>
-                <Route path="/" component={Dashboard} />
-                <Route path="/explore"><Redirect to="/" /></Route>
-                <Route path="/dashboard"><Redirect to="/" /></Route>
-                {/* Legacy /app route — redirects to /coin/:address when ?token= is present */}
-                <Route path="/app" component={AppRoute} />
-                {/* Legacy /token/:address — redirect to canonical /coin/:address */}
-                <Route path="/token/:address" component={LegacyTokenRedirect} />
-                {/* Canonical SEO-friendly coin pages */}
-                <Route path="/coin/:address" component={TokenPage} />
-                <Route path="/profile/:slug" component={ProfilePage} />
-                {/* signin/signup show the explore page behind the auth modal */}
-                <Route path="/signin"><Dashboard /></Route>
-                <Route path="/signup"><Dashboard /></Route>
-                <Route path="/privacy" component={PrivacyPolicy} />
-                <Route path="/disclaimer" component={DisclaimerPage} />
-                <Route path="/terms" component={TermsOfService} />
-                <Route path="/contact" component={ContactPage} />
-                <Route component={NotFound} />
-              </Switch>
-            </Suspense>
-          </ErrorBoundary>
-          {/* Hide footer on full-height trade/coin pages */}
-          {!location.startsWith("/coin/") && <SiteFooter />}
+          <div className="flex-1">
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <Switch>
+                  <Route path="/" component={Dashboard} />
+                  <Route path="/explore"><Redirect to="/" /></Route>
+                  <Route path="/dashboard"><Redirect to="/" /></Route>
+                  {/* Legacy /app route — redirects to /coin/:address when ?token= is present */}
+                  <Route path="/app" component={AppRoute} />
+                  {/* Legacy /token/:address — redirect to canonical /coin/:address */}
+                  <Route path="/token/:address" component={LegacyTokenRedirect} />
+                  {/* Canonical SEO-friendly coin pages */}
+                  <Route path="/coin/:address" component={TokenPage} />
+                  <Route path="/profile/:slug" component={ProfilePage} />
+                  {/* signin/signup show the explore page behind the auth modal */}
+                  <Route path="/signin"><Dashboard /></Route>
+                  <Route path="/signup"><Dashboard /></Route>
+                  <Route path="/privacy" component={PrivacyPolicy} />
+                  <Route path="/disclaimer" component={DisclaimerPage} />
+                  <Route path="/terms" component={TermsOfService} />
+                  <Route path="/contact" component={ContactPage} />
+                  <Route component={NotFound} />
+                </Switch>
+              </Suspense>
+            </ErrorBoundary>
+          </div>
+          <SiteFooter />
         </main>
       </div>
       <BottomNav />
