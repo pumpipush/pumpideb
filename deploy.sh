@@ -34,15 +34,27 @@ echo ""
 export VITE_PLATFORM_FEE_RECIPIENT="JBCqngc3TYcz3Rtv5Md3CZyw8X6AxLik7gswCCttRS5E"
 export VITE_PUMP_FEE_RECIPIENT="JBCqngc3TYcz3Rtv5Md3CZyw8X6AxLik7gswCCttRS5E"
 
-echo "▶ Building frontend..."
+echo "▶ Building frontend (rocketfi)..."
 pnpm --filter @workspace/rocketfi run build
 
-# Point nginx to the new dist (atomic symlink swap)
-ln -sfn /opt/rocketfi/artifacts/rocketfi/dist /opt/rocketfi/current
+# Point nginx to the new dist/public (atomic symlink swap)
+# Must point to dist/public — dist/ alone has no index.html and returns 403
+ln -sfn /opt/rocketfi/artifacts/rocketfi/dist/public /opt/rocketfi/current
 echo "✓ Frontend live"
 echo ""
 
+# ── 4. Build admin dashboard ──────────────────────────────────────────────────
+echo "▶ Building admin dashboard..."
+pnpm --filter @workspace/admin run build
+
+# Point nginx admin root to the new admin build
+ln -sfn /opt/rocketfi/artifacts/admin/dist/public /opt/rocketfi/admin-current
+echo "✓ Admin live"
+echo ""
+
 echo "══════════════════════════════════════"
-echo "  Deploy selesai!"
+echo "  Deploy selesai! 🚀"
+echo "  pumpi.io      → rocketfi app"
+echo "  admin.pumpi.io → admin dashboard"
 echo "══════════════════════════════════════"
 echo ""
