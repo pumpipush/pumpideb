@@ -2412,9 +2412,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   onClick={() => setActiveSubTab("dev")}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all shrink-0"
                   style={{
-                    background: activeSubTab === "dev" ? "rgba(248,113,113,0.15)" : "rgba(255,255,255,0.04)",
-                    color: activeSubTab === "dev" ? "#f87171" : "#64748b",
-                    border: "1px solid " + (activeSubTab === "dev" ? "rgba(248,113,113,0.30)" : "rgba(255,255,255,0.06)"),
+                    background: activeSubTab === "dev" ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+                    color: activeSubTab === "dev" ? "#e2e8f0" : "#64748b",
+                    border: "1px solid " + (activeSubTab === "dev" ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
                   }}
                 >
                   <ShieldCheck className="h-3.5 w-3.5" /> Dev
@@ -2423,15 +2423,15 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   onClick={() => setActiveSubTab("snipers")}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all shrink-0"
                   style={{
-                    background: activeSubTab === "snipers" ? "rgba(251,191,36,0.15)" : "rgba(255,255,255,0.04)",
-                    color: activeSubTab === "snipers" ? "#fbbf24" : "#64748b",
-                    border: "1px solid " + (activeSubTab === "snipers" ? "rgba(251,191,36,0.3)" : "rgba(255,255,255,0.06)"),
+                    background: activeSubTab === "snipers" ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
+                    color: activeSubTab === "snipers" ? "#e2e8f0" : "#64748b",
+                    border: "1px solid " + (activeSubTab === "snipers" ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
                   }}
                 >
                   <Zap className="h-3.5 w-3.5" /> Snipers
                   {snipers.length > 0 && (
                     <span className="ml-1 text-[11px] font-bold px-1.5 py-0.5 rounded-full"
-                      style={{ background: activeSubTab === "snipers" ? "rgba(251,191,36,0.2)" : "rgba(255,255,255,0.08)", color: activeSubTab === "snipers" ? "#fbbf24" : "#94a3b8" }}>
+                      style={{ background: "rgba(255,255,255,0.08)", color: activeSubTab === "snipers" ? "#e2e8f0" : "#94a3b8" }}>
                       {snipers.length}
                     </span>
                   )}
