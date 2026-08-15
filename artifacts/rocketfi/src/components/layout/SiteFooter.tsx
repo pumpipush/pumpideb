@@ -51,12 +51,15 @@ export function SiteFooter() {
           <span className="text-[13px] text-muted-foreground">© {YEAR} Pumpi</span>
           <SocialIcons />
         </div>
-        {/* Row 2: legal links — 2×2 grid so layout is always clean */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-          {LEGAL_LINKS.map(l => (
-            <Link key={l.href} href={l.href} className="text-[13px] text-muted-foreground hover:text-foreground transition-colors">
-              {l.label}
-            </Link>
+        {/* Row 2: 3 links only (Terms hidden on mobile) */}
+        <div className="flex items-center gap-2">
+          {[{ href: "/privacy", label: "Privacy Policy" }, { href: "/disclaimer", label: "Disclaimer" }, { href: "/contact", label: "Contact" }].map((l, i) => (
+            <span key={l.href} className="flex items-center gap-2">
+              {i > 0 && <span className="text-muted-foreground/30">·</span>}
+              <Link href={l.href} className="text-[13px] text-muted-foreground hover:text-foreground transition-colors">
+                {l.label}
+              </Link>
+            </span>
           ))}
         </div>
       </div>
