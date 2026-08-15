@@ -20,7 +20,8 @@ export default function Login() {
     try {
       // Use raw fetch here — apiFetch reads secret from context state which is
       // still null at login time, so we bypass it entirely.
-      const res = await fetch('/api/admin/overview', {
+      const apiBase = import.meta.env.VITE_API_BASE_URL ?? '';
+      const res = await fetch(`${apiBase}/api/admin/overview`, {
         headers: {
           'Content-Type': 'application/json',
           'X-Admin-Secret': inputSecret.trim(),
@@ -45,7 +46,7 @@ export default function Login() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm flex flex-col items-center gap-8">
         <div className="flex items-center gap-3">
-          <img src="/admin/pumpi-logo.png" alt="Pumpi" className="h-8 w-auto object-contain" />
+          <img src={`${import.meta.env.BASE_URL}pumpi-logo.png`} alt="Pumpi" className="h-8 w-auto object-contain" />
           <span className="text-muted-foreground font-mono text-sm tracking-widest">/OPS</span>
         </div>
         

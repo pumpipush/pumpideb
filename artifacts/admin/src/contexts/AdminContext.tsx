@@ -33,7 +33,11 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       throw new Error('No admin secret');
     }
 
-    const res = await fetch(`/api${path}`, {
+    // VITE_API_BASE_URL is empty in dev (Vite proxy handles /api → localhost:8080).
+    // In production with a subdomain (admin.pumpi.io), set it to https://pumpi.io
+    // so API calls cross to the main domain.
+    const apiBase = import.meta.env.VITE_API_BASE_URL ?? '';
+    const res = await fetch(`${apiBase}/api${path}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',

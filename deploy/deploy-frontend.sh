@@ -93,7 +93,7 @@ ADMIN_RELEASE_DIR=$(ssh "$VPS_USER_HOST" "
   mkdir -p \$ADMIN_RELEASE_PATH
 
   cd $APP_DIR/artifacts/admin
-  BASE_PATH=/admin/ pnpm run build
+  pnpm run build
 
   # Move the built output into the admin snapshot
   mv dist/public/* \$ADMIN_RELEASE_PATH/

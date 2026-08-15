@@ -22,7 +22,9 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-const basePath = process.env.BASE_PATH ?? '/admin/';
+// In Replit dev the artifact.toml injects BASE_PATH=/admin/ so /admin/ preview works.
+// On VPS with a subdomain (admin.pumpi.io) BASE_PATH is not set → defaults to '/'.
+const basePath = process.env.BASE_PATH ?? '/';
 
 export default defineConfig({
   base: basePath,

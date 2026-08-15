@@ -1,19 +1,23 @@
 # /etc/nginx/sites-available/rocketfi
 #
-# Nginx site config for pumpi.io
+# Nginx site config for pumpi.io + admin.pumpi.io
+#
+# Two server blocks:
+#   pumpi.io       — rocketfi SPA + API proxy
+#   admin.pumpi.io — admin dashboard SPA (separate subdomain)
 #
 # FRONTEND ROOT is a symlink: /opt/rocketfi/current
-# That symlink is atomically swapped by deploy/deploy-frontend.sh on each
-# release, so nginx serves new files instantly with no partial-asset window.
+# ADMIN ROOT is a symlink:    /opt/rocketfi/admin-current
+# Both are atomically swapped by deploy/deploy-frontend.sh on each release.
 #
 # First-time setup on a new VPS:
 #   mkdir -p /opt/rocketfi/releases
-#   # Run deploy/deploy-frontend.sh once to create /opt/rocketfi/current
+#   Run deploy/deploy-frontend.sh once to create both symlinks.
 #
 # Reload after any change:
 #   nginx -t && systemctl reload nginx
 
-# ── Redirect HTTP → HTTPS ────────────────────────────────────────────────────
+# ── Redirect HTTP → HTTPS (pumpi.io) ────────────────────────────────────────
 server {
     listen 80;
     listen [::]:80;
@@ -21,6 +25,15 @@ server {
     return 301 https://$host$request_uri;
 }
 
+# ── Redirect HTTP → HTTPS (admin.pumpi.io) ──────────────────────────────────
+server {
+    listen 80;
+    listen [::]:80;
+    server_name admin.pumpi.io;
+    return 301 https://$host$request_uri;
+}
+
+# ── pumpi.io — main app ──────────────────────────────────────────────────────
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
@@ -59,26 +72,6 @@ server {
         proxy_no_cache         $http_x_purge_cache;
     }
 
-    # ── Admin dashboard ──────────────────────────────────────────────────────
-    # Static SPA served from a separate directory so it can be deployed
-    # independently of the main rocketfi frontend.
-    # Build output: artifacts/admin/dist/public/ → /opt/rocketfi/admin-current/
-    # Protected by X-Admin-Secret header (validated at login, stored in localStorage).
-    # ^~ prefix takes priority over the SPA catch-all `location /` below.
-    location ^~ /admin/ {
-        alias /opt/rocketfi/admin-current/;
-        index index.html;
-        # SPA fallback — unknown routes (e.g. /admin/tokens) serve index.html
-        try_files $uri $uri/ /admin/index.html;
-        # index.html must never be cached — Vite hashes all other assets
-        location = /admin/index.html {
-            alias /opt/rocketfi/admin-current/index.html;
-            add_header Cache-Control "no-cache, no-store, must-revalidate" always;
-            add_header Pragma        "no-cache" always;
-            add_header Expires       "0" always;
-        }
-    }
-
     # ── API reverse proxy ────────────────────────────────────────────────────
     location /api/ {
         proxy_pass         http://127.0.0.1:8080;
@@ -110,6 +103,50 @@ server {
     }
 
     # ── SPA catch-all — return index.html for all client-side routes ─────────
+    location / {
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        add_header Pragma        "no-cache" always;
+        add_header Expires       "0" always;
+        try_files $uri $uri/ /index.html;
+    }
+}
+
+# ── admin.pumpi.io — admin dashboard ────────────────────────────────────────
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name admin.pumpi.io;
+
+    # SSL — use a wildcard cert (*.pumpi.io) or a separate cert for this subdomain.
+    # If using Cloudflare Origin Certificates, generate a wildcard *.pumpi.io cert.
+    ssl_certificate     /etc/nginx/ssl/pumpi.io.crt;
+    ssl_certificate_key /etc/nginx/ssl/pumpi.io.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+
+    # Symlink managed by deploy/deploy-frontend.sh — swapped atomically on each deploy
+    root /opt/rocketfi/admin-current;
+    index index.html;
+
+    # ── Optional: IP allowlist — uncomment to restrict to your IP only ───────
+    # allow 1.2.3.4;   # your office / VPN IP
+    # deny all;
+
+    # ── index.html — NEVER cache ─────────────────────────────────────────────
+    location = /index.html {
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        add_header Pragma        "no-cache" always;
+        add_header Expires       "0" always;
+        try_files $uri =404;
+    }
+
+    # ── Hashed JS / CSS / font assets — immutable cache ──────────────────────
+    location ~* \.(?:js|css|woff2?|ttf|eot|png|svg|ico)$ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    # ── SPA catch-all — all unknown paths serve index.html ───────────────────
     location / {
         add_header Cache-Control "no-cache, no-store, must-revalidate" always;
         add_header Pragma        "no-cache" always;
