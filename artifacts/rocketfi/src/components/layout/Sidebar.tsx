@@ -15,14 +15,18 @@ function LaunchTokenButton() {
     <Button
       className="w-full rounded-[8px] font-bold text-sm h-9 transition-all duration-200 active:scale-[0.98] flex items-center gap-2"
       style={{
-        background: hovered ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.88)",
-        color: "#0f172a",
-        boxShadow: hovered ? "0 2px 12px rgba(0,0,0,0.3)" : undefined,
+        background: hovered
+          ? "linear-gradient(135deg, #16a34a 0%, #22c55e 100%)"
+          : "linear-gradient(135deg, #15803d 0%, #16a34a 100%)",
+        color: "#ffffff",
+        boxShadow: hovered ? "0 0 16px rgba(22,163,74,0.45)" : "0 0 8px rgba(22,163,74,0.2)",
+        border: "1px solid rgba(74,222,128,0.25)",
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      Create New Coin
+      <Plus className="h-4 w-4 shrink-0" />
+      Launch Token
     </Button>
   );
 }
@@ -45,6 +49,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 px-3 py-2 flex flex-col gap-1">
+        <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest" style={{ color: "#334155" }}>Menu</p>
         <Link
           href="/"
           className={cn(

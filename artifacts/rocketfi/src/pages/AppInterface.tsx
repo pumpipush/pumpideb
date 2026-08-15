@@ -2162,19 +2162,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
           {/* ── MOBILE: Row 2 — Bonding Curve (pump.fun only) ── */}
           <div className="md:hidden">{token.platform !== "pump_fun" ? null : <div>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[12px] font-medium" style={{ color: "#94a3b8" }}>Bonding Curve</span>
-              <span
-                className="text-[11px] font-bold font-mono px-1.5 py-0.5 rounded-full"
-                style={{
-                  background: isGraduated ? "rgba(34,197,94,0.12)" : "rgba(16,185,129,0.10)",
-                  color: isGraduated ? "#22c55e" : "#10b981",
-                  border: `1px solid ${isGraduated ? "rgba(34,197,94,0.28)" : "rgba(16,185,129,0.22)"}`,
-                }}
-              >
-                {progressPercent >= 100 ? "100%" : `${progressPercent.toFixed(1)}%`}
-              </span>
-            </div>
+            <span className="text-[12px] font-medium mb-1 block" style={{ color: "#94a3b8" }}>Bonding Curve</span>
             <div className="relative h-2 w-full rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
               {[25, 50, 75].map(m => (
                 <div key={m} className="absolute top-0 h-full w-px pointer-events-none" style={{ left: `${m}%`, background: "rgba(0,0,0,0.45)", zIndex: 2 }} />
@@ -2198,10 +2186,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               </div>
             ) : (
               <div className="flex items-center justify-between mt-1">
-                <span className="text-[12px] font-mono text-foreground">
-                  {realSolInCurve.toFixed(2)}<span className="text-muted-foreground ml-1">/ 85 SOL</span>
+                <span className="text-[12px] font-mono" style={{ color: "#cbd5e1" }}>
+                  {realSolInCurve.toFixed(2)}<span className="ml-1" style={{ color: "#475569" }}>/ 85 SOL</span>
+                  <span className="ml-1.5 text-[11px] font-bold" style={{ color: "#10b981" }}>· {progressPercent.toFixed(1)}%</span>
                 </span>
-                <span className="text-[12px] font-medium" style={{ color: "#94a3b8" }}>
+                <span className="text-[12px]" style={{ color: "#64748b" }}>
                   {(85 - realSolInCurve).toFixed(2)} SOL left
                 </span>
               </div>
@@ -2253,19 +2242,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             {/* Bonding Curve — pump.fun only */}
             {token.platform !== "pump_fun" ? null : (
             <div className="w-[380px] shrink-0 flex flex-col justify-center">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[14px] font-medium" style={{ color: "#94a3b8" }}>Bonding Curve</span>
-                <span
-                  className="text-[12px] font-bold font-mono px-1.5 py-0.5 rounded-full"
-                  style={{
-                    background: isGraduated ? "rgba(34,197,94,0.12)" : "rgba(16,185,129,0.10)",
-                    color: isGraduated ? "#22c55e" : "#10b981",
-                    border: `1px solid ${isGraduated ? "rgba(34,197,94,0.28)" : "rgba(16,185,129,0.22)"}`,
-                  }}
-                >
-                  {progressPercent >= 100 ? "100%" : `${progressPercent.toFixed(1)}%`}
-                </span>
-              </div>
+              <span className="text-[14px] font-medium mb-1 block" style={{ color: "#94a3b8" }}>Bonding Curve</span>
               <div className="relative h-2 w-full rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
                 {[25, 50, 75].map(m => (
                   <div key={m} className="absolute top-0 h-full w-px pointer-events-none" style={{ left: `${m}%`, background: "rgba(0,0,0,0.45)", zIndex: 2 }} />
@@ -2289,10 +2266,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 </div>
               ) : (
                 <div className="flex items-center justify-between mt-1">
-                  <span className="text-[12px] font-mono text-foreground">
-                    {realSolInCurve.toFixed(2)}<span className="text-muted-foreground ml-1">/ 85 SOL</span>
+                  <span className="text-[12px] font-mono" style={{ color: "#cbd5e1" }}>
+                    {realSolInCurve.toFixed(2)}<span className="ml-1" style={{ color: "#475569" }}>/ 85 SOL</span>
+                    <span className="ml-1.5 text-[11px] font-bold" style={{ color: "#10b981" }}>· {progressPercent.toFixed(1)}%</span>
                   </span>
-                  <span className="text-[12px] font-medium" style={{ color: "#94a3b8" }}>
+                  <span className="text-[12px]" style={{ color: "#64748b" }}>
                     {(85 - realSolInCurve).toFixed(2)} SOL left
                   </span>
                 </div>

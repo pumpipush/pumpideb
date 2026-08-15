@@ -1028,7 +1028,7 @@ export default function Dashboard() {
                   tokens={isMobile ? bubbleTokens.slice(0, 20) : bubbleTokens}
                   liveUpdates={liveTradeStats}
                   solPrice={solPrice}
-                  height={isMobile ? 340 : 460}
+                  height={isMobile ? 220 : 300}
                   radiusScale={isMobile ? 0.5 : 1}
                 />
               )}
