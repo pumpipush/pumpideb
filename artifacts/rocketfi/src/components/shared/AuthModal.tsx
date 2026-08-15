@@ -87,7 +87,7 @@ type Step = "main" | "otp";
 /* ── component ───────────────────────────────────────────────────────────── */
 
 export function AuthModal({ open, onOpenChange }: AuthModalProps) {
-  const { sendEmailOTP, verifyEmailOTP, handleGoogleToken, loginOrLinkWallet } = useAuth();
+  const { sendEmailOTP, verifyEmailOTP, handleGoogleToken, loginOrLinkWallet, linkGoogle, socialUser } = useAuth();
   const { connectWallet, signMessage } = useWallet();
   const { toast } = useToast();
 
@@ -108,6 +108,22 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
     setLoading("google");
     setError(null);
     try {
+      // ── Wallet-auth user clicks Google: link instead of creating a new row ──
+      // If the current session is wallet-primary (loginWithWallet was used),
+      // route through /auth/link/google so Google identity is added to the
+      // existing wallet profile — no UUID-addressed duplicate row is created.
+      if (socialUser?.authType === "wallet") {
+        await linkGoogle(accessToken);
+        reset();
+        close();
+        toast({
+          title: "Google account linked",
+          description: "Your Google account has been connected to your wallet profile.",
+        });
+        return;
+      }
+
+      // ── Standard flow: not yet signed in (or already Google/email) ──────
       const { isNewAccount, wasLinked } = await handleGoogleToken(accessToken);
       reset();
       close();
