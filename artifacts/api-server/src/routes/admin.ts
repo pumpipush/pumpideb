@@ -204,6 +204,8 @@ router.get("/admin/users", asyncWrap(async (req: Request, res: Response) => {
       linkedWallet: profilesTable.linkedWallet,
       createdAt:    profilesTable.createdAt,
       avatarUrl:    profilesTable.avatarUrl,
+      bannedAt:     profilesTable.bannedAt,
+      banReason:    profilesTable.banReason,
     })
       .from(profilesTable)
       .where(where)
@@ -247,24 +249,46 @@ router.get("/admin/tokens", asyncWrap(async (req: Request, res: Response) => {
     ? sql`SELECT t.id, t.address, t.name, t.symbol, t.platform, t.graduated, t.market_cap_usd, t.price_usd, t.volume_eth, t.trade_count, t.holder_count, t.creator_address, t.created_at, t.image_url FROM tokens t ${whereClause}) ORDER BY t.created_at DESC LIMIT ${limit} OFFSET ${offset}`
     : sql`SELECT t.id, t.address, t.name, t.symbol, t.platform, t.graduated, t.market_cap_usd, t.price_usd, t.volume_eth, t.trade_count, t.holder_count, t.creator_address, t.created_at, t.image_url FROM tokens t ${whereClause} ORDER BY t.created_at DESC LIMIT ${limit} OFFSET ${offset}`;
 
-  // Use a simpler direct approach for the query
+  // Build WHERE conditions for the data query
+  const hidden = req.query.hidden === "true"  ? true
+               : req.query.hidden === "false" ? false
+               : undefined;
+
   let rows: unknown[];
-  if (search && platform && graduated !== undefined) {
-    rows = (await db.execute(sql`SELECT id, address, name, symbol, platform, graduated, market_cap_usd, price_usd, volume_eth, trade_count, holder_count, creator_address, created_at, image_url FROM tokens WHERE (name ILIKE ${'%' + search + '%'} OR symbol ILIKE ${'%' + search + '%'} OR address ILIKE ${'%' + search + '%'}) AND platform = ${platform} AND graduated = ${graduated} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
+  const cols = sql`id, address, name, symbol, platform, graduated, hidden, market_cap_usd, price_usd, volume_eth, trade_count, holder_count, creator_address, created_at, image_url`;
+
+  if (search && platform && graduated !== undefined && hidden !== undefined) {
+    rows = (await db.execute(sql`SELECT ${cols} FROM tokens WHERE (name ILIKE ${'%' + search + '%'} OR symbol ILIKE ${'%' + search + '%'} OR address ILIKE ${'%' + search + '%'}) AND platform = ${platform} AND graduated = ${graduated} AND hidden = ${hidden} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
+  } else if (search && platform && graduated !== undefined) {
+    rows = (await db.execute(sql`SELECT ${cols} FROM tokens WHERE (name ILIKE ${'%' + search + '%'} OR symbol ILIKE ${'%' + search + '%'} OR address ILIKE ${'%' + search + '%'}) AND platform = ${platform} AND graduated = ${graduated} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
+  } else if (search && platform && hidden !== undefined) {
+    rows = (await db.execute(sql`SELECT ${cols} FROM tokens WHERE (name ILIKE ${'%' + search + '%'} OR symbol ILIKE ${'%' + search + '%'} OR address ILIKE ${'%' + search + '%'}) AND platform = ${platform} AND hidden = ${hidden} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
+  } else if (search && graduated !== undefined && hidden !== undefined) {
+    rows = (await db.execute(sql`SELECT ${cols} FROM tokens WHERE (name ILIKE ${'%' + search + '%'} OR symbol ILIKE ${'%' + search + '%'} OR address ILIKE ${'%' + search + '%'}) AND graduated = ${graduated} AND hidden = ${hidden} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
+  } else if (platform && graduated !== undefined && hidden !== undefined) {
+    rows = (await db.execute(sql`SELECT ${cols} FROM tokens WHERE platform = ${platform} AND graduated = ${graduated} AND hidden = ${hidden} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
   } else if (search && platform) {
-    rows = (await db.execute(sql`SELECT id, address, name, symbol, platform, graduated, market_cap_usd, price_usd, volume_eth, trade_count, holder_count, creator_address, created_at, image_url FROM tokens WHERE (name ILIKE ${'%' + search + '%'} OR symbol ILIKE ${'%' + search + '%'} OR address ILIKE ${'%' + search + '%'}) AND platform = ${platform} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
+    rows = (await db.execute(sql`SELECT ${cols} FROM tokens WHERE (name ILIKE ${'%' + search + '%'} OR symbol ILIKE ${'%' + search + '%'} OR address ILIKE ${'%' + search + '%'}) AND platform = ${platform} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
   } else if (search && graduated !== undefined) {
-    rows = (await db.execute(sql`SELECT id, address, name, symbol, platform, graduated, market_cap_usd, price_usd, volume_eth, trade_count, holder_count, creator_address, created_at, image_url FROM tokens WHERE (name ILIKE ${'%' + search + '%'} OR symbol ILIKE ${'%' + search + '%'} OR address ILIKE ${'%' + search + '%'}) AND graduated = ${graduated} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
+    rows = (await db.execute(sql`SELECT ${cols} FROM tokens WHERE (name ILIKE ${'%' + search + '%'} OR symbol ILIKE ${'%' + search + '%'} OR address ILIKE ${'%' + search + '%'}) AND graduated = ${graduated} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
+  } else if (search && hidden !== undefined) {
+    rows = (await db.execute(sql`SELECT ${cols} FROM tokens WHERE (name ILIKE ${'%' + search + '%'} OR symbol ILIKE ${'%' + search + '%'} OR address ILIKE ${'%' + search + '%'}) AND hidden = ${hidden} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
   } else if (platform && graduated !== undefined) {
-    rows = (await db.execute(sql`SELECT id, address, name, symbol, platform, graduated, market_cap_usd, price_usd, volume_eth, trade_count, holder_count, creator_address, created_at, image_url FROM tokens WHERE platform = ${platform} AND graduated = ${graduated} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
+    rows = (await db.execute(sql`SELECT ${cols} FROM tokens WHERE platform = ${platform} AND graduated = ${graduated} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
+  } else if (platform && hidden !== undefined) {
+    rows = (await db.execute(sql`SELECT ${cols} FROM tokens WHERE platform = ${platform} AND hidden = ${hidden} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
+  } else if (graduated !== undefined && hidden !== undefined) {
+    rows = (await db.execute(sql`SELECT ${cols} FROM tokens WHERE graduated = ${graduated} AND hidden = ${hidden} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
   } else if (search) {
-    rows = (await db.execute(sql`SELECT id, address, name, symbol, platform, graduated, market_cap_usd, price_usd, volume_eth, trade_count, holder_count, creator_address, created_at, image_url FROM tokens WHERE name ILIKE ${'%' + search + '%'} OR symbol ILIKE ${'%' + search + '%'} OR address ILIKE ${'%' + search + '%'} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
+    rows = (await db.execute(sql`SELECT ${cols} FROM tokens WHERE name ILIKE ${'%' + search + '%'} OR symbol ILIKE ${'%' + search + '%'} OR address ILIKE ${'%' + search + '%'} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
   } else if (platform) {
-    rows = (await db.execute(sql`SELECT id, address, name, symbol, platform, graduated, market_cap_usd, price_usd, volume_eth, trade_count, holder_count, creator_address, created_at, image_url FROM tokens WHERE platform = ${platform} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
+    rows = (await db.execute(sql`SELECT ${cols} FROM tokens WHERE platform = ${platform} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
   } else if (graduated !== undefined) {
-    rows = (await db.execute(sql`SELECT id, address, name, symbol, platform, graduated, market_cap_usd, price_usd, volume_eth, trade_count, holder_count, creator_address, created_at, image_url FROM tokens WHERE graduated = ${graduated} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
+    rows = (await db.execute(sql`SELECT ${cols} FROM tokens WHERE graduated = ${graduated} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
+  } else if (hidden !== undefined) {
+    rows = (await db.execute(sql`SELECT ${cols} FROM tokens WHERE hidden = ${hidden} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
   } else {
-    rows = (await db.execute(sql`SELECT id, address, name, symbol, platform, graduated, market_cap_usd, price_usd, volume_eth, trade_count, holder_count, creator_address, created_at, image_url FROM tokens ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
+    rows = (await db.execute(sql`SELECT ${cols} FROM tokens ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
   }
 
   // Count query (simplified)
