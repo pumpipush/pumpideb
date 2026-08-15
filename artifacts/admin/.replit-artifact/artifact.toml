@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/admin/"
+title = "Admin Dashboard"
+description = "Internal admin dashboard for monitoring users, tokens, trades, and system health. Protected by admin secret — only accessible to operators."
+version = "1.0.0"
+id = "artifacts/admin"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/admin/" ]
+localPort = 23744
+
+[services.development]
+run = "pnpm --filter @workspace/admin run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/admin", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/admin/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23744"
+BASE_PATH = "/admin/"
