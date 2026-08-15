@@ -676,7 +676,7 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
         <span className="font-semibold text-foreground text-[16px] truncate leading-tight group-hover:text-primary transition-colors duration-200">{token.name}</span>
         {/* Symbol — own row below name, full width, no truncation clash */}
         {!isPlaceholder(token.symbol) && (
-          <span className="text-muted-foreground/70 font-mono text-[11px] truncate leading-none">
+          <span className="text-muted-foreground/70 font-mono text-[13px] truncate leading-none">
             ${(token.symbol ?? "").replace(/^\$/, "")}
           </span>
         )}
