@@ -194,7 +194,8 @@ export default function ProfilePage() {
       if (!res.ok) throw new Error("Failed to fetch portfolio");
       return res.json() as Promise<WalletPortfolio>;
     },
-    enabled: activeTab === "wallet" && !!address,
+    // Prefetch wallet data as soon as address is known, not only when tab is clicked
+    enabled: !!address,
     staleTime: 20_000,
     refetchOnWindowFocus: true,
     refetchInterval: activeTab === "wallet" ? 30_000 : false,
@@ -208,7 +209,8 @@ export default function ProfilePage() {
       if (!res.ok) return [];
       return res.json() as Promise<ActivityTrade[]>;
     },
-    enabled: activeTab === "activity" && !!address,
+    // Activity is the default tab — prefetch immediately so it's ready on first render
+    enabled: !!address,
     staleTime: 20_000,
     refetchInterval: activeTab === "activity" ? 30_000 : false,
   });

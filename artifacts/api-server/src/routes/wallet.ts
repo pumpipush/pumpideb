@@ -40,33 +40,33 @@ router.get("/wallet/:address/portfolio", asyncWrap(async (req, res) => {
     return;
   }
 
-  try {
-    // 1. SOL balance
-    const balResult = (await rpcPost("getBalance", [
-      address,
-      { commitment: "confirmed" },
-    ])) as { value: number };
-    const solBalance = balResult.value / 1e9;
-
-    // 2. SPL token accounts
-    const tokenResult = (await rpcPost("getTokenAccountsByOwner", [
-      address,
-      { programId: TOKEN_PROGRAM_ID },
-      { encoding: "jsonParsed", commitment: "confirmed" },
-    ])) as {
-      value: Array<{
-        account: {
-          data: {
-            parsed: {
-              info: {
-                mint: string;
-                tokenAmount: { uiAmount: number | null; decimals: number };
-              };
+  type TokenAccountsResult = {
+    value: Array<{
+      account: {
+        data: {
+          parsed: {
+            info: {
+              mint: string;
+              tokenAmount: { uiAmount: number | null; decimals: number };
             };
           };
         };
-      }>;
-    };
+      };
+    }>;
+  };
+
+  try {
+    // 1 & 2. Fetch SOL balance + SPL token accounts in parallel — eliminates sequential RPC waterfall
+    const [balResult, tokenResult] = await Promise.all([
+      rpcPost("getBalance", [address, { commitment: "confirmed" }]) as Promise<{ value: number }>,
+      rpcPost("getTokenAccountsByOwner", [
+        address,
+        { programId: TOKEN_PROGRAM_ID },
+        { encoding: "jsonParsed", commitment: "confirmed" },
+      ]) as Promise<TokenAccountsResult>,
+    ]);
+
+    const solBalance = balResult.value / 1e9;
 
     const nonZero = tokenResult.value
       .map((acc) => ({
