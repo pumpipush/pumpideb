@@ -17,7 +17,12 @@ echo "▶ git pull..."
 git pull origin main
 echo ""
 
-# ── 2. Build & reload API (zero-downtime rolling restart) ─────────────────────
+# ── 2. Install/update dependencies ───────────────────────────────────────────
+echo "▶ Installing dependencies..."
+pnpm install --frozen-lockfile
+echo ""
+
+# ── 3. Build & reload API (zero-downtime rolling restart) ─────────────────────
 echo "▶ Building API..."
 pnpm --filter @workspace/api-server run build
 pm2 reload rocketfi-api --update-env
