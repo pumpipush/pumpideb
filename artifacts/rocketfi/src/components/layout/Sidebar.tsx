@@ -72,8 +72,8 @@ export function Sidebar() {
               : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
           )}
         >
-          <ArrowRightLeft className={cn("w-4 h-4 transition-transform duration-200", location === "/app" ? "text-primary" : "group-hover:scale-110")} />
-          Trade
+          <Rocket className={cn("w-4 h-4 transition-transform duration-200", location === "/app" ? "text-primary" : "group-hover:scale-110")} />
+          Launch
         </Link>
 
         <Link
