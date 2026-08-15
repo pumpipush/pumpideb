@@ -3076,12 +3076,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                                     style={{ color: "#94a3b8" }}>
                                     {addr.slice(0, 6)}…{addr.slice(-4)}
                                   </span>
-                                  {idx === 0 && (
-                                    <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide"
-                                      style={{ background: "rgba(245,158,11,0.14)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.3)" }}>
-                                      TOP
-                                    </span>
-                                  )}
                                 </button>
                               </td>
 
