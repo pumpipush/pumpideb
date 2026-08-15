@@ -177,9 +177,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(STORAGE_KEY);
   }, [handleDisconnect, handleAccountChanged]);
 
-  // ── Auto-reconnect on mount (Task 24) ────────────────────────────────────
+  // ── Auto-reconnect on mount ───────────────────────────────────────────────
   // If the user previously connected a wallet, silently reconnect without
-  // showing a popup — using onlyIfTrusted so the wallet approves automatically.
+  // showing any popup.
+  //
+  // Strategy:
+  //   1. If provider.publicKey is already set the wallet is unlocked and the
+  //      site is trusted — grab the address directly, no connect() call needed.
+  //   2. Otherwise call connect({ onlyIfTrusted: true }) ONLY for
+  //      Phantom/Backpack, which handle this silently (reject without popup).
+  //      Solflare opens a password dialog instead of rejecting silently, so we
+  //      skip the call for Solflare when publicKey is not already present.
+  //      The user can connect manually once they unlock their wallet.
 
   useEffect(() => {
     const savedName = localStorage.getItem(STORAGE_KEY) as WalletName | null;
@@ -191,32 +200,39 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const provider = descriptor.getProvider();
     if (!provider) return;
 
-    // onlyIfTrusted: won't show a popup; resolves only if already trusted.
-    // On failure we do NOT clear localStorage — the wallet may simply be locked.
-    // Keeping the stored name means the next page load will silently reconnect
-    // once the user unlocks their wallet. We only clear on explicit disconnect().
+    const attachAndSet = (address: string) => {
+      try {
+        provider.on("disconnect", handleDisconnect);
+        provider.on("accountChanged", handleAccountChanged);
+      } catch { /* some wallets may not support all events */ }
+      providerRef.current = provider;
+      setWallet(address);
+      setWalletName(savedName);
+    };
+
+    // Fast path: wallet already unlocked — publicKey is available immediately.
+    if (provider.publicKey) {
+      const address = provider.publicKey.toBase58();
+      if (address) { attachAndSet(address); return; }
+    }
+
+    // Solflare shows a password popup instead of silently rejecting when the
+    // wallet is locked. Skip the connect() call to avoid the unwanted popup.
+    if (savedName === "Solflare") return;
+
+    // Phantom / Backpack: onlyIfTrusted silently rejects when locked — safe.
     provider.connect({ onlyIfTrusted: true })
       .then(result => {
-        // Solflare returns void from connect(); public key lives on provider.publicKey.
-        // Phantom/Backpack return it in the result object. Use the same fallback as
-        // the explicit connect path to support both wallet families.
         const publicKey =
           (result as { publicKey?: { toBase58(): string } } | undefined)?.publicKey
           ?? provider.publicKey;
-        if (!publicKey) return; // wallet locked or permission not yet granted
+        if (!publicKey) return;
         const address = publicKey.toBase58();
-        if (!address) return;
-        try {
-          provider.on("disconnect", handleDisconnect);
-          provider.on("accountChanged", handleAccountChanged);
-        } catch { /* ignore */ }
-        providerRef.current = provider;
-        setWallet(address);
-        setWalletName(savedName);
+        if (address) attachAndSet(address);
       })
       .catch(() => {
         // Silent failure — wallet locked or permission revoked.
-        // Do not clear localStorage so we can retry on next reload.
+        // Keep localStorage so we retry on next page load.
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
