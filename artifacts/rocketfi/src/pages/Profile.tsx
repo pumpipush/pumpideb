@@ -551,7 +551,7 @@ export default function ProfilePage() {
               >
                 <Gift className="w-3.5 h-3.5 shrink-0" style={{ color: "#22c55e" }} />
                 <span className="text-xs font-semibold" style={{ color: "#22c55e" }}>
-                  {formatSol(String(claimableLamports))} SOL in creator fees available
+                  {formatSol(String(claimableLamports))} in creator fees available
                 </span>
                 <span className="text-xs text-muted-foreground ml-auto">View →</span>
               </button>
@@ -692,7 +692,7 @@ export default function ProfilePage() {
                               </span>
                             </div>
                             <div className="text-xs text-muted-foreground/60 mt-0.5 font-mono">
-                              {formatSol(trade.ethAmount)} SOL
+                              {formatSol(trade.ethAmount)}
                             </div>
                           </Link>
 
@@ -1042,7 +1042,7 @@ export default function ProfilePage() {
                       {claimableLamports > 0n ? (
                         <>
                           <p className="text-3xl font-bold tabular-nums" style={{ color: "#22c55e" }}>
-                            {formatSol(String(claimableLamports))} SOL
+                            {formatSol(String(claimableLamports))}
                           </p>
                           {solPrice && (
                             <p className="text-sm text-muted-foreground mt-1">
