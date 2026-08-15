@@ -3001,7 +3001,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569", minWidth: 140 }}>%</th>
                         <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Amount</th>
                         <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Value</th>
-                        <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569", width: 60 }}>Txns</th>
                         <th style={{ width: 36 }} />
                       </tr>
                     </thead>
@@ -3014,13 +3013,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                             <td className="px-3 py-3"><div className="flex items-center gap-2"><Skeleton className="h-2 w-24 rounded-full" /><Skeleton className="h-3 w-10" /></div></td>
                             <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-16 ml-auto" /></td>
                             <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-12 ml-auto" /></td>
-                            <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-8 ml-auto" /></td>
                             <td style={{ width: 36 }} />
                           </tr>
                         ))
                       ) : holders.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="px-4 py-14 text-center">
+                          <td colSpan={6} className="px-4 py-14 text-center">
                             <div className="flex flex-col items-center gap-2">
                               <Users className="h-5 w-5" style={{ color: "#334155" }} />
                               <p className="text-[13px] font-semibold" style={{ color: "#475569" }}>No holders yet</p>
@@ -3105,13 +3103,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               <td className="px-3 py-2.5 text-right">
                                 <span className="font-mono text-[13px] font-semibold" style={{ color: valUsd > 0 ? "#e2e8f0" : "#334155" }}>
                                   {fmtVal}
-                                </span>
-                              </td>
-
-                              {/* Txns */}
-                              <td className="px-3 py-2.5 text-right" style={{ width: 60 }}>
-                                <span className="font-mono text-[13px]" style={{ color: "#64748b" }}>
-                                  {txCount ?? 0}
                                 </span>
                               </td>
 
