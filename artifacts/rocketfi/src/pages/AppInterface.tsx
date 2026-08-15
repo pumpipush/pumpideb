@@ -2995,6 +2995,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         <th className="text-left px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Wallet</th>
                         <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8" }}>Holdings</th>
                         <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#94a3b8", width: 72 }}>Share</th>
+                        <th style={{ width: 36 }} />
                       </tr>
                     </thead>
                     <tbody>
@@ -3006,11 +3007,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                             <td className="px-3 py-3"><div className="flex items-center gap-2"><Skeleton className="h-5 w-5 rounded-full" /><Skeleton className="h-3.5 w-28" /></div></td>
                             <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-16 ml-auto" /></td>
                             <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-10 ml-auto" /></td>
+                            <td style={{ width: 36 }} />
                           </tr>
                         ))
                       ) : holders.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="px-4 py-14 text-center">
+                          <td colSpan={6} className="px-4 py-14 text-center">
                             <div className="flex flex-col items-center gap-2">
                               <Users className="h-5 w-5" style={{ color: "#334155" }} />
                               <p className="text-[13px] font-semibold" style={{ color: "#475569" }}>No holders yet</p>
@@ -3080,6 +3082,28 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               <span className="font-mono text-[13px] font-bold" style={{ color: idx < 3 ? rankColor : "#64748b" }}>
                                 {pct.toFixed(1)}%
                               </span>
+                            </td>
+
+                            {/* Explorer link */}
+                            <td className="pr-3 py-3 text-center" style={{ width: 36 }}>
+                              <a
+                                href={`https://solscan.io/account/${addr}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="View on Solscan"
+                                className="inline-flex items-center justify-center w-7 h-7 rounded-md transition-all"
+                                style={{ background: "rgba(255,255,255,0.07)", color: "#64748b" }}
+                                onMouseEnter={e => {
+                                  (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.13)";
+                                  (e.currentTarget as HTMLAnchorElement).style.color = "#cbd5e1";
+                                }}
+                                onMouseLeave={e => {
+                                  (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.07)";
+                                  (e.currentTarget as HTMLAnchorElement).style.color = "#64748b";
+                                }}
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
                             </td>
                           </tr>
                         );
