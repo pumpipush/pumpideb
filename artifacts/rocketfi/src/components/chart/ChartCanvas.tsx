@@ -5,7 +5,7 @@
  * Sub-pane indicators: RSI, MACD, STOCH (separate synced chart instances)
  */
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, memo } from "react";
-import { formatTokenPrice } from "@/lib/utils";
+import { formatTokenPrice, formatUSD } from "@/lib/utils";
 import {
   createChart,
   createSeriesMarkers,
@@ -45,6 +45,9 @@ interface ChartCanvasProps {
   chartType?:       ChartType;
   indicators?:      Indicator[];
   solPrice?:        number | null;
+  /** Total token supply used to convert SOL/token → USD market cap on the Y-axis.
+   *  Defaults to 1 000 000 000 (pump.fun / LaunchLab fixed supply). */
+  totalSupply?:     number;
   symbol?:          string;
   graduated?:       boolean;
   graduatedAt?:     string | Date | null;
@@ -52,13 +55,16 @@ interface ChartCanvasProps {
   onCrosshairMove?: (bar: OHLCSnapshot | null) => void;
 }
 
-/** Build a USD price formatter for lightweight-charts axis labels */
-function makeUsdFormatter(solPrice: number | null): (p: number) => string {
+/**
+ * Build a Market Cap formatter for the lightweight-charts Y-axis.
+ * bar values are in SOL/token; multiply by solPrice × totalSupply → USD market cap.
+ */
+function makeMcFormatter(solPrice: number | null, totalSupply = 1_000_000_000): (p: number) => string {
   return (p: number) => {
     if (!solPrice || !p || !Number.isFinite(p)) {
       return p < 0.0001 ? p.toExponential(3) : p.toPrecision(5);
     }
-    return formatTokenPrice(p * solPrice);
+    return formatUSD(p * solPrice * totalSupply);
   };
 }
 
@@ -367,7 +373,7 @@ function ChartSkeleton({ visible }: { visible: boolean }) {
 
 /* ── Main component ────────────────────────────────────────────────── */
 export const ChartCanvas = memo(function ChartCanvas({
-  bars, address, loading, chartType = "candle", indicators = [], solPrice, symbol, graduated, graduatedAt, priceFormatter, onCrosshairMove,
+  bars, address, loading, chartType = "candle", indicators = [], solPrice, totalSupply = 1_000_000_000, symbol, graduated, graduatedAt, priceFormatter, onCrosshairMove,
 }: ChartCanvasProps) {
   const mainRef    = useRef<HTMLDivElement>(null);
   const chartRef   = useRef<IChartApi | null>(null);
@@ -388,8 +394,10 @@ export const ChartCanvas = memo(function ChartCanvas({
   const seriesMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
 
   // Mutable refs so crosshair handler always reads latest values without closure staleness
-  const solPriceRef = useRef<number | null>(solPrice ?? null);
-  solPriceRef.current = solPrice ?? null;
+  const solPriceRef    = useRef<number | null>(solPrice ?? null);
+  solPriceRef.current  = solPrice ?? null;
+  const totalSupplyRef = useRef<number>(totalSupply);
+  totalSupplyRef.current = totalSupply;
   const symbolRef = useRef<string | undefined>(symbol);
   symbolRef.current = symbol;
 
@@ -401,9 +409,11 @@ export const ChartCanvas = memo(function ChartCanvas({
     const el = innerOhlcRef.current;
     if (!el) return;
     if (!bar) { el.style.opacity = "0"; return; }
-    const sp = solPriceRef.current;
+    const sp  = solPriceRef.current;
+    const sup = totalSupplyRef.current;
+    // Display market cap (SOL/token × solPrice × supply = USD MC) to match pump.fun convention
     const fmt = (n: number): string => {
-      if (sp && n > 0) return formatTokenPrice(n * sp);
+      if (sp && sup && n > 0) return formatUSD(n * sp * sup);
       return n < 0.00001 ? n.toExponential(3) : n.toPrecision(4);
     };
     const isUp = bar.close >= bar.open;
@@ -415,7 +425,7 @@ export const ChartCanvas = memo(function ChartCanvas({
     // showing "O $x H $x L $x C $x" is redundant — just show the price.
     const allSame = bar.open === bar.high && bar.high === bar.low && bar.low === bar.close;
     if (allSame) {
-      el.innerHTML = `<span style="color:#94a3b8">Price</span><span style="color:${VAL}"> ${fmt(bar.close)}</span>`;
+      el.innerHTML = `<span style="color:#94a3b8">MC</span><span style="color:${VAL}"> ${fmt(bar.close)}</span>`;
     } else {
       el.innerHTML =
         `<span style="color:#94a3b8">O</span><span style="color:${VAL}"> ${fmt(bar.open)}</span> ` +
@@ -427,14 +437,14 @@ export const ChartCanvas = memo(function ChartCanvas({
   const writeInnerOhlcRef = useRef(writeInnerOhlc);
   useEffect(() => { writeInnerOhlcRef.current = writeInnerOhlc; }, [writeInnerOhlc]);
 
-  // When solPrice loads or changes, update the chart's axis formatter in-place
+  // When solPrice or totalSupply loads or changes, update the chart's axis formatter in-place
   // (no chart recreation needed — applyOptions is cheap)
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
-    const fmt = priceFormatter ?? makeUsdFormatter(solPrice ?? null);
+    const fmt = priceFormatter ?? makeMcFormatter(solPrice ?? null, totalSupply);
     chart.applyOptions({ localization: { priceFormatter: fmt } });
-  }, [solPrice, priceFormatter]);
+  }, [solPrice, totalSupply, priceFormatter]);
 
   const rsiRef   = useRef<HTMLDivElement>(null);
   const macdRef  = useRef<HTMLDivElement>(null);
@@ -514,7 +524,7 @@ export const ChartCanvas = memo(function ChartCanvas({
     const el = mainRef.current;
     if (!el) return;
 
-    const chart = makeChart(el, { timeVisible: true, rightScale: true, priceFormatter: priceFormatter ?? makeUsdFormatter(solPrice ?? null) });
+    const chart = makeChart(el, { timeVisible: true, rightScale: true, priceFormatter: priceFormatter ?? makeMcFormatter(solPrice ?? null, totalSupply) });
     chart.priceScale("right").applyOptions({ scaleMargins: { top: 0.10, bottom: 0.05 } });
 
     if (chartType === "candle") {
@@ -916,7 +926,7 @@ export const ChartCanvas = memo(function ChartCanvas({
             className="font-bold tracking-wide shrink-0"
             style={{ fontSize: 12, color: "#e2e8f0", letterSpacing: "0.03em" }}
           >
-            {symbol.toUpperCase()}/USD
+            {symbol.toUpperCase()}/MC
           </span>
         )}
         {/* OHLC — horizontally scrollable on mobile, pointer-events re-enabled for touch */}

@@ -1353,8 +1353,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     if (!bar) { el.style.opacity = "0"; return; }
     el.style.opacity = "1";
     const sp = solPriceRef.current;
+    // Show Market Cap (SOL/token × solPrice × 1B supply) — same convention as pump.fun
     const fmt = (n: number): string => {
-      if (sp && n > 0) return formatTokenPrice(n * sp);
+      if (sp && n > 0) return formatUSD(n * sp * 1_000_000_000);
       return n < 0.00001 ? n.toExponential(3) : n.toPrecision(4);
     };
     el.innerHTML = `
