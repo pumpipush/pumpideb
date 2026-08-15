@@ -263,6 +263,109 @@ function ActivityBar({ value, max }: { value: number; max: number }) {
   );
 }
 
+// ─── Mobile list row ─────────────────────────────────────────────────────────
+function MobileListRow({ token, rank, solPrice, isTrending, isVolume }: {
+  token: DisplayToken; rank: number; solPrice: number | null;
+  isTrending: boolean; isVolume: boolean;
+}) {
+  const price  = parseFloat(token.priceEth  ?? "0") || 0;
+  const vol    = parseFloat(token.volumeEth ?? "0") || 0;
+  const pct    = token.pctChange24h;
+  const pctUp  = (pct ?? 0) >= 0;
+  const isHot  = isTrending && rank <= 3;
+  const isNew  = token.isLive;
+
+  // right-column metric depends on active tab
+  const metricLabel = isVolume ? "Vol" : "MC";
+  const metricValue = isVolume
+    ? (vol > 0 ? formatMCUsd(token.volumeEth, solPrice) : "—")
+    : formatMCUsd(token.marketCapEth, solPrice);
+
+  return (
+    <Link
+      href={`/coin/${token.address}`}
+      className="flex items-center gap-2.5 px-3 py-2.5 active:bg-white/5 transition-colors"
+      style={{ borderBottom: "1px solid rgba(255,255,255,0.045)" }}
+    >
+      {/* Rank */}
+      <div className="w-7 shrink-0 flex justify-center">
+        {isTrending && rank <= 3 ? (
+          <span
+            className="inline-flex items-center justify-center w-6 h-6 rounded-md text-[11px] font-black"
+            style={{
+              background: rank === 1 ? "linear-gradient(135deg,#f59e0b,#d97706)" : rank === 2 ? "linear-gradient(135deg,#94a3b8,#64748b)" : "linear-gradient(135deg,#b45309,#92400e)",
+              color: rank === 1 ? "#000" : rank === 2 ? "#fff" : "#fde68a",
+            }}
+          >{rank}</span>
+        ) : (
+          <span className="text-[12px] font-mono tabular-nums" style={{ color: "#475569" }}>{rank}</span>
+        )}
+      </div>
+
+      {/* Avatar */}
+      <div className="relative shrink-0">
+        <div className="w-9 h-9 rounded-lg overflow-hidden" style={{ outline: "1px solid rgba(255,255,255,0.08)" }}>
+          {isPlaceholder(token.symbol) ? (
+            <div className="w-full h-full flex items-center justify-center" style={{ background: tokenCardBackground(token.symbol) }}>
+              <span className="flex gap-0.5">
+                {[0,150,300].map(d => <span key={d} className="w-1 h-1 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: `${d}ms` }} />)}
+              </span>
+            </div>
+          ) : (
+            <TokenImage imageUrl={token.imageUrl} symbol={token.symbol} textSize="text-base" />
+          )}
+        </div>
+        <PlatformDot platform={token.platform as PlatformId} className="absolute -bottom-0.5 -right-0.5 w-3 h-3 ring-1 ring-black" />
+      </div>
+
+      {/* Name + ticker row */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-semibold text-[14px] leading-tight truncate" style={{ color: "#e2e8f0" }}>
+            {token.name}
+          </span>
+          {isHot && <span className="shrink-0 text-[9px] font-black px-1 py-0.5 rounded leading-none" style={{ color: "#fbbf24", background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.22)" }}>HOT</span>}
+          {isNew && !isHot && <span className="shrink-0 text-[9px] font-black px-1 py-0.5 rounded leading-none" style={{ color: "#34d399", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.22)" }}>NEW</span>}
+          {token.graduated && <span className="shrink-0 text-[9px] font-black px-1 py-0.5 rounded leading-none" style={{ color: "#60a5fa", background: "rgba(96,165,250,0.1)", border: "1px solid rgba(96,165,250,0.22)" }}>GRAD</span>}
+        </div>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span className="text-[12px] font-mono" style={{ color: "#475569" }}>{displaySymbol(token.symbol)}</span>
+          <span style={{ color: "#1e293b" }}>·</span>
+          <span className="text-[11px]" style={{ color: "#334155" }}>{timeAgo(token.createdAt)}</span>
+          {isTrending && (token.trades1h ?? 0) > 0 && (
+            <>
+              <span style={{ color: "#1e293b" }}>·</span>
+              <span className="text-[11px] font-mono" style={{ color: "#f59e0b" }}>
+                {token.trades1h! >= 1000 ? `${(token.trades1h! / 1000).toFixed(1)}K` : token.trades1h}/hr
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Right: MC/Vol + 24h% */}
+      <div className="shrink-0 text-right flex flex-col items-end gap-0.5">
+        <span className="font-mono text-[13px] font-bold tabular-nums leading-tight" style={{ color: "#f1f5f9" }}>
+          {metricValue}
+        </span>
+        <div className="flex items-center gap-1">
+          <span className="text-[10px]" style={{ color: "#334155" }}>{metricLabel}</span>
+          {pct != null ? (
+            <span
+              className="font-mono text-[12px] font-bold tabular-nums"
+              style={{ color: pctUp ? "#4ade80" : "#f87171" }}
+            >
+              {fmtPct(pct)}
+            </span>
+          ) : (
+            <span style={{ color: "#334155" }} className="text-[12px]">—</span>
+          )}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
 // ─── Table view ───────────────────────────────────────────────────────────────
 function TableView({ tokens, solPrice, activeTab, startRank }: {
   tokens: DisplayToken[];
@@ -279,7 +382,7 @@ function TableView({ tokens, solPrice, activeTab, startRank }: {
   };
 
   const sorted = useMemo(() => {
-    if (sortKey === "rank") return tokens; // preserve server order
+    if (sortKey === "rank") return tokens;
     const copy = [...tokens];
     const dir = sortDir === "asc" ? 1 : -1;
     copy.sort((a, b) => {
@@ -301,205 +404,196 @@ function TableView({ tokens, solPrice, activeTab, startRank }: {
   const isTrending = activeTab === "Trending";
   const isVolume   = activeTab === "Volume";
 
-  // Max trades1h for activity bar scale
   const maxTrades1h = useMemo(() =>
     Math.max(...tokens.map(t => t.trades1h ?? 0), 1),
     [tokens]
   );
 
   return (
-    <div
-      className="overflow-x-auto rounded-xl border border-white/[0.06]"
-      style={{ background: "rgba(10,12,18,0.85)", backdropFilter: "blur(8px)" }}
-    >
-      <table className="w-full border-collapse min-w-[640px]">
-        <thead>
-          <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.025)" }}>
-            <th className="px-4 py-3 text-left text-[14px] font-semibold tracking-[0.04em] text-muted-foreground/60 w-12">#</th>
-            {th("name", "Token", "min-w-[200px]")}
-            {th("price", "Price", "hidden md:table-cell", "right")}
-            {th("marketCap", "Market Cap", "hidden sm:table-cell", "right")}
-            <th className={cn(
-              "px-4 py-3 text-[14px] font-semibold tracking-[0.04em] whitespace-nowrap text-right hidden md:table-cell",
-              "text-muted-foreground/65"
-            )}>24h %</th>
-            {(isTrending) && (
-              <th className="px-4 py-3 text-[14px] font-semibold tracking-[0.04em] text-muted-foreground/65 whitespace-nowrap text-right hidden lg:table-cell">
-                Trades/hr
-              </th>
-            )}
-            {isVolume && (
-              <th className="px-4 py-3 text-[14px] font-semibold tracking-[0.04em] text-primary/80 whitespace-nowrap text-right hidden lg:table-cell">
-                Volume
-              </th>
-            )}
-            <th className="px-4 py-3 text-[14px] font-semibold tracking-[0.04em] text-muted-foreground/65 whitespace-nowrap text-right hidden xl:table-cell">Age</th>
-            <th className="px-4 py-3 text-right text-[14px] font-semibold tracking-[0.04em] text-muted-foreground/60 w-20">Trade</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((token, idx) => {
-            const rank  = startRank + idx;
-            const price = parseFloat(token.priceEth ?? "0") || 0;
-            const vol   = parseFloat(token.volumeEth ?? "0") || 0;
-            const pct   = token.pctChange24h;
-            const pctUp = (pct ?? 0) >= 0;
-            const isHot = isTrending && rank <= 3;
-            const isNew = token.isLive;
+    <div className="rounded-xl border border-white/[0.06] overflow-hidden" style={{ background: "rgba(10,12,18,0.85)", backdropFilter: "blur(8px)" }}>
 
-            return (
-              <tr
-                key={token.id}
-                className="group transition-colors duration-100"
-                style={{
-                  borderBottom: "1px solid rgba(255,255,255,0.04)",
-                  background: isHot
-                    ? "rgba(245,158,11,0.025)"
-                    : isNew
-                      ? "rgba(52,211,153,0.02)"
-                      : "transparent",
-                }}
-                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
-                onMouseLeave={e => (e.currentTarget.style.background = isHot ? "rgba(245,158,11,0.025)" : isNew ? "rgba(52,211,153,0.02)" : "transparent")}
-              >
-                {/* # */}
-                <td className="px-4 py-3">
-                  {isTrending && rank <= 3 ? (
-                    <span
-                      className="inline-flex items-center justify-center w-6 h-6 rounded-md text-[11px] font-black"
-                      style={{
-                        background: rank === 1 ? "linear-gradient(135deg,#f59e0b,#d97706)" : rank === 2 ? "linear-gradient(135deg,#94a3b8,#64748b)" : "linear-gradient(135deg,#b45309,#92400e)",
-                        color: rank === 1 ? "#000" : rank === 2 ? "#fff" : "#fde68a",
-                      }}
-                    >
-                      {rank}
-                    </span>
-                  ) : (
-                    <span className="text-[12px] text-muted-foreground/60 font-mono tabular-nums">{rank}</span>
-                  )}
-                </td>
+      {/* ── Mobile list (< sm) ── */}
+      <div className="sm:hidden">
+        {/* Column header strip */}
+        <div className="flex items-center justify-between px-3 py-2" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
+          <span className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#334155" }}>Token</span>
+          <span className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#334155" }}>{isVolume ? "Vol / 24h%" : "MC / 24h%"}</span>
+        </div>
+        {sorted.map((token, idx) => (
+          <MobileListRow
+            key={token.id}
+            token={token}
+            rank={startRank + idx}
+            solPrice={solPrice}
+            isTrending={isTrending}
+            isVolume={isVolume}
+          />
+        ))}
+      </div>
 
-                {/* Token */}
-                <td className="px-4 py-3">
-                  <Link href={`/coin/${token.address}`} className="flex items-center gap-3 min-w-0 group/row">
-                    {/* Avatar */}
-                    <div className="relative shrink-0">
-                      <div className="w-9 h-9 rounded-lg overflow-hidden ring-1 ring-white/[0.08]">
-                        {isPlaceholder(token.symbol) ? (
-                          <div className="w-full h-full flex items-center justify-center" style={{ background: tokenCardBackground(token.symbol) }}>
-                            <span className="flex gap-0.5">
-                              {[0,150,300].map(d => <span key={d} className="w-1 h-1 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: `${d}ms` }} />)}
-                            </span>
-                          </div>
-                        ) : (
-                          <TokenImage imageUrl={token.imageUrl} symbol={token.symbol} textSize="text-base" />
-                        )}
-                      </div>
-                      {/* Platform dot */}
-                      <PlatformDot platform={token.platform as PlatformId} className="absolute -bottom-0.5 -right-0.5 w-3 h-3 ring-1 ring-black" />
-                    </div>
+      {/* ── Desktop table (sm+) ── */}
+      <div className="hidden sm:block overflow-x-auto">
+        <table className="w-full border-collapse min-w-[640px]">
+          <thead>
+            <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.025)" }}>
+              <th className="px-4 py-3 text-left text-[14px] font-semibold tracking-[0.04em] text-muted-foreground/60 w-12">#</th>
+              {th("name", "Token", "min-w-[200px]")}
+              {th("price", "Price", "hidden md:table-cell", "right")}
+              {th("marketCap", "Market Cap", "hidden sm:table-cell", "right")}
+              <th className={cn(
+                "px-4 py-3 text-[14px] font-semibold tracking-[0.04em] whitespace-nowrap text-right hidden md:table-cell",
+                "text-muted-foreground/65"
+              )}>24h %</th>
+              {isTrending && (
+                <th className="px-4 py-3 text-[14px] font-semibold tracking-[0.04em] text-muted-foreground/65 whitespace-nowrap text-right hidden lg:table-cell">
+                  Trades/hr
+                </th>
+              )}
+              {isVolume && (
+                <th className="px-4 py-3 text-[14px] font-semibold tracking-[0.04em] text-primary/80 whitespace-nowrap text-right hidden lg:table-cell">
+                  Volume
+                </th>
+              )}
+              <th className="px-4 py-3 text-[14px] font-semibold tracking-[0.04em] text-muted-foreground/65 whitespace-nowrap text-right hidden xl:table-cell">Age</th>
+              <th className="px-4 py-3 text-right text-[14px] font-semibold tracking-[0.04em] text-muted-foreground/60 w-20">Trade</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((token, idx) => {
+              const rank  = startRank + idx;
+              const price = parseFloat(token.priceEth ?? "0") || 0;
+              const vol   = parseFloat(token.volumeEth ?? "0") || 0;
+              const pct   = token.pctChange24h;
+              const pctUp = (pct ?? 0) >= 0;
+              const isHot = isTrending && rank <= 3;
+              const isNew = token.isLive;
 
-                    {/* Name + symbol */}
-                    <div className="min-w-0 flex flex-col gap-0.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-[14px] text-foreground group-hover/row:text-primary transition-colors truncate max-w-[140px] leading-none">
-                          {token.name}
-                        </span>
-                        {isHot && (
-                          <span className="shrink-0 text-[9px] font-black text-amber-400 bg-amber-400/10 border border-amber-400/25 px-1 py-0.5 rounded leading-none">HOT</span>
-                        )}
-                        {isNew && !isHot && (
-                          <span className="shrink-0 text-[9px] font-black text-emerald-400 bg-emerald-400/10 border border-emerald-400/25 px-1 py-0.5 rounded leading-none">NEW</span>
-                        )}
-                        {token.graduated && (
-                          <span className="shrink-0 text-[9px] font-black text-primary bg-primary/10 border border-primary/25 px-1 py-0.5 rounded leading-none">GRAD</span>
-                        )}
-                      </div>
-                      <span className="text-[12px] font-mono text-muted-foreground/75 leading-none">{displaySymbol(token.symbol)}</span>
-                    </div>
-                  </Link>
-                </td>
-
-                {/* Price */}
-                <td className="px-4 py-3 text-right hidden md:table-cell">
-                  <span className="font-mono text-[13px] text-foreground/80 tabular-nums">
-                    {solPrice && price > 0 ? formatTokenPrice(price * solPrice) : <span className="text-muted-foreground/30">—</span>}
-                  </span>
-                </td>
-
-                {/* Market Cap */}
-                <td className="px-4 py-3 text-right hidden sm:table-cell">
-                  <span className="font-mono text-[13px] font-semibold text-foreground tabular-nums">
-                    {formatMCUsd(token.marketCapEth, solPrice)}
-                  </span>
-                </td>
-
-                {/* 24h % */}
-                <td className="px-4 py-3 text-right hidden md:table-cell">
-                  {pct != null ? (
-                    <span
-                      className="inline-block font-mono text-[12px] font-bold px-2 py-0.5 rounded"
-                      style={{
-                        color: pctUp ? "#4ade80" : "#f87171",
-                        background: pctUp ? "rgba(74,222,128,0.08)" : "rgba(248,113,113,0.08)",
-                        border: `1px solid ${pctUp ? "rgba(74,222,128,0.2)" : "rgba(248,113,113,0.2)"}`,
-                      }}
-                    >
-                      {fmtPct(pct)}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground/25 text-xs">—</span>
-                  )}
-                </td>
-
-                {/* Trades/hr (Trending) */}
-                {isTrending && (
-                  <td className="px-4 py-3 hidden lg:table-cell">
-                    <ActivityBar value={token.trades1h ?? 0} max={maxTrades1h} />
+              return (
+                <tr
+                  key={token.id}
+                  className="group transition-colors duration-100"
+                  style={{
+                    borderBottom: "1px solid rgba(255,255,255,0.04)",
+                    background: isHot ? "rgba(245,158,11,0.025)" : isNew ? "rgba(52,211,153,0.02)" : "transparent",
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = isHot ? "rgba(245,158,11,0.025)" : isNew ? "rgba(52,211,153,0.02)" : "transparent")}
+                >
+                  {/* # */}
+                  <td className="px-4 py-3">
+                    {isTrending && rank <= 3 ? (
+                      <span
+                        className="inline-flex items-center justify-center w-6 h-6 rounded-md text-[11px] font-black"
+                        style={{
+                          background: rank === 1 ? "linear-gradient(135deg,#f59e0b,#d97706)" : rank === 2 ? "linear-gradient(135deg,#94a3b8,#64748b)" : "linear-gradient(135deg,#b45309,#92400e)",
+                          color: rank === 1 ? "#000" : rank === 2 ? "#fff" : "#fde68a",
+                        }}
+                      >{rank}</span>
+                    ) : (
+                      <span className="text-[12px] text-muted-foreground/60 font-mono tabular-nums">{rank}</span>
+                    )}
                   </td>
-                )}
 
-                {/* Volume (Volume tab) */}
-                {isVolume && (
-                  <td className="px-4 py-3 text-right hidden lg:table-cell">
-                    <span className="font-mono text-[13px] font-semibold text-primary tabular-nums">
-                      {vol > 0 ? formatMCUsd(token.volumeEth, solPrice) : <span className="text-muted-foreground/30">—</span>}
+                  {/* Token */}
+                  <td className="px-4 py-3">
+                    <Link href={`/coin/${token.address}`} className="flex items-center gap-3 min-w-0 group/row">
+                      <div className="relative shrink-0">
+                        <div className="w-9 h-9 rounded-lg overflow-hidden ring-1 ring-white/[0.08]">
+                          {isPlaceholder(token.symbol) ? (
+                            <div className="w-full h-full flex items-center justify-center" style={{ background: tokenCardBackground(token.symbol) }}>
+                              <span className="flex gap-0.5">
+                                {[0,150,300].map(d => <span key={d} className="w-1 h-1 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: `${d}ms` }} />)}
+                              </span>
+                            </div>
+                          ) : (
+                            <TokenImage imageUrl={token.imageUrl} symbol={token.symbol} textSize="text-base" />
+                          )}
+                        </div>
+                        <PlatformDot platform={token.platform as PlatformId} className="absolute -bottom-0.5 -right-0.5 w-3 h-3 ring-1 ring-black" />
+                      </div>
+                      <div className="min-w-0 flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-[14px] text-foreground group-hover/row:text-primary transition-colors truncate max-w-[140px] leading-none">
+                            {token.name}
+                          </span>
+                          {isHot && <span className="shrink-0 text-[9px] font-black text-amber-400 bg-amber-400/10 border border-amber-400/25 px-1 py-0.5 rounded leading-none">HOT</span>}
+                          {isNew && !isHot && <span className="shrink-0 text-[9px] font-black text-emerald-400 bg-emerald-400/10 border border-emerald-400/25 px-1 py-0.5 rounded leading-none">NEW</span>}
+                          {token.graduated && <span className="shrink-0 text-[9px] font-black text-primary bg-primary/10 border border-primary/25 px-1 py-0.5 rounded leading-none">GRAD</span>}
+                        </div>
+                        <span className="text-[12px] font-mono text-muted-foreground/75 leading-none">{displaySymbol(token.symbol)}</span>
+                      </div>
+                    </Link>
+                  </td>
+
+                  {/* Price */}
+                  <td className="px-4 py-3 text-right hidden md:table-cell">
+                    <span className="font-mono text-[13px] text-foreground/80 tabular-nums">
+                      {solPrice && price > 0 ? formatTokenPrice(price * solPrice) : <span className="text-muted-foreground/30">—</span>}
                     </span>
                   </td>
-                )}
 
-                {/* Age */}
-                <td className="px-4 py-3 text-right hidden xl:table-cell">
-                  <span className="font-mono text-[12px]" style={{ color: "#4ade80" }}>{timeAgo(token.createdAt)}</span>
-                </td>
+                  {/* Market Cap */}
+                  <td className="px-4 py-3 text-right hidden sm:table-cell">
+                    <span className="font-mono text-[13px] font-semibold text-foreground tabular-nums">
+                      {formatMCUsd(token.marketCapEth, solPrice)}
+                    </span>
+                  </td>
 
-                {/* Trade button */}
-                <td className="px-4 py-3 text-right">
-                  <Link
-                    href={`/coin/${token.address}`}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all duration-150"
-                    style={{
-                      background: "rgba(59,130,246,0.10)",
-                      color: "#60a5fa",
-                      border: "1px solid rgba(59,130,246,0.20)",
-                    }}
-                    onMouseEnter={e => {
-                      (e.currentTarget as HTMLElement).style.background = "rgba(59,130,246,0.85)";
-                      (e.currentTarget as HTMLElement).style.color = "#fff";
-                    }}
-                    onMouseLeave={e => {
-                      (e.currentTarget as HTMLElement).style.background = "rgba(59,130,246,0.10)";
-                      (e.currentTarget as HTMLElement).style.color = "#60a5fa";
-                    }}
-                  >
-                    Trade <ArrowRight className="w-3 h-3" />
-                  </Link>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  {/* 24h % */}
+                  <td className="px-4 py-3 text-right hidden md:table-cell">
+                    {pct != null ? (
+                      <span
+                        className="inline-block font-mono text-[12px] font-bold px-2 py-0.5 rounded"
+                        style={{
+                          color: pctUp ? "#4ade80" : "#f87171",
+                          background: pctUp ? "rgba(74,222,128,0.08)" : "rgba(248,113,113,0.08)",
+                          border: `1px solid ${pctUp ? "rgba(74,222,128,0.2)" : "rgba(248,113,113,0.2)"}`,
+                        }}
+                      >{fmtPct(pct)}</span>
+                    ) : (
+                      <span className="text-muted-foreground/25 text-xs">—</span>
+                    )}
+                  </td>
+
+                  {/* Trades/hr */}
+                  {isTrending && (
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      <ActivityBar value={token.trades1h ?? 0} max={maxTrades1h} />
+                    </td>
+                  )}
+
+                  {/* Volume */}
+                  {isVolume && (
+                    <td className="px-4 py-3 text-right hidden lg:table-cell">
+                      <span className="font-mono text-[13px] font-semibold text-primary tabular-nums">
+                        {vol > 0 ? formatMCUsd(token.volumeEth, solPrice) : <span className="text-muted-foreground/30">—</span>}
+                      </span>
+                    </td>
+                  )}
+
+                  {/* Age */}
+                  <td className="px-4 py-3 text-right hidden xl:table-cell">
+                    <span className="font-mono text-[12px]" style={{ color: "#4ade80" }}>{timeAgo(token.createdAt)}</span>
+                  </td>
+
+                  {/* Trade button */}
+                  <td className="px-4 py-3 text-right">
+                    <Link
+                      href={`/coin/${token.address}`}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all duration-150"
+                      style={{ background: "rgba(59,130,246,0.10)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.20)" }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(59,130,246,0.85)"; (e.currentTarget as HTMLElement).style.color = "#fff"; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(59,130,246,0.10)"; (e.currentTarget as HTMLElement).style.color = "#60a5fa"; }}
+                    >
+                      Trade <ArrowRight className="w-3 h-3" />
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
