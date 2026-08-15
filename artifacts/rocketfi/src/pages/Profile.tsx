@@ -253,11 +253,11 @@ export default function ProfilePage() {
     }
   };
 
-  const totalTrades = history?.length ?? 0;
-  const totalVolumeLamports = history
-    ? history.reduce((s, t) => s + (parseFloat(t.ethAmount) || 0), 0) : 0;
-  const realizedPnlLamports: number | null = history
-    ? history.reduce((s, t) => {
+  const historyArr = Array.isArray(history) ? history : [];
+  const totalTrades = historyArr.length;
+  const totalVolumeLamports = historyArr.reduce((s, t) => s + (parseFloat(t.ethAmount) || 0), 0);
+  const realizedPnlLamports: number | null = history != null
+    ? historyArr.reduce((s, t) => {
         const lam = parseFloat(t.ethAmount) || 0;
         return s + (t.isBuy ? -lam : lam);
       }, 0)
@@ -625,7 +625,7 @@ export default function ProfilePage() {
                       <Skeleton key={i} className="h-16 rounded-xl" />
                     ))}
                   </div>
-                ) : history.length === 0 ? (
+                ) : historyArr.length === 0 ? (
                   <div
                     className="py-20 flex flex-col items-center gap-3 text-center rounded-xl"
                     style={{ background: "rgba(255,255,255,0.02)", border: "1px dashed rgba(255,255,255,0.08)" }}
@@ -638,7 +638,7 @@ export default function ProfilePage() {
                     className="rounded-xl overflow-hidden"
                     style={{ border: "1px solid rgba(255,255,255,0.07)" }}
                   >
-                    {history.map((trade, idx) => {
+                    {historyArr.map((trade, idx) => {
                       const solAmt  = parseFloat(trade.ethAmount) / 1e9;
                       const usdAmt  = solPrice && solAmt ? solAmt * solPrice : null;
                       const tokAmt  = formatAtomicTokenAmount(trade.tokenAmount, 6);
@@ -739,9 +739,10 @@ export default function ProfilePage() {
 
             {/* ══ WALLET TAB ═══════════════════════════════════════════════════════ */}
             {activeTab === "wallet" && (() => {
-              const tokenTotalSol = portfolio?.tokens.reduce((s, t) => s + (t.valueSol ?? 0), 0) ?? 0;
+              const portfolioTokens = Array.isArray(portfolio?.tokens) ? portfolio!.tokens : [];
+              const tokenTotalSol = portfolioTokens.reduce((s, t) => s + (t.valueSol ?? 0), 0);
               const totalSol = (portfolio?.solBalance ?? 0) + tokenTotalSol;
-              const topToken = portfolio?.tokens[0];
+              const topToken = portfolioTokens[0];
               const solEntry = portfolio
                 ? { symbol: "SOL", valueSol: portfolio.solBalance, pct: totalSol > 0 ? portfolio.solBalance / totalSol * 100 : 100 }
                 : null;
@@ -878,7 +879,7 @@ export default function ProfilePage() {
                           style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
                         >
                           <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-medium mb-2">Tokens Held</p>
-                          <p className="text-lg font-bold">{portfolio.tokens.length}</p>
+                          <p className="text-lg font-bold">{portfolioTokens.length}</p>
                           <p className="text-xs text-muted-foreground/60 mt-0.5">SPL tokens</p>
                         </div>
                       </div>
@@ -937,17 +938,17 @@ export default function ProfilePage() {
                         </div>
 
                         {/* Token rows */}
-                        {portfolio.tokens.length === 0 && (
+                        {portfolioTokens.length === 0 && (
                           <div className="py-10 text-center text-sm text-muted-foreground/50">
                             No SPL token holdings found.
                           </div>
                         )}
-                        {portfolio.tokens.map((token, idx) => (
+                        {portfolioTokens.map((token, idx) => (
                           <div
                             key={token.mint}
                             className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-3.5 items-center hover:bg-white/[0.02] transition-colors cursor-pointer"
                             style={{
-                              borderBottom: idx < portfolio.tokens.length - 1
+                              borderBottom: idx < portfolioTokens.length - 1
                                 ? "1px solid rgba(255,255,255,0.04)"
                                 : undefined,
                             }}

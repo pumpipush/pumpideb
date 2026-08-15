@@ -36,9 +36,13 @@ export function Sidebar() {
   const search = useSearch();
   const isPortfolio = location === "/app" && search.includes("tab=portfolio");
   const { wallet, walletName } = useWallet();
+  const { socialUser } = useAuth();
 
-  const { data: profile } = useGetProfile(wallet ?? "", {
-    query: { enabled: !!wallet, retry: false, queryKey: getGetProfileQueryKey(wallet ?? "") },
+  // Use extension wallet if available; fall back to Privy/social address.
+  const effectiveAddress = wallet ?? socialUser?.address ?? null;
+
+  const { data: profile } = useGetProfile(effectiveAddress ?? "", {
+    query: { enabled: !!effectiveAddress, retry: false, queryKey: getGetProfileQueryKey(effectiveAddress ?? "") },
   });
 
   return (
@@ -89,19 +93,19 @@ export function Sidebar() {
           My Coins
         </Link>
 
-        {/* Profile link — only visible when wallet connected */}
-        {wallet && (
+        {/* Profile link — visible when any wallet (extension or Privy) is connected */}
+        {effectiveAddress && (
           <Link
-            href={`/profile/${profile?.username ?? wallet}`}
+            href={`/profile/${profile?.username ?? effectiveAddress}`}
             className={cn(
               "flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-all duration-200 rounded-sm group",
-              location === `/profile/${profile?.username ?? wallet}`
+              location === `/profile/${profile?.username ?? effectiveAddress}`
                 ? "bg-primary/15 text-foreground nav-active-bar"
                 : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
             )}
           >
             <img
-              src={profile?.avatarUrl || diceBearUrl(wallet)}
+              src={profile?.avatarUrl || diceBearUrl(effectiveAddress)}
               alt="avatar"
               className="w-4 h-4 rounded-full object-cover shrink-0"
               style={{ imageRendering: profile?.avatarUrl ? "auto" : "pixelated" }}
