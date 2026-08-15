@@ -148,7 +148,8 @@ function DeviceIcon({ device }: { device: string }) {
 
 function timeAgo(ts: string): string {
   const diff = Date.now() - new Date(ts).getTime();
-  const s = Math.floor(diff / 1000);
+  const s = Math.max(0, Math.floor(diff / 1000)); // clamp: VPS clock may be slightly ahead
+  if (s < 5)    return "just now";
   if (s < 60)   return `${s}s ago`;
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
