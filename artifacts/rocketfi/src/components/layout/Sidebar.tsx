@@ -38,7 +38,7 @@ export function Sidebar() {
   const { wallet, walletName } = useWallet();
   const { socialUser } = useAuth();
 
-  // Use extension wallet if available; fall back to Privy/social address.
+  // Use extension wallet if available; fall back to social account address.
   const effectiveAddress = wallet ?? socialUser?.address ?? null;
 
   const { data: profile } = useGetProfile(effectiveAddress ?? "", {
@@ -93,7 +93,7 @@ export function Sidebar() {
           My Coins
         </Link>
 
-        {/* Profile link — visible when any wallet (extension or Privy) is connected */}
+        {/* Profile link — visible when signed in */}
         {effectiveAddress && (
           <Link
             href={`/profile/${profile?.username ?? effectiveAddress}`}
@@ -130,8 +130,7 @@ export function BottomNav() {
   const { wallet } = useWallet();
   const { socialUser } = useAuth();
 
-  // Privy social login gives a wallet address via socialUser.address even when
-  // no extension wallet is connected — use the same fallback chain as Navbar.
+  // Use extension wallet if available; fall back to social account address.
   const effectiveAddress = wallet ?? socialUser?.address ?? null;
 
   const { data: profile } = useGetProfile(effectiveAddress ?? "", {

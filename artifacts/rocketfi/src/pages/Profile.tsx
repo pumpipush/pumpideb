@@ -221,7 +221,10 @@ export default function ProfilePage() {
 
   const isOwner =
     (!!wallet && !!address && wallet.toLowerCase() === address.toLowerCase()) ||
-    (!!socialUser && !!address && socialUser.address === address);
+    (!!socialUser && !!address && (
+      socialUser.address === address ||
+      (!!socialUser.linkedWallet && socialUser.linkedWallet.toLowerCase() === address.toLowerCase())
+    ));
 
   // ── Seamless wallet link flow ─────────────────────────────────────────────
   // Called either directly (wallet already connected) or auto-triggered by

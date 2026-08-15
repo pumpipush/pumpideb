@@ -325,58 +325,6 @@ router.post("/auth/google", asyncWrap(async (req, res) => {
   return void res.json({ token, profile, isNewAccount, wasLinked });
 }));
 
-// ── POST /api/auth/email/send ──────────────────────────────────────────────
-
-router.post("/auth/email/send", authLimiter, asyncWrap(async (req, res) => {
-  const { email } = req.body as { email?: string };
-  if (!email || !email.includes("@")) {
-    return void res.status(400).json({ error: "valid email required" });
-  }
-  // Max 3 sends per email per 15 minutes
-  if (!checkRateLimit(otpSendLimiter, email.toLowerCase(), 3, 15 * 60_000)) {
-    return void res.status(429).json({ error: "Too many attempts. Please wait 15 minutes before requesting another code." });
-  }
-  const code = generateOTP(email.toLowerCase());
-  await sendOTPEmail(email.toLowerCase(), code);
-  return void res.json({ ok: true });
-}));
-
-// ── POST /api/auth/email/verify ────────────────────────────────────────────
-
-router.post("/auth/email/verify", authLimiter, asyncWrap(async (req, res) => {
-  const { email, code } = req.body as { email?: string; code?: string };
-  if (!email || !code) return void res.status(400).json({ error: "email and code required" });
-
-  // Max 10 verify attempts per email per 15 minutes (brute-force guard)
-  if (!checkRateLimit(otpVerifyLimiter, email.toLowerCase(), 10, 15 * 60_000)) {
-    return void res.status(429).json({ error: "Too many verification attempts. Please request a new code." });
-  }
-
-  const ok = verifyOTP(email.toLowerCase(), code);
-  if (!ok) return void res.status(401).json({ error: "Invalid or expired code" });
-
-  const existing = await db
-    .select()
-    .from(profilesTable)
-    .where(eq(profilesTable.email, email.toLowerCase()))
-    .limit(1);
-
-  let profile = existing[0];
-  if (!profile) {
-    const address  = randomUUID();
-    const username = await uniqueUsername(email.split("@")[0]);
-    profile = (
-      await db
-        .insert(profilesTable)
-        .values({ address, username, email: email.toLowerCase(), authType: "email" })
-        .returning()
-    )[0];
-  }
-
-  const token = signToken({ sub: profile.address, authType: "email" });
-  return void res.json({ token, profile });
-}));
-
 // ── POST /api/auth/link/email/send ────────────────────────────────────────
 // Wallet-only users can add an email address by sending an OTP.
 // Requires: Authorization: Bearer <wallet-auth JWT>

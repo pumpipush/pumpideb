@@ -171,9 +171,9 @@ export function AddEmailModal({ open, onClose }: AddEmailModalProps) {
         {/* header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-white/[0.06]">
           <div>
-            <p className="text-[15px] font-semibold">Secure your balance</p>
+            <p className="text-[15px] font-semibold">Backup login</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Add a backup login so you can recover your account
+              Add a recovery method so you can access your account if you lose wallet access
             </p>
           </div>
           <button

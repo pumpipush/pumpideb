@@ -34,10 +34,6 @@ export interface SocialUser {
 interface AuthContextValue {
   socialUser: SocialUser | null;
   isLoading: boolean;
-  /** Send 6-digit OTP to email */
-  sendEmailOTP: (email: string) => Promise<void>;
-  /** Verify OTP and sign in */
-  verifyEmailOTP: (email: string, code: string) => Promise<void>;
   /**
    * Exchange a Google OAuth access_token (from useGoogleLogin implicit flow) for our own JWT.
    * Returns outcome flags so callers can show appropriate messaging.
@@ -97,8 +93,10 @@ interface AuthContextValue {
   /**
    * Smart wallet connect — call this after the wallet extension approves
    * the connection.  Automatically decides:
-   *   • Already signed in (Google / email JWT present) → links the wallet to the
+   *   • Already signed in (Google JWT present) → links the wallet to the
    *     existing social profile via /auth/wallet/link (no new row created).
+   *     Returns { mergeNonce } if the wallet already has its own primary account
+   *     — the caller must show a merge confirmation and call mergeWallet().
    *   • Not signed in → creates / retrieves a wallet-primary profile and issues
    *     a JWT via /auth/wallet/login.
    * This prevents the duplicate-profile scenario where one person ends up with
@@ -107,14 +105,12 @@ interface AuthContextValue {
   loginOrLinkWallet: (
     walletAddress: string,
     signMessage: (msg: Uint8Array) => Promise<Uint8Array>,
-  ) => Promise<void>;
+  ) => Promise<{ mergeNonce: string } | undefined>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
   socialUser: null,
   isLoading: true,
-  sendEmailOTP: async () => {},
-  verifyEmailOTP: async () => {},
   handleGoogleToken: async () => ({ isNewAccount: false, wasLinked: false }),
   signOut: () => {},
   authHeaders: () => ({}),
@@ -124,7 +120,7 @@ const AuthContext = createContext<AuthContextValue>({
   unlinkWallet: async () => {},
   mergeWallet: async () => {},
   loginWithWallet: async () => {},
-  loginOrLinkWallet: async () => {},
+  loginOrLinkWallet: async () => undefined,
   linkEmailSend: async () => {},
   linkEmailVerify: async () => {},
   linkGoogle: async () => {},
@@ -230,33 +226,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       clearTimeout(timer);
     }
-  }, []);
-
-  // ── Email OTP ──────────────────────────────────────────────────────────────
-  const sendEmailOTP = useCallback(async (email: string) => {
-    const r = await fetch(apiUrl("/auth/email/send"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      throw new Error((err as { error?: string }).error ?? "Failed to send code");
-    }
-  }, []);
-
-  const verifyEmailOTP = useCallback(async (email: string, code: string) => {
-    const r = await fetch(apiUrl("/auth/email/verify"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, code }),
-    });
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      throw new Error((err as { error?: string }).error ?? "Invalid code");
-    }
-    const data = await r.json();
-    handleAuthResponse({ ...data, authType: "email" });
   }, []);
 
   // ── Sign out ───────────────────────────────────────────────────────────────
@@ -481,12 +450,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginOrLinkWallet = useCallback(async (
     walletAddress: string,
     signMessage: (msg: Uint8Array) => Promise<Uint8Array>,
-  ) => {
+  ): Promise<{ mergeNonce: string } | undefined> => {
     const token = getToken();
 
     if (token) {
       // ── Already signed in → link wallet to existing social profile ──────
       // Uses /auth/wallet/link/challenge + /auth/wallet/link (no new row).
+      // Returns { mergeNonce } if the wallet already has its own primary account.
       const cr = await fetch(apiUrl(`/auth/wallet/link/challenge?wallet=${encodeURIComponent(walletAddress)}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -497,10 +467,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { message } = await cr.json() as { nonce: string; message: string };
       const sigBytes  = await signMessage(new TextEncoder().encode(message));
       const signature = encodeBase58(sigBytes);
-      await linkWallet(walletAddress, signature, message);
+      return await linkWallet(walletAddress, signature, message);
     } else {
       // ── Not signed in → create / retrieve wallet profile and issue JWT ──
       await loginWithWallet(walletAddress, signMessage);
+      return undefined;
     }
   }, [linkWallet, loginWithWallet]);
 
@@ -509,8 +480,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         socialUser,
         isLoading,
-        sendEmailOTP,
-        verifyEmailOTP,
         handleGoogleToken,
         signOut,
         authHeaders,

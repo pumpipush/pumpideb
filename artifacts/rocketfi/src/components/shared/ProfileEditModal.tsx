@@ -79,9 +79,11 @@ interface ProfileEditModalProps {
 
 export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }: ProfileEditModalProps) {
   const { wallet, signMessage, openWalletModal } = useWallet();
-  const { socialUser, authHeaders, refreshSocialUser, getWalletLinkChallenge, linkWallet, unlinkWallet } = useAuth();
+  const { socialUser, authHeaders, refreshSocialUser, getWalletLinkChallenge, linkWallet, unlinkWallet, mergeWallet } = useAuth();
   const { toast } = useToast();
-  const [walletLinking, setWalletLinking] = useState(false);
+  const [walletLinking, setWalletLinking]     = useState(false);
+  const [walletMergeNonce, setWalletMergeNonce] = useState<string | null>(null);
+  const [walletMerging, setWalletMerging]     = useState(false);
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
@@ -542,7 +544,12 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
                         }
                         const signature = bs58Encode(sigRaw);
                         // 3. Submit to server for verification and persistence
-                        await linkWallet(wallet, signature, challengeMsg);
+                        const result = await linkWallet(wallet, signature, challengeMsg);
+                        if (result?.mergeNonce) {
+                          // Wallet already has its own account — show merge confirmation
+                          setWalletMergeNonce(result.mergeNonce);
+                          return; // don't show success yet
+                        }
                         toast({ title: "Wallet linked", description: "Your wallet is now linked to your profile." });
                       } catch (e) {
                         const msg = e instanceof Error ? e.message : "Failed to link wallet";
@@ -569,6 +576,51 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Merge confirmation — appears when linked wallet already has its own account ── */}
+        {walletMergeNonce && (
+          <div className="mb-4 p-3 rounded-sm border border-primary/30 bg-primary/5">
+            <p className="text-xs font-semibold text-foreground mb-1">This wallet has its own account</p>
+            <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+              Merging will link this wallet to your current account. Your trade history will stay intact.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="h-7 text-xs rounded-sm"
+                disabled={walletMerging}
+                onClick={async () => {
+                  setWalletMerging(true);
+                  try {
+                    await mergeWallet(walletMergeNonce);
+                    await refreshSocialUser();
+                    setWalletMergeNonce(null);
+                    toast({ title: "Accounts merged", description: "Your wallet is now linked to your profile." });
+                  } catch (e) {
+                    const msg = e instanceof Error ? e.message : "Merge failed";
+                    toast({ title: "Merge failed", description: msg, variant: "destructive" });
+                  } finally {
+                    setWalletMerging(false);
+                    setWalletLinking(false);
+                  }
+                }}
+              >
+                {walletMerging ? <Loader2 className="w-3 h-3 animate-spin" /> : "Merge accounts"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs rounded-sm text-muted-foreground"
+                disabled={walletMerging}
+                onClick={() => { setWalletMergeNonce(null); setWalletLinking(false); }}
+              >
+                Cancel
+              </Button>
+            </div>
           </div>
         )}
 
