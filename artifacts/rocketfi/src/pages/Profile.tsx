@@ -578,14 +578,14 @@ export default function ProfilePage() {
                 }}
                 onClick={() => setAddEmailOpen(true)}
               >
-                <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "#f59e0b" }} />
+                <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0" style={{ color: "#ffffff" }} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium" style={{ color: "#f59e0b" }}>
+                  <p className="text-sm font-medium" style={{ color: "#ffffff" }}>
                     Protect your balance
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     If you lose wallet access your in-app balance will be unrecoverable.{" "}
-                    <span className="underline underline-offset-2" style={{ color: "#f59e0b" }}>
+                    <span className="underline underline-offset-2" style={{ color: "#ffffff" }}>
                       Add an email or Google backup →
                     </span>
                   </p>
