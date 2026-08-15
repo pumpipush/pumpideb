@@ -287,21 +287,6 @@ function MobileListRow({ token, rank, solPrice, isTrending, isVolume }: {
       className="flex items-center gap-2.5 px-3 py-2.5 active:bg-white/5 transition-colors"
       style={{ borderBottom: "1px solid rgba(255,255,255,0.045)" }}
     >
-      {/* Rank */}
-      <div className="w-7 shrink-0 flex justify-center">
-        {isTrending && rank <= 3 ? (
-          <span
-            className="inline-flex items-center justify-center w-6 h-6 rounded-md text-[11px] font-black"
-            style={{
-              background: rank === 1 ? "linear-gradient(135deg,#f59e0b,#d97706)" : rank === 2 ? "linear-gradient(135deg,#94a3b8,#64748b)" : "linear-gradient(135deg,#b45309,#92400e)",
-              color: rank === 1 ? "#000" : rank === 2 ? "#fff" : "#fde68a",
-            }}
-          >{rank}</span>
-        ) : (
-          <span className="text-[12px] font-mono tabular-nums" style={{ color: "#475569" }}>{rank}</span>
-        )}
-      </div>
-
       {/* Avatar */}
       <div className="relative shrink-0">
         <div className="w-9 h-9 rounded-lg overflow-hidden" style={{ outline: "1px solid rgba(255,255,255,0.08)" }}>
