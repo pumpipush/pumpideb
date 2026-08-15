@@ -114,7 +114,7 @@ export function CopyToastProvider() {
             {notif.label}
           </span>
           {notif.sub && (
-            <span className="text-[10px] font-mono text-[#666666] mt-0.5">
+            <span className="text-[10px] font-mono text-[#b3b3b3] mt-0.5">
               {notif.sub}
             </span>
           )}

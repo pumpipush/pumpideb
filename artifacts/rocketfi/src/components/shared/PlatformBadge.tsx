@@ -74,7 +74,7 @@ const PLATFORM_CONFIGS: Record<string, PlatformConfig> = {
     color: "text-white/40",
     bg: "bg-white/5",
     border: "border-white/10",
-    dot: "#6b7280",
+    dot: "#b3b3b3",
     icon: <span role="img" aria-label="unknown">⬡</span>,
   },
 };

@@ -297,7 +297,7 @@ function makeChart(
   opts: { timeVisible?: boolean; rightScale?: boolean; priceFormatter?: (p: number) => string } = {},
 ) {
   return createChart(el, {
-    layout: { background: { type: ColorType.Solid, color: BG }, textColor: "#888888", fontSize: 11, fontFamily: "'Trebuchet MS', system-ui, sans-serif" },
+    layout: { background: { type: ColorType.Solid, color: BG }, textColor: "#b3b3b3", fontSize: 11, fontFamily: "'Trebuchet MS', system-ui, sans-serif" },
     grid: { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
     crosshair: {
       vertLine: { color: "rgba(59,130,246,0.4)", width: 1, style: 3 },
@@ -426,13 +426,13 @@ export const ChartCanvas = memo(function ChartCanvas({
     // showing "O $x H $x L $x C $x" is redundant — just show the price.
     const allSame = bar.open === bar.high && bar.high === bar.low && bar.low === bar.close;
     if (allSame) {
-      el.innerHTML = `<span style="color:#888888">MC</span><span style="color:${VAL}"> ${fmt(bar.close)}</span>`;
+      el.innerHTML = `<span style="color:#b3b3b3">MC</span><span style="color:${VAL}"> ${fmt(bar.close)}</span>`;
     } else {
       el.innerHTML =
-        `<span style="color:#888888">O</span><span style="color:${VAL}"> ${fmt(bar.open)}</span> ` +
-        `<span style="color:#888888">H</span><span style="color:${UP}"> ${fmt(bar.high)}</span> ` +
-        `<span style="color:#888888">L</span><span style="color:${DN}"> ${fmt(bar.low)}</span> ` +
-        `<span style="color:#888888">C</span><span style="color:${VAL}"> ${fmt(bar.close)}</span>`;
+        `<span style="color:#b3b3b3">O</span><span style="color:${VAL}"> ${fmt(bar.open)}</span> ` +
+        `<span style="color:#b3b3b3">H</span><span style="color:${UP}"> ${fmt(bar.high)}</span> ` +
+        `<span style="color:#b3b3b3">L</span><span style="color:${DN}"> ${fmt(bar.low)}</span> ` +
+        `<span style="color:#b3b3b3">C</span><span style="color:${VAL}"> ${fmt(bar.close)}</span>`;
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const writeInnerOhlcRef = useRef(writeInnerOhlc);
@@ -970,7 +970,7 @@ export const ChartCanvas = memo(function ChartCanvas({
               background: "rgba(15,15,15,0.92)",
               border: "1px solid rgba(255,255,255,0.20)",
               borderRadius: 4,
-              color: "#888888",
+              color: "#b3b3b3",
               fontSize: 17,
               fontWeight: 600,
               lineHeight: 1,
@@ -987,7 +987,7 @@ export const ChartCanvas = memo(function ChartCanvas({
             onMouseLeave={e => {
               const b = e.currentTarget as HTMLButtonElement;
               b.style.background  = "rgba(15,15,15,0.92)";
-              b.style.color       = "#888888";
+              b.style.color       = "#b3b3b3";
               b.style.borderColor = "rgba(255,255,255,0.20)";
             }}
           >

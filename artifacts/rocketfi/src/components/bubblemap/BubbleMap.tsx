@@ -119,7 +119,7 @@ function pctToColors(pct: number): {
       edge:   { r: 16, g: 18, b: 30 },
       glow:   "rgba(55,62,100,0.25)",
       border: "rgba(90,100,150,0.50)",
-      pctHex: "#888888",
+      pctHex: "#b3b3b3",
     };
   }
 }
@@ -277,7 +277,7 @@ function circleColors(pct: number): CircleStyle {
     fillCenter: "rgba(28,34,68,0.08)",
     fillMid:    "rgba(40,50,95,0.22)",
     fillEdge:   "rgba(65,80,145,0.48)",
-    text:       "#888888",
+    text:       "#b3b3b3",
   };
 }
 
@@ -852,7 +852,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
           : mcUsd >= 1e6 ? `$${(mcUsd/1e6).toFixed(2)}M`
           : mcUsd >= 1e3 ? `$${(mcUsd/1e3).toFixed(1)}K`
           : `$${mcUsd.toFixed(0)}`;
-        const pctColor = pct > 0.3 ? "#4ade80" : pct < -0.3 ? "#f87171" : "#888888";
+        const pctColor = pct > 0.3 ? "#4ade80" : pct < -0.3 ? "#f87171" : "#b3b3b3";
         return (
           <div
             className="pointer-events-none absolute z-50 px-3 py-2.5 rounded-xl text-[12px] font-medium"
@@ -867,20 +867,20 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
             }}
           >
             <div className="font-bold text-[14px] text-white mb-0.5">{b.symbol.replace(/^\$/, "")}</div>
-            <div className="text-[11px] mb-2" style={{ color: "#666666" }}>{b.name}</div>
+            <div className="text-[11px] mb-2" style={{ color: "#b3b3b3" }}>{b.name}</div>
             <div className="flex justify-between gap-4">
-              <span style={{ color: "#888888" }}>Mkt Cap</span>
+              <span style={{ color: "#b3b3b3" }}>Mkt Cap</span>
               <span className="font-mono text-white">{fmtMc}</span>
             </div>
             <div className="flex justify-between gap-4 mt-0.5">
-              <span style={{ color: "#888888" }}>Change</span>
+              <span style={{ color: "#b3b3b3" }}>Change</span>
               <span className="font-mono font-bold" style={{ color: pctColor }}>
                 {formatPct(pct)}
               </span>
             </div>
             <div className="flex justify-between gap-4 mt-0.5">
-              <span style={{ color: "#888888" }}>Chain</span>
-              <span style={{ color: "#888888" }}>{b.platform}</span>
+              <span style={{ color: "#b3b3b3" }}>Chain</span>
+              <span style={{ color: "#b3b3b3" }}>{b.platform}</span>
             </div>
           </div>
         );

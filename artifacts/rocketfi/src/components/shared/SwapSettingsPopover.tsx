@@ -91,7 +91,7 @@ export function SwapSettingsPopover() {
                       : "rgba(255,255,255,0.06)",
                     color: !isCustomSlippage && settings.slippageBps === bps
                       ? "hsl(var(--primary-foreground))"
-                      : "#888888",
+                      : "#b3b3b3",
                     border: "1px solid " + (!isCustomSlippage && settings.slippageBps === bps
                       ? "transparent"
                       : "rgba(255,255,255,0.08)"),
@@ -153,7 +153,7 @@ export function SwapSettingsPopover() {
                       : "rgba(255,255,255,0.06)",
                     color: !isCustomFee && settings.priorityFee === preset.microLamports
                       ? "hsl(var(--primary-foreground))"
-                      : "#888888",
+                      : "#b3b3b3",
                     border: "1px solid " + (!isCustomFee && settings.priorityFee === preset.microLamports
                       ? "transparent"
                       : "rgba(255,255,255,0.08)"),

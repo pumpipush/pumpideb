@@ -140,7 +140,7 @@ function StatChip({
         {value}
       </span>
       {sub && (
-        <span className="text-[11px] font-medium tabular-nums mt-0.5" style={{ color: color ?? "#6b7280" }}>
+        <span className="text-[11px] font-medium tabular-nums mt-0.5" style={{ color: color ?? "#b3b3b3" }}>
           {sub}
         </span>
       )}
@@ -542,7 +542,7 @@ export default function ProfilePage() {
                       style={{
                         color: realizedPnlLamports > 0 ? "#16a34a"
                           : realizedPnlLamports < 0 ? "#dc2626"
-                          : "#6b7280",
+                          : "#b3b3b3",
                       }}
                     >
                       {realizedPnlLamports > 0 ? "+" : ""}

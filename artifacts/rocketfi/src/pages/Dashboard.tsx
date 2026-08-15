@@ -243,7 +243,7 @@ function ActivityBar({ value, max }: { value: number; max: number }) {
   const fmtTrades = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${n}`;
   return (
     <div className="flex items-center gap-2 justify-end">
-      <span className="font-mono text-[12px] tabular-nums" style={{ color: pct > 60 ? "#f59e0b" : "#666666" }}>
+      <span className="font-mono text-[12px] tabular-nums" style={{ color: pct > 60 ? "#f59e0b" : "#b3b3b3" }}>
         {fmtTrades(value)}
       </span>
       <div className="w-14 h-1.5 rounded-full bg-border/30 overflow-hidden">
@@ -470,7 +470,7 @@ function TableView({ tokens, solPrice, activeTab, startRank }: {
                       <span
                         className="inline-flex items-center justify-center w-6 h-6 rounded-md text-[11px] font-black"
                         style={{
-                          background: rank === 1 ? "linear-gradient(135deg,#f59e0b,#d97706)" : rank === 2 ? "linear-gradient(135deg,#888888,#666666)" : "linear-gradient(135deg,#b45309,#92400e)",
+                          background: rank === 1 ? "linear-gradient(135deg,#f59e0b,#d97706)" : rank === 2 ? "linear-gradient(135deg,#b3b3b3,#b3b3b3)" : "linear-gradient(135deg,#b45309,#92400e)",
                           color: rank === 1 ? "#000" : rank === 2 ? "#fff" : "#fde68a",
                         }}
                       >{rank}</span>
@@ -586,7 +586,7 @@ function TableView({ tokens, solPrice, activeTab, startRank }: {
 // ─── Rank badge config ────────────────────────────────────────────────────────
 const RANK_STYLES: Record<number, { bg: string; text: string; border: string }> = {
   1: { bg: "linear-gradient(135deg,#f59e0b,#d97706)", text: "#000", border: "rgba(251,191,36,0.5)" },
-  2: { bg: "linear-gradient(135deg,#888888,#666666)", text: "#fff", border: "rgba(136,136,136,0.4)" },
+  2: { bg: "linear-gradient(135deg,#b3b3b3,#b3b3b3)", text: "#fff", border: "rgba(136,136,136,0.4)" },
   3: { bg: "linear-gradient(135deg,#b45309,#92400e)", text: "#fde68a", border: "rgba(180,83,9,0.4)" },
 };
 
@@ -647,7 +647,7 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
             className="absolute top-2 left-2 min-w-[26px] h-[22px] flex items-center justify-center rounded-md text-[11px] font-black px-1.5 backdrop-blur-sm"
             style={{
               background: rankStyle?.bg ?? "rgba(0,0,0,0.55)",
-              color: rankStyle?.text ?? "#888888",
+              color: rankStyle?.text ?? "#b3b3b3",
               border: `1px solid ${rankStyle?.border ?? "rgba(255,255,255,0.12)"}`,
               textShadow: rank <= 3 ? "0 1px 2px rgba(0,0,0,0.4)" : "none",
             }}
@@ -715,7 +715,7 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
               </span>
             );
             if (fallback > 0) return (
-              <span className="flex items-center gap-1 text-[12px] font-mono" style={{ color: "#888888" }}>
+              <span className="flex items-center gap-1 text-[12px] font-mono" style={{ color: "#b3b3b3" }}>
                 <BarChart2 className="w-3 h-3" />
                 {fmtTrades(fallback)}
               </span>
@@ -1078,7 +1078,7 @@ export default function Dashboard() {
                 <div className="relative group">
                   <Info
                     className="w-4 h-4 cursor-pointer transition-colors duration-150"
-                    style={{ color: bubbleInfoOpen ? "#888888" : "rgba(136,136,136,0.75)" }}
+                    style={{ color: bubbleInfoOpen ? "#b3b3b3" : "rgba(136,136,136,0.75)" }}
                     onClick={() => setBubbleInfoOpen(v => !v)}
                   />
                   {/* Desktop: hover tooltip / Mobile: tap toggle */}

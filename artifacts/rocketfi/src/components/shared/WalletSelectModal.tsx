@@ -83,9 +83,9 @@ export function WalletSelectModal({ open, onOpenChange, onSuccess }: WalletSelec
             <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
               style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)" }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <rect x="2" y="6" width="20" height="14" rx="3" stroke="#888888" strokeWidth="1.8"/>
-                <path d="M2 10h20" stroke="#888888" strokeWidth="1.8"/>
-                <circle cx="17" cy="15" r="1.5" fill="#888888"/>
+                <rect x="2" y="6" width="20" height="14" rx="3" stroke="#b3b3b3" strokeWidth="1.8"/>
+                <path d="M2 10h20" stroke="#b3b3b3" strokeWidth="1.8"/>
+                <circle cx="17" cy="15" r="1.5" fill="#b3b3b3"/>
               </svg>
             </div>
             <Dialog.Title className="flex-1 text-[15px] font-semibold" style={{ color: "#f2f2f2" }}>
@@ -94,9 +94,9 @@ export function WalletSelectModal({ open, onOpenChange, onSuccess }: WalletSelec
             <Dialog.Close asChild>
               <button
                 className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
-                style={{ background: "rgba(255,255,255,0.05)", color: "#666666" }}
+                style={{ background: "rgba(255,255,255,0.05)", color: "#b3b3b3" }}
                 onMouseEnter={e => (e.currentTarget.style.color = "#e0e0e0")}
-                onMouseLeave={e => (e.currentTarget.style.color = "#666666")}
+                onMouseLeave={e => (e.currentTarget.style.color = "#b3b3b3")}
                 aria-label="Close"
               >
                 <X className="w-4 h-4" />
@@ -137,7 +137,7 @@ export function WalletSelectModal({ open, onOpenChange, onSuccess }: WalletSelec
                     )}
                     {isConnecting
                       ? <Loader2 className="w-4 h-4 animate-spin shrink-0" style={{ color: "#4ade80" }} />
-                      : <ChevronRight className="w-4 h-4 shrink-0" style={{ color: "#666666" }} />
+                      : <ChevronRight className="w-4 h-4 shrink-0" style={{ color: "#b3b3b3" }} />
                     }
                   </button>
                 );
