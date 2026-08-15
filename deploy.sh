@@ -45,6 +45,7 @@ echo ""
 
 # ── 4. Build admin dashboard ──────────────────────────────────────────────────
 echo "▶ Building admin dashboard..."
+export VITE_API_BASE_URL="https://pumpi.io"
 pnpm --filter @workspace/admin run build
 
 # Point nginx admin root to the new admin build
