@@ -58,7 +58,7 @@ export function Sidebar() {
         <Link
           href="/"
           className={cn(
-            "flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-all duration-200 rounded-sm group",
+            "flex items-center gap-3 px-3 py-2.5 text-sm font-normal transition-all duration-200 rounded-sm group",
             location === "/"
               ? "bg-primary/15 text-foreground nav-active-bar"
               : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
@@ -70,7 +70,7 @@ export function Sidebar() {
         <Link
           href="/app"
           className={cn(
-            "flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-all duration-200 rounded-sm group",
+            "flex items-center gap-3 px-3 py-2.5 text-sm font-normal transition-all duration-200 rounded-sm group",
             location === "/app" && !isPortfolio
               ? "bg-primary/15 text-foreground nav-active-bar"
               : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
@@ -83,7 +83,7 @@ export function Sidebar() {
         <Link
           href="/app?tab=portfolio"
           className={cn(
-            "flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-all duration-200 rounded-sm group",
+            "flex items-center gap-3 px-3 py-2.5 text-sm font-normal transition-all duration-200 rounded-sm group",
             isPortfolio
               ? "bg-primary/15 text-foreground nav-active-bar"
               : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
@@ -98,7 +98,7 @@ export function Sidebar() {
           <Link
             href={`/profile/${profile?.username ?? effectiveAddress}`}
             className={cn(
-              "flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-all duration-200 rounded-sm group",
+              "flex items-center gap-3 px-3 py-2.5 text-sm font-normal transition-all duration-200 rounded-sm group",
               location === `/profile/${profile?.username ?? effectiveAddress}`
                 ? "bg-primary/15 text-foreground nav-active-bar"
                 : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
@@ -149,7 +149,7 @@ export function BottomNav() {
         <Link
           href="/"
           className={cn(
-            "flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-wide transition-all duration-200",
+            "flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-normal tracking-wide transition-all duration-200",
             location === "/" ? "text-primary" : "text-muted-foreground"
           )}
         >
@@ -171,7 +171,7 @@ export function BottomNav() {
           <Link
             href={profileHref}
             className={cn(
-              "flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-wide transition-all duration-200",
+              "flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-normal tracking-wide transition-all duration-200",
               isProfileActive ? "text-primary" : "text-muted-foreground"
             )}
           >
@@ -192,7 +192,7 @@ export function BottomNav() {
         ) : (
           <Link
             href="/signin"
-            className="flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-wide text-muted-foreground transition-all duration-200"
+            className="flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-normal tracking-wide text-muted-foreground transition-all duration-200"
           >
             <UserCircle2 className="w-5 h-5" />
             Profile

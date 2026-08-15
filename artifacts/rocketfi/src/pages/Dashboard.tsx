@@ -217,7 +217,7 @@ function SortTh({
   return (
     <th
       className={cn(
-        "px-4 py-3 text-[14px] font-semibold tracking-[0.04em] cursor-pointer select-none transition-colors whitespace-nowrap",
+        "px-4 py-3 text-[14px] font-medium tracking-[0.04em] cursor-pointer select-none transition-colors whitespace-nowrap",
         active ? "text-primary" : "text-muted-foreground/65 hover:text-muted-foreground/85",
         align === "right" ? "text-right" : "text-left",
         className
@@ -401,8 +401,8 @@ function TableView({ tokens, solPrice, activeTab, startRank }: {
       <div className="sm:hidden">
         {/* Column header strip */}
         <div className="flex items-center justify-between px-3 py-2" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
-          <span className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#334155" }}>Token</span>
-          <span className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#334155" }}>{isVolume ? "Vol / 24h%" : "MC / 24h%"}</span>
+          <span className="text-[11px] font-medium uppercase tracking-widest" style={{ color: "#334155" }}>Token</span>
+          <span className="text-[11px] font-medium uppercase tracking-widest" style={{ color: "#334155" }}>{isVolume ? "Vol / 24h%" : "MC / 24h%"}</span>
         </div>
         {sorted.map((token, idx) => (
           <MobileListRow
@@ -421,26 +421,26 @@ function TableView({ tokens, solPrice, activeTab, startRank }: {
         <table className="w-full border-collapse min-w-[640px]">
           <thead>
             <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.025)" }}>
-              <th className="px-4 py-3 text-left text-[14px] font-semibold tracking-[0.04em] text-muted-foreground/60 w-12">#</th>
+              <th className="px-4 py-3 text-left text-[14px] font-medium tracking-[0.04em] text-muted-foreground/60 w-12">#</th>
               {th("name", "Token", "min-w-[200px]")}
               {th("price", "Price", "hidden md:table-cell", "right")}
               {th("marketCap", "Market Cap", "hidden sm:table-cell", "right")}
               <th className={cn(
-                "px-4 py-3 text-[14px] font-semibold tracking-[0.04em] whitespace-nowrap text-right hidden md:table-cell",
+                "px-4 py-3 text-[14px] font-medium tracking-[0.04em] whitespace-nowrap text-right hidden md:table-cell",
                 "text-muted-foreground/65"
               )}>24h %</th>
               {isTrending && (
-                <th className="px-4 py-3 text-[14px] font-semibold tracking-[0.04em] text-muted-foreground/65 whitespace-nowrap text-right hidden lg:table-cell">
+                <th className="px-4 py-3 text-[14px] font-medium tracking-[0.04em] text-muted-foreground/65 whitespace-nowrap text-right hidden lg:table-cell">
                   Trades/hr
                 </th>
               )}
               {isVolume && (
-                <th className="px-4 py-3 text-[14px] font-semibold tracking-[0.04em] text-primary/80 whitespace-nowrap text-right hidden lg:table-cell">
+                <th className="px-4 py-3 text-[14px] font-medium tracking-[0.04em] text-primary/80 whitespace-nowrap text-right hidden lg:table-cell">
                   Volume
                 </th>
               )}
-              <th className="px-4 py-3 text-[14px] font-semibold tracking-[0.04em] text-muted-foreground/65 whitespace-nowrap text-right hidden xl:table-cell">Age</th>
-              <th className="px-4 py-3 text-right text-[14px] font-semibold tracking-[0.04em] text-muted-foreground/60 w-20">Trade</th>
+              <th className="px-4 py-3 text-[14px] font-medium tracking-[0.04em] text-muted-foreground/65 whitespace-nowrap text-right hidden xl:table-cell">Age</th>
+              <th className="px-4 py-3 text-right text-[14px] font-medium tracking-[0.04em] text-muted-foreground/60 w-20">Trade</th>
             </tr>
           </thead>
           <tbody>
@@ -755,7 +755,7 @@ function PlatformFilterStrip({
             key={opt.id}
             onClick={() => onChange(opt.id)}
             className={cn(
-              "snap-start shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold border transition-all duration-150 whitespace-nowrap",
+              "snap-start shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-normal border transition-all duration-150 whitespace-nowrap",
               selected === opt.id
                 ? "bg-primary/15 border-primary/40 text-primary shadow-[0_0_8px_rgba(59,130,246,0.15)]"
                 : "bg-card border-border/40 text-muted-foreground hover:text-foreground hover:border-border"
@@ -1074,7 +1074,7 @@ export default function Dashboard() {
           <section className="mb-3 md:mb-5">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <h2 className="text-[20px] font-medium text-foreground">Bubble Map</h2>
+                <h2 className="text-[22px] font-extrabold text-foreground tracking-tight">Bubble Map</h2>
                 <div className="relative group">
                   <Info
                     className="w-4 h-4 cursor-pointer transition-colors duration-150"
@@ -1130,7 +1130,7 @@ export default function Dashboard() {
 
             {/* Header */}
             <div className="flex items-center justify-between">
-              <h2 className="text-[20px] font-medium text-foreground">Explore coins</h2>
+              <h2 className="text-[22px] font-extrabold text-foreground tracking-tight">Explore coins</h2>
             </div>
 
             {/* Platform filter strip */}
@@ -1150,10 +1150,10 @@ export default function Dashboard() {
                     key={tab}
                     onClick={() => handleTabChange(tab)}
                     className={cn(
-                      "px-3 py-1 text-[14px] font-bold rounded-[3px] transition-all duration-150",
+                      "px-3 py-1 text-[14px] rounded-[3px] transition-all duration-150",
                       activeTab === tab
-                        ? "bg-primary text-black shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
+                        ? "bg-primary text-black shadow-sm font-bold"
+                        : "text-muted-foreground hover:text-foreground font-normal"
                     )}
                   >
                     {tab}
@@ -1167,7 +1167,7 @@ export default function Dashboard() {
                 <button
                   onClick={() => setShowFilters((v) => !v)}
                   className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] border text-[14px] font-medium transition-all duration-150",
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] border text-[14px] font-normal transition-all duration-150",
                     showFilters || activeFilterCount > 0
                       ? "bg-primary/10 border-primary/40 text-primary"
                       : "border-border/50 text-muted-foreground hover:text-foreground hover:border-border"
