@@ -674,7 +674,7 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
       <div className="p-3 flex flex-col gap-1.5">
         <span className="font-semibold text-foreground text-[16px] truncate leading-tight group-hover:text-primary transition-colors duration-200">{token.name}</span>
         <div className="flex justify-between items-center gap-1">
-          <span className="text-muted-foreground font-mono text-[14px] truncate flex-1 min-w-0 pr-1">{displaySymbol(token.symbol)}</span>
+          <span className="text-muted-foreground font-mono text-[14px] truncate flex-1 min-w-0 pr-1">{isPlaceholder(token.symbol) ? "—" : token.symbol}</span>
           <div className="flex items-center gap-1.5 shrink-0">
             {/* pct change pill — Trending & Volume tabs */}
             {pctStr && (
