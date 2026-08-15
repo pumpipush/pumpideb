@@ -11,7 +11,7 @@ const XIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 import { TokenAvatar, getGradient, GRADIENTS, hashSymbol } from "@/components/shared/TokenAvatar";
-import { formatMCUsd, formatUSD } from "@/lib/utils";
+import { formatMCUsd, formatUSD, formatTokenPrice } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { copyToClipboard } from "@/components/shared/CopyToast";
 
@@ -199,9 +199,16 @@ async function generateCardCanvas(
   // ── Price + 1h change ─────────────────────────────────────────────────────
   const priceY = AY + AV + 20;
   const priceUsd = stats?.currentPrice && solPrice ? stats.currentPrice * solPrice : null;
+  // Canvas can't render subscript chars — use plain decimal for tiny prices
+  const fmtCanvasPrice = (p: number) => {
+    if (p >= 0.01) return formatUSD(p);
+    const s = p.toFixed(20);
+    const zeros = s.slice(2).match(/^0*/)?.[0].length ?? 0;
+    return `$0.${"0".repeat(zeros)}${s.slice(2 + zeros, 2 + zeros + 4)}`;
+  };
   const priceStr = priceUsd
-    ? (priceUsd < 0.0001 ? `$${priceUsd.toExponential(2)}` : formatUSD(priceUsd))
-    : (token.priceEth ? parseFloat(token.priceEth).toExponential(4)+" SOL" : "—");
+    ? fmtCanvasPrice(priceUsd)
+    : (token.priceEth ? `${parseFloat(token.priceEth).toFixed(8).replace(/\.?0+$/, "")} SOL` : "—");
 
   ctx.textAlign = "left"; ctx.textBaseline = "top";
   ctx.fillStyle = "#ffffff";
@@ -262,8 +269,8 @@ export function ShareModal({ token, open, onClose, solPrice, priceStats }: Share
 
   const priceUsd = priceStats?.currentPrice && solPrice ? priceStats.currentPrice * solPrice : null;
   const priceStr = priceUsd
-    ? (priceUsd < 0.0001 ? `$${priceUsd.toExponential(2)}` : formatUSD(priceUsd))
-    : token.priceEth ? parseFloat(token.priceEth).toExponential(4)+" SOL" : "—";
+    ? formatTokenPrice(priceUsd)
+    : token.priceEth ? `${parseFloat(token.priceEth).toFixed(8).replace(/\.?0+$/, "")} SOL` : "—";
 
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden";
