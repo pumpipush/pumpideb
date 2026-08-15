@@ -671,11 +671,18 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
         </div>
       </div>
 
-      <div className="p-3 flex flex-col gap-1.5">
+      <div className="p-3 flex flex-col gap-1">
+        {/* Name */}
         <span className="font-semibold text-foreground text-[16px] truncate leading-tight group-hover:text-primary transition-colors duration-200">{token.name}</span>
-        <div className="flex justify-between items-center gap-1">
-          <span className="text-muted-foreground font-mono text-[14px] truncate flex-1 min-w-0 pr-1">{isPlaceholder(token.symbol) ? "—" : (token.symbol ?? "").replace(/^\$/, "")}</span>
-          <div className="flex items-center gap-1.5 shrink-0">
+        {/* Symbol — own row below name, full width, no truncation clash */}
+        {!isPlaceholder(token.symbol) && (
+          <span className="text-muted-foreground/70 font-mono text-[11px] truncate leading-none">
+            {(token.symbol ?? "").replace(/^\$/, "")}
+          </span>
+        )}
+        {/* pct + MC row — full width, no symbol competing for space */}
+        <div className="flex items-center justify-between gap-1 mt-0.5">
+          <div className="flex items-center gap-1.5">
             {/* pct change pill — Trending & Volume tabs */}
             {pctStr && (
               <span
@@ -685,10 +692,10 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
                 {pctStr}
               </span>
             )}
-            <span className="text-foreground font-mono text-[16px] font-semibold">
-              {formatMCUsd(token.marketCapEth, solPrice)} <span className="text-muted-foreground/60 font-normal text-[14px]">MC</span>
-            </span>
           </div>
+          <span className="text-foreground font-mono text-[16px] font-semibold">
+            {formatMCUsd(token.marketCapEth, solPrice)} <span className="text-muted-foreground/60 font-normal text-[14px]">MC</span>
+          </span>
         </div>
         <div className="flex items-center justify-between mt-0.5">
           {/* Bottom-left: volume for Volume tab, age otherwise */}
