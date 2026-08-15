@@ -693,8 +693,8 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
               </span>
             )}
           </div>
-          <span className="text-foreground font-mono text-[16px] font-semibold">
-            {formatMCUsd(token.marketCapEth, solPrice)} <span className="text-muted-foreground/60 font-normal text-[14px]">MC</span>
+          <span className="text-foreground font-mono text-[14px] font-semibold whitespace-nowrap">
+            {formatMCUsd(token.marketCapEth, solPrice)} <span className="text-muted-foreground/60 font-normal text-[12px]">MC</span>
           </span>
         </div>
         <div className="flex items-center justify-between mt-0.5">
