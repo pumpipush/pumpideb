@@ -3232,19 +3232,19 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     {/* Header */}
                     <div className="flex items-center justify-between px-4 py-2.5"
                       style={{ background: "rgba(255,255,255,0.025)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                      <div className="flex items-center gap-2">
-                        <ShieldCheck className="h-3.5 w-3.5" style={{ color: "#f87171" }} />
-                        <span className="text-[14px] font-semibold" style={{ color: "#e2e8f0" }}>Dev Activity</span>
-                        <span className="text-[12px]" style={{ color: "#475569" }}>creator wallet</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "#f87171" }} />
+                        <span className="text-[14px] font-semibold whitespace-nowrap" style={{ color: "#e2e8f0" }}>Dev Activity</span>
+                        <span className="text-[12px] hidden sm:inline whitespace-nowrap" style={{ color: "#475569" }}>creator wallet</span>
                       </div>
                       {!loadingDevActivity && dev?.creatorAddress && isSoldOut && (
-                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0"
                           style={{ background: "rgba(248,113,113,0.15)", color: "#f87171", border: "1px solid rgba(248,113,113,0.25)" }}>
                           🚨 DEV DUMPED
                         </span>
                       )}
                       {!loadingDevActivity && dev?.creatorAddress && isDumping && !isSoldOut && (
-                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0"
                           style={{ background: "rgba(251,146,60,0.15)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.25)" }}>
                           ⚠️ DEV SELLING
                         </span>
@@ -3301,7 +3301,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         {/* SOL bought */}
                         <div className="flex items-center justify-between py-3"
                           style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                          <span className="text-[12px] uppercase tracking-widest font-semibold" style={{ color: "#475569" }}>SOL Spent Buying</span>
+                          <span className="text-[12px] uppercase tracking-wider font-semibold whitespace-nowrap" style={{ color: "#475569" }}>SOL Spent</span>
                           <span className="font-mono text-[13px]" style={{ color: "#4ade80" }}>
                             {solBought < 0.001 ? "<0.001" : solBought.toFixed(3)} SOL
                           </span>
@@ -3310,7 +3310,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         {/* SOL sold */}
                         <div className="flex items-center justify-between py-3"
                           style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                          <span className="text-[12px] uppercase tracking-widest font-semibold" style={{ color: "#475569" }}>SOL Received Selling</span>
+                          <span className="text-[12px] uppercase tracking-wider font-semibold whitespace-nowrap" style={{ color: "#475569" }}>SOL Received</span>
                           <span className="font-mono text-[13px]" style={{ color: solSold > 0 ? "#f87171" : "#475569" }}>
                             {solSold < 0.001 && solSold > 0 ? "<0.001" : solSold.toFixed(3)} SOL
                           </span>
@@ -3389,7 +3389,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         <span className="text-[14px] font-semibold" style={{ color: "#e2e8f0" }}>
                           {snipers.length} sniper{snipers.length !== 1 ? "s" : ""}
                         </span>
-                        <span className="text-[12px]" style={{ color: "#475569" }}>detected in first 5 min</span>
+                        <span className="text-[12px] hidden sm:inline whitespace-nowrap" style={{ color: "#475569" }}>first 5 min</span>
                       </div>
                       {snipers.length > 0 && (() => {
                         const sold = snipers.filter(s => {
@@ -3406,156 +3406,150 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       })()}
                     </div>
 
-                    {/* Table */}
-                    <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                      <table style={{ minWidth: "520px", width: "100%", borderCollapse: "collapse" }}>
-                        <thead>
-                          <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}>
-                            <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569", width: 40 }}>#</th>
-                            <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Address</th>
-                            <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Speed</th>
-                            <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>SOL Spent</th>
-                            <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Tokens</th>
-                            <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Status</th>
-                            <th style={{ width: 36 }} />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {loadingSnipers ? (
-                            [...Array(6)].map((_, i) => (
-                              <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                                <td className="px-3 py-3 text-center"><Skeleton className="h-3.5 w-4 mx-auto" /></td>
-                                <td className="px-3 py-3"><Skeleton className="h-3.5 w-28" /></td>
-                                <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-10 ml-auto" /></td>
-                                <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-14 ml-auto" /></td>
-                                <td className="px-3 py-3 text-right"><Skeleton className="h-3.5 w-16 ml-auto" /></td>
-                                <td className="px-3 py-3 text-center"><Skeleton className="h-5 w-16 mx-auto rounded-full" /></td>
-                                <td style={{ width: 36 }} />
-                              </tr>
-                            ))
-                          ) : snipers.length === 0 ? (
-                            <tr>
-                              <td colSpan={7} className="px-4 py-14 text-center">
-                                <div className="flex flex-col items-center gap-2">
-                                  <Zap className="h-5 w-5" style={{ color: "#334155" }} />
-                                  <p className="text-[13px] font-semibold" style={{ color: "#475569" }}>No snipers detected</p>
-                                  <p className="text-[11px]" style={{ color: "#334155" }}>No buys recorded in the first 5 minutes</p>
-                                </div>
-                              </td>
-                            </tr>
-                          ) : snipers.map((s, idx) => {
-                            const totalBought = Math.max(0, parseFloat(s.totalBought) || 0);
-                            const netBalance  = Math.max(0, parseFloat(s.netBalance)  || 0);
-                            const soldAmt     = Math.max(0, totalBought - netBalance);
-                            const soldPct     = totalBought > 0 ? (soldAmt / totalBought) * 100 : 0;
-                            const isSoldOut   = soldPct >= 99;
-                            const isHolding   = soldPct < 1;
-                            const solSpent    = parseFloat(s.totalSolIn) / LAMPORTS_PER_SOL;
-                            const sec         = s.secondsAfterLaunch;
-                            const fmtSpeed    = sec < 60
-                              ? `${sec}s`
-                              : sec < 3600
-                              ? `${Math.floor(sec / 60)}m ${sec % 60}s`
-                              : `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
-                            const speedColor  = sec <= 10 ? "#f87171" : sec <= 30 ? "#fb923c" : sec <= 60 ? "#fbbf24" : "#94a3b8";
+                    {/* Shared row data builder */}
+                    {(() => {
+                      if (loadingSnipers) return (
+                        <div className="px-4 py-4 space-y-3">
+                          {[...Array(5)].map((_, i) => (
+                            <div key={i} className="flex items-center justify-between gap-3">
+                              <div className="flex flex-col gap-1.5 flex-1">
+                                <Skeleton className="h-3.5 w-32" />
+                                <Skeleton className="h-3 w-48" />
+                              </div>
+                              <Skeleton className="h-5 w-16 rounded-full shrink-0" />
+                            </div>
+                          ))}
+                        </div>
+                      );
+                      if (snipers.length === 0) return (
+                        <div className="px-4 py-14 text-center flex flex-col items-center gap-2">
+                          <Zap className="h-5 w-5" style={{ color: "#334155" }} />
+                          <p className="text-[13px] font-semibold" style={{ color: "#475569" }}>No snipers detected</p>
+                          <p className="text-[11px]" style={{ color: "#334155" }}>No buys in the first 5 minutes</p>
+                        </div>
+                      );
 
-                            return (
-                              <tr key={s.address}
-                                className="group"
-                                style={{ borderBottom: "1px solid rgba(255,255,255,0.035)", transition: "background 0.12s" }}
-                                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
-                                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                      const rows = snipers.map((s, idx) => {
+                        const totalBought = Math.max(0, parseFloat(s.totalBought) || 0);
+                        const netBalance  = Math.max(0, parseFloat(s.netBalance)  || 0);
+                        const soldAmt     = Math.max(0, totalBought - netBalance);
+                        const soldPct     = totalBought > 0 ? (soldAmt / totalBought) * 100 : 0;
+                        const isSoldOut   = soldPct >= 99;
+                        const isHolding   = soldPct < 1;
+                        const solSpent    = parseFloat(s.totalSolIn) / LAMPORTS_PER_SOL;
+                        const sec         = s.secondsAfterLaunch;
+                        const fmtSpeed    = sec < 60 ? `${sec}s` : sec < 3600 ? `${Math.floor(sec / 60)}m ${sec % 60}s` : `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
+                        const speedColor  = sec <= 10 ? "#f87171" : sec <= 30 ? "#fb923c" : sec <= 60 ? "#fbbf24" : "#94a3b8";
+                        const statusEl    = isSoldOut
+                          ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ background: "rgba(248,113,113,0.12)", color: "#f87171", border: "1px solid rgba(248,113,113,0.25)" }}>SOLD OUT</span>
+                          : isHolding
+                          ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.25)" }}>HOLDING</span>
+                          : <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ background: "rgba(251,191,36,0.12)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.25)" }}>{soldPct.toFixed(0)}% SOLD</span>;
+                        return { s, idx, fmtSpeed, speedColor, solSpent, statusEl };
+                      });
+
+                      return (
+                        <>
+                          {/* ── Mobile list (< sm) ── */}
+                          <div className="sm:hidden">
+                            {rows.map(({ s, idx, fmtSpeed, speedColor, solSpent, statusEl }) => (
+                              <div key={s.address}
+                                className="flex items-start justify-between gap-2 px-3 py-2.5"
+                                style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
                               >
-                                {/* Rank */}
-                                <td className="px-3 py-2.5 text-center" style={{ width: 40 }}>
-                                  <span className="font-mono text-[13px] font-bold"
+                                {/* Left: rank + address + meta */}
+                                <div className="flex items-start gap-2 min-w-0">
+                                  <span className="font-mono text-[12px] font-bold w-7 shrink-0 pt-0.5 text-right"
                                     style={{ color: idx < 3 ? "#fbbf24" : "#475569" }}>
                                     #{idx + 1}
                                   </span>
-                                </td>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <button onClick={() => copyToClipboard(s.address)} title={s.address}>
+                                        <span className="font-mono text-[13px]" style={{ color: "#94a3b8" }}>
+                                          {s.address.slice(0, 6)}…{s.address.slice(-4)}
+                                        </span>
+                                      </button>
+                                      <a href={`https://solscan.io/account/${s.address}`} target="_blank" rel="noopener noreferrer"
+                                        className="inline-flex items-center justify-center w-5 h-5 rounded transition-all"
+                                        style={{ background: "rgba(255,255,255,0.06)", color: "#475569" }}>
+                                        <ExternalLink className="h-3 w-3" />
+                                      </a>
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                      <span className="font-mono text-[12px] font-bold whitespace-nowrap" style={{ color: speedColor }}>⚡ {fmtSpeed}</span>
+                                      <span style={{ color: "#1e293b" }}>·</span>
+                                      <span className="font-mono text-[12px] whitespace-nowrap" style={{ color: "#cbd5e1" }}>{solSpent < 0.001 ? "<0.001" : solSpent.toFixed(3)} SOL</span>
+                                      <span style={{ color: "#1e293b" }}>·</span>
+                                      <span className="font-mono text-[12px] whitespace-nowrap" style={{ color: "#64748b" }}>{formatAtomicTokenAmount(s.totalBought)}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                {/* Right: status */}
+                                <div className="shrink-0 pt-0.5">{statusEl}</div>
+                              </div>
+                            ))}
+                          </div>
 
-                                {/* Address */}
-                                <td className="px-3 py-2.5">
-                                  <button
-                                    className="flex items-center gap-1.5 group/addr"
-                                    onClick={() => copyToClipboard(s.address)}
-                                    title={s.address}
+                          {/* ── Desktop table (sm+) ── */}
+                          <div className="hidden sm:block overflow-x-auto">
+                            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "520px" }}>
+                              <thead>
+                                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}>
+                                  <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569", width: 40 }}>#</th>
+                                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Address</th>
+                                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Speed</th>
+                                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>SOL Spent</th>
+                                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Tokens</th>
+                                  <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#475569" }}>Status</th>
+                                  <th style={{ width: 36 }} />
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {rows.map(({ s, idx, fmtSpeed, speedColor, solSpent, statusEl }) => (
+                                  <tr key={s.address} className="group"
+                                    style={{ borderBottom: "1px solid rgba(255,255,255,0.035)", transition: "background 0.12s" }}
+                                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+                                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                                   >
-                                    <span className="font-mono text-[13px] transition-colors group-hover/addr:text-slate-200"
-                                      style={{ color: "#94a3b8" }}>
-                                      {s.address.slice(0, 6)}…{s.address.slice(-4)}
-                                    </span>
-                                  </button>
-                                </td>
-
-                                {/* Speed */}
-                                <td className="px-3 py-2.5 text-right">
-                                  <span className="font-mono text-[12px] font-bold" style={{ color: speedColor }}>
-                                    ⚡ {fmtSpeed}
-                                  </span>
-                                </td>
-
-                                {/* SOL Spent */}
-                                <td className="px-3 py-2.5 text-right">
-                                  <span className="font-mono text-[13px]" style={{ color: "#cbd5e1" }}>
-                                    {solSpent < 0.001 ? "<0.001" : solSpent.toFixed(3)} SOL
-                                  </span>
-                                </td>
-
-                                {/* Tokens bought */}
-                                <td className="px-3 py-2.5 text-right">
-                                  <span className="font-mono text-[13px]" style={{ color: "#94a3b8" }}>
-                                    {formatAtomicTokenAmount(s.totalBought)}
-                                  </span>
-                                </td>
-
-                                {/* Status badge */}
-                                <td className="px-3 py-2.5 text-center">
-                                  {isSoldOut ? (
-                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
-                                      style={{ background: "rgba(248,113,113,0.12)", color: "#f87171", border: "1px solid rgba(248,113,113,0.25)" }}>
-                                      SOLD OUT
-                                    </span>
-                                  ) : isHolding ? (
-                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
-                                      style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.25)" }}>
-                                      HOLDING
-                                    </span>
-                                  ) : (
-                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
-                                      style={{ background: "rgba(251,191,36,0.12)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.25)" }}>
-                                      {soldPct.toFixed(0)}% SOLD
-                                    </span>
-                                  )}
-                                </td>
-
-                                {/* Explorer */}
-                                <td className="pr-3 py-2.5 text-center" style={{ width: 36 }}>
-                                  <a
-                                    href={`https://solscan.io/account/${s.address}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    title="View on Solscan"
-                                    className="inline-flex items-center justify-center w-7 h-7 rounded-md transition-all"
-                                    style={{ background: "rgba(255,255,255,0.06)", color: "#475569" }}
-                                    onMouseEnter={e => {
-                                      (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.12)";
-                                      (e.currentTarget as HTMLAnchorElement).style.color = "#cbd5e1";
-                                    }}
-                                    onMouseLeave={e => {
-                                      (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.06)";
-                                      (e.currentTarget as HTMLAnchorElement).style.color = "#475569";
-                                    }}
-                                  >
-                                    <ExternalLink className="h-3.5 w-3.5" />
-                                  </a>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                                    <td className="px-3 py-2.5 text-center" style={{ width: 40 }}>
+                                      <span className="font-mono text-[13px] font-bold" style={{ color: idx < 3 ? "#fbbf24" : "#475569" }}>#{idx + 1}</span>
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <button className="flex items-center gap-1.5" onClick={() => copyToClipboard(s.address)} title={s.address}>
+                                        <span className="font-mono text-[13px] hover:text-slate-200 transition-colors" style={{ color: "#94a3b8" }}>
+                                          {s.address.slice(0, 6)}…{s.address.slice(-4)}
+                                        </span>
+                                      </button>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-right">
+                                      <span className="font-mono text-[12px] font-bold" style={{ color: speedColor }}>⚡ {fmtSpeed}</span>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-right">
+                                      <span className="font-mono text-[13px]" style={{ color: "#cbd5e1" }}>{solSpent < 0.001 ? "<0.001" : solSpent.toFixed(3)} SOL</span>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-right">
+                                      <span className="font-mono text-[13px]" style={{ color: "#94a3b8" }}>{formatAtomicTokenAmount(s.totalBought)}</span>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-center">{statusEl}</td>
+                                    <td className="pr-3 py-2.5 text-center" style={{ width: 36 }}>
+                                      <a href={`https://solscan.io/account/${s.address}`} target="_blank" rel="noopener noreferrer"
+                                        className="inline-flex items-center justify-center w-7 h-7 rounded-md transition-all"
+                                        style={{ background: "rgba(255,255,255,0.06)", color: "#475569" }}
+                                        onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.12)"; (e.currentTarget as HTMLAnchorElement).style.color = "#cbd5e1"; }}
+                                        onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.06)"; (e.currentTarget as HTMLAnchorElement).style.color = "#475569"; }}
+                                      >
+                                        <ExternalLink className="h-3.5 w-3.5" />
+                                      </a>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 );
               })()}
