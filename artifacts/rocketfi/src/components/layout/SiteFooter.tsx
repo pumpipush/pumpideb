@@ -23,26 +23,26 @@ export function SiteFooter() {
     <footer className="mt-auto border-t border-border/40 px-5 py-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
       {/* Copyright + version */}
       <div className="flex items-center gap-2 shrink-0">
-        <span className="text-[12px] text-muted-foreground/60">
+        <span className="text-[14px] text-muted-foreground">
           © {YEAR} Pumpi. All rights reserved.
         </span>
       </div>
 
       {/* Legal links */}
       <div className="flex items-center gap-3 flex-wrap">
-        <Link href="/privacy" className="text-[12px] text-muted-foreground/60 hover:text-foreground transition-colors">
+        <Link href="/privacy" className="text-[14px] text-muted-foreground hover:text-foreground transition-colors">
           Privacy Policy
         </Link>
-        <span className="text-muted-foreground/30 text-[12px]">·</span>
-        <Link href="/disclaimer" className="text-[12px] text-muted-foreground/60 hover:text-foreground transition-colors">
+        <span className="text-muted-foreground/40 text-[14px]">·</span>
+        <Link href="/disclaimer" className="text-[14px] text-muted-foreground hover:text-foreground transition-colors">
           Disclaimer
         </Link>
-        <span className="text-muted-foreground/30 text-[12px]">·</span>
-        <Link href="/terms" className="text-[12px] text-muted-foreground/60 hover:text-foreground transition-colors">
+        <span className="text-muted-foreground/40 text-[14px]">·</span>
+        <Link href="/terms" className="text-[14px] text-muted-foreground hover:text-foreground transition-colors">
           Terms of Service
         </Link>
-        <span className="text-muted-foreground/30 text-[12px]">·</span>
-        <Link href="/contact" className="text-[12px] text-muted-foreground/60 hover:text-foreground transition-colors">
+        <span className="text-muted-foreground/40 text-[14px]">·</span>
+        <Link href="/contact" className="text-[14px] text-muted-foreground hover:text-foreground transition-colors">
           Contact
         </Link>
       </div>
