@@ -567,6 +567,85 @@ router.get("/tokens/:address/holders", heavyLimiter, asyncWrap(async (req, res) 
   res.json({ holders, count: holders.length });
 }));
 
+// GET /tokens/:address/dev-activity — creator wallet trade summary for a token.
+// Returns total SOL bought/sold, net token balance, last sell timestamp, and trade counts.
+// Uses creator_address from the tokens table — returns 404 if the token has no creator recorded.
+router.get("/tokens/:address/dev-activity", heavyLimiter, asyncWrap(async (req, res) => {
+  const address = req.params.address as string;
+  if (!address) { res.status(400).json({ error: "address required" }); return; }
+
+  const { rows } = await pool.query<{
+    creator_address: string | null;
+    total_sol_bought: string | null;
+    total_sol_sold: string | null;
+    net_balance: string | null;
+    total_bought: string | null;
+    buy_count: string | null;
+    sell_count: string | null;
+    last_sell_at: string | null;
+  }>(`
+    WITH creator AS (
+      SELECT creator_address FROM tokens WHERE address = $1
+    ),
+    dev_trades AS (
+      SELECT
+        SUM(CASE WHEN t.is_buy  THEN CAST(NULLIF(t.eth_amount,   '') AS NUMERIC) ELSE 0 END) AS total_sol_bought,
+        SUM(CASE WHEN NOT t.is_buy THEN CAST(NULLIF(t.eth_amount, '') AS NUMERIC) ELSE 0 END) AS total_sol_sold,
+        GREATEST(0, SUM(
+          CASE WHEN t.is_buy
+            THEN  CAST(NULLIF(t.token_amount,'') AS NUMERIC)
+            ELSE -CAST(NULLIF(t.token_amount,'') AS NUMERIC)
+          END
+        )) AS net_balance,
+        SUM(CASE WHEN t.is_buy THEN CAST(NULLIF(t.token_amount,'') AS NUMERIC) ELSE 0 END) AS total_bought,
+        COUNT(*) FILTER (WHERE t.is_buy)      AS buy_count,
+        COUNT(*) FILTER (WHERE NOT t.is_buy)  AS sell_count,
+        MAX(CASE WHEN NOT t.is_buy THEN t.timestamp END) AS last_sell_at
+      FROM trades t
+      JOIN creator c ON t.trader_address = c.creator_address
+      WHERE t.token_address = $1
+        AND t.token_amount IS NOT NULL AND t.token_amount <> '' AND t.token_amount <> '0'
+        AND t.eth_amount   IS NOT NULL AND t.eth_amount   <> ''
+    )
+    SELECT
+      (SELECT creator_address FROM creator) AS creator_address,
+      total_sol_bought,
+      total_sol_sold,
+      net_balance,
+      total_bought,
+      buy_count,
+      sell_count,
+      last_sell_at
+    FROM dev_trades
+  `, [address]);
+
+  if (rows.length === 0 || !rows[0].creator_address) {
+    res.json({
+      creatorAddress: null,
+      totalSolBought: "0",
+      totalSolSold: "0",
+      netBalance: "0",
+      totalBought: "0",
+      buyCount: 0,
+      sellCount: 0,
+      lastSellAt: null,
+    });
+    return;
+  }
+
+  const r = rows[0];
+  res.json({
+    creatorAddress: r.creator_address,
+    totalSolBought: r.total_sol_bought ?? "0",
+    totalSolSold:   r.total_sol_sold   ?? "0",
+    netBalance:     r.net_balance      ?? "0",
+    totalBought:    r.total_bought     ?? "0",
+    buyCount:       Number(r.buy_count  ?? 0),
+    sellCount:      Number(r.sell_count ?? 0),
+    lastSellAt:     r.last_sell_at     ?? null,
+  });
+}));
+
 // GET /tokens/:address/snipers — wallets whose FIRST buy was within 5 min of token launch.
 // Returns ALL trade stats for those wallets (buys + sells) so the UI can show
 // current holding %, sold %, and P&L.

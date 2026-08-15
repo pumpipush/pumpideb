@@ -969,6 +969,27 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   });
   const topWallets = topWalletsData?.wallets ?? [];
 
+  // ── Dev activity — creator wallet trade summary ──────────────────────────────
+  const { data: devActivityData, isLoading: loadingDevActivity } = useQuery({
+    queryKey: ["devActivity", selectedAddress],
+    queryFn: async (): Promise<{
+      creatorAddress: string | null;
+      totalSolBought: string; totalSolSold: string;
+      netBalance: string; totalBought: string;
+      buyCount: number; sellCount: number;
+      lastSellAt: string | null;
+    } | null> => {
+      if (!selectedAddress) return null;
+      const res = await fetch(`/api/tokens/${selectedAddress}/dev-activity`);
+      if (!res.ok) throw new Error(`dev-activity fetch failed: ${res.status}`);
+      return res.json();
+    },
+    enabled: !!selectedAddress,
+    refetchInterval: 15_000,
+    staleTime: 12_000,
+    placeholderData: (prev) => prev,
+  });
+
   // ── Snipers — wallets that bought within 5 min of launch ────────────────────
   const { data: snipersData, isLoading: loadingSnipers } = useQuery({
     queryKey: ["snipers", selectedAddress],
@@ -2384,6 +2405,17 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   <TrendingUp className="h-3.5 w-3.5" /> Positions
                 </button>
                 <button
+                  onClick={() => setActiveSubTab("dev")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all shrink-0"
+                  style={{
+                    background: activeSubTab === "dev" ? "rgba(248,113,113,0.15)" : "rgba(255,255,255,0.04)",
+                    color: activeSubTab === "dev" ? "#f87171" : "#64748b",
+                    border: "1px solid " + (activeSubTab === "dev" ? "rgba(248,113,113,0.30)" : "rgba(255,255,255,0.06)"),
+                  }}
+                >
+                  <ShieldCheck className="h-3.5 w-3.5" /> Dev
+                </button>
+                <button
                   onClick={() => setActiveSubTab("snipers")}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all shrink-0"
                   style={{
@@ -3176,6 +3208,169 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   </table>
                 </div>
               </div>
+
+              {/* Dev activity panel */}
+              {activeSubTab === "dev" && (() => {
+                const LAMPORTS_PER_SOL = 1e9;
+                const dev = devActivityData;
+                const totalBought = Math.max(0, parseFloat(dev?.totalBought ?? "0") || 0);
+                const netBalance  = Math.max(0, parseFloat(dev?.netBalance  ?? "0") || 0);
+                const soldAmt     = Math.max(0, totalBought - netBalance);
+                const soldPct     = totalBought > 0 ? (soldAmt / totalBought) * 100 : 0;
+                const solBought   = (parseFloat(dev?.totalSolBought ?? "0") || 0) / LAMPORTS_PER_SOL;
+                const solSold     = (parseFloat(dev?.totalSolSold   ?? "0") || 0) / LAMPORTS_PER_SOL;
+                const netSol      = solSold - solBought;
+                const isSoldOut   = soldPct >= 99;
+                const isDumping   = soldPct >= 50;
+
+                return (
+                  <div className="rounded-lg overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-4 py-2.5"
+                      style={{ background: "rgba(255,255,255,0.025)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="h-3.5 w-3.5" style={{ color: "#f87171" }} />
+                        <span className="text-[14px] font-semibold" style={{ color: "#e2e8f0" }}>Dev Activity</span>
+                        <span className="text-[12px]" style={{ color: "#475569" }}>creator wallet</span>
+                      </div>
+                      {!loadingDevActivity && dev?.creatorAddress && isSoldOut && (
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: "rgba(248,113,113,0.15)", color: "#f87171", border: "1px solid rgba(248,113,113,0.25)" }}>
+                          🚨 DEV DUMPED
+                        </span>
+                      )}
+                      {!loadingDevActivity && dev?.creatorAddress && isDumping && !isSoldOut && (
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: "rgba(251,146,60,0.15)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.25)" }}>
+                          ⚠️ DEV SELLING
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Content */}
+                    {loadingDevActivity ? (
+                      <div className="px-4 py-6 space-y-3">
+                        {[...Array(4)].map((_, i) => (
+                          <div key={i} className="flex items-center justify-between">
+                            <Skeleton className="h-3.5 w-28" />
+                            <Skeleton className="h-3.5 w-20" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : !dev?.creatorAddress ? (
+                      <div className="px-4 py-14 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <ShieldCheck className="h-5 w-5" style={{ color: "#334155" }} />
+                          <p className="text-[13px] font-semibold" style={{ color: "#475569" }}>No creator data</p>
+                          <p className="text-[11px]" style={{ color: "#334155" }}>Creator address not recorded for this token</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="px-4 py-4 space-y-0">
+                        {/* Creator address row */}
+                        <div className="flex items-center justify-between py-3"
+                          style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                          <span className="text-[12px] uppercase tracking-widest font-semibold" style={{ color: "#475569" }}>Creator</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              className="flex items-center gap-1.5 group/addr"
+                              onClick={() => { navigator.clipboard.writeText(dev.creatorAddress!); }}
+                              title={dev.creatorAddress}
+                            >
+                              <span className="font-mono text-[13px] transition-colors hover:text-slate-200" style={{ color: "#94a3b8" }}>
+                                {dev.creatorAddress.slice(0, 6)}…{dev.creatorAddress.slice(-4)}
+                              </span>
+                            </button>
+                            <a
+                              href={`https://solscan.io/account/${dev.creatorAddress}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="View on Solscan"
+                              className="inline-flex items-center justify-center w-6 h-6 rounded-md transition-all"
+                              style={{ background: "rgba(255,255,255,0.06)", color: "#475569" }}
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </div>
+                        </div>
+
+                        {/* SOL bought */}
+                        <div className="flex items-center justify-between py-3"
+                          style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                          <span className="text-[12px] uppercase tracking-widest font-semibold" style={{ color: "#475569" }}>SOL Spent Buying</span>
+                          <span className="font-mono text-[13px]" style={{ color: "#4ade80" }}>
+                            {solBought < 0.001 ? "<0.001" : solBought.toFixed(3)} SOL
+                          </span>
+                        </div>
+
+                        {/* SOL sold */}
+                        <div className="flex items-center justify-between py-3"
+                          style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                          <span className="text-[12px] uppercase tracking-widest font-semibold" style={{ color: "#475569" }}>SOL Received Selling</span>
+                          <span className="font-mono text-[13px]" style={{ color: solSold > 0 ? "#f87171" : "#475569" }}>
+                            {solSold < 0.001 && solSold > 0 ? "<0.001" : solSold.toFixed(3)} SOL
+                          </span>
+                        </div>
+
+                        {/* Net P&L */}
+                        <div className="flex items-center justify-between py-3"
+                          style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                          <span className="text-[12px] uppercase tracking-widest font-semibold" style={{ color: "#475569" }}>Net P&L</span>
+                          <span className="font-mono text-[13px] font-bold"
+                            style={{ color: netSol >= 0 ? "#4ade80" : "#f87171" }}>
+                            {netSol >= 0 ? "+" : ""}{netSol.toFixed(3)} SOL
+                          </span>
+                        </div>
+
+                        {/* Still holding */}
+                        <div className="flex items-center justify-between py-3"
+                          style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                          <span className="text-[12px] uppercase tracking-widest font-semibold" style={{ color: "#475569" }}>Still Holding</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[13px]" style={{ color: "#cbd5e1" }}>
+                              {formatAtomicTokenAmount(String(Math.round(netBalance)))}
+                            </span>
+                            {isSoldOut ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                                style={{ background: "rgba(248,113,113,0.12)", color: "#f87171", border: "1px solid rgba(248,113,113,0.25)" }}>
+                                SOLD OUT
+                              </span>
+                            ) : isDumping ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                                style={{ background: "rgba(251,146,60,0.12)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.25)" }}>
+                                {soldPct.toFixed(0)}% SOLD
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                                style={{ background: "rgba(74,222,128,0.12)", color: "#4ade80", border: "1px solid rgba(74,222,128,0.25)" }}>
+                                HOLDING
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Trade counts + last sell */}
+                        <div className="flex items-center justify-between py-3">
+                          <span className="text-[12px] uppercase tracking-widest font-semibold" style={{ color: "#475569" }}>Trades</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-[12px]" style={{ color: "#4ade80" }}>
+                              {dev.buyCount} buy{dev.buyCount !== 1 ? "s" : ""}
+                            </span>
+                            <span className="text-[12px]" style={{ color: dev.sellCount > 0 ? "#f87171" : "#475569" }}>
+                              {dev.sellCount} sell{dev.sellCount !== 1 ? "s" : ""}
+                            </span>
+                            {dev.lastSellAt && (
+                              <span className="text-[11px]" style={{ color: "#475569" }}>
+                                last sell {timeAgo(new Date(dev.lastSellAt).getTime())}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Snipers panel */}
               {activeSubTab === "snipers" && (() => {
