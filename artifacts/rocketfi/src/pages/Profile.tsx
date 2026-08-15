@@ -155,7 +155,7 @@ export default function ProfilePage() {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const { wallet, openWalletModal } = useWallet();
-  const { socialUser } = useAuth();
+  const { socialUser, unlinkWallet } = useAuth();
   const solPrice = useSolPrice();
 
   const looksLikeAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(slug);
@@ -166,6 +166,7 @@ export default function ProfilePage() {
   const [depositOpen, setDepositOpen] = useState(false);
   const [addEmailOpen, setAddEmailOpen] = useState(false);
   const [claimLoading, setClaimLoading] = useState(false);
+  const [unlinkLoading, setUnlinkLoading] = useState(false);
   const { submitTx } = useTxToast();
   const { signAndSendTransaction } = useWallet();
 
@@ -250,6 +251,16 @@ export default function ProfilePage() {
       setTimeout(() => { void refetchFees(); }, 4_000);
     } finally {
       setClaimLoading(false);
+    }
+  };
+
+  const handleUnlinkWallet = async () => {
+    if (unlinkLoading) return;
+    setUnlinkLoading(true);
+    try {
+      await unlinkWallet();
+    } finally {
+      setUnlinkLoading(false);
     }
   };
 
@@ -578,6 +589,59 @@ export default function ProfilePage() {
                       Add an email or Google backup →
                     </span>
                   </p>
+                </div>
+              </div>
+            )}
+
+            {/* ══ LINKED WALLET (social users only) ════════════════════════════════ */}
+            {isOwner && socialUser && socialUser.authType !== "wallet" && (
+              <div
+                className="flex items-center gap-3 px-4 py-3.5 rounded-xl mb-5"
+                style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.07)",
+                }}
+              >
+                <Wallet className="w-4 h-4 shrink-0 text-muted-foreground/50" />
+                <div className="min-w-0 flex-1">
+                  {socialUser.linkedWallet ? (
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="min-w-0">
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground/50 font-medium mb-0.5">
+                          Connected wallet
+                        </p>
+                        <button
+                          onClick={() => copyToClipboard(socialUser.linkedWallet!, "Address copied")}
+                          className="inline-flex items-center gap-1.5 text-xs font-mono text-foreground/80 hover:text-foreground transition-colors group"
+                        >
+                          {formatAddress(socialUser.linkedWallet)}
+                          <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => void handleUnlinkWallet()}
+                        disabled={unlinkLoading}
+                        className="shrink-0 text-xs text-muted-foreground/40 hover:text-red-400 transition-colors disabled:opacity-40"
+                      >
+                        {unlinkLoading ? "Unlinking…" : "Unlink"}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground/50 font-medium mb-0.5">
+                          Connected wallet
+                        </p>
+                        <p className="text-xs text-muted-foreground/40">No wallet linked</p>
+                      </div>
+                      <button
+                        onClick={wallet ? () => setEditOpen(true) : openWalletModal}
+                        className="shrink-0 text-xs font-medium text-primary/80 hover:text-primary transition-colors"
+                      >
+                        {wallet ? "Link wallet →" : "Connect wallet →"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
