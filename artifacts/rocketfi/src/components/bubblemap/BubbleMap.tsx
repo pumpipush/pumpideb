@@ -291,9 +291,9 @@ function drawBubble(
 ) {
   const x = b.dispX, y = b.dispY, r = b.dispR;
 
-  // Guard: skip until radius is large enough for all arc calls.
-  // Largest negative arc is r - bw - 2 (inner ring), bw=2.2 → needs r > 4.2; use 6.
-  if (r < 6) return;
+  // Guard: NaN < 6 === false in JS, so the isFinite check MUST come first.
+  // createRadialGradient throws if ANY argument is non-finite (NaN or ±Infinity).
+  if (!isFinite(x) || !isFinite(y) || !isFinite(r) || r < 6) return;
 
   // Fade-in opacity driven by dispR growth (0 → r over ~3s on first open)
   const fadeAlpha = Math.min(1, r / Math.max(b.r, 1));
@@ -637,8 +637,8 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
     newBubbles.sort((a, b) => b.r - a.r);
     bubblesRef.current = newBubbles;
 
-    // Run layout synchronously (fast enough for ≤ 60 tokens)
-    runLayout(newBubbles, W, H);
+    // Run layout synchronously — 300 steps balances quality vs blocking time
+    runLayout(newBubbles, W, H, 300);
   }, [tokens]);
 
   // ── Update colors when live prices come in (no layout recalc) ─────────────
