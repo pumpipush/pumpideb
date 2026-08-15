@@ -677,7 +677,7 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
         {/* Symbol — own row below name, full width, no truncation clash */}
         {!isPlaceholder(token.symbol) && (
           <span className="text-muted-foreground/70 font-mono text-[11px] truncate leading-none">
-            {(token.symbol ?? "").replace(/^\$/, "")}
+            ${(token.symbol ?? "").replace(/^\$/, "")}
           </span>
         )}
         {/* pct + MC row — full width, no symbol competing for space */}
