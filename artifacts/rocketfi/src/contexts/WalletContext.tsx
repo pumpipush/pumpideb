@@ -98,11 +98,39 @@ const WalletContext = createContext<WalletContextValue>({
   signMessage: async () => { throw new Error("WalletContext not mounted"); },
 });
 
+/** Read the already-connected wallet address synchronously (before first render).
+ *  If the wallet extension already has publicKey set (unlocked + site trusted),
+ *  we can skip the async connect() call and avoid the "Connect Wallet to Trade"
+ *  flash that appears while auto-reconnect is in progress. */
+function getInitialWalletState(): { address: string | null; name: WalletName | null; provider: SolanaProvider | null } {
+  try {
+    const savedName = localStorage.getItem(STORAGE_KEY) as WalletName | null;
+    if (!savedName) return { address: null, name: null, provider: null };
+    const descriptor = WALLET_DESCRIPTORS.find(d => d.name === savedName);
+    if (!descriptor) return { address: null, name: null, provider: null };
+    const provider = descriptor.getProvider();
+    if (!provider?.publicKey) return { address: null, name: null, provider: null };
+    const address = provider.publicKey.toBase58();
+    if (!address) return { address: null, name: null, provider: null };
+    return { address, name: savedName, provider };
+  } catch {
+    return { address: null, name: null, provider: null };
+  }
+}
+
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [wallet, setWallet]         = useState<string | null>(null);
-  const [walletName, setWalletName] = useState<WalletName | null>(null);
+  // Initialise synchronously from the wallet extension's publicKey so we never
+  // flash "Connect Wallet to Trade" when the wallet is already unlocked.
+  // Lazy initialisers run only once (on the first render), which is correct here.
+  const [wallet, setWallet]         = useState<string | null>(() => getInitialWalletState().address);
+  const [walletName, setWalletName] = useState<WalletName | null>(() => getInitialWalletState().name);
   const [modalOpen, setModalOpen]   = useState(false);
   const providerRef = useRef<SolanaProvider | null>(null);
+  // Sync providerRef with the initial wallet state on the very first render.
+  // We use a ref (not state) so it's mutated without triggering a re-render.
+  if (providerRef.current === null && wallet !== null) {
+    providerRef.current = getInitialWalletState().provider;
+  }
 
   // ── Listen for wallet events (disconnect, account change) ─────────────────
 
