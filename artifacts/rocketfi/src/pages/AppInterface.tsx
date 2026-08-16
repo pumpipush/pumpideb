@@ -272,22 +272,38 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         image:       imageFile,
       });
 
-      // Step 2: Build transaction via pumpportal.fun (always matches current pump.fun format)
-      setLaunchStep("building");
-      const { transaction, mintAddress: newMint, blockhash, lastValidBlockHeight } =
-        await buildPumpFunCreateTx(wallet, name.trim(), symbol.trim().toUpperCase(), metadataUri);
-      // Step 3: User signs in wallet (mint keypair already signed inside buildPumpFunCreateTx)
-      setLaunchStep("signing");
-      const sig = await signAndSendTransaction(transaction);
+      // Step 2+3: Build tx → sign. Retry up to 3x if blockhash expires before user signs.
+      const MAX_TX_ATTEMPTS = 3;
+      let lastErr: unknown;
+      for (let attempt = 0; attempt < MAX_TX_ATTEMPTS; attempt++) {
+        setLaunchStep("building");
+        const { transaction, mintAddress: newMint, blockhash, lastValidBlockHeight } =
+          await buildPumpFunCreateTx(wallet, name.trim(), symbol.trim().toUpperCase(), metadataUri);
 
-      // Step 4: Wait for on-chain confirmation
-      setLaunchStep("confirming");
-      setConfirmingDetail(null);
-      await waitForTxConfirmation(sig, blockhash, lastValidBlockHeight, setConfirmingDetail);
+        try {
+          setLaunchStep("signing");
+          const sig = await signAndSendTransaction(transaction);
 
-      setLaunchStep("done");
-      setMintAddress(newMint);
-      onLaunch(newMint);
+          // Step 4: Wait for on-chain confirmation
+          setLaunchStep("confirming");
+          setConfirmingDetail(null);
+          await waitForTxConfirmation(sig, blockhash, lastValidBlockHeight, setConfirmingDetail);
+
+          setLaunchStep("done");
+          setMintAddress(newMint);
+          onLaunch(newMint);
+          return; // success — exit the function
+        } catch (txErr: unknown) {
+          const raw = txErr instanceof Error ? txErr.message : String(txErr);
+          // Blockhash expired — rebuild with a fresh one (metadata already uploaded)
+          if (/block height exceeded|expired|Blockhash not found/i.test(raw) && attempt < MAX_TX_ATTEMPTS - 1) {
+            lastErr = txErr;
+            continue;
+          }
+          throw txErr; // non-expiry error or final attempt — surface to outer catch
+        }
+      }
+      throw lastErr;
 
     } catch (err: unknown) {
       setLaunchStep("error");
