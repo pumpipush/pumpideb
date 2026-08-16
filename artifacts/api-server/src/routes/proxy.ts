@@ -168,13 +168,14 @@ router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
     await storageService.uploadToPublicPath(imageSubPath, imageBuffer, imageType);
     const imageUrl = `${baseUrl}/api/storage/public-objects/${imageSubPath}`;
 
-    // 2. Build Metaplex-compatible metadata JSON
+    // 2. Build Metaplex-compatible metadata JSON (pump.fun standard format)
     const metadata: Record<string, unknown> = {
       name:        name.trim(),
       symbol:      symbol.trim(),
       description: descriptionStr,
       image:       imageUrl,
       showName:    true,
+      createdOn:   "https://pump.fun",
     };
     if (typeof twitter === "string" && twitter.trim())  metadata.twitter  = twitter.trim();
     if (typeof telegram === "string" && telegram.trim()) metadata.telegram = telegram.trim();
