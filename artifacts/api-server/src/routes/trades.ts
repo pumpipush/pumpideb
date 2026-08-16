@@ -321,6 +321,8 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
       ]);
 
       let bars: { time: number; open: number; high: number; low: number; close: number; volume: number }[] = [];
+      // Hoisted so the payload below can include live Birdeye MC regardless of whether bars were fetched.
+      let currentMcEth: string | undefined = undefined;
 
       if (birdeyeBars && birdeyeBars.length > 0) {
         const solPrice = await getSolPriceUsd();
@@ -362,6 +364,13 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
             });
           }
 
+          // Live MC from Birdeye overview — piggybacked on the response so the header
+          // can stay in sync with the chart's synthetic current candle without waiting
+          // for the async DB write to propagate back through the token REST endpoint.
+          if (overview.mc && overview.mc > 0) {
+            currentMcEth = String(Math.round(overview.mc / solPrice * 1e9));
+          }
+
           // Keep DB price fresh without blocking the response
           db.update(tokensTable)
             .set({
@@ -370,8 +379,8 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
               // overview.mc is Birdeye's marketCap field (mapped in birdeye.ts via n("marketCap")??n("mc"))
               // Store both the lamport-encoded form AND the raw USD value so effectiveMcEth
               // can use the USD value as a sanity-checked fallback.
-              ...(overview.mc && overview.mc > 0 && solPrice > 0 ? {
-                marketCapEth: String(Math.round(overview.mc / solPrice * 1e9)),
+              ...(overview.mc && overview.mc > 0 ? {
+                marketCapEth: currentMcEth,
                 marketCapUsd: overview.mc,
               } : {}),
             })
@@ -380,7 +389,7 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
         }
       }
 
-      const payload = { bars, maxTradeId: 0 };
+      const payload = { bars, maxTradeId: 0, ...(currentMcEth ? { currentMcEth } : {}) };
       _ohlcvCacheSet(cacheKey, payload, tf);
       res.setHeader("X-Cache", "MISS");
       res.json(payload);
@@ -456,6 +465,9 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
   // ── Birdeye OHLCV proxy for DEX tokens ──────────────────────────────────────
   // If internal trade history is empty, check if this is a DEX token and proxy
   // OHLCV from Birdeye so the chart shows real price history.
+  // Hoisted so the payload below can include live Birdeye MC from whichever DEX branch ran.
+  let currentMcEthFallback: string | undefined = undefined;
+
   if (bars.length === 0) {
     const [tokenRow] = await db
       .select({ platform: tokensTable.platform })
@@ -513,13 +525,18 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
             });
           }
 
+          // Live MC piggybacked on response — keeps header in sync with chart candle.
+          if (overview.mc && overview.mc > 0) {
+            currentMcEthFallback = String(Math.round(overview.mc / solPrice * 1e9));
+          }
+
           // Background: keep token.price_eth fresh in the DB so the info panel
           // always reflects the current Birdeye price, not the stale backfill value.
           db.update(tokensTable)
             .set({
               priceEth:     currentSol.toFixed(15),
               priceUsd:     overview.price,            // doublePrecision column — store as number
-              marketCapEth: overview.mc ? String(Math.round(overview.mc / solPrice * 1e9)) : undefined,
+              marketCapEth: currentMcEthFallback ?? undefined,
             })
             .where(eq(tokensTable.address, address))
             .catch(() => { /* non-fatal */ });
@@ -528,7 +545,7 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
     }
   }
 
-  const payload = { bars, maxTradeId };
+  const payload = { bars, maxTradeId, ...(currentMcEthFallback ? { currentMcEth: currentMcEthFallback } : {}) };
   _ohlcvCacheSet(cacheKey, payload, tf);
   res.setHeader("X-Cache", "MISS");
   res.json(payload);

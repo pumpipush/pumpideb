@@ -1772,12 +1772,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const DEX_PLATFORMS_SET = new Set(["pumpswap", "raydium_launchlab"]);
   const isDexToken = DEX_PLATFORMS_SET.has(token?.platform ?? "");
   const effectiveMcEth = useMemo(() => {
-    // DEX tokens: skip liveToken.marketCapEth — the adapter computes it from
-    // the same /1000-decimal formula used for priceEth, which is unreliable for
-    // non-6-decimal tokens (same bug that caused WSOL price to show 1000× low).
-    // Use DB marketCapEth instead (kept fresh by the Birdeye OHLCV async update).
+    // DEX tokens: prefer the live Birdeye MC piggybacked on the OHLCV response
+    // (serverOhlcv.currentMcEth) — this is the same value that drives the chart's
+    // synthetic current candle, so header and chart stay in sync.
+    // Fall back to DB marketCapEth (kept fresh by the async OHLCV DB write).
+    // Skip liveToken.marketCapEth — the adapter formula is unreliable for non-6-decimal tokens.
     const raw = isDexToken
-      ? token?.marketCapEth
+      ? (serverOhlcv?.currentMcEth ?? token?.marketCapEth)
       : (liveToken?.marketCapEth ?? token?.marketCapEth);
 
     if (raw && raw !== "0") return raw;
@@ -1802,7 +1803,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       const mc = Math.round(1e15 * (vSolSol * 1e9) / vTokAtom);
       return mc > 0 ? mc.toString() : null;
     } catch { return null; }
-  }, [isDexToken, liveToken?.marketCapEth, token?.marketCapEth,
+  }, [isDexToken, serverOhlcv?.currentMcEth, liveToken?.marketCapEth, token?.marketCapEth,
       liveToken?.virtualEthReserves, token?.virtualEthReserves,
       liveToken?.virtualTokenReserves, token?.virtualTokenReserves,
       solPrice]);

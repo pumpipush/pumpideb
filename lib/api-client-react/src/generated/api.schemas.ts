@@ -192,10 +192,14 @@ export interface OHLCVBar {
  * OHLCV endpoint response envelope.
  * bars: candles; maxTradeId: highest trade ID already included in the aggregate
  * (client should only overlay SSE trades with id > maxTradeId to avoid double-counting).
+ * currentMcEth: live Birdeye market cap in lamports (string), present only for DEX tokens
+ * when the Birdeye overview fetch succeeded — use this for the header MC display so it
+ * matches the chart's synthetic current candle exactly.
  */
 export interface OHLCVResponse {
   bars: OHLCVBar[];
   maxTradeId: number;
+  currentMcEth?: string;
 }
 
 export interface ActivityItem {
