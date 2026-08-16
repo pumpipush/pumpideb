@@ -104,8 +104,10 @@ function AppShell() {
                   <Route path="/" component={Dashboard} />
                   <Route path="/explore"><Redirect to="/" /></Route>
                   <Route path="/dashboard"><Redirect to="/" /></Route>
-                  {/* Legacy /app route — redirects to /coin/:address when ?token= is present */}
-                  <Route path="/app" component={AppRoute} />
+                  {/* /launch — main launch + portfolio page */}
+                  <Route path="/launch" component={AppRoute} />
+                  {/* Legacy /app → /launch redirect (keeps old links working) */}
+                  <Route path="/app"><Redirect to="/launch" /></Route>
                   {/* Legacy /token/:address — redirect to canonical /coin/:address */}
                   <Route path="/token/:address" component={LegacyTokenRedirect} />
                   {/* Canonical SEO-friendly coin pages */}

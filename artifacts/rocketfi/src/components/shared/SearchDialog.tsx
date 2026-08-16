@@ -465,7 +465,7 @@ export function SearchDialog() {
               </button>
               <button
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-sm hover:bg-white/[0.05] transition-colors text-left"
-                onClick={() => go("/app")}
+                onClick={() => go("/launch")}
               >
                 <div className="h-6 w-6 rounded bg-muted/60 flex items-center justify-center shrink-0">
                   <Rocket className="h-3 w-3 text-primary" />

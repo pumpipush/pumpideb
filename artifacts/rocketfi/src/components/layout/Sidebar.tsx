@@ -34,7 +34,7 @@ function LaunchTokenButton() {
 export function Sidebar() {
   const [location] = useLocation();
   const search = useSearch();
-  const isPortfolio = location === "/app" && search.includes("tab=portfolio");
+  const isPortfolio = location === "/launch" && search.includes("tab=portfolio");
   const { wallet, walletName } = useWallet();
   const { socialUser } = useAuth();
 
@@ -68,20 +68,20 @@ export function Sidebar() {
           Explore
         </Link>
         <Link
-          href="/app"
+          href="/launch"
           className={cn(
             "flex items-center gap-3 px-3 py-2.5 text-sm font-normal transition-all duration-200 rounded-sm group",
-            location === "/app" && !isPortfolio
+            location === "/launch" && !isPortfolio
               ? "bg-primary/15 text-foreground nav-active-bar"
               : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
           )}
         >
-          <Rocket className={cn("w-4 h-4 transition-transform duration-200", location === "/app" ? "text-primary" : "group-hover:scale-110")} />
+          <Rocket className={cn("w-4 h-4 transition-transform duration-200", location === "/launch" ? "text-primary" : "group-hover:scale-110")} />
           Launch
         </Link>
 
         <Link
-          href="/app?tab=portfolio"
+          href="/launch?tab=portfolio"
           className={cn(
             "flex items-center gap-3 px-3 py-2.5 text-sm font-normal transition-all duration-200 rounded-sm group",
             isPortfolio
@@ -116,7 +116,7 @@ export function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-border/50 flex flex-col gap-3">
-        <Link href="/app" className="block w-full">
+        <Link href="/launch" className="block w-full">
           <LaunchTokenButton />
         </Link>
         <span className="text-center text-[11px] text-muted-foreground">v1.0 beta</span>
@@ -157,7 +157,7 @@ export function BottomNav() {
         </Link>
 
         <Link
-          href="/app"
+          href="/launch"
           className="flex-1 flex flex-col items-center justify-center"
         >
           <div className="relative bg-primary rounded-full w-12 h-12 flex items-center justify-center shadow-[0_0_16px_rgba(255,255,255,0.2)] -mt-5 fab-ring animate-floatY transition-transform duration-150 active:scale-90">
