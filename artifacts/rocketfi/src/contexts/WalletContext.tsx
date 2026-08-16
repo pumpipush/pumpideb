@@ -249,8 +249,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (savedName === "Solflare") return;
 
     // Phantom / Backpack: onlyIfTrusted silently rejects when locked — safe.
+    // Guard against stale resolution: if the user disconnects/switches wallet
+    // before connect() resolves, ignore the result.
+    let cancelled = false;
     provider.connect({ onlyIfTrusted: true })
       .then(result => {
+        if (cancelled) return;
         const publicKey =
           (result as { publicKey?: { toBase58(): string } } | undefined)?.publicKey
           ?? provider.publicKey;
@@ -262,6 +266,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         // Silent failure — wallet locked or permission revoked.
         // Keep localStorage so we retry on next page load.
       });
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

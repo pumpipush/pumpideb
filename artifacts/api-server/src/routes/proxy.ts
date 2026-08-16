@@ -152,15 +152,17 @@ router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
     return res.status(400).json({ error: "Image data is empty" });
   }
 
-  // Derive the public base URL from request headers so the metadataUri is absolute
-  // and fetchable by external clients (pump.fun explorers, wallets, etc.)
-  const forwardedHost = req.headers["x-forwarded-host"];
-  const host = (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost) ??
-    req.headers.host ??
-    "localhost";
-  const forwardedProto = req.headers["x-forwarded-proto"];
-  const proto = (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto) ?? "https";
-  const baseUrl = `${proto}://${host}`;
+  // Use configured PUBLIC_BASE_URL if set — prevents URL poisoning via
+  // client-controlled X-Forwarded-Host / Host headers.
+  // Fall back to deriving from request headers only in development.
+  const baseUrl = process.env["PUBLIC_BASE_URL"] ?? (() => {
+    const forwardedHost = req.headers["x-forwarded-host"];
+    const host = (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost) ??
+      req.headers.host ?? "localhost";
+    const forwardedProto = req.headers["x-forwarded-proto"];
+    const proto = (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto) ?? "https";
+    return `${proto}://${host}`;
+  })();
 
   // ── Path A: Replit object storage (available on Replit hosted envs) ──────────
   try {

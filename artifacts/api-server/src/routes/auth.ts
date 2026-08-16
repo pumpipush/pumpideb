@@ -233,7 +233,7 @@ router.post("/auth/google", asyncWrap(async (req, res) => {
       if (!r.ok) throw new Error(`Google userinfo ${r.status}`);
       info = await r.json() as Record<string, unknown>;
     } catch (err: unknown) {
-      return void res.status(401).json({ error: "invalid Google access_token", detail: String(err) });
+      return void res.status(401).json({ error: "invalid Google access_token", });
     }
     googleId      = String(info.sub ?? "");
     // Always normalise to lowercase — OTP-registered emails are stored lowercase;
@@ -262,7 +262,7 @@ router.post("/auth/google", asyncWrap(async (req, res) => {
       picture       = payload.picture ?? "";
       emailVerified = payload.email_verified ?? false;
     } catch (err: unknown) {
-      return void res.status(401).json({ error: "invalid Google token", detail: String(err) });
+      return void res.status(401).json({ error: "invalid Google token", });
     }
   }
 
@@ -452,7 +452,7 @@ router.post("/auth/link/google", asyncWrap(async (req, res) => {
     emailVerified = info.email_verified === true || info.email_verified === "true";
     if (!googleId) throw new Error("no sub in userinfo");
   } catch (err: unknown) {
-    return void res.status(401).json({ error: "invalid Google access_token", detail: String(err) });
+    return void res.status(401).json({ error: "invalid Google access_token", });
   }
 
   // Ensure neither googleId nor email is already taken by a different profile

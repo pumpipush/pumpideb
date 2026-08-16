@@ -139,12 +139,14 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
     });
 
     // Focus the username field after it renders (e.g. when coming from the nudge banner)
+    let focusTimer: ReturnType<typeof setTimeout> | undefined;
     if (focusUsername) {
-      setTimeout(() => usernameInputRef.current?.focus(), 50);
+      focusTimer = setTimeout(() => usernameInputRef.current?.focus(), 50);
     }
     // Only re-init when the modal first opens or identity changes.
     // Intentionally omit `profile` fields from deps so typing doesn't reset the form.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { if (focusTimer !== undefined) clearTimeout(focusTimer); };
   }, [open, effectiveAddress, profileLoading]);
 
   const close = () => {
@@ -189,7 +191,8 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
       // 1. Crop to 256×256 JPEG Blob
       const blob = await cropToBlob(file);
 
-      // Show a local preview immediately while the upload is in progress
+      // Show a local preview immediately while the upload is in progress.
+      // The object URL is revoked in the finally block once no longer needed.
       const previewUrl = URL.createObjectURL(blob);
       setForm((f) => f && { ...f, avatarPreview: previewUrl });
 
@@ -247,6 +250,9 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
       // Reset preview to what it was before the failed upload
       setForm((f) => f && { ...f, avatarPreview: f.avatarUrl });
     } finally {
+      // Revoke the object URL now that upload has completed or failed —
+      // the form either holds the serving URL or has reverted to avatarUrl.
+      URL.revokeObjectURL(previewUrl);
       setAvatarUploading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

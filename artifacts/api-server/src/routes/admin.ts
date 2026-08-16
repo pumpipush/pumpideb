@@ -182,9 +182,15 @@ router.get("/admin/charts/daily", asyncWrap(async (_req: Request, res: Response)
 // ── GET /admin/users ──────────────────────────────────────────────────────────
 // Paginated user list with optional search.
 
+/** Safely parse a query-string integer, clamping to [min, max]. Rejects NaN/Infinity. */
+function safePageInt(raw: unknown, def: number, min: number, max: number): number {
+  const n = Number(raw);
+  return Math.min(Math.max(Number.isFinite(n) ? Math.floor(n) : def, min), max);
+}
+
 router.get("/admin/users", asyncWrap(async (req: Request, res: Response) => {
-  const limit  = Math.min(Number(req.query.limit  ?? 50), 200);
-  const offset = Number(req.query.offset ?? 0);
+  const limit  = safePageInt(req.query.limit,  50, 1, 200);
+  const offset = safePageInt(req.query.offset,  0, 0, Number.MAX_SAFE_INTEGER);
   const search = (req.query.search as string | undefined)?.trim() ?? "";
 
   const where = search
@@ -227,8 +233,8 @@ router.get("/admin/users", asyncWrap(async (req: Request, res: Response) => {
 // Paginated token list with optional filters.
 
 router.get("/admin/tokens", asyncWrap(async (req: Request, res: Response) => {
-  const limit     = Math.min(Number(req.query.limit    ?? 50), 200);
-  const offset    = Number(req.query.offset   ?? 0);
+  const limit     = safePageInt(req.query.limit,  50, 1, 200);
+  const offset    = safePageInt(req.query.offset,  0, 0, Number.MAX_SAFE_INTEGER);
   const search    = (req.query.search    as string | undefined)?.trim() ?? "";
   const platform  = (req.query.platform  as string | undefined)?.trim() ?? "";
   const graduated = req.query.graduated === "true"  ? true
@@ -313,8 +319,8 @@ router.get("/admin/tokens", asyncWrap(async (req: Request, res: Response) => {
 // Recent trades across all tokens.
 
 router.get("/admin/trades", asyncWrap(async (req: Request, res: Response) => {
-  const limit  = Math.min(Number(req.query.limit  ?? 50), 200);
-  const offset = Number(req.query.offset ?? 0);
+  const limit  = safePageInt(req.query.limit,  50, 1, 200);
+  const offset = safePageInt(req.query.offset,  0, 0, Number.MAX_SAFE_INTEGER);
 
   const [rows, countResult] = await Promise.all([
     db.select({

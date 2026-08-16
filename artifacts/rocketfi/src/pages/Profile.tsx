@@ -370,6 +370,9 @@ export default function ProfilePage() {
       );
       // Refresh balance after a few seconds so the user sees the updated amount
       setTimeout(() => { void refetchFees(); }, 4_000);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Claim failed";
+      toast({ title: "Claim failed", description: msg, variant: "destructive" });
     } finally {
       setClaimLoading(false);
     }
@@ -380,6 +383,9 @@ export default function ProfilePage() {
     setUnlinkLoading(true);
     try {
       await unlinkWallet();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to unlink wallet";
+      toast({ title: "Unlink failed", description: msg, variant: "destructive" });
     } finally {
       setUnlinkLoading(false);
     }
