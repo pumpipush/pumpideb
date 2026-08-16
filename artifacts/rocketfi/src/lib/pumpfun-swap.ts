@@ -399,12 +399,16 @@ export async function waitForTxConfirmation(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.startsWith("Transaction failed on-chain")) throw err;
-    if (/BlockheightExceeded|expired/i.test(msg)) throw err;
+    // BlockheightExceeded means the validity window passed, but the transaction
+    // may have been included in a block BEFORE the window closed.  Fall through
+    // to the polling phase — getSignatureStatus(searchTransactionHistory:true)
+    // will find it even after the blockhash expires.
     phase1Err = err;
   }
 
   // Phase 2: polling fallback via getSignatureStatus.
-  // Reliably detects a confirmed tx that confirmTransaction missed.
+  // Reliably detects a confirmed tx that confirmTransaction missed (including
+  // the common BlockheightExceeded false-negative).
   const POLL_INTERVAL_MS = 3_000;
   const POLL_ATTEMPTS    = 10;
 

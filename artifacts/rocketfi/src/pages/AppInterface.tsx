@@ -273,6 +273,10 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       });
 
       // Step 2+3: Build tx → sign. Retry up to 3x if blockhash expires before user signs.
+      // IMPORTANT: We track the last signature separately so that if confirmation
+      // times out / blockhash expires AFTER the wallet broadcast, we can check
+      // getSignatureStatus before deciding to build a new coin (new mint).
+      // Creating a new mint when the previous tx already confirmed = duplicate coin.
       const MAX_TX_ATTEMPTS = 3;
       let lastErr: unknown;
       for (let attempt = 0; attempt < MAX_TX_ATTEMPTS; attempt++) {
@@ -280,10 +284,23 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         const { transaction, mintAddress: newMint, blockhash, lastValidBlockHeight } =
           await buildPumpFunCreateTx(wallet, name.trim(), symbol.trim().toUpperCase(), metadataUri);
 
+        let sig: string | null = null;
         try {
           setLaunchStep("signing");
-          const sig = await signAndSendTransaction(transaction);
+          sig = await signAndSendTransaction(transaction);
+          // tx was broadcast — now wait for confirmation
+        } catch (signErr: unknown) {
+          // Error came from the wallet before broadcasting (user rejected, or
+          // blockhash expired in preflight). Safe to retry with a new transaction.
+          const raw = signErr instanceof Error ? signErr.message : String(signErr);
+          if (/block height exceeded|expired|Blockhash not found/i.test(raw) && attempt < MAX_TX_ATTEMPTS - 1) {
+            lastErr = signErr;
+            continue;
+          }
+          throw signErr;
+        }
 
+        try {
           // Step 4: Wait for on-chain confirmation
           setLaunchStep("confirming");
           setConfirmingDetail(null);
@@ -292,15 +309,33 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           setLaunchStep("done");
           setMintAddress(newMint);
           onLaunch(newMint);
-          return; // success — exit the function
-        } catch (txErr: unknown) {
-          const raw = txErr instanceof Error ? txErr.message : String(txErr);
-          // Blockhash expired — rebuild with a fresh one (metadata already uploaded)
-          if (/block height exceeded|expired|Blockhash not found/i.test(raw) && attempt < MAX_TX_ATTEMPTS - 1) {
-            lastErr = txErr;
+          return; // success
+        } catch (confirmErr: unknown) {
+          // Confirmation failed — but the tx may have already landed on-chain.
+          // Check the signature BEFORE building a new mint to avoid duplicates.
+          try {
+            const { value: status } = await getConnection().getSignatureStatus(sig, {
+              searchTransactionHistory: true,
+            });
+            if (status && !status.err &&
+                (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized")) {
+              // The coin WAS created — treat as success.
+              setLaunchStep("done");
+              setMintAddress(newMint);
+              onLaunch(newMint);
+              return;
+            }
+          } catch {
+            // getSignatureStatus network error — proceed to decide on retry
+          }
+
+          const raw = confirmErr instanceof Error ? confirmErr.message : String(confirmErr);
+          if (/block height exceeded|expired|Blockhash not found|timeout/i.test(raw) && attempt < MAX_TX_ATTEMPTS - 1) {
+            // Tx truly expired (not confirmed) — safe to retry with a new mint
+            lastErr = confirmErr;
             continue;
           }
-          throw txErr; // non-expiry error or final attempt — surface to outer catch
+          throw confirmErr;
         }
       }
       throw lastErr;
