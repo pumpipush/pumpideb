@@ -15,10 +15,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Inline favicon as data URI — guarantees browser tab icon loads in ALL environments
+         (dev, staging, production) without any network request.
+         Solflare and other wallet extensions read the tab favicon via chrome.tabs.get;
+         an inline data URI makes it available immediately on first render. -->
+    <link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAIKUExURQAAAAsWHAsWHQoVGwwXHAwWHAwXHQ4ZHwkVHAoVHQ8aIA0XHQcTGQAHDQkUGg0YHgsXHwwXHgAKEAAFDAUQFgYRFxYhJpicn9fZ2drc3drb3Nrc3Nnb3NTW17a5u3l/giQuNAAGDAcSGMHExf////f494SKjQURFwgTGQALEUFJTvn5+fz8/Pz8/fz9/f7+/vr7+/v7+/r6+ri7vQsVHAEMEzpDSPv8/P39/fj4+KKnqQAJEA4ZHgMOFKyvsVphZaWpq/n5+k1UWQAJD32ChcbIysbIycHDxd7f4F5laQAABL7Bw7e6vQAMEgMOFQIOEwINEwINFKGlp09XWwAAB8PGx/3+/u7v7xwmKw0YHQACCbW5u0dQVAAABsLExjQ+QgADCqCkpxQgJkBJTzM9QgkUGQUPFoKHi4ySlYGGiuvs7BkjKQALE0dPU7y/wdPV1tLU1VxkZxokKsnLzLS3uQ4YHgEMEkBITczOz1JZXEdPVAAKEa6xs/f39/T09ZWanAAIDhslK+zt7fr6+6SoqgAHDlxkaOjp6Wxydq2xs8nMzcvNzp+jpV9lahQfJAYSGBwnLO/v716DhgUQFwENEwAGDQ8aHw8ZH2BnaxchJw4YH7C0ta2wsh8pLvDx8WJqbklRVvPz9CIrMTlCR/f3+MrMzQIOFKisrVVdYAgUGnJ4e6isrkRMUQAAAHTAR0cAAAABdFJOUwBA5thmAAAAAWJLR0QAiAUdSAAAAAlwSFlzAAAOwwAADsMBx2+oZAAAAAd0SU1FB+oIDwsmJg6eIOsAAAIfSURBVDjLhZL3XxMxGMYbQhPtcQ0crWIrKO2rXDWapg5OAbFWKi6se++9cW+tIu6FinXvrX+kuZb2rnzox+eH++HyzfOOPB5UhSoI578e159qr9dbjbzuYwcgFOFRo7EtRH2ac2sI0Gp0P6utrSOEML9RH/CRckALjhnbMC4UDoXC48ONTRMmNiNW7hCJgluTJreYrARgzGJTYCpXmsancxGXCYAZM/3EcWCzZoOUnLfyVmnFgQtrDsxta3eVYB3zSvad8yEJIg4LUrQIYETMqoXRrnRXOr2oe/GSpZAACcvabAAPNUlw8/KeFZlMx8qeVavXrAW5DtZviBDsXpRGNEI2UrRp85at20AK2J5hrk2qDTJlSdCOzp27dnerRmFPGYDUrMZe09y3/0DgIAC34NDhGuIG2JGjx4739jacOHkK1DIScNqZwtaZs+eyQ56/ICEphJBw8VIZQPXLcIVz6yqo/gRPwrUsdb8FiVy/AZYQlkgkeF8fwM0AIm6A9t+ybwpR2ObtOzFMyl6TZu/aAEDjvfvRBw8f6awYiAJAHj8ZUBUkPE1Fnj2vHzRflGJXAHL6S2VgwcCr4Os6lqOlPBUBmn2jAAlvU77hsc4DJPjufb7Ch/7ciAA1PtopgU+fW1zmTuRUor6oRH2FbxmGRgDsh/j+wx7/p0ErAOQX/t3056+hoQqAStRgSo8NK4CdPSgiR2k7QhUdKsvzP/0DZQNnngXcw1oAAAAldEVYdGRhdGU6Y3JlYXRlADIwMjYtMDgtMTRUMTY6MDU6MDYrMDA6MDCcSGbmAAAAJXRFWHRkYXRlOm1vZGlmeQAyMDI2LTA4LTE0VDE2OjA1OjA2KzAwOjAw7RXeWgAAACh0RVh0ZGF0ZTp0aW1lc3RhbXAAMjAyNi0wOC0xNVQxMTozODozOCswMDowMNu3+UMAAAAASUVORK5CYII=" />
+    <!-- Fallback file-served icons for environments where data URI may be blocked -->
     <link rel="icon" type="image/png" sizes="512x512" href="%BASE_URL%icon-512.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="%BASE_URL%icon-192.png" />
     <link rel="icon" type="image/x-icon" href="%BASE_URL%favicon.ico" />
-    <link rel="icon" type="image/png" sizes="32x32" href="%BASE_URL%favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="%BASE_URL%favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="%BASE_URL%apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
