@@ -667,7 +667,12 @@ router.get("/tokens/:address/dev-activity", heavyLimiter, asyncWrap(async (req, 
     FROM dev_trades
   `, [address]);
 
-  if (rows.length === 0 || !rows[0].creator_address) {
+  // Treat "unknown" the same as null — it means the creator wallet was never reliably decoded.
+  const creatorAddress = rows[0]?.creator_address && rows[0].creator_address !== "unknown"
+    ? rows[0].creator_address
+    : null;
+
+  if (rows.length === 0 || !creatorAddress) {
     res.json({
       creatorAddress: null,
       totalSolBought: "0",
@@ -683,7 +688,7 @@ router.get("/tokens/:address/dev-activity", heavyLimiter, asyncWrap(async (req, 
 
   const r = rows[0];
   res.json({
-    creatorAddress: r.creator_address,
+    creatorAddress,
     totalSolBought: r.total_sol_bought ?? "0",
     totalSolSold:   r.total_sol_sold   ?? "0",
     netBalance:     r.net_balance      ?? "0",
@@ -710,9 +715,10 @@ router.get("/tokens/:address/snipers", heavyLimiter, asyncWrap(async (req, res) 
     net_balance: string;
     buy_count: string;
     sell_count: string;
+    total_count: string;
   }>(`
     WITH token_start AS (
-      SELECT created_at FROM tokens WHERE address = $1
+      SELECT created_at, creator_address FROM tokens WHERE address = $1
     ),
     early_buyers AS (
       SELECT trader_address, MIN(timestamp) AS first_buy_at
@@ -721,6 +727,10 @@ router.get("/tokens/:address/snipers", heavyLimiter, asyncWrap(async (req, res) 
         AND is_buy = true
         AND timestamp <= (SELECT created_at FROM token_start) + INTERVAL '5 minutes'
         AND token_amount IS NOT NULL AND token_amount <> '' AND token_amount <> '0'
+        -- Exclude the creator wallet so it doesn't appear in the sniper list.
+        -- Also exclude "unknown" which is a placeholder for unresolved creators.
+        AND trader_address IS DISTINCT FROM (SELECT creator_address FROM token_start)
+        AND trader_address <> 'unknown'
       GROUP BY trader_address
     ),
     sniper_stats AS (
@@ -737,7 +747,8 @@ router.get("/tokens/:address/snipers", heavyLimiter, asyncWrap(async (req, res) 
           END
         )) AS net_balance,
         COUNT(*) FILTER (WHERE t.is_buy)      AS buy_count,
-        COUNT(*) FILTER (WHERE NOT t.is_buy)  AS sell_count
+        COUNT(*) FILTER (WHERE NOT t.is_buy)  AS sell_count,
+        COUNT(*) OVER ()                      AS total_count
       FROM trades t
       JOIN early_buyers eb ON t.trader_address = eb.trader_address
       CROSS JOIN token_start ts
@@ -762,7 +773,10 @@ router.get("/tokens/:address/snipers", heavyLimiter, asyncWrap(async (req, res) 
     sellCount:          Number(r.sell_count),
   }));
 
-  res.json({ snipers, count: snipers.length });
+  // totalCount is the true number of snipers (may exceed the 100-row cap).
+  const totalCount = rows.length > 0 ? Number(rows[0].total_count) : 0;
+
+  res.json({ snipers, count: snipers.length, totalCount });
 }));
 
 // GET /wallet/:address/holdings — tokens held by a wallet (net balance > 0 across ALL trades)

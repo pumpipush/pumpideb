@@ -1245,7 +1245,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const topWallets = topWalletsData?.wallets ?? [];
 
   // ── Dev activity — creator wallet trade summary ──────────────────────────────
-  const { data: devActivityData, isLoading: loadingDevActivity } = useQuery({
+  const { data: devActivityData, isLoading: loadingDevActivity, isError: devActivityError } = useQuery({
     queryKey: ["devActivity", selectedAddress],
     queryFn: async (): Promise<{
       creatorAddress: string | null;
@@ -1266,25 +1266,27 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   });
 
   // ── Snipers — wallets that bought within 5 min of launch ────────────────────
-  const { data: snipersData, isLoading: loadingSnipers } = useQuery({
+  const { data: snipersData, isLoading: loadingSnipers, isError: snipersError } = useQuery({
     queryKey: ["snipers", selectedAddress],
     queryFn: async (): Promise<{
-      address: string; firstBuyAt: string; secondsAfterLaunch: number;
-      totalSolIn: string; totalBought: string; netBalance: string;
-      buyCount: number; sellCount: number;
-    }[]> => {
-      if (!selectedAddress) return [];
+      snipers: { address: string; firstBuyAt: string; secondsAfterLaunch: number;
+        totalSolIn: string; totalBought: string; netBalance: string;
+        buyCount: number; sellCount: number; }[];
+      totalCount: number;
+    }> => {
+      if (!selectedAddress) return { snipers: [], totalCount: 0 };
       const res = await fetch(`/api/tokens/${selectedAddress}/snipers`);
       if (!res.ok) throw new Error(`snipers fetch failed: ${res.status}`);
       const json = await res.json();
-      return json.snipers ?? [];
+      return { snipers: json.snipers ?? [], totalCount: json.totalCount ?? json.count ?? 0 };
     },
     enabled: !!selectedAddress,
     refetchInterval: 30_000,
     staleTime: 25_000,
     placeholderData: (prev) => prev,
   });
-  const snipers = snipersData ?? [];
+  const snipers = snipersData?.snipers ?? [];
+  const snipersTotalCount = snipersData?.totalCount ?? snipers.length;
 
   // ── Server-side reference prices for % change (SQL — no 100-row cap) ────────
   // High-volume tokens exhaust the 100-row history in < 2 min, so we query DB
@@ -2739,10 +2741,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   }}
                 >
                   <Zap className="h-3.5 w-3.5" /> Snipers
-                  {snipers.length > 0 && (
+                  {snipersTotalCount > 0 && (
                     <span className="ml-1 text-[11px] font-bold px-1.5 py-0.5 rounded-full"
                       style={{ background: "rgba(255,255,255,0.08)", color: activeSubTab === "snipers" ? "#e0e0e0" : "#b3b3b3" }}>
-                      {snipers.length}
+                      {snipersTotalCount > snipers.length ? `>${snipers.length}` : snipersTotalCount}
                     </span>
                   )}
                 </button>
@@ -3594,6 +3596,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                           </div>
                         ))}
                       </div>
+                    ) : devActivityError ? (
+                      <div className="px-4 py-14 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <ShieldCheck className="h-5 w-5" style={{ color: "#3a3a3a" }} />
+                          <p className="text-[13px] font-semibold" style={{ color: "#555555" }}>Failed to load dev data</p>
+                          <p className="text-[11px]" style={{ color: "#3a3a3a" }}>Try refreshing the page</p>
+                        </div>
+                      </div>
                     ) : !dev?.creatorAddress ? (
                       <div className="px-4 py-14 text-center">
                         <div className="flex flex-col items-center gap-2">
@@ -3604,6 +3614,17 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       </div>
                     ) : (
                       <div className="px-4 py-4 space-y-0">
+                        {/* PumpSwap disclaimer — creator = first observed trader, not verified on-chain creator */}
+                        {token?.platform === "pumpswap" && (
+                          <div className="flex items-center gap-2 py-2.5 mb-1"
+                            style={{ borderBottom: "1px solid rgba(251,191,36,0.1)", background: "rgba(251,191,36,0.04)", margin: "0 -16px", padding: "8px 16px" }}>
+                            <span className="text-[10px] font-mono shrink-0" style={{ color: "rgba(251,191,36,0.7)" }}>⚠</span>
+                            <span className="text-[11px]" style={{ color: "rgba(251,191,36,0.6)" }}>
+                              Graduated token — creator is the first indexed trader, not the verified on-chain creator
+                            </span>
+                          </div>
+                        )}
+
                         {/* Creator address row */}
                         <div className="flex items-center justify-between py-3"
                           style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
@@ -3720,7 +3741,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       <div className="flex items-center gap-2">
                         <Zap className="h-3.5 w-3.5" style={{ color: "#fbbf24" }} />
                         <span className="text-[14px] font-semibold" style={{ color: "#e0e0e0" }}>
-                          {snipers.length} sniper{snipers.length !== 1 ? "s" : ""}
+                          {snipersTotalCount > snipers.length ? `>${snipers.length}` : snipersTotalCount} sniper{snipersTotalCount !== 1 ? "s" : ""}
                         </span>
                         <span className="text-[12px] hidden sm:inline whitespace-nowrap" style={{ color: "#555555" }}>first 5 min</span>
                       </div>
@@ -3752,6 +3773,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               <Skeleton className="h-5 w-16 rounded-full shrink-0" />
                             </div>
                           ))}
+                        </div>
+                      );
+                      if (snipersError) return (
+                        <div className="px-4 py-14 text-center flex flex-col items-center gap-2">
+                          <Zap className="h-5 w-5" style={{ color: "#3a3a3a" }} />
+                          <p className="text-[13px] font-semibold" style={{ color: "#555555" }}>Failed to load snipers</p>
+                          <p className="text-[11px]" style={{ color: "#3a3a3a" }}>Try refreshing the page</p>
                         </div>
                       );
                       if (snipers.length === 0) return (
