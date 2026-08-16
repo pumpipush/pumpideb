@@ -238,15 +238,27 @@ router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
 
     // Fetch the metadata JSON to extract the image URL so the frontend
     // can store it in the DB and display the logo immediately after launch.
+    // ipfs.io alone is often slow from VPS IPs; race several gateways so the
+    // fastest one wins and we stay well inside the request timeout.
     let ipfsImageUrl: string | null = null;
     try {
-      const metaRes = await fetch(pumpData.metadataUri, { signal: AbortSignal.timeout(10_000) });
-      if (metaRes.ok) {
-        const meta = await metaRes.json() as { image?: string };
-        ipfsImageUrl = (typeof meta.image === "string" && meta.image) ? meta.image : null;
-      }
+      const cid = pumpData.metadataUri.replace(/^https?:\/\/[^/]+\/ipfs\//, "");
+      const gateways = [
+        pumpData.metadataUri,                          // whatever pump.fun returned (ipfs.io)
+        `https://cf-ipfs.com/ipfs/${cid}`,             // Cloudflare IPFS
+        `https://gateway.pinata.cloud/ipfs/${cid}`,    // Pinata
+        `https://dweb.link/ipfs/${cid}`,               // Protocol Labs
+      ];
+      const metaJson = await Promise.any(
+        gateways.map(url =>
+          fetch(url, { signal: AbortSignal.timeout(8_000) })
+            .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+        )
+      );
+      const meta = metaJson as { image?: string };
+      ipfsImageUrl = (typeof meta.image === "string" && meta.image) ? meta.image : null;
     } catch {
-      // Non-fatal — logo may still appear once the adapter enriches from metadataUri
+      // Non-fatal — logo will appear once the enrichment adapter processes the token
     }
 
     console.info("[proxy] pump-ipfs-upload: used pump.fun fallback successfully", { imageUrl: ipfsImageUrl });
