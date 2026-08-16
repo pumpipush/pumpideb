@@ -23,8 +23,8 @@
  */
 
 import { Router, type IRouter } from "express";
-import { eq, or } from "drizzle-orm";
-import { db, profilesTable } from "@workspace/db";
+import { eq, or, and, sql } from "drizzle-orm";
+import { db, profilesTable, followsTable } from "@workspace/db";
 import {
   GetProfileParams,
   GetProfileResponse,
@@ -337,6 +337,245 @@ router.patch("/profiles/:address", asyncWrap(async (req, res) => {
   }
 
   res.json(response.data);
+}));
+
+// ── Follow auth helper ────────────────────────────────────────────────────────
+// Resolves the caller's profile address from either:
+//   A) JWT Bearer token  (social / email users)
+//   B) Authorization: Wallet <address>  (wallet-only users, lightweight)
+// Returns null if no valid auth found.
+function resolveFollowCaller(authHeader: string | undefined): string | null {
+  if (!authHeader) return null;
+
+  // Path A: JWT Bearer
+  const bearer = extractBearer(authHeader);
+  if (bearer) {
+    const payload = verifyToken(bearer);
+    return payload ? payload.sub : null;
+  }
+
+  // Path B: Wallet <address>
+  if (authHeader.startsWith("Wallet ")) {
+    const addr = authHeader.slice(7).trim();
+    if (addr.length >= 32) return addr;
+  }
+
+  return null;
+}
+
+// ── POST /profiles/:address/follow ────────────────────────────────────────────
+// Follow a profile. Auth required (JWT or Wallet header). No self-follow.
+router.post("/profiles/:address/follow", asyncWrap(async (req, res) => {
+  const targetAddress = String(req.params.address ?? "").trim();
+  if (!targetAddress) { res.status(400).json({ error: "Missing target address" }); return; }
+
+  const callerAddress = resolveFollowCaller(req.headers.authorization);
+  if (!callerAddress) { res.status(401).json({ error: "Authentication required" }); return; }
+
+  if (callerAddress === targetAddress) {
+    res.status(400).json({ error: "Cannot follow yourself" }); return;
+  }
+
+  // Verify target profile exists
+  const [target] = await db.select({ address: profilesTable.address }).from(profilesTable)
+    .where(eq(profilesTable.address, targetAddress)).limit(1);
+  if (!target) { res.status(404).json({ error: "Profile not found" }); return; }
+
+  // Verify caller profile exists
+  const [caller] = await db.select({ address: profilesTable.address }).from(profilesTable)
+    .where(eq(profilesTable.address, callerAddress)).limit(1);
+  if (!caller) { res.status(403).json({ error: "You need a profile to follow others" }); return; }
+
+  // Insert follow + increment counters in a transaction
+  await db.transaction(async (tx) => {
+    await tx.insert(followsTable)
+      .values({ followerAddress: callerAddress, followingAddress: targetAddress })
+      .onConflictDoNothing();
+    await tx.update(profilesTable)
+      .set({ followingCount: sql`${profilesTable.followingCount} + 1` })
+      .where(and(
+        eq(profilesTable.address, callerAddress),
+        // Only increment if the follow row was actually new (prevent double-counting)
+        // We use a subquery: only update if the follow now exists
+        sql`EXISTS (SELECT 1 FROM follows WHERE follower_address = ${callerAddress} AND following_address = ${targetAddress})`
+      ));
+    await tx.update(profilesTable)
+      .set({ followersCount: sql`${profilesTable.followersCount} + 1` })
+      .where(eq(profilesTable.address, targetAddress));
+  }).catch((err: unknown) => {
+    // Unique constraint: already following — silently OK
+    if ((err as { code?: string }).code !== "23505") throw err;
+  });
+
+  // Re-read counters to return accurate values
+  const [updated] = await db.select({
+    followersCount: profilesTable.followersCount,
+    followingCount: profilesTable.followingCount,
+  }).from(profilesTable).where(eq(profilesTable.address, targetAddress)).limit(1);
+
+  res.json({ isFollowing: true, followersCount: updated?.followersCount ?? 0 });
+}));
+
+// ── DELETE /profiles/:address/follow ──────────────────────────────────────────
+// Unfollow a profile. Auth required.
+router.delete("/profiles/:address/follow", asyncWrap(async (req, res) => {
+  const targetAddress = String(req.params.address ?? "").trim();
+  if (!targetAddress) { res.status(400).json({ error: "Missing target address" }); return; }
+
+  const callerAddress = resolveFollowCaller(req.headers.authorization);
+  if (!callerAddress) { res.status(401).json({ error: "Authentication required" }); return; }
+
+  // Delete follow row
+  const deleted = await db.delete(followsTable)
+    .where(and(
+      eq(followsTable.followerAddress, callerAddress),
+      eq(followsTable.followingAddress, targetAddress),
+    ))
+    .returning();
+
+  if (deleted.length > 0) {
+    // Decrement counters (floor at 0)
+    await db.transaction(async (tx) => {
+      await tx.update(profilesTable)
+        .set({ followingCount: sql`GREATEST(${profilesTable.followingCount} - 1, 0)` })
+        .where(eq(profilesTable.address, callerAddress));
+      await tx.update(profilesTable)
+        .set({ followersCount: sql`GREATEST(${profilesTable.followersCount} - 1, 0)` })
+        .where(eq(profilesTable.address, targetAddress));
+    });
+  }
+
+  const [updated] = await db.select({
+    followersCount: profilesTable.followersCount,
+  }).from(profilesTable).where(eq(profilesTable.address, targetAddress)).limit(1);
+
+  res.json({ isFollowing: false, followersCount: updated?.followersCount ?? 0 });
+}));
+
+// ── GET /profiles/:address/follow-status ──────────────────────────────────────
+// Check if viewer follows target. viewer provided via ?viewer=<address>.
+router.get("/profiles/:address/follow-status", asyncWrap(async (req, res) => {
+  const targetAddress = String(req.params.address ?? "").trim();
+  const viewerAddress = String(req.query.viewer ?? "").trim();
+
+  if (!targetAddress || !viewerAddress) {
+    res.json({ isFollowing: false }); return;
+  }
+
+  const [row] = await db.select({ followerAddress: followsTable.followerAddress })
+    .from(followsTable)
+    .where(and(
+      eq(followsTable.followerAddress, viewerAddress),
+      eq(followsTable.followingAddress, targetAddress),
+    ))
+    .limit(1);
+
+  res.json({ isFollowing: !!row });
+}));
+
+// ── GET /profiles/:address/followers ─────────────────────────────────────────
+// List followers of :address. Optional ?viewer=<address> for isFollowedByViewer.
+router.get("/profiles/:address/followers", asyncWrap(async (req, res) => {
+  const targetAddress = String(req.params.address ?? "").trim();
+  const viewerAddress = String(req.query.viewer ?? "").trim();
+  const limit = Math.min(Number(req.query.limit ?? 50), 100);
+  const offset = Number(req.query.offset ?? 0);
+
+  if (!targetAddress) { res.status(400).json({ error: "Missing address" }); return; }
+
+  // Count total followers
+  const [{ total }] = await db.select({ total: sql<number>`COUNT(*)::int` })
+    .from(followsTable)
+    .where(eq(followsTable.followingAddress, targetAddress));
+
+  // Fetch follower profiles
+  const rows = await db
+    .select({
+      address: profilesTable.address,
+      username: profilesTable.username,
+      avatarUrl: profilesTable.avatarUrl,
+      bio: profilesTable.bio,
+      followersCount: profilesTable.followersCount,
+      followingCount: profilesTable.followingCount,
+    })
+    .from(followsTable)
+    .innerJoin(profilesTable, eq(followsTable.followerAddress, profilesTable.address))
+    .where(eq(followsTable.followingAddress, targetAddress))
+    .orderBy(followsTable.createdAt)
+    .limit(limit)
+    .offset(offset);
+
+  // Resolve isFollowedByViewer for each row
+  let viewerFollowingSet = new Set<string>();
+  if (viewerAddress && rows.length > 0) {
+    const addresses = rows.map(r => r.address);
+    const viewerFollows = await db
+      .select({ followingAddress: followsTable.followingAddress })
+      .from(followsTable)
+      .where(and(
+        eq(followsTable.followerAddress, viewerAddress),
+        sql`${followsTable.followingAddress} = ANY(${sql.raw(`ARRAY[${addresses.map(a => `'${a.replace(/'/g, "''")}'`).join(",")}]::text[]`)})`,
+      ));
+    viewerFollowingSet = new Set(viewerFollows.map(r => r.followingAddress));
+  }
+
+  const items = rows.map(r => ({
+    ...r,
+    isFollowedByViewer: viewerFollowingSet.has(r.address),
+  }));
+
+  res.json({ items, total });
+}));
+
+// ── GET /profiles/:address/following ─────────────────────────────────────────
+// List profiles that :address is following.
+router.get("/profiles/:address/following", asyncWrap(async (req, res) => {
+  const targetAddress = String(req.params.address ?? "").trim();
+  const viewerAddress = String(req.query.viewer ?? "").trim();
+  const limit = Math.min(Number(req.query.limit ?? 50), 100);
+  const offset = Number(req.query.offset ?? 0);
+
+  if (!targetAddress) { res.status(400).json({ error: "Missing address" }); return; }
+
+  const [{ total }] = await db.select({ total: sql<number>`COUNT(*)::int` })
+    .from(followsTable)
+    .where(eq(followsTable.followerAddress, targetAddress));
+
+  const rows = await db
+    .select({
+      address: profilesTable.address,
+      username: profilesTable.username,
+      avatarUrl: profilesTable.avatarUrl,
+      bio: profilesTable.bio,
+      followersCount: profilesTable.followersCount,
+      followingCount: profilesTable.followingCount,
+    })
+    .from(followsTable)
+    .innerJoin(profilesTable, eq(followsTable.followingAddress, profilesTable.address))
+    .where(eq(followsTable.followerAddress, targetAddress))
+    .orderBy(followsTable.createdAt)
+    .limit(limit)
+    .offset(offset);
+
+  let viewerFollowingSet = new Set<string>();
+  if (viewerAddress && rows.length > 0) {
+    const addresses = rows.map(r => r.address);
+    const viewerFollows = await db
+      .select({ followingAddress: followsTable.followingAddress })
+      .from(followsTable)
+      .where(and(
+        eq(followsTable.followerAddress, viewerAddress),
+        sql`${followsTable.followingAddress} = ANY(${sql.raw(`ARRAY[${addresses.map(a => `'${a.replace(/'/g, "''")}'`).join(",")}]::text[]`)})`,
+      ));
+    viewerFollowingSet = new Set(viewerFollows.map(r => r.followingAddress));
+  }
+
+  const items = rows.map(r => ({
+    ...r,
+    isFollowedByViewer: viewerFollowingSet.has(r.address),
+  }));
+
+  res.json({ items, total });
 }));
 
 export default router;

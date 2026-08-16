@@ -4,9 +4,16 @@ import {
   useGetProfile,
   getGetProfileQueryKey,
   Profile,
+  useGetFollowStatus,
+  getGetFollowStatusQueryKey,
+  followProfile,
+  unfollowProfile,
+  getGetFollowersQueryKey,
+  getGetFollowingQueryKey,
 } from "@workspace/api-client-react";
 import { ProfileEditModal } from "@/components/shared/ProfileEditModal";
 import { AddEmailModal } from "@/components/shared/AddEmailModal";
+import { FollowListModal } from "@/components/shared/FollowListModal";
 import { generateUsername } from "@/lib/username";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,12 +28,13 @@ import {
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, useSearch } from "wouter";
 import {
   Globe, Copy, Share2, Edit2, Camera, Coins,
   ExternalLink, AlertCircle,
   TrendingUp, TrendingDown, Wallet, Activity, Gift, Loader2,
+  UserPlus, UserMinus,
 } from "lucide-react";
 import { useTxToast } from "@/hooks/useTxToast";
 import { fetchClaimableLamports, buildCollectCreatorFeeTx } from "@/lib/pumpfun-creator-fees";
@@ -188,6 +196,13 @@ export default function ProfilePage() {
   const [linkingWallet, setLinkingWallet] = useState(false);
   const [mergeNonce, setMergeNonce] = useState<string | null>(null);
   const [mergingAccounts, setMergingAccounts] = useState(false);
+  const [followModalOpen, setFollowModalOpen] = useState(false);
+  const [followModalMode, setFollowModalMode] = useState<"followers" | "following">("followers");
+  const [followLoading, setFollowLoading] = useState(false);
+  // Optimistic follow state — null means "not yet loaded"
+  const [localIsFollowing, setLocalIsFollowing] = useState<boolean | null>(null);
+  const [localFollowersCount, setLocalFollowersCount] = useState<number | null>(null);
+  const qc = useQueryClient();
   // Set to true when user clicks "Connect wallet" from the social-no-wallet CTA,
   // so we auto-run the link flow the moment the wallet extension connects.
   const pendingLinkRef = useRef(false);
@@ -196,6 +211,37 @@ export default function ProfilePage() {
   const { data: profile, isLoading, refetch } = useGetProfile(slug, {
     query: { enabled: !!slug, retry: false, queryKey: getGetProfileQueryKey(slug) },
   });
+
+  // ── Viewer identity (derived from wallet/social; does NOT depend on profile) ──
+  const IS_SOLANA_EARLY = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+  const viewerAddress: string | null =
+    socialUser?.address ?? (wallet && IS_SOLANA_EARLY.test(wallet) ? wallet : null);
+
+  // ── Follow status ─────────────────────────────────────────────────────────
+  // Fetch whether viewerAddress already follows this profile.
+  const profileAddress = profile?.address ?? "";
+  const followStatusEnabled = !!profileAddress && !!viewerAddress && profileAddress !== viewerAddress;
+  const { data: followStatusData } = useGetFollowStatus(
+    profileAddress,
+    viewerAddress ?? "",
+    {
+      query: {
+        enabled: followStatusEnabled,
+        queryKey: getGetFollowStatusQueryKey(profileAddress, viewerAddress ?? ""),
+      },
+    },
+  );
+  // Sync server state into local optimistic state (only on first load)
+  useEffect(() => {
+    if (followStatusData !== undefined && localIsFollowing === null) {
+      setLocalIsFollowing(followStatusData.isFollowing);
+    }
+  }, [followStatusData, localIsFollowing]);
+  useEffect(() => {
+    if (profile?.followersCount !== undefined && localFollowersCount === null) {
+      setLocalFollowersCount(profile.followersCount);
+    }
+  }, [profile?.followersCount, localFollowersCount]);
 
   // ── Canonical URL redirect ────────────────────────────────────────────────
   // If the URL uses a wallet address or UUID instead of the profile username,
@@ -213,11 +259,21 @@ export default function ProfilePage() {
 
   // Only valid Solana base58 addresses should link to Solscan.
   // Social (Google/email) users have an internal address — use their linkedWallet instead.
-  const IS_SOLANA = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+  // IS_SOLANA_EARLY was declared above (before hooks); alias it here for readability.
+  const IS_SOLANA = IS_SOLANA_EARLY;
   const solanaAddress: string | null =
     IS_SOLANA.test(address) ? address
     : (socialUser?.linkedWallet && IS_SOLANA.test(socialUser.linkedWallet)) ? socialUser.linkedWallet
     : null;
+
+  // Build the Authorization header to send with follow/unfollow requests.
+  // Social users: Bearer JWT (from localStorage); wallet users: Wallet <address>.
+  function getFollowAuthHeader(): string | null {
+    const jwt = typeof window !== "undefined" ? localStorage.getItem("pumpi_auth_token") : null;
+    if (jwt) return `Bearer ${jwt}`;
+    if (wallet && IS_SOLANA.test(wallet)) return `Wallet ${wallet}`;
+    return null;
+  }
 
   const isOwner =
     (!!wallet && !!address && wallet.toLowerCase() === address.toLowerCase()) ||
@@ -375,6 +431,44 @@ export default function ProfilePage() {
       toast({ title: "Claim failed", description: msg, variant: "destructive" });
     } finally {
       setClaimLoading(false);
+    }
+  };
+
+  const handleFollow = async () => {
+    const authHeader = getFollowAuthHeader();
+    if (!authHeader || !profileAddress || followLoading) return;
+
+    const wasFollowing = localIsFollowing ?? false;
+    // Optimistic update
+    setLocalIsFollowing(!wasFollowing);
+    setLocalFollowersCount((prev) =>
+      prev === null ? null : wasFollowing ? Math.max(0, prev - 1) : prev + 1,
+    );
+    setFollowLoading(true);
+
+    try {
+      const result = wasFollowing
+        ? await unfollowProfile(profileAddress, authHeader)
+        : await followProfile(profileAddress, authHeader);
+
+      // Sync server-confirmed count
+      setLocalFollowersCount(result.followersCount);
+      setLocalIsFollowing(result.isFollowing);
+
+      // Invalidate profile + follow-list caches
+      void qc.invalidateQueries({ queryKey: getGetProfileQueryKey(slug) });
+      void qc.invalidateQueries({ queryKey: getGetFollowersQueryKey(profileAddress) });
+      void qc.invalidateQueries({ queryKey: getGetFollowingQueryKey(profileAddress) });
+    } catch (e) {
+      // Revert optimistic update
+      setLocalIsFollowing(wasFollowing);
+      setLocalFollowersCount((prev) =>
+        prev === null ? null : wasFollowing ? prev + 1 : Math.max(0, prev - 1),
+      );
+      const msg = e instanceof Error ? e.message : "Failed";
+      toast({ title: wasFollowing ? "Unfollow failed" : "Follow failed", description: msg, variant: "destructive" });
+    } finally {
+      setFollowLoading(false);
     }
   };
 
@@ -554,6 +648,26 @@ export default function ProfilePage() {
                 >
                   <Share2 className="w-3.5 h-3.5" />
                 </button>
+                {/* Follow button — visible to non-owners who have a wallet or social account */}
+                {!isOwner && (wallet || socialUser) && profileAddress && (
+                  <button
+                    onClick={() => void handleFollow()}
+                    disabled={followLoading || (!wallet && !socialUser)}
+                    className={cn(
+                      "h-8 px-3 flex items-center gap-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50",
+                      localIsFollowing
+                        ? "border border-white/20 text-muted-foreground hover:border-red-500/40 hover:text-red-400"
+                        : "bg-primary text-primary-foreground hover:bg-primary/90",
+                    )}
+                  >
+                    {followLoading
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : localIsFollowing
+                        ? <><UserMinus className="w-3.5 h-3.5" /><span className="hidden sm:inline">Following</span></>
+                        : <><UserPlus className="w-3.5 h-3.5" /><span className="hidden sm:inline">Follow</span></>
+                    }
+                  </button>
+                )}
                 {isOwner && (
                   <button
                     onClick={() => setEditOpen(true)}
@@ -626,6 +740,30 @@ export default function ProfilePage() {
                 backdropFilter: "blur(12px)",
               }}
             >
+              {/* Followers chip — clickable */}
+              <button
+                className="flex-1 flex flex-col items-center justify-center py-3 px-3 min-w-0 hover:bg-white/[0.03] transition-colors"
+                onClick={() => { setFollowModalMode("followers"); setFollowModalOpen(true); }}
+              >
+                <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 mb-1.5 font-medium">
+                  Followers
+                </span>
+                <span className="text-lg font-bold tabular-nums leading-none tracking-tight">
+                  {localFollowersCount ?? profile?.followersCount ?? 0}
+                </span>
+              </button>
+              {/* Following chip — clickable */}
+              <button
+                className="flex-1 flex flex-col items-center justify-center py-3 px-3 min-w-0 hover:bg-white/[0.03] transition-colors"
+                onClick={() => { setFollowModalMode("following"); setFollowModalOpen(true); }}
+              >
+                <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 mb-1.5 font-medium">
+                  Following
+                </span>
+                <span className="text-lg font-bold tabular-nums leading-none tracking-tight">
+                  {profile?.followingCount ?? 0}
+                </span>
+              </button>
               <StatChip
                 label="Trades"
                 value={totalTrades || "—"}
@@ -1386,6 +1524,18 @@ export default function ProfilePage() {
           }
         }}
       />
+
+      {/* Follow list modal */}
+      {profile && (
+        <FollowListModal
+          open={followModalOpen}
+          onOpenChange={setFollowModalOpen}
+          mode={followModalMode}
+          address={profile.address}
+          viewerAddress={viewerAddress ?? undefined}
+          authHeader={getFollowAuthHeader() ?? undefined}
+        />
+      )}
     </div>
   );
 }

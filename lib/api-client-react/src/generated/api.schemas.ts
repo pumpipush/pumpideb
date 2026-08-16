@@ -278,6 +278,27 @@ export type GetRecentActivityParams = {
 limit?: number;
 };
 
+export interface FollowListItem {
+  address: string;
+  username: string;
+  /** @nullable */
+  avatarUrl?: string | null;
+  /** @nullable */
+  bio?: string | null;
+  followersCount: number;
+  followingCount: number;
+  isFollowedByViewer: boolean;
+}
+
+export interface FollowListResponse {
+  items: FollowListItem[];
+  total: number;
+}
+
+export interface FollowStatusResponse {
+  isFollowing: boolean;
+}
+
 export interface TopWalletItem {
   address: string;
   balance: string;

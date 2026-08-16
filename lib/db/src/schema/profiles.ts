@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -23,6 +23,16 @@ export const profilesTable = pgTable("profiles", {
   bannedAt:  timestamp("banned_at",  { withTimezone: true }),
   banReason: text("ban_reason"),
 });
+
+export const followsTable = pgTable("follows", {
+  followerAddress:  text("follower_address").notNull().references(() => profilesTable.address, { onDelete: "cascade" }),
+  followingAddress: text("following_address").notNull().references(() => profilesTable.address, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.followerAddress, t.followingAddress] }),
+}));
+
+export type Follow = typeof followsTable.$inferSelect;
 
 export const insertProfileSchema = createInsertSchema(profilesTable).omit({
   createdAt: true,
