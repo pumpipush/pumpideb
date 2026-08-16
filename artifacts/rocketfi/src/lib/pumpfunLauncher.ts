@@ -148,6 +148,8 @@ export async function buildPumpFunCreateTx(
   name:           string,
   symbol:         string,
   metadataUri:    string,
+  /** Optional SOL to buy at launch (bundled by pumpportal into the same tx). */
+  initialBuySOL?: number,
 ): Promise<PumpFunCreateTxResult> {
   // Generate a fresh mint keypair — pumpportal requires the `mint` parameter.
   // The address will be random (no "pump" suffix), which is fine functionally.
@@ -162,7 +164,7 @@ export async function buildPumpFunCreateTx(
       tokenMetadata:    { name, symbol, uri: metadataUri },
       mint:             mintKeypair.publicKey.toBase58(),
       denominatedInSol: "true",
-      amount:           0,
+      amount:           initialBuySOL ?? 0,
       slippage:         10,
       priorityFee:      0.0005,
       pool:             "pump",

@@ -170,6 +170,10 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const [website,  setWebsite]  = useState("");
   const [showLinks, setShowLinks] = useState(false);
 
+  // pump.fun: optional dev buy bundled into the create tx
+  const [pumpfunBuyEnabled, setPumpfunBuyEnabled] = useState(false);
+  const [pumpfunBuySOL,     setPumpfunBuySOL]     = useState("0.1");
+
   // Raydium LaunchLab: initial buy amount in SOL (required by SDK, must be > 0)
   const [initialBuySOL, setInitialBuySOL] = useState("0.1");
 
@@ -274,7 +278,10 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       for (let attempt = 0; attempt < MAX_TX_ATTEMPTS; attempt++) {
         setLaunchStep("building");
         const { transaction, mintAddress: newMint, blockhash, lastValidBlockHeight } =
-          await buildPumpFunCreateTx(wallet, name.trim(), symbol.trim().toUpperCase(), metadataUri);
+          await buildPumpFunCreateTx(
+            wallet, name.trim(), symbol.trim().toUpperCase(), metadataUri,
+            pumpfunBuyEnabled ? (parseFloat(pumpfunBuySOL) || 0) : 0,
+          );
 
         let sig: string | null = null;
         try {
@@ -738,6 +745,92 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               </div>
             )}
           </div>
+
+          {/* ── Step 5: Dev Buy (pump.fun only, optional) ── */}
+          {platform === "pumpfun" && (
+            <>
+              <div style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
+              <div className="px-5 pt-4 pb-4">
+                {/* Toggle header */}
+                <button
+                  type="button"
+                  onClick={() => setPumpfunBuyEnabled(v => !v)}
+                  disabled={isLaunching}
+                  className="flex items-center gap-2 w-full text-left"
+                >
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
+                    style={{
+                      background: pumpfunBuyEnabled ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.08)",
+                      color:      pumpfunBuyEnabled ? "#86efac" : "#bbbbbb",
+                      border:     `1px solid ${pumpfunBuyEnabled ? "rgba(34,197,94,0.30)" : "rgba(255,255,255,0.18)"}`,
+                    }}>5</span>
+                  <span className="text-[13px] font-semibold text-foreground">Dev Buy</span>
+                  <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.06)", color: "#b3b3b3" }}>
+                    Optional
+                  </span>
+                  {/* pill toggle */}
+                  <div className="ml-auto relative w-9 h-5 rounded-full transition-colors shrink-0"
+                    style={{ background: pumpfunBuyEnabled ? "rgba(34,197,94,0.35)" : "rgba(255,255,255,0.10)", border: `1px solid ${pumpfunBuyEnabled ? "rgba(34,197,94,0.50)" : "rgba(255,255,255,0.15)"}` }}>
+                    <span className="absolute top-0.5 transition-all duration-200 w-4 h-4 rounded-full"
+                      style={{
+                        left:       pumpfunBuyEnabled ? "calc(100% - 18px)" : "2px",
+                        background: pumpfunBuyEnabled ? "#4ade80" : "#666",
+                      }} />
+                  </div>
+                </button>
+
+                {pumpfunBuyEnabled && (
+                  <div className="mt-3 space-y-3">
+                    <p className="text-[12px]" style={{ color: "#b3b3b3" }}>
+                      Beli token kamu di awal untuk menjaga nilai coin. Token langsung masuk ke walletmu dalam satu transaksi bersama pembuatan coin.
+                    </p>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        min="0.001"
+                        step="0.01"
+                        placeholder="0.1"
+                        value={pumpfunBuySOL}
+                        onChange={e => setPumpfunBuySOL(e.target.value)}
+                        disabled={isLaunching}
+                        className="h-9 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 text-[13px] pr-12"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] font-medium pointer-events-none"
+                        style={{ color: "#b3b3b3" }}>SOL</span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      {["0.05", "0.1", "0.5", "1"].map(v => (
+                        <button key={v} type="button"
+                          onClick={() => setPumpfunBuySOL(v)}
+                          disabled={isLaunching}
+                          className="text-[11px] px-2 py-1 rounded-md transition-colors"
+                          style={{
+                            background: pumpfunBuySOL === v ? "rgba(34,197,94,0.18)" : "rgba(255,255,255,0.05)",
+                            color:      pumpfunBuySOL === v ? "#86efac" : "#b3b3b3",
+                            border:     `1px solid ${pumpfunBuySOL === v ? "rgba(34,197,94,0.35)" : "rgba(255,255,255,0.08)"}`,
+                          }}>
+                          {v} SOL
+                        </button>
+                      ))}
+                    </div>
+                    {(() => {
+                      const solNum = parseFloat(pumpfunBuySOL) || 0;
+                      if (solNum <= 0) return null;
+                      // rough estimate: at 30 SOL virtual reserves + buy, price ≈ 30/1.073B token
+                      // tokens ≈ buy_sol / price ≈ buy_sol * 1.073B / 30
+                      const estTokens = (solNum * 1_073_000_000) / 30;
+                      const pct = (estTokens / 1_000_000_000) * 100;
+                      return (
+                        <p className="text-[11px]" style={{ color: "#86efac" }}>
+                          ≈ {estTokens.toLocaleString(undefined, { maximumFractionDigits: 0 })} token ({pct.toFixed(2)}% supply)
+                        </p>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
           {/* ── Step 5: Initial Buy (Raydium only, required by SDK) ── */}
           {platform === "raydium" && (
