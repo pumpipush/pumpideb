@@ -186,7 +186,7 @@ router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
     await storageService.uploadToPublicPath(metaSubPath, metaBuffer, "application/json");
 
     const metadataUri = `${baseUrl}/api/storage/public-objects/${metaSubPath}`;
-    return res.json({ metadataUri });
+    return res.json({ metadataUri, imageUrl });
   } catch (storageErr) {
     console.warn("[proxy] pump-ipfs-upload: object storage unavailable, trying pump.fun fallback:", storageErr);
   }

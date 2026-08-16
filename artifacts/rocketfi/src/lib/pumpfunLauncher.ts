@@ -68,7 +68,7 @@ export interface PumpFunCreateTxResult {
  * pump.fun's on-chain program only stores the metadataUri string and accepts any
  * publicly reachable HTTPS URL — not exclusively IPFS URIs.
  */
-export async function uploadToPumpFunIpfs(fields: PumpFunIpfsFields): Promise<string> {
+export async function uploadToPumpFunIpfs(fields: PumpFunIpfsFields): Promise<{ metadataUri: string; imageUrl: string | null }> {
   // Convert File → base64 using FileReader (browser-native, no Buffer polyfill needed)
   const imageBase64 = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -106,11 +106,11 @@ export async function uploadToPumpFunIpfs(fields: PumpFunIpfsFields): Promise<st
       throw new Error(`pump.fun metadata upload failed (${res.status}): ${text}`);
     }
 
-    const data = await res.json() as { metadataUri?: string };
+    const data = await res.json() as { metadataUri?: string; imageUrl?: string };
     if (!data.metadataUri) {
       throw new Error("Metadata upload response did not include metadataUri");
     }
-    return data.metadataUri;
+    return { metadataUri: data.metadataUri, imageUrl: data.imageUrl ?? null };
   };
 
   try {

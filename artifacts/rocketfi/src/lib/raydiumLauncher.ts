@@ -145,7 +145,7 @@ export interface RaydiumLaunchTxResult {
  */
 export async function uploadToRaydiumIpfs(
   params: RaydiumUploadParams,
-): Promise<string> {
+): Promise<{ metadataUri: string; imageUrl: string | null }> {
   return uploadToPumpFunIpfs({
     name:        params.name,
     symbol:      params.symbol,

@@ -181,6 +181,12 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const [buildingSubLabel, setBuildingSubLabel] = useState<string | null>(null);
   // Progress detail shown under the "confirming" step — updated live by waitForTxConfirmation
   const [confirmingDetail, setConfirmingDetail] = useState<string | null>(null);
+  // Snapshot of launch metadata shown in the success card (captured at launch time)
+  const [launchInfo, setLaunchInfo] = useState<{
+    name: string; symbol: string; imagePreview: string | null; imageUrl: string | null; mint: string;
+  } | null>(null);
+  // True once our indexer has picked up the newly-launched token
+  const [indexReady, setIndexReady] = useState(false);
 
   const { toast } = useToast();
   const { openWalletModal, signAndSendTransaction } = useWallet();
@@ -248,7 +254,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     try {
       // Step 1: Upload metadata + image ke pump.fun IPFS
       setLaunchStep("uploading");
-      const metadataUri = await uploadToPumpFunIpfs({
+      const { metadataUri, imageUrl: uploadedImageUrl } = await uploadToPumpFunIpfs({
         name:        name.trim(),
         symbol:      symbol.trim().toUpperCase(),
         description: desc.trim(),
@@ -294,8 +300,10 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
           setLaunchStep("done");
           setMintAddress(newMint);
-          onLaunch(newMint);
-          return; // success
+          setLaunchInfo({ name: name.trim(), symbol: symbol.trim().toUpperCase(), imagePreview, imageUrl: uploadedImageUrl, mint: newMint });
+          setIndexReady(false);
+          setExternalToken({ address: newMint, name: name.trim(), symbol: symbol.trim().toUpperCase(), logoURI: uploadedImageUrl ?? imagePreview, decimals: 6 });
+          return; // success — user stays on launch page, sees rich success card
         } catch (confirmErr: unknown) {
           // Confirmation failed — but the tx may have already landed on-chain.
           // Check the signature BEFORE building a new mint to avoid duplicates.
@@ -308,7 +316,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               // The coin WAS created — treat as success.
               setLaunchStep("done");
               setMintAddress(newMint);
-              onLaunch(newMint);
+              setLaunchInfo({ name: name.trim(), symbol: symbol.trim().toUpperCase(), imagePreview, imageUrl: uploadedImageUrl, mint: newMint });
+              setIndexReady(false);
+              setExternalToken({ address: newMint, name: name.trim(), symbol: symbol.trim().toUpperCase(), logoURI: uploadedImageUrl ?? imagePreview, decimals: 6 });
               return;
             }
           } catch {
@@ -348,7 +358,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     try {
       // Step 1: Upload metadata via Raydium IPFS (fallback: pump.fun IPFS)
       setLaunchStep("uploading");
-      const metadataUri = await uploadToRaydiumIpfs({
+      const { metadataUri, imageUrl: uploadedImageUrl } = await uploadToRaydiumIpfs({
         name:        name.trim(),
         symbol:      symbol.trim().toUpperCase(),
         description: desc.trim(),
@@ -403,7 +413,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
       setLaunchStep("done");
       setMintAddress(newMint);
-      onLaunch(newMint);
+      setLaunchInfo({ name: name.trim(), symbol: symbol.trim().toUpperCase(), imagePreview, imageUrl: uploadedImageUrl, mint: newMint });
+      setIndexReady(false);
+      setExternalToken({ address: newMint, name: name.trim(), symbol: symbol.trim().toUpperCase(), logoURI: uploadedImageUrl ?? imagePreview, decimals: 6 });
 
     } catch (err: unknown) {
       setLaunchStep("error");
@@ -427,7 +439,27 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     setLaunchError(null);
     setBuildingSubLabel(null);
     setConfirmingDetail(null);
+    setLaunchInfo(null);
+    setIndexReady(false);
   };
+
+  // Poll our API every 3 s until the newly-launched token appears in our DB.
+  // Once indexed, reveal the "View on Pumpi →" button and stop polling.
+  useEffect(() => {
+    if (launchStep !== "done" || !mintAddress || indexReady) return;
+    let cancelled = false;
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const res = await fetch(`/api/tokens/${mintAddress}`, { signal: AbortSignal.timeout(5_000) });
+        if (res.ok && !cancelled) { setIndexReady(true); return; }
+      } catch { /* network hiccup — keep polling */ }
+      if (!cancelled) setTimeout(poll, 3_000);
+    };
+    // Small initial delay so the tx has time to propagate before first check
+    const t = setTimeout(poll, 4_000);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [launchStep, mintAddress, indexReady]);
 
   const isLaunching = launchStep !== "idle" && launchStep !== "done" && launchStep !== "error";
 
@@ -741,21 +773,84 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               </div>
             )}
 
-            {/* Success state */}
-            {launchStep === "done" && mintAddress && (
+            {/* Success state — rich card shown while indexing happens in background */}
+            {launchStep === "done" && mintAddress && launchInfo && (
               <div className="rounded-xl p-4 space-y-3"
-                style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.25)" }}>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5" style={{ color: "#4ade80" }} />
-                  <span className="text-[14px] font-bold" style={{ color: "#4ade80" }}>Coin launched successfully! 🚀</span>
+                style={{ background: "rgba(74,222,128,0.06)", border: "1px solid rgba(74,222,128,0.22)" }}>
+                {/* Token identity row */}
+                <div className="flex items-center gap-3">
+                  {launchInfo.imagePreview ? (
+                    <img src={launchInfo.imagePreview} alt="Token"
+                      className="w-12 h-12 rounded-xl object-cover shrink-0"
+                      style={{ border: "1px solid rgba(255,255,255,0.12)" }} />
+                  ) : (
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                      style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)" }}>
+                      <span className="text-[18px] font-bold" style={{ color: "#4ade80" }}>
+                        {launchInfo.symbol.charAt(0)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: "#4ade80" }} />
+                      <span className="text-[13px] font-bold" style={{ color: "#4ade80" }}>Coin launched! 🚀</span>
+                    </div>
+                    <div className="text-[14px] font-semibold truncate" style={{ color: "#e0e0e0" }}>
+                      {launchInfo.name}{" "}
+                      <span className="text-[12px] font-normal" style={{ color: "#888" }}>${launchInfo.symbol}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="font-mono text-[11px] px-2 py-1.5 rounded-lg break-all"
-                  style={{ background: "rgba(0,0,0,0.3)", color: "#b3b3b3" }}>
+
+                {/* Mint address */}
+                <div className="font-mono text-[10px] px-2 py-1.5 rounded-lg break-all"
+                  style={{ background: "rgba(0,0,0,0.3)", color: "#666" }}>
                   {mintAddress}
                 </div>
-                <p className="text-[12px]" style={{ color: "#b3b3b3" }}>
-                  Mengarahkan ke halaman token dalam {platform === "raydium" ? "6" : "3"} detik…
-                </p>
+
+                {/* External links */}
+                <div className="flex gap-2 flex-wrap">
+                  <a href={`https://${platform === "raydium" ? "raydium.io/launchpad" : "pump.fun/coin"}/${mintAddress}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                    style={{ background: "rgba(255,255,255,0.06)", color: "#b3b3b3", border: "1px solid rgba(255,255,255,0.10)" }}>
+                    {platform === "raydium" ? "Raydium ↗" : "Pump.fun ↗"}
+                  </a>
+                  <a href={`https://solscan.io/token/${mintAddress}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
+                    style={{ background: "rgba(255,255,255,0.06)", color: "#b3b3b3", border: "1px solid rgba(255,255,255,0.10)" }}>
+                    Solscan ↗
+                  </a>
+                </div>
+
+                {/* Indexing status / View on Pumpi button */}
+                {indexReady ? (
+                  <button
+                    type="button"
+                    onClick={() => onLaunch(mintAddress)}
+                    className="w-full h-10 rounded-xl text-[13px] font-bold flex items-center justify-center gap-2 transition-all duration-150 active:scale-[0.98]"
+                    style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)", color: "#fff", border: "none" }}>
+                    View on Pumpi →
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2 py-0.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" style={{ color: "#4ade80" }} />
+                    <span className="text-[11px]" style={{ color: "#888" }}>
+                      Indexing on Pumpi… the page will be ready in a few seconds
+                    </span>
+                  </div>
+                )}
+
+                {/* Launch another coin */}
+                <button
+                  type="button"
+                  onClick={resetToIdle}
+                  className="text-[11px] font-medium transition-opacity hover:opacity-80"
+                  style={{ color: "#555", background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+                  + Launch another coin
+                </button>
               </div>
             )}
 
