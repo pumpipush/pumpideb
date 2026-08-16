@@ -1105,8 +1105,10 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         </form>
       </div>
 
-      {/* ── RIGHT: Live Preview ── */}
-      <div className="w-full lg:w-[290px] shrink-0">
+      {/* ── RIGHT: Live Preview (desktop only — on mobile it would appear below the submit
+           button, making it useless. Users see the form fields and the preview can't
+           update in sync since it's off-screen anyway.) ── */}
+      <div className="hidden lg:block lg:w-[290px] shrink-0">
         <div className="sticky top-4 space-y-4 mt-[52px]">
 
           {/* Header */}
@@ -1954,7 +1956,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           {/* Timeframe — horizontal pills on mobile (no 1W), pills on desktop */}
           <div className="flex items-center ml-auto shrink-0" style={{ borderLeft: "1px solid rgba(255,255,255,0.08)" }}>
             {/* Mobile: horizontal scrollable, hide 1W */}
-            <div className="sm:hidden flex items-center overflow-x-auto px-1.5" style={{ gap: 2, scrollbarWidth: "none" }}>
+            <div className="sm:hidden flex items-center overflow-x-auto px-1.5 snap-x snap-mandatory" style={{ gap: 2, scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
               {CHART_TIMEFRAMES.filter(t => t !== "1W").map(t => (
                 <button key={t} onClick={() => setChartTf(t)}
                   className="px-2 text-[13px] font-semibold transition-all shrink-0 whitespace-nowrap flex items-center"
@@ -2492,7 +2494,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               <div className="flex items-center justify-between mt-1">
                 <span className="text-[12px] font-mono" style={{ color: "#bbbbbb" }}>
                   {realSolInCurve.toFixed(2)}<span className="ml-1" style={{ color: "#555555" }}>/ 85 SOL</span>
-                  <span className="ml-1.5 text-[11px] font-bold" style={{ color: "#10b981" }}>· {progressPercent.toFixed(1)}%</span>
+                  {/* Math.max(0, …) guards -0.0% from floating-point imprecision */}
+                  <span className="ml-1.5 text-[11px] font-bold" style={{ color: "#10b981" }}>· {Math.max(0, progressPercent).toFixed(1)}%</span>
                 </span>
                 <span className="text-[12px]" style={{ color: "#b3b3b3" }}>
                   {(85 - realSolInCurve).toFixed(2)} SOL left
@@ -2572,7 +2575,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 <div className="flex items-center justify-between mt-1">
                   <span className="text-[12px] font-mono" style={{ color: "#bbbbbb" }}>
                     {realSolInCurve.toFixed(2)}<span className="ml-1" style={{ color: "#555555" }}>/ 85 SOL</span>
-                    <span className="ml-1.5 text-[11px] font-bold" style={{ color: "#10b981" }}>· {progressPercent.toFixed(1)}%</span>
+                    {/* Math.max(0, …) guards -0.0% from floating-point imprecision */}
+                    <span className="ml-1.5 text-[11px] font-bold" style={{ color: "#10b981" }}>· {Math.max(0, progressPercent).toFixed(1)}%</span>
                   </span>
                   <span className="text-[12px]" style={{ color: "#b3b3b3" }}>
                     {(85 - realSolInCurve).toFixed(2)} SOL left
