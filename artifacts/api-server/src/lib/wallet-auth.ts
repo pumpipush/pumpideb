@@ -5,7 +5,7 @@
  * calls `signMessage(messageBytes)` and returns a 64-byte signature.
  *
  * Convention used here:
- *   message  = "RocketFi:{action}:{tokenAddress}:{unixSeconds}"
+ *   message  = "Pumpi:{action}:{tokenAddress}:{unixSeconds}"
  *   signature = base58-encoded 64-byte Ed25519 signature of the UTF-8 message
  *   walletAddress = base58-encoded 32-byte Ed25519 public key
  *
@@ -48,7 +48,7 @@ export function buildSignMessage(
   timestampSeconds?: number,
 ): string {
   const ts = timestampSeconds ?? Math.floor(Date.now() / 1000);
-  return `RocketFi:${action}:${tokenAddress}:${ts}`;
+  return `Pumpi:${action}:${tokenAddress}:${ts}`;
 }
 
 // ── Timestamp validation ───────────────────────────────────────────────────
@@ -58,7 +58,7 @@ export function buildSignMessage(
  * Returns the parsed Unix timestamp in seconds, or throws if invalid / expired.
  */
 export function parseAndValidateTimestamp(message: string): number {
-  // Expected format: "RocketFi:{action}:{tokenAddress}:{unixSeconds}"
+  // Expected format: "Pumpi:{action}:{tokenAddress}:{unixSeconds}"
   const parts = message.split(":");
   if (parts.length < 4) {
     throw new Error("Malformed signed message");
@@ -102,7 +102,7 @@ export function verifyWalletSignature(
   parseAndValidateTimestamp(message);
 
   // 2. Validate message content matches expected action + token address
-  const expectedPrefix = `RocketFi:${expectedAction}:${expectedTokenAddress}:`;
+  const expectedPrefix = `Pumpi:${expectedAction}:${expectedTokenAddress}:`;
   if (!message.startsWith(expectedPrefix)) {
     throw new Error("Signed message does not match expected action or token address");
   }
@@ -184,7 +184,7 @@ export function buildProfileSignMessage(
   address: string,
   nonce: string,
 ): string {
-  return `RocketFi:${action}:${address}:${nonce}`;
+  return `Pumpi:${action}:${address}:${nonce}`;
 }
 
 /**
@@ -209,7 +209,7 @@ export function verifyWalletSignatureWithNonce(
   const parts = message.split(":");
   if (parts.length !== 4) throw new Error("Malformed signed message");
   const [prefix, action, addr, nonce] = parts;
-  if (prefix !== "RocketFi" || action !== expectedAction || addr !== expectedAddress || !nonce) {
+  if (prefix !== "Pumpi" || action !== expectedAction || addr !== expectedAddress || !nonce) {
     throw new Error("Signed message does not match expected action or address");
   }
 

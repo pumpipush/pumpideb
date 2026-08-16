@@ -211,7 +211,7 @@ describe("parseWalletAuthFields", () => {
     const result = parseWalletAuthFields({
       walletAddress: "1".repeat(32),
       signature: "abc",
-      message: "RocketFi:update:addr:nonce",
+      message: "Pumpi:update:addr:nonce",
     });
     expect(result).not.toBeNull();
     expect(result?.walletAddress).toBe("1".repeat(32));

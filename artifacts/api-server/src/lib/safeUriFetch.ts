@@ -113,7 +113,7 @@ export async function fetchSafeUriMeta(rawUri: string): Promise<UriMeta | null> 
   try {
     const res = await fetch(url, {
       signal:   AbortSignal.timeout(10_000),
-      headers:  { "User-Agent": "RocketFi/1.0" },
+      headers:  { "User-Agent": "Pumpi/1.0" },
       redirect: "error",  // never follow redirects — prevents chaining to internal hosts
     });
     if (!res.ok) return null;

@@ -539,7 +539,7 @@ router.get("/auth/wallet/login/challenge", authLimiter, asyncWrap(async (req, re
     // Global cap reached — caller should retry after a moment
     return void res.status(503).json({ error: "Server busy, please retry" });
   }
-  const message = `RocketFi:login:${walletAddress}:${nonce}`;
+  const message = `Pumpi:login:${walletAddress}:${nonce}`;
   return void res.json({ nonce, message });
 }));
 
@@ -559,9 +559,9 @@ router.post("/auth/wallet/login", authLimiter, asyncWrap(async (req, res) => {
     return void res.status(400).json({ error: "Invalid Solana wallet address" });
   }
 
-  // Validate message format: "RocketFi:login:<walletAddress>:<nonce>"
+  // Validate message format: "Pumpi:login:<walletAddress>:<nonce>"
   const parts = message.split(":");
-  if (parts.length !== 4 || parts[0] !== "RocketFi" || parts[1] !== "login" || parts[2] !== walletAddress) {
+  if (parts.length !== 4 || parts[0] !== "Pumpi" || parts[1] !== "login" || parts[2] !== walletAddress) {
     return void res.status(400).json({ error: "Malformed challenge message" });
   }
   const nonce = parts[3];
@@ -686,7 +686,7 @@ router.get("/auth/wallet/link/challenge", asyncWrap(async (req, res) => {
     expiresAt: Date.now() + 5 * 60_000, // 5 minutes
   });
 
-  return void res.json({ nonce, message: `RocketFi:linkwallet:${walletAddress}:${nonce}` });
+  return void res.json({ nonce, message: `Pumpi:linkwallet:${walletAddress}:${nonce}` });
 }));
 
 // ── POST /api/auth/wallet/link ─────────────────────────────────────────────
@@ -716,9 +716,9 @@ router.post("/auth/wallet/link", asyncWrap(async (req, res) => {
   }
 
   // ── Parse and validate the signed message format ──────────────────────
-  // Expected: "RocketFi:linkwallet:<walletAddress>:<nonce>"
+  // Expected: "Pumpi:linkwallet:<walletAddress>:<nonce>"
   const parts = message.split(":");
-  if (parts.length !== 4 || parts[0] !== "RocketFi" || parts[1] !== "linkwallet" ||
+  if (parts.length !== 4 || parts[0] !== "Pumpi" || parts[1] !== "linkwallet" ||
       parts[2] !== walletAddress) {
     return void res.status(400).json({ error: "Malformed signed message" });
   }

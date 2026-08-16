@@ -42,7 +42,7 @@ async function fetchList(): Promise<void> {
   try {
     const res = await fetch(STRICT_LIST_URL, {
       signal:  AbortSignal.timeout(30_000),
-      headers: { "User-Agent": "RocketFi/1.0" },
+      headers: { "User-Agent": "Pumpi/1.0" },
     });
     if (!res.ok) {
       log.warn({ status: res.status }, "jupiter-tokens: list fetch returned non-OK");

@@ -65,7 +65,7 @@ export async function fetchDexScreenerTokens(
   const chunk = addresses.slice(0, 30).join(",");
   try {
     const res = await fetch(`${BASE}/latest/dex/tokens/${chunk}`, {
-      headers: { Accept: "application/json", "User-Agent": "RocketFi/1.0" },
+      headers: { Accept: "application/json", "User-Agent": "Pumpi/1.0" },
       signal:  AbortSignal.timeout(10_000),
     });
     if (!res.ok) return [];

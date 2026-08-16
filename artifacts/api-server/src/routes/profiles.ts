@@ -17,7 +17,7 @@
  *   GET   /profiles/:address — Public, no auth.
  *
  * Signature convention (identical to token auth):
- *   message   = "RocketFi:{action}:{walletAddress}:{unixSeconds}"
+ *   message   = "Pumpi:{action}:{walletAddress}:{unixSeconds}"
  *   signature = base58-encoded 64-byte Ed25519 signature over UTF-8 message bytes
  *   The timestamp must be within ±5 minutes of server time (replay protection).
  */

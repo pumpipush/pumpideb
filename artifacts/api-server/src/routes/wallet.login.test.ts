@@ -107,7 +107,7 @@ describe("GET /api/auth/wallet/login/challenge", () => {
       .expect(200);
 
     expect(res.body.nonce).toBeTruthy();
-    expect(res.body.message).toBe(`RocketFi:login:${address}:${res.body.nonce}`);
+    expect(res.body.message).toBe(`Pumpi:login:${address}:${res.body.nonce}`);
   });
 
   it("returns 400 for a missing wallet param", async () => {
@@ -354,7 +354,7 @@ describe("POST /api/auth/wallet/login", () => {
     for (let i = 0; i < 2000; i++) {
       const candidate = makeKeypair();
       // Use a stable message for this candidate to avoid consuming challenges
-      const testMsg = `RocketFi:login:${candidate.address}:test-nonce`;
+      const testMsg = `Pumpi:login:${candidate.address}:test-nonce`;
       const sig = nacl.sign.detached(new TextEncoder().encode(testMsg), candidate.secretKey);
       if (sig[0] === 0x00) {
         kp = candidate;

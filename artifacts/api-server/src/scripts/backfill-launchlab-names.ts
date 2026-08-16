@@ -90,7 +90,7 @@ async function rpcPost(body: unknown): Promise<unknown> {
     try {
       const res = await fetch(url, {
         method:  "POST",
-        headers: { "Content-Type": "application/json", "User-Agent": "RocketFi-Backfill/1.0" },
+        headers: { "Content-Type": "application/json", "User-Agent": "Pumpi-Backfill/1.0" },
         body:    JSON.stringify(body),
         signal:  AbortSignal.timeout(RPC_TIMEOUT_MS),
       });

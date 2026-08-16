@@ -127,7 +127,7 @@ async function fetchMetadataWithRetry(
     try {
       const res = await fetch(httpUri, {
         signal:  AbortSignal.timeout(8_000),
-        headers: { "User-Agent": "RocketFi/1.0 SmokeTest" },
+        headers: { "User-Agent": "Pumpi/1.0 SmokeTest" },
       });
 
       if (!res.ok) {

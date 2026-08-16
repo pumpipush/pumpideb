@@ -229,7 +229,7 @@ async function fetchMetaFromUri(uri: string): Promise<UriMeta | null> {
   try {
     const res = await fetch(resolveIpfs(uri), {
       signal:  AbortSignal.timeout(10_000),
-      headers: { "User-Agent": "RocketFi/1.0" },
+      headers: { "User-Agent": "Pumpi/1.0" },
     });
     if (!res.ok) return null;
     const json = (await res.json()) as {

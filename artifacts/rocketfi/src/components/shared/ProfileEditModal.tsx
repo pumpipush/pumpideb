@@ -278,7 +278,7 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
         if (!challengeRes.ok) throw new Error("Failed to obtain signing challenge");
         const { nonce } = await challengeRes.json() as { nonce: string };
 
-        const message = `RocketFi:update:${address}:${nonce}`;
+        const message = `Pumpi:update:${address}:${nonce}`;
         const messageBytes = new TextEncoder().encode(message);
         const sigBytes = await signMessage(messageBytes);
         if (!(sigBytes instanceof Uint8Array) || sigBytes.length !== 64) {

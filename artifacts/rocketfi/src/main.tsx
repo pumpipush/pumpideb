@@ -10,7 +10,7 @@ import './index.css';
 // page load — both in development and production.
 if (!isPlatformFeeConfigured()) {
   console.warn(
-    "%c[RocketFi] Platform fee recipient not configured — all fees will be skipped.\n" +
+    "%c[Pumpi] Platform fee recipient not configured — all fees will be skipped.\n" +
     "Set VITE_PLATFORM_FEE_RECIPIENT to a valid Solana wallet address to collect revenue.",
     "color: orange; font-weight: bold;",
   );

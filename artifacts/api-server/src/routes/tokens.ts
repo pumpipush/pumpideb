@@ -465,7 +465,7 @@ router.get("/tokens", asyncWrap(async (req, res) => {
 
 // POST /tokens
 // Requires a wallet signature to prove the caller owns the creator wallet.
-// The client must sign the message "RocketFi:create:{tokenAddress}:{unixSeconds}"
+// The client must sign the message "Pumpi:create:{tokenAddress}:{unixSeconds}"
 // and send { walletAddress, signature, message } alongside the token fields.
 // creatorAddress is derived server-side from the verified walletAddress — the
 // creatorAddress field in the body is ignored and overwritten.
@@ -839,7 +839,7 @@ router.get("/tokens/:address", asyncWrap(async (req, res) => {
 //   A) Indexer service: send `X-Indexer-Secret` header matching SESSION_SECRET
 //      (used by internal adapters / backfill scripts that write via HTTP).
 //   B) Token creator: send { walletAddress, signature, message } where the
-//      signature covers "RocketFi:update:{tokenAddress}:{unixSeconds}" and
+//      signature covers "Pumpi:update:{tokenAddress}:{unixSeconds}" and
 //      walletAddress matches the token's stored creatorAddress.
 router.patch("/tokens/:address", asyncWrap(async (req, res) => {
   const params = UpdateTokenParams.safeParse(req.params);

@@ -67,7 +67,7 @@ async function fetchPumpMeta(mint: string): Promise<PumpCoin | null> {
   try {
     const res = await fetch(`https://frontend-api.pump.fun/coins/${mint}`, {
       signal:  AbortSignal.timeout(8_000),
-      headers: { "User-Agent": "RocketFi/1.0" },
+      headers: { "User-Agent": "Pumpi/1.0" },
     });
     if (!res.ok) return null;
     return (await res.json()) as PumpCoin;
@@ -88,7 +88,7 @@ async function fetchRaydiumMeta(mint: string): Promise<RaydiumItem | null> {
   try {
     const res = await fetch(
       `https://api-v3.raydium.io/mint/ids?mints=${mint}`,
-      { signal: AbortSignal.timeout(8_000), headers: { "User-Agent": "RocketFi/1.0" } },
+      { signal: AbortSignal.timeout(8_000), headers: { "User-Agent": "Pumpi/1.0" } },
     );
     if (!res.ok) return null;
     const body = (await res.json()) as { data?: RaydiumItem[] };
@@ -125,7 +125,7 @@ async function fetchBirdeyeLogoURI(mint: string): Promise<string | null> {
   try {
     const res = await fetch(
       `https://public-api.birdeye.so/defi/token_overview?address=${mint}`,
-      { signal: AbortSignal.timeout(8_000), headers: { "X-API-KEY": key, "User-Agent": "RocketFi/1.0" } },
+      { signal: AbortSignal.timeout(8_000), headers: { "X-API-KEY": key, "User-Agent": "Pumpi/1.0" } },
     );
     if (!res.ok) return null;
     const body = (await res.json()) as { data?: BirdeyeOverview };
@@ -1028,7 +1028,7 @@ async function _llRpcPost(body: unknown, timeoutMs = 20_000): Promise<unknown> {
     try {
       const res = await fetch(url, {
         method:  "POST",
-        headers: { "Content-Type": "application/json", "User-Agent": "RocketFi/1.0" },
+        headers: { "Content-Type": "application/json", "User-Agent": "Pumpi/1.0" },
         body:    JSON.stringify(body),
         signal:  AbortSignal.timeout(timeoutMs),
       });
@@ -1711,7 +1711,7 @@ export async function fetchLabPoolRealSol(mint: string): Promise<number | null> 
     const url = `https://api-v3.raydium.io/pools/info/mint?mint1=${mint}&poolType=all&poolSortField=liquidity&sortType=desc&pageSize=5&page=1`;
     const res = await fetch(url, {
       signal:  AbortSignal.timeout(10_000),
-      headers: { "User-Agent": "RocketFi/1.0" },
+      headers: { "User-Agent": "Pumpi/1.0" },
     });
     if (!res.ok) return null;
     const body = (await res.json()) as RaydiumPoolsResponse;

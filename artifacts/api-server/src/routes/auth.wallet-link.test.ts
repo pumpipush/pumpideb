@@ -43,10 +43,10 @@ function bs58Decode(s: string): Uint8Array {
 
 /**
  * Build the canonical wallet-link message (must match the server's format).
- * Server issues: "RocketFi:linkwallet:<walletAddress>:<nonce>"
+ * Server issues: "Pumpi:linkwallet:<walletAddress>:<nonce>"
  */
 function buildLinkMessage(walletAddress: string, nonce: string): string {
-  return `RocketFi:linkwallet:${walletAddress}:${nonce}`;
+  return `Pumpi:linkwallet:${walletAddress}:${nonce}`;
 }
 
 /**
@@ -60,9 +60,9 @@ function verifyLinkSignature(
   message: string,
   expectedNonce: string,
 ): void {
-  // Parse message format: "RocketFi:linkwallet:<walletAddress>:<nonce>"
+  // Parse message format: "Pumpi:linkwallet:<walletAddress>:<nonce>"
   const parts = message.split(":");
-  if (parts.length !== 4 || parts[0] !== "RocketFi" || parts[1] !== "linkwallet") {
+  if (parts.length !== 4 || parts[0] !== "Pumpi" || parts[1] !== "linkwallet") {
     throw new Error("Malformed signed message");
   }
   if (parts[2] !== walletAddress) {
@@ -134,7 +134,7 @@ describe("wallet-link challenge/verify", () => {
     const walletAddress = bs58Encode(kp.publicKey);
     const nonce = "test-nonce-wrongaction";
     // Wrong action: "update" instead of "linkwallet"
-    const badMessage = `RocketFi:update:${walletAddress}:${nonce}`;
+    const badMessage = `Pumpi:update:${walletAddress}:${nonce}`;
     const sigBytes = nacl.sign.detached(new TextEncoder().encode(badMessage), kp.secretKey);
     const signature = bs58Encode(sigBytes);
 
