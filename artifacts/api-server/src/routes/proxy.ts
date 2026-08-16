@@ -164,9 +164,18 @@ router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
     const imageSubPath = `token-images/${uuid}.${ext}`;
     const metaSubPath  = `token-meta/${uuid}.json`;
 
-    // 1. Upload image to public object storage
-    await storageService.uploadToPublicPath(imageSubPath, imageBuffer, imageType);
-    const imageUrl = `${baseUrl}/api/storage/public-objects/${imageSubPath}`;
+    // 1. Upload image to public object storage.
+    // uploadToPublicPath attempts to make the file publicly readable and returns
+    // the direct GCS URL (https://storage.googleapis.com/…) when it succeeds —
+    // this URL is permanent and reachable by external services (pump.fun, wallets)
+    // regardless of which server is currently handling requests.
+    // Falls back to the proxied URL when per-object ACLs are disabled on the bucket.
+    const directImageUrl = await storageService.uploadToPublicPath(imageSubPath, imageBuffer, imageType);
+    const imageUrl = directImageUrl ?? `${baseUrl}/api/storage/public-objects/${imageSubPath}`;
+
+    if (!directImageUrl) {
+      console.warn("[proxy] pump-ipfs-upload: could not get direct GCS URL for image — using proxied URL instead. Logo may not show on pump.fun if the proxy URL is not publicly reachable.");
+    }
 
     // 2. Build Metaplex-compatible metadata JSON (pump.fun standard format)
     const metadata: Record<string, unknown> = {
@@ -183,9 +192,9 @@ router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
 
     // 3. Upload metadata JSON to public object storage
     const metaBuffer = Buffer.from(JSON.stringify(metadata));
-    await storageService.uploadToPublicPath(metaSubPath, metaBuffer, "application/json");
+    const directMetaUrl = await storageService.uploadToPublicPath(metaSubPath, metaBuffer, "application/json");
+    const metadataUri = directMetaUrl ?? `${baseUrl}/api/storage/public-objects/${metaSubPath}`;
 
-    const metadataUri = `${baseUrl}/api/storage/public-objects/${metaSubPath}`;
     return res.json({ metadataUri, imageUrl });
   } catch (storageErr) {
     console.warn("[proxy] pump-ipfs-upload: object storage unavailable, trying pump.fun fallback:", storageErr);

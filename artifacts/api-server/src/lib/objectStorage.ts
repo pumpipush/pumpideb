@@ -221,15 +221,22 @@ export class ObjectStorageService {
    * Upload a file directly to the first PUBLIC_OBJECT_SEARCH_PATH so it is
    * immediately reachable via GET /api/storage/public-objects/{subPath}.
    *
+   * Returns the direct GCS public URL (https://storage.googleapis.com/…) when
+   * the object can be made publicly accessible — this URL is permanent and does
+   * not depend on our API server being reachable.  Falls back to null when the
+   * bucket uses uniform bucket-level access (per-object ACLs disabled), in
+   * which case the caller should use the proxied /api/storage/public-objects URL.
+   *
    * @param subPath   Path under the public prefix, e.g. "token-meta/uuid.json"
    * @param content   File content as a Buffer
    * @param contentType  MIME type stored in GCS metadata
+   * @returns Direct GCS URL if the object was made public, otherwise null
    */
   async uploadToPublicPath(
     subPath: string,
     content: Buffer,
     contentType: string,
-  ): Promise<void> {
+  ): Promise<string | null> {
     const paths = this.getPublicObjectSearchPaths();
     // Strip trailing slash; split into '/bucketName/optional/prefix'
     const basePath = paths[0].replace(/\/$/, "");
@@ -239,6 +246,17 @@ export class ObjectStorageService {
     const objectName = prefix ? `${prefix}/${subPath}` : subPath;
     const file = objectStorageClient.bucket(bucketName).file(objectName);
     await file.save(content, { contentType, resumable: false });
+
+    // Attempt to make the file publicly readable so external services
+    // (pump.fun explorers, wallets, etc.) can fetch it directly from GCS
+    // without going through our API proxy.  This fails silently when the
+    // bucket uses uniform bucket-level access (per-object ACLs are disabled).
+    try {
+      await file.makePublic();
+      return `https://storage.googleapis.com/${bucketName}/${objectName}`;
+    } catch {
+      return null; // caller falls back to the proxied URL
+    }
   }
 
   async canAccessObjectEntity({
