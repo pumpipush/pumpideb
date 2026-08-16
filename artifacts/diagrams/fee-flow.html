@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"/>
+<title>Pumpi — Alur Fee Token Creation</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    padding: 32px 24px;
+    min-height: 100vh;
+  }
+  h1 { font-size: 22px; font-weight: 700; color: #FF3C00; margin-bottom: 4px; }
+  .subtitle { color: #8b949e; font-size: 13px; margin-bottom: 36px; }
+
+  /* ─── FLOW ─────────────────────────────────────────────── */
+  .flow { display: flex; flex-direction: column; gap: 0; max-width: 680px; margin: 0 auto; }
+
+  .step {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    position: relative;
+  }
+  .step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 19px;
+    top: 48px;
+    width: 2px;
+    bottom: 0;
+    background: #30363d;
+  }
+  .step-num {
+    width: 40px; height: 40px; min-width: 40px;
+    border-radius: 50%;
+    background: #161b22;
+    border: 2px solid #30363d;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700;
+    color: #FF3C00;
+    z-index: 1;
+  }
+  .step-body {
+    flex: 1;
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 24px;
+  }
+  .step-title { font-size: 14px; font-weight: 600; color: #f0f6fc; margin-bottom: 6px; }
+  .step-desc { font-size: 13px; color: #8b949e; line-height: 1.6; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin: 4px 4px 0 0;
+  }
+  .badge-sol { background: #0d2136; color: #58a6ff; border: 1px solid #1f6feb; }
+  .badge-ok { background: #0d1f0d; color: #3fb950; border: 1px solid #238636; }
+  .badge-warn { background: #2d1b00; color: #e3b341; border: 1px solid #9e6a03; }
+
+  /* ─── FEE BREAKDOWN ───────────────────────────────────── */
+  .section-title { font-size: 13px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: .05em; margin: 8px 0 4px; }
+
+  .fee-box {
+    background: #0d1117;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 8px;
+    max-width: 680px;
+    margin-left: auto; margin-right: auto;
+  }
+  .fee-header {
+    background: #161b22;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #f0f6fc;
+    border-bottom: 1px solid #21262d;
+  }
+  .fee-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    border-bottom: 1px solid #21262d;
+    gap: 10px;
+  }
+  .fee-row:last-child { border-bottom: none; }
+  .fee-icon { font-size: 18px; width: 28px; text-align: center; }
+  .fee-label { flex: 1; }
+  .fee-name { font-size: 13px; font-weight: 600; color: #e6edf3; }
+  .fee-note { font-size: 11px; color: #8b949e; margin-top: 1px; }
+  .fee-amount { font-size: 13px; font-weight: 700; text-align: right; }
+  .fee-dest { font-size: 11px; color: #8b949e; text-align: right; margin-top: 1px; }
+  .c-sol { color: #58a6ff; }
+  .c-green { color: #3fb950; }
+  .c-orange { color: #FF3C00; }
+  .c-yellow { color: #e3b341; }
+  .fee-total-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    background: #1a1f27;
+    border-top: 1px solid #30363d;
+  }
+  .fee-total-label { flex: 1; font-size: 13px; font-weight: 700; color: #f0f6fc; }
+  .fee-total-amt { font-size: 15px; font-weight: 700; color: #FF3C00; }
+
+  /* ─── WALLET POPUP ────────────────────────────────────── */
+  .wallet-box {
+    max-width: 680px; margin: 24px auto 0;
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .wallet-header {
+    background: #0d1117;
+    padding: 10px 16px;
+    font-size: 12px;
+    font-weight: 700; color: #8b949e;
+    border-bottom: 1px solid #21262d;
+    text-transform: uppercase; letter-spacing: .05em;
+  }
+  .wallet-body { padding: 12px 16px; }
+  .wallet-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 13px; }
+  .wallet-key { color: #8b949e; }
+  .wallet-val { font-weight: 600; }
+
+  /* ─── ARROW ───────────────────────────────────────────── */
+  .arrow-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 0;
+    color: #30363d;
+    font-size: 20px;
+    max-width: 680px; margin: 0 auto;
+  }
+
+  /* ─── MONEY FLOW ──────────────────────────────────────── */
+  .money-flow {
+    max-width: 680px; margin: 24px auto 0;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 12px;
+    align-items: center;
+  }
+  .entity {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 10px;
+    padding: 14px;
+    text-align: center;
+  }
+  .entity-icon { font-size: 28px; margin-bottom: 6px; }
+  .entity-name { font-size: 12px; font-weight: 700; color: #e6edf3; }
+  .entity-desc { font-size: 11px; color: #8b949e; margin-top: 2px; }
+  .flows { display: flex; flex-direction: column; gap: 6px; }
+  .flow-line {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600;
+  }
+  .flow-amt { color: #58a6ff; }
+  .flow-arrow { color: #30363d; flex: 1; text-align: center; font-size: 16px; }
+  .flow-dest { text-align: right; flex: 1; color: #8b949e; }
+
+  footer { text-align: center; color: #30363d; font-size: 11px; margin-top: 40px; }
+</style>
+</head>
+<body>
+
+<h1>Pumpi — Alur Pembuatan Token & Fee</h1>
+<p class="subtitle">Dari klik "Launch Token" hingga token live di blockchain Solana</p>
+
+<!-- ─── STEP BY STEP ────────────────────────────────────── -->
+<div class="flow">
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <div class="step-title">User isi data coin</div>
+      <div class="step-desc">
+        Name, ticker symbol, deskripsi, dan upload gambar logo.<br>
+        Gambar di-upload ke <strong>Object Storage</strong> (cloud) dan mendapat URL permanen.
+        <br><br>
+        <span class="badge badge-ok">✓ Gratis</span>
+        <span class="badge badge-sol">Belum ada tx Solana</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <div class="step-title">Upload metadata ke pump.fun</div>
+      <div class="step-desc">
+        Pumpi mengirim nama, simbol, deskripsi, dan URL gambar ke API pump.fun.<br>
+        pump.fun menyimpan metadata dan mengembalikan <strong>URI</strong> (tautan ke JSON metadata on-chain).
+        <br><br>
+        <span class="badge badge-ok">✓ Gratis</span>
+        <span class="badge badge-sol">Belum ada tx Solana</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <div class="step-title">Build transaksi via pumpportal</div>
+      <div class="step-desc">
+        Pumpi memanggil <strong>pumpportal API</strong> untuk membuat transaksi Solana yang berisi:
+        semua instruksi pembuatan token (mint account, bonding curve, metadata) + instruksi platform fee Pumpi.
+        Transaksi dikembalikan sebagai raw bytes — belum ditandatangani.
+        <br><br>
+        <span class="badge badge-ok">✓ Gratis</span>
+        <span class="badge badge-sol">Belum dikirim ke Solana</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <div class="step-title">Wallet popup — user approve</div>
+      <div class="step-desc">
+        Transaksi ditampilkan di <strong>Phantom / Backpack / Solflare</strong>.<br>
+        User melihat estimasi total cost dan memilih Approve atau Reject.
+        <br><br>
+        <span class="badge badge-warn">⚠ SOL akan dikurangi dari wallet</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <div class="step-title">Transaksi ditandatangani & dikirim ke Solana</div>
+      <div class="step-desc">
+        Wallet user menandatangani. Pumpi juga menandatangani dengan <strong>mint keypair</strong> baru (kunci unik untuk mint account).<br>
+        Transaksi dikirim ke Solana RPC. Dicoba hingga <strong>5x</strong> jika gagal (network congestion).
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">6</div>
+    <div class="step-body">
+      <div class="step-title">Token live — Pumpi register ke database</div>
+      <div class="step-desc">
+        Setelah transaksi confirmed, Pumpi menyimpan data token ke database internal.<br>
+        Token langsung muncul di halaman Explore dan chart mulai tracking trades.
+        <br><br>
+        <span class="badge badge-ok">✓ Token siap diperdagangkan</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ─── FEE BREAKDOWN ──────────────────────────────────── -->
+<div style="max-width:680px;margin:32px auto 0">
+  <div class="section-title">📦 Isi Satu Transaksi (step 4–5)</div>
+</div>
+
+<div class="fee-box">
+  <div class="fee-header">ESTIMATED BALANCE CHANGE — seperti yang terlihat di wallet</div>
+
+  <div class="fee-row">
+    <div class="fee-icon">🔒</div>
+    <div class="fee-label">
+      <div class="fee-name">Solana Account Rent</div>
+      <div class="fee-note">Deposit wajib Solana untuk membuat akun baru:<br>Mint account + Bonding curve + ATA creator + Metadata</div>
+    </div>
+    <div>
+      <div class="fee-amount c-sol">~0.0070 SOL</div>
+      <div class="fee-dest">→ dikunci di akun-akun tsb</div>
+    </div>
+  </div>
+
+  <div class="fee-row">
+    <div class="fee-icon">🟠</div>
+    <div class="fee-label">
+      <div class="fee-name">Pumpi Platform Fee</div>
+      <div class="fee-note">Fee layanan Pumpi per token yang diluncurkan</div>
+    </div>
+    <div>
+      <div class="fee-amount c-orange">0.0010 SOL</div>
+      <div class="fee-dest">→ wallet operator Pumpi</div>
+    </div>
+  </div>
+
+  <div class="fee-row">
+    <div class="fee-icon">⚡</div>
+    <div class="fee-label">
+      <div class="fee-name">Priority Fee (Compute Budget)</div>
+      <div class="fee-note">Tip ke validator agar tx diproses lebih cepat</div>
+    </div>
+    <div>
+      <div class="fee-amount c-yellow">0.0001 SOL</div>
+      <div class="fee-dest">→ Solana validators</div>
+    </div>
+  </div>
+
+  <div class="fee-row">
+    <div class="fee-icon">🌐</div>
+    <div class="fee-label">
+      <div class="fee-name">Base Transaction Fee</div>
+      <div class="fee-note">Biaya dasar Solana per signature</div>
+    </div>
+    <div>
+      <div class="fee-amount" style="color:#8b949e">~0.00001 SOL</div>
+      <div class="fee-dest">→ Solana validators</div>
+    </div>
+  </div>
+
+  <div class="fee-total-row">
+    <div class="fee-total-label">TOTAL yang keluar dari wallet user</div>
+    <div class="fee-total-amt">≈ 0.008 SOL</div>
+  </div>
+</div>
+
+<!-- ─── MONEY FLOW ─────────────────────────────────────── -->
+<div style="max-width:680px;margin:32px auto 0">
+  <div class="section-title">💸 Kemana SOL mengalir?</div>
+</div>
+
+<div style="max-width:680px;margin:8px auto 0;display:flex;flex-direction:column;gap:8px;">
+
+  <div style="display:flex;align-items:center;gap:0;background:#161b22;border:1px solid #21262d;border-radius:10px;overflow:hidden;">
+    <div style="padding:12px 16px;font-size:24px;">👤</div>
+    <div style="padding:12px 4px;font-size:12px;color:#8b949e;font-weight:700;">User Wallet</div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:4px;padding:8px 12px;">
+      <div style="display:flex;align-items:center;font-size:12px;">
+        <span style="color:#58a6ff;font-weight:700;min-width:90px;">0.0070 SOL</span>
+        <span style="color:#30363d;flex:1;text-align:center;">────────▶</span>
+        <span style="color:#8b949e;min-width:180px;text-align:right;">🔒 Solana Accounts (terkunci)</span>
+      </div>
+      <div style="display:flex;align-items:center;font-size:12px;">
+        <span style="color:#FF3C00;font-weight:700;min-width:90px;">0.0010 SOL</span>
+        <span style="color:#30363d;flex:1;text-align:center;">────────▶</span>
+        <span style="color:#8b949e;min-width:180px;text-align:right;">🟠 Pumpi Operator Wallet</span>
+      </div>
+      <div style="display:flex;align-items:center;font-size:12px;">
+        <span style="color:#e3b341;font-weight:700;min-width:90px;">0.0001 SOL</span>
+        <span style="color:#30363d;flex:1;text-align:center;">────────▶</span>
+        <span style="color:#8b949e;min-width:180px;text-align:right;">⚡ Solana Validators</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- note -->
+  <div style="background:#0d2136;border:1px solid #1f6feb;border-radius:8px;padding:12px 14px;font-size:12px;color:#58a6ff;">
+    <strong>Kenapa pump.fun bilang "Create = 0 SOL"?</strong><br>
+    <span style="color:#8b949e;">Mereka tidak memungut <em>platform fee</em> mereka sendiri saat create. Tapi Solana Account Rent (~0.007 SOL) tetap harus dibayar di pump.fun langsung juga — itu bukan fee pump.fun, itu persyaratan protokol Solana.</span>
+  </div>
+
+</div>
+
+<footer>Pumpi v1.0 beta — pumpi.io</footer>
+</body>
+</html>
