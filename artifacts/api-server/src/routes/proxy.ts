@@ -236,8 +236,21 @@ router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
     const pumpData = await pumpRes.json() as { metadataUri?: string };
     if (!pumpData.metadataUri) throw new Error("pump.fun /api/ipfs did not return metadataUri");
 
-    console.info("[proxy] pump-ipfs-upload: used pump.fun fallback successfully");
-    return res.json({ metadataUri: pumpData.metadataUri });
+    // Fetch the metadata JSON to extract the image URL so the frontend
+    // can store it in the DB and display the logo immediately after launch.
+    let ipfsImageUrl: string | null = null;
+    try {
+      const metaRes = await fetch(pumpData.metadataUri, { signal: AbortSignal.timeout(10_000) });
+      if (metaRes.ok) {
+        const meta = await metaRes.json() as { image?: string };
+        ipfsImageUrl = (typeof meta.image === "string" && meta.image) ? meta.image : null;
+      }
+    } catch {
+      // Non-fatal — logo may still appear once the adapter enriches from metadataUri
+    }
+
+    console.info("[proxy] pump-ipfs-upload: used pump.fun fallback successfully", { imageUrl: ipfsImageUrl });
+    return res.json({ metadataUri: pumpData.metadataUri, imageUrl: ipfsImageUrl });
   } catch (pumpErr) {
     console.error("[proxy] pump-ipfs-upload: both storage and pump.fun fallback failed:", pumpErr);
     return res.status(502).json({ error: "Metadata upload failed — object storage and pump.fun fallback both unavailable" });
