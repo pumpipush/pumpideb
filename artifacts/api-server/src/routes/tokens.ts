@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, ilike, and, not, sql, gte, gt } from "drizzle-orm";
-import { db, pool, tokensTable } from "@workspace/db";
+import { db, pool, tokensTable, tradesTable } from "@workspace/db";
 import {
   ListTokensQueryParams,
   ListTokensResponse,
@@ -21,6 +21,7 @@ import { SERVER_START_TIME } from "../lib/serverMeta.js";
 import { logger } from "../lib/logger.js";
 import { getSolPriceUsd } from "../lib/birdeye.js";
 import { emitSnapshot } from "../lib/tradeEmitter.js";
+import { deriveDevBuyFromTx } from "../lib/devBuyFromTx.js";
 
 const router: IRouter = Router();
 
@@ -648,6 +649,10 @@ router.post("/tokens/register-launch", asyncWrap(async (req, res) => {
     twitter, telegram, website, creatorAddress,
     platform: reqPlatform,
   } = req.body as Record<string, string | undefined>;
+  // Client-supplied hint that a dev buy was bundled into the launch tx. Used
+  // ONLY as a trigger to inspect the tx — all inserted values are derived from
+  // the confirmed transaction itself, never from this number.
+  const devBuySol = Number((req.body as Record<string, unknown>).devBuySol ?? 0);
 
   if (!mint || !txSignature || !name || !symbol || !creatorAddress) {
     res.status(400).json({ error: "Missing required fields: mint, txSignature, name, symbol, creatorAddress" });
@@ -738,6 +743,49 @@ router.post("/tokens/register-launch", asyncWrap(async (req, res) => {
     .returning();
 
   logger.info({ mint, platform }, "register-launch: token upserted");
+
+  // ── Fallback dev-buy trade, derived from the confirmed transaction ──────────
+  // The pumpapi.io stream normally emits the bundled dev buy via the create
+  // event's `initialBuy` field (verified live), but if that event is dropped the
+  // creator's own purchase would be invisible on the chart forever.
+  //
+  // Nothing is trusted from the client here beyond "go look at this tx": we
+  // fetch the confirmed transaction and extract the EXACT swap amounts from the
+  // program-emitted Anchor TradeEvent (never from balance deltas, which include
+  // rent and unrelated transfers). The row is only inserted when a verifiable
+  // buy event bound to this mint and creator exists in the tx. The UNIQUE
+  // constraint on trades.tx_hash makes this a no-op when the indexer already
+  // recorded the same tx, so no double-counting is possible — and because the
+  // values are on-chain-derived, a fallback row is equivalent to the stream row.
+  if (isFinite(devBuySol) && devBuySol > 0) {
+    try {
+      const derived = await deriveDevBuyFromTx(RPC_URLS, txSignature, mint, creatorAddress, platform);
+      if (derived) {
+        const [inserted] = await db.insert(tradesTable).values({
+          tokenAddress:  mint,
+          traderAddress: creatorAddress,
+          isBuy:         true,
+          ethAmount:     derived.solLamports.toString(),
+          tokenAmount:   derived.tokenBaseUnits.toString(),
+          priceEth:      derived.priceEth,
+          txHash:        txSignature,
+          platform,
+          timestamp:     derived.blockTime ?? new Date(),
+        }).onConflictDoNothing().returning({ id: tradesTable.id });
+        if (inserted) {
+          logger.info(
+            { mint, solLamports: derived.solLamports.toString() },
+            "register-launch: dev-buy trade derived from on-chain tx (stream had not recorded it)",
+          );
+        }
+      } else {
+        logger.debug({ mint, txSignature }, "register-launch: tx contains no verifiable dev buy for this mint — skipping fallback insert");
+      }
+    } catch (err) {
+      // Never fail registration because of the fallback insert
+      logger.warn({ mint, err }, "register-launch: dev-buy fallback derivation failed");
+    }
+  }
 
   // Push an updated snapshot to any SSE clients already watching this token.
   // Without this, clients that connected before register-launch fires would

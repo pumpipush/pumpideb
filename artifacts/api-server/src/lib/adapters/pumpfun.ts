@@ -104,7 +104,7 @@ function readBorshStr(buf: Uint8Array, off: number): [string, number] {
  *
  * Total: 8+32+8+8+1+32+8+8+8 = 113 bytes
  */
-function parseTradeEventFromLogs(logs: string[]): {
+export function parseTradeEventFromLogs(logs: string[]): {
   mint:                 string;
   solLamports:          string;
   tokenAmount:          string;

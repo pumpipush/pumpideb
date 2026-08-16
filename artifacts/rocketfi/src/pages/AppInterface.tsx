@@ -40,6 +40,7 @@ import { SwapSettingsPopover } from "@/components/shared/SwapSettingsPopover";
 import { useSwapSettings, formatSlippage, formatPriorityFee, getSwapSettings } from "@/stores/swapSettings";
 import { useTxToast } from "@/hooks/useTxToast";
 import { buildPumpFunBuyTx, buildPumpFunSellTx, waitForTxConfirmation } from "@/lib/pumpfun-swap";
+import { classifyLaunchConfirmOutcome, type SigStatusValue } from "@/lib/launchConfirmOutcome";
 import { buildLaunchLabBuyTx, buildLaunchLabSellTx } from "@/lib/launchlabSwap";
 import {
   uploadToPumpFunIpfs,
@@ -255,6 +256,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
   const _launchPumpFun = async () => {
     if (!wallet || !imageFile) return;
+    // True only when getSignatureStatus SUCCEEDED and showed the tx did not land —
+    // the only case where we can safely tell the user the coin was NOT launched.
+    let verifiedNotLanded = false;
     try {
       // Step 1: Upload metadata + image ke pump.fun IPFS
       setLaunchStep("uploading");
@@ -310,36 +314,55 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           setLaunchInfo({ name: name.trim(), symbol: symbol.trim().toUpperCase(), imagePreview, imageUrl: uploadedImageUrl, mint: newMint });
           setIndexReady(false);
           setExternalToken({ address: newMint, name: name.trim(), symbol: symbol.trim().toUpperCase(), logoURI: uploadedImageUrl ?? imagePreview, decimals: 6 });
-          void _registerAndNavigate(newMint, sig!, metadataUri, uploadedImageUrl, "pump_fun");
+          void _registerAndNavigate(newMint, sig!, metadataUri, uploadedImageUrl, "pump_fun", pumpfunBuyEnabled ? (parseFloat(pumpfunBuySOL) || 0) : 0);
           return; // success — card shows briefly; _registerAndNavigate navigates once DB insert confirms
         } catch (confirmErr: unknown) {
           // Confirmation failed — but the tx may have already landed on-chain.
-          // Check the signature BEFORE building a new mint to avoid duplicates.
+          // Gather evidence BEFORE deciding: a fresh mint may only be built when
+          // it is conclusively proven this tx cannot have created a coin.
+          let status: SigStatusValue | undefined;
+          let currentBlockHeight: number | null = null;
           try {
-            const { value: status } = await getConnection().getSignatureStatus(sig, {
+            ({ value: status } = await getConnection().getSignatureStatus(sig, {
               searchTransactionHistory: true,
-            });
-            if (status && !status.err &&
-                (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized")) {
-              // The coin WAS created — treat as success.
-              setLaunchStep("done");
-              setMintAddress(newMint);
-              setLaunchInfo({ name: name.trim(), symbol: symbol.trim().toUpperCase(), imagePreview, imageUrl: uploadedImageUrl, mint: newMint });
-              setIndexReady(false);
-              setExternalToken({ address: newMint, name: name.trim(), symbol: symbol.trim().toUpperCase(), logoURI: uploadedImageUrl ?? imagePreview, decimals: 6 });
-              void _registerAndNavigate(newMint, sig!, metadataUri, uploadedImageUrl, "pump_fun");
-              return;
-            }
+            }));
           } catch {
-            // getSignatureStatus network error — proceed to decide on retry
+            status = undefined; // lookup failed — no evidence either way
+          }
+          try {
+            currentBlockHeight = await getConnection().getBlockHeight("confirmed");
+          } catch {
+            currentBlockHeight = null;
           }
 
-          const raw = confirmErr instanceof Error ? confirmErr.message : String(confirmErr);
-          if (/block height exceeded|expired|Blockhash not found|timeout/i.test(raw) && attempt < MAX_TX_ATTEMPTS - 1) {
-            // Tx truly expired (not confirmed) — safe to retry with a new mint
-            lastErr = confirmErr;
-            continue;
+          const outcome = classifyLaunchConfirmOutcome({ status, currentBlockHeight, lastValidBlockHeight });
+
+          if (outcome === "confirmed") {
+            // The coin WAS created — treat as success.
+            setLaunchStep("done");
+            setMintAddress(newMint);
+            setLaunchInfo({ name: name.trim(), symbol: symbol.trim().toUpperCase(), imagePreview, imageUrl: uploadedImageUrl, mint: newMint });
+            setIndexReady(false);
+            setExternalToken({ address: newMint, name: name.trim(), symbol: symbol.trim().toUpperCase(), logoURI: uploadedImageUrl ?? imagePreview, decimals: 6 });
+            void _registerAndNavigate(newMint, sig!, metadataUri, uploadedImageUrl, "pump_fun", pumpfunBuyEnabled ? (parseFloat(pumpfunBuySOL) || 0) : 0);
+            return;
           }
+
+          if (outcome === "not_landed") {
+            // Conclusive: tx failed on-chain OR its blockhash validity window
+            // closed with the signature provably absent. Safe to retry with a
+            // new mint, and safe to show the definitive copy if retries run out.
+            verifiedNotLanded = true;
+            if (attempt < MAX_TX_ATTEMPTS - 1) {
+              lastErr = confirmErr;
+              continue;
+            }
+            throw confirmErr;
+          }
+
+          // outcome === "unknown" — the tx may still confirm. NEVER build a
+          // fresh mint here (duplicate-coin risk); surface uncertainty instead.
+          verifiedNotLanded = false;
           throw confirmErr;
         }
       }
@@ -353,7 +376,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       } else if (/upload|ipfs/i.test(raw) && !/timeout|expired|block height/i.test(raw)) {
         setLaunchError(`Metadata upload failed: ${raw}. Check your internet connection and try again.`);
       } else if (/timeout|not confirmed|Blockhash|block height|expired/i.test(raw)) {
-        setLaunchError("Network congested — the transaction didn't confirm in time. Your coin was NOT launched. Click Try Again to retry with a fresh transaction.");
+        setLaunchError(verifiedNotLanded
+          ? "Network congested — the transaction didn't confirm in time. Your coin was NOT launched. Click Try Again to retry with a fresh transaction."
+          : "Network congested — the transaction didn't confirm in time. It may still have gone through — check your wallet before retrying to avoid launching a duplicate coin.");
       } else {
         setLaunchError(raw);
       }
@@ -425,7 +450,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       setLaunchInfo({ name: name.trim(), symbol: symbol.trim().toUpperCase(), imagePreview, imageUrl: uploadedImageUrl, mint: newMint });
       setIndexReady(false);
       setExternalToken({ address: newMint, name: name.trim(), symbol: symbol.trim().toUpperCase(), logoURI: uploadedImageUrl ?? imagePreview, decimals: 6 });
-      void _registerAndNavigate(newMint, lastSig, metadataUri, uploadedImageUrl, "raydium_launchlab");
+      void _registerAndNavigate(newMint, lastSig, metadataUri, uploadedImageUrl, "raydium_launchlab", parseFloat(initialBuySOL) || 0);
 
     } catch (err: unknown) {
       setLaunchStep("error");
@@ -435,7 +460,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       } else if (/upload|ipfs/i.test(raw) && !/timeout|expired|block height/i.test(raw)) {
         setLaunchError(`Metadata upload failed: ${raw}. Check your internet connection and try again.`);
       } else if (/timeout|not confirmed|Blockhash|block height|expired/i.test(raw)) {
-        setLaunchError("Network congested — the transaction didn't confirm in time. Your coin was NOT launched. Click Try Again to retry with a fresh transaction.");
+        // No signature-status verification happens on this path, so the outcome
+        // is unknown — never claim the coin was NOT launched.
+        setLaunchError("Network congested — the transaction didn't confirm in time. It may still have gone through — check your wallet before retrying to avoid launching a duplicate coin.");
       } else if (/SDK tidak|config|launchpad/i.test(raw)) {
         setLaunchError(`Failed to connect to Raydium LaunchLab: ${raw}. Try again in a few seconds.`);
       } else {
@@ -463,6 +490,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     metadataUri: string | null,
     imageUrl: string | null,
     launchPlatform: "pump_fun" | "raydium_launchlab" = "pump_fun",
+    devBuySol = 0,
   ) => {
     try {
       const r = await fetch("/api/tokens/register-launch", {
@@ -481,6 +509,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           telegram:       telegram.trim() || undefined,
           website:        website.trim()  || undefined,
           creatorAddress: wallet,
+          // Bundled dev-buy amount — lets the server insert a synthetic first
+          // trade if the stream drops the bundled buy event (deduped by tx hash).
+          devBuySol:      devBuySol > 0 ? devBuySol : undefined,
         }),
         signal: AbortSignal.timeout(10_000),
       });
