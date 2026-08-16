@@ -24,8 +24,10 @@ export const listTokensQueryOffsetDefault = 0;
 
 export const ListTokensQueryParams = zod.object({
   "sort": zod.enum(['newest', 'trending', 'volume', 'marketcap']).optional(),
-  "limit": zod.coerce.number().default(listTokensQueryLimitDefault),
-  "offset": zod.coerce.number().default(listTokensQueryOffsetDefault),
+  // Clamp to 1–200; negative or zero values would cause a DB error, and large
+  // values (limit=999) would return ~870 KB payloads, a cheap DoS vector.
+  "limit": zod.coerce.number().int().min(1).max(200).default(listTokensQueryLimitDefault),
+  "offset": zod.coerce.number().int().min(0).default(listTokensQueryOffsetDefault),
   "search": zod.coerce.string().optional(),
   "graduated": zod.coerce.boolean().optional(),
   "platform": zod.enum(['pump_fun', 'moonshot', 'letsbonk', 'raydium_launchlab', 'daos_fun', 'pumpswap']).optional()
@@ -137,7 +139,7 @@ export const CreateTokenResponse = zod.object({
 export const getTrendingTokensQueryLimitDefault = 10;
 
 export const GetTrendingTokensQueryParams = zod.object({
-  "limit": zod.coerce.number().default(getTrendingTokensQueryLimitDefault)
+  "limit": zod.coerce.number().int().min(1).max(50).default(getTrendingTokensQueryLimitDefault)
 })
 
 export const getTrendingTokensResponsePlatformDefault = `unknown`;

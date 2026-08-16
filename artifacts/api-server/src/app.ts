@@ -104,6 +104,18 @@ app.use("/api/tokens", (req, _res, next) => {
 
 app.use("/api", router);
 
+// ── Security headers ──────────────────────────────────────────────────────
+// Applied after routes so they appear on every response including errors.
+// Not using helmet to keep the dependency footprint minimal.
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-XSS-Protection", "0");           // modern browsers ignore this; CSP is the right defence
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
+
 // ── Global error handler ──────────────────────────────────────────────────
 import { globalErrorHandler } from "./lib/errorHandler.js";
 app.use(globalErrorHandler);

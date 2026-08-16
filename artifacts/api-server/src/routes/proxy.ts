@@ -115,6 +115,11 @@ function isAllowedUrl(raw: string): boolean {
  * Rate: 6 req / min / IP via uploadLimiter (uses req.ip, respects trust-proxy header).
  */
 router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
+  // Body parser skips non-JSON content-types → req.body is undefined.
+  // Return a clear 400 instead of letting destructuring throw a 500.
+  if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
+    return res.status(400).json({ error: "Request body must be JSON (Content-Type: application/json)" });
+  }
   const { name, symbol, description, imageBase64, imageType, twitter, telegram, website } =
     req.body as Record<string, unknown>;
 
