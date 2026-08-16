@@ -1612,8 +1612,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   }, []);
 
   // Memoized bars — reference is stable until trades or timeframe actually change.
-  // Uses server-side OHLCV (full history, no 100-row cap) merged with real-time
-  // SSE trade ticks so the last candle stays live between server refetches.
+  // Uses server-side OHLCV (full history, no 100-row cap) merged with:
+  //   1. DB trade history from useTradeHistory (for tokens too new for Birdeye)
+  //   2. Real-time SSE trade ticks so the last candle stays live.
   const chartBars = useMemo(() => {
     if (!token) return [];
 
@@ -1622,44 +1623,46 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     const base  = (serverOhlcv?.bars ?? []) as import("@/lib/ohlcv").OHLCVBar[];
     const maxId = serverOhlcv?.maxTradeId ?? 0;
 
-    const liveAsHistory = liveTrades.map(lt => ({
-      id: lt.id,
-      tokenAddress: lt.tokenAddress,
-      traderAddress: lt.traderAddress,
-      isBuy: lt.isBuy,
-      ethAmount: lt.ethAmount,
-      tokenAmount: lt.tokenAmount,
-      priceEth: lt.priceEth,
-      txHash: lt.txHash,
-      platform: lt.platform ?? "unknown",
-      timestamp: lt.timestamp,
+    // DB historical trades (polled every 5 s — shows trades for tokens too new for Birdeye)
+    // Trade from api-client-react: id: number, priceEth?: string|null|undefined, timestamp: string
+    const historyRows = (history ?? []).map(t => ({
+      id:            t.id,
+      tokenAddress:  t.tokenAddress,
+      traderAddress: t.traderAddress,
+      isBuy:         t.isBuy,
+      ethAmount:     t.ethAmount,
+      tokenAmount:   t.tokenAmount,
+      priceEth:      t.priceEth ?? null,
+      txHash:        t.txHash,
+      platform:      t.platform ?? "unknown",
+      timestamp:     t.timestamp,
     }));
+    // Live SSE ticks — LiveTrade already matches Trade shape
+    const liveRows = liveTrades as import("@workspace/api-client-react").Trade[];
 
-    // ── Anti-double-count: ID-based cursor ────────────────────────────────────
-    // The server aggregate includes every trade with id <= maxTradeId.
-    // Adding all SSE trades on top re-counts those same rows on every 30-s
-    // refetch, inflating the current candle's volume each poll cycle.
-    //
-    // Fix: only overlay SSE trades whose database id is strictly greater than
-    // maxTradeId — those are genuinely new rows the server hasn't seen yet.
-    // When maxId = 0 (no server data loaded yet), all SSE trades are new.
-    const freshLiveTrades = maxId > 0
-      ? liveAsHistory.filter(lt => (lt.id ?? 0) > maxId)
-      : liveAsHistory;
+    // ── Anti-double-count: ID-based cursor ───────────────────────────────────
+    // Trades with id <= maxId are already baked into serverOhlcv bars; skip them.
+    // Dedup by txHash across both sources so a trade that arrived via SSE AND is
+    // already in history doesn't get counted twice.
+    const seen = new Set<string>();
+    const freshRows = [...historyRows, ...liveRows].filter(t => {
+      if (maxId > 0 && (t.id ?? 0) <= maxId && (t.id ?? 0) > 0) return false;
+      if (seen.has(t.txHash)) return false;
+      seen.add(t.txHash);
+      return true;
+    });
 
-    const liveBars = freshLiveTrades.length > 0
-      ? tradesFromLocalBars(freshLiveTrades, chartTf)
+    const freshBars = freshRows.length > 0
+      ? tradesFromLocalBars(freshRows, chartTf)
       : [];
 
-    if (liveBars.length === 0) return base;
-    if (base.length === 0) return liveBars;
+    if (freshBars.length === 0) return base;
+    if (base.length === 0) return freshBars;
 
-    // Merge: fresh live bars update the matching server bar (or append new ones).
-    // Volume addition is safe here — freshLiveTrades are id > maxTradeId so
-    // they are not yet present in any server bar.
+    // Merge: fresh bars update the matching server bar (or append new ones).
     const merged = new Map<number, import("@/lib/ohlcv").OHLCVBar>();
     for (const b of base) merged.set(b.time, { ...b });
-    for (const lb of liveBars) {
+    for (const lb of freshBars) {
       const existing = merged.get(lb.time);
       if (existing) {
         existing.high   = Math.max(existing.high, lb.high);
@@ -1672,7 +1675,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     }
     return Array.from(merged.values()).sort((a, b) => a.time - b.time);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverOhlcv, liveTrades, chartTf, token?.address]);
+  }, [serverOhlcv, liveTrades, history, chartTf, token?.address]);
 
   // ── "Just launched" detection ─────────────────────────────────────────────
   // True when: token was created < 60 s ago, has 0 DB trades, and no live SSE
@@ -1683,6 +1686,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     !!token?.createdAt &&
     (token.tradeCount ?? 0) === 0 &&
     liveTrades.length === 0 &&
+    (!history || history.length === 0) &&
     Date.now() - new Date(token.createdAt).getTime() < 60_000;
 
   // Effective market cap: stored value first, then derive from virtual reserves as fallback.

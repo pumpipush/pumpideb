@@ -20,6 +20,7 @@ import { asyncWrap } from "../lib/asyncHandler.js";
 import { SERVER_START_TIME } from "../lib/serverMeta.js";
 import { logger } from "../lib/logger.js";
 import { getSolPriceUsd } from "../lib/birdeye.js";
+import { emitSnapshot } from "../lib/tradeEmitter.js";
 
 const router: IRouter = Router();
 
@@ -737,6 +738,30 @@ router.post("/tokens/register-launch", asyncWrap(async (req, res) => {
     .returning();
 
   logger.info({ mint, platform }, "register-launch: token upserted");
+
+  // Push an updated snapshot to any SSE clients already watching this token.
+  // Without this, clients that connected before register-launch fires would
+  // never see the imageUrl (their initial snapshot had imageUrl: null from the
+  // pumpapi.io stub row, and the adapter's own emitNewToken call goes to the
+  // global feed, not per-token subscribers).
+  emitSnapshot({
+    type: "snapshot",
+    token: {
+      address:              token.address,
+      name:                 token.name,
+      symbol:               token.symbol,
+      imageUrl:             token.imageUrl,
+      priceEth:             token.priceEth,
+      marketCapEth:         token.marketCapEth,
+      volumeEth:            token.volumeEth ?? "0",
+      virtualEthReserves:   token.virtualEthReserves ?? "0",
+      virtualTokenReserves: token.virtualTokenReserves ?? "0",
+      tradeCount:           Number(token.tradeCount ?? 0),
+      platform:             token.platform ?? platform,
+      chain:                token.chain ?? "solana",
+    },
+  });
+
   res.status(201).json(GetTokenResponse.parse(formatToken(token)));
 }));
 
