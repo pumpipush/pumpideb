@@ -175,8 +175,12 @@ export async function waitForJupiterTxConfirmation(
   signature:            string,
   blockhash:            string,
   lastValidBlockHeight: number,
+  /** Optional callback fired with a human-readable progress string at each stage. */
+  onProgress?:          (msg: string) => void,
 ): Promise<void> {
   const conn = new Connection(getRpcUrl(), "confirmed");
+
+  onProgress?.("Waiting for on-chain confirmation…");
 
   try {
     const result = await conn.confirmTransaction(
@@ -186,11 +190,13 @@ export async function waitForJupiterTxConfirmation(
     if (result.value.err) {
       throw new Error(`Swap failed on-chain: ${JSON.stringify(result.value.err)}`);
     }
+    onProgress?.("Confirmed!");
   } catch (err: unknown) {
     // confirmTransaction throws TransactionExpiredBlockheightExceededError when the
     // blockhash window closes. But that just means the *poll* gave up — the tx may
     // have landed just before the window closed. Verify with a direct status lookup.
     if (err instanceof Error && /block.?height exceeded|blockhash not found/i.test(err.message)) {
+      onProgress?.("Checking transaction status…");
       const { value: statuses } = await conn.getSignatureStatuses(
         [signature],
         { searchTransactionHistory: true },
@@ -201,6 +207,7 @@ export async function waitForJupiterTxConfirmation(
           throw new Error(`Swap failed on-chain: ${JSON.stringify(status.err)}`);
         }
         // Tx IS on-chain — confirmTransaction just gave up too early. Success.
+        onProgress?.("Confirmed!");
         return;
       }
       // status is null → tx was never seen by the network. Re-throw timeout.

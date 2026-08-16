@@ -246,7 +246,7 @@ export default function ProfilePage() {
         return; // don't clear linkingWallet yet — button stays loading until merge dialog shows
       }
       await refreshSocialUser();
-      toast({ title: "Wallet linked", description: "Your wallet is now connected to your profile." });
+      toast({ title: "Wallet linked", description: "Your wallet is now connected to your profile.", variant: "success" as never });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to link wallet";
       toast({ title: "Link failed", description: msg, variant: "destructive" });
@@ -277,7 +277,7 @@ export default function ProfilePage() {
       await mergeWallet(mergeNonce);
       await refreshSocialUser();
       setMergeNonce(null);
-      toast({ title: "Accounts merged", description: "Your wallet is now linked to your profile." });
+      toast({ title: "Accounts merged", description: "Your wallet is now linked to your profile.", variant: "success" as never });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Merge failed";
       toast({ title: "Merge failed", description: msg, variant: "destructive" });

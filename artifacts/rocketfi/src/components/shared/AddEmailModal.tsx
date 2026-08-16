@@ -122,7 +122,7 @@ export function AddEmailModal({ open, onClose }: AddEmailModalProps) {
       await linkEmailSend(email.trim());
       setStep("verify");
     } catch (err) {
-      toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
+      toast({ title: "Verification email failed", description: (err as Error).message, variant: "destructive" });
     } finally {
       setEmailLoading(false);
     }
@@ -136,7 +136,7 @@ export function AddEmailModal({ open, onClose }: AddEmailModalProps) {
       await linkEmailVerify(email.trim(), code.trim());
       setStep("done");
     } catch (err) {
-      toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
+      toast({ title: "Invalid verification code", description: (err as Error).message, variant: "destructive" });
     } finally {
       setEmailLoading(false);
     }
@@ -147,9 +147,9 @@ export function AddEmailModal({ open, onClose }: AddEmailModalProps) {
     try {
       await linkGoogle(accessToken);
       setGoogleDone(true);
-      toast({ title: "Google account linked", description: "Your profile is now recoverable via Google." });
+      toast({ title: "Google account linked", description: "Your profile is now recoverable via Google.", variant: "success" as never });
     } catch (err) {
-      toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
+      toast({ title: "Google link failed", description: (err as Error).message, variant: "destructive" });
     } finally {
       setGoogleLoading(false);
     }
@@ -294,7 +294,7 @@ export function AddEmailModal({ open, onClose }: AddEmailModalProps) {
                   loading={googleLoading}
                   onLoading={setGoogleLoading}
                   onSuccess={handleGoogleToken}
-                  onError={(msg) => toast({ title: "Error", description: msg, variant: "destructive" })}
+                  onError={(msg) => toast({ title: "Google link failed", description: msg, variant: "destructive" })}
                 />
               ) : (
                 <p className="text-xs text-amber-400 text-center">

@@ -232,7 +232,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       return;
     }
     if (!imageFile) {
-      toast({ title: "Gambar diperlukan", description: "Token memerlukan gambar untuk tampilan di platform.", variant: "destructive" });
+      toast({ title: "Image required", description: "Upload a token image so it displays correctly on the platform.", variant: "destructive" });
       return;
     }
 
@@ -1397,6 +1397,15 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [amount, setAmount] = useState("");
   /** True while a trade is in-flight (signing + broadcast + on-chain confirmation). */
   const [isTradePending, setIsTradePending] = useState(false);
+  /** Seconds elapsed since the current trade started — shown in the button label. */
+  const [tradeElapsed, setTradeElapsed] = useState(0);
+  // Reset to 0 and tick every second for as long as a trade is in-flight.
+  useEffect(() => {
+    if (!isTradePending) { setTradeElapsed(0); return; }
+    setTradeElapsed(0);
+    const id = setInterval(() => setTradeElapsed((s) => s + 1), 1_000);
+    return () => clearInterval(id);
+  }, [isTradePending]);
   // ── Jupiter quote state (graduated tokens routed through Jupiter DEX) ─────
   const [jupiterQuote, setJupiterQuote]               = useState<JupiterQuoteResponse | null>(null);
   const [jupiterQuoteLoading, setJupiterQuoteLoading] = useState(false);
@@ -2581,6 +2590,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               wallet={wallet}
               handleTrade={handleTrade}
               isPending={isTradePending}
+              pendingSecs={tradeElapsed}
               isGraduated={!!(token?.graduated || token?.platform === "pumpswap")}
               jupiterQuote={jupiterQuote}
               jupiterQuoteLoading={jupiterQuoteLoading}
@@ -3988,6 +3998,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             wallet={wallet}
             handleTrade={handleTrade}
             isPending={isTradePending}
+            pendingSecs={tradeElapsed}
             isGraduated={!!(token?.graduated || token?.platform === "pumpswap")}
             jupiterQuote={jupiterQuote}
             jupiterQuoteLoading={jupiterQuoteLoading}
@@ -4066,10 +4077,16 @@ interface TradePanelFormProps {
    * than flashing "–".
    */
   balanceLoading?: boolean;
+  /**
+   * Seconds elapsed since the trade was submitted — shown in the button label as
+   * "Confirming… Xs" so users know the app hasn't frozen during the confirmation wait.
+   * Drives the counter only while isPending is true.
+   */
+  pendingSecs?: number;
 }
 
 function TradePanelForm({
-  tradeMode, setTradeMode, amount, setAmount, token, wallet, handleTrade, isPending,
+  tradeMode, setTradeMode, amount, setAmount, token, wallet, handleTrade, isPending, pendingSecs,
   isGraduated, jupiterQuote, jupiterQuoteLoading, jupiterQuoteError, tokenDecimals = 6,
   solBalance, tokenBalance, atomicBalance, balanceLoading,
 }: TradePanelFormProps) {
@@ -4343,7 +4360,12 @@ function TradePanelForm({
             disabled={isPending}
           >
             {isPending
-              ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /></span>
+              ? <span className="flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span className="tabular-nums">
+                    {(pendingSecs ?? 0) > 0 ? `Confirming… ${pendingSecs}s` : "Confirming…"}
+                  </span>
+                </span>
               : tradeMode === "buy" ? "Place Buy" : "Place Sell"}
           </Button>
         )}
@@ -4710,6 +4732,14 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
   const [tradeMode, setTradeMode]           = useState<"buy" | "sell">("buy");
   const [amount, setAmount]                 = useState("");
   const [isTradePending, setIsTradePending] = useState(false);
+  /** Seconds elapsed since the trade was submitted — shown in the button as "Confirming… Xs". */
+  const [tradeElapsed, setTradeElapsed] = useState(0);
+  useEffect(() => {
+    if (!isTradePending) { setTradeElapsed(0); return; }
+    setTradeElapsed(0);
+    const id = setInterval(() => setTradeElapsed((s) => s + 1), 1_000);
+    return () => clearInterval(id);
+  }, [isTradePending]);
   const [jupiterQuote, setJupiterQuote]     = useState<JupiterQuoteResponse | null>(null);
   const [jupiterQuoteLoading, setJupiterQuoteLoading] = useState(false);
   const [jupiterQuoteError, setJupiterQuoteError]     = useState<string | null>(null);
@@ -4874,6 +4904,7 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
               wallet={wallet}
               handleTrade={handleTrade}
               isPending={isTradePending}
+              pendingSecs={tradeElapsed}
               isGraduated={true}
               jupiterQuote={jupiterQuote}
               jupiterQuoteLoading={jupiterQuoteLoading}

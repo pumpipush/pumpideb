@@ -6,9 +6,9 @@
  *   await submitTx(sendOnChainTx(), "Buy");
  *
  * Behaviour:
- * - Shows "Pending…" immediately (no auto-dismiss while waiting).
- * - On success: "Confirmed ✓" with Solscan link — auto-dismisses after 6 s.
- * - On failure: "Failed" with error message — auto-dismisses after 8 s.
+ * - Shows "Pending…" (blue) immediately — no auto-dismiss while waiting.
+ * - On success: "Confirmed ✓" (green) with Solscan link — auto-dismisses after 6 s.
+ * - On failure: "Failed" (red) with a friendly error message — auto-dismisses after 8 s.
  * - The X button always works immediately.
  */
 
@@ -63,26 +63,35 @@ export function useTxToast() {
   ): Promise<string | null> => {
     const title = label ?? "Trade";
 
+    // Pending — blue accent (neutral informational)
     const { id, update, dismiss } = toast({
       title: `${title} Pending…`,
       description: "Broadcasting & confirming on-chain — please wait",
+      variant: "default",
     });
 
     try {
       const signature = await txPromise;
 
       if (isRealSignature(signature)) {
+        // Confirmed — green accent
         update({
           id,
-          title: `${title} Confirmed ✓`,
+          variant: "success" as never,
+          title: `${title} Confirmed`,
           description: (
             <a
               href={`${SOLSCAN_TX}${signature}`}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: "hsl(var(--primary))", textDecoration: "underline", fontSize: 13 }}
+              style={{
+                color: "hsl(152 76% 60%)",
+                textDecoration: "underline",
+                fontSize: 12,
+                fontFamily: "monospace",
+              }}
             >
-              View on Solscan ↗
+              {signature.slice(0, 16)}…{signature.slice(-8)} ↗
             </a>
           ),
           open: true,
@@ -90,6 +99,7 @@ export function useTxToast() {
       } else {
         update({
           id,
+          variant: "success" as never,
           title: `${title} Order Filled`,
           description: "Trade recorded. On-chain execution enabled in the next update.",
           open: true,
@@ -121,6 +131,7 @@ export function useTxToast() {
         msg = msg.slice(0, 200);
       }
 
+      // Failed — red accent
       update({
         id,
         title: `${title} Failed`,

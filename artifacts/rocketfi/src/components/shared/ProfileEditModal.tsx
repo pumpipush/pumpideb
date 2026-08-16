@@ -329,7 +329,7 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
       });
 
       close();
-      toast({ title: "Profile saved", description: "Your profile has been updated." });
+      toast({ title: "Profile saved", description: "Your profile has been updated.", variant: "success" as never });
 
       if (onSaved) {
         onSaved(newUsername);
@@ -514,7 +514,7 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
                     setWalletLinking(true);
                     try {
                       await unlinkWallet();
-                      toast({ title: "Wallet unlinked", description: "Your wallet has been removed from your profile." });
+                      toast({ title: "Wallet unlinked", description: "Your wallet has been removed from your profile.", variant: "warning" as never });
                     } catch (e) {
                       const msg = e instanceof Error ? e.message : "Failed to unlink";
                       toast({ title: "Unlink failed", description: msg, variant: "destructive" });
@@ -558,7 +558,7 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
                           setWalletMergeNonce(result.mergeNonce);
                           return; // don't show success yet
                         }
-                        toast({ title: "Wallet linked", description: "Your wallet is now linked to your profile." });
+                        toast({ title: "Wallet linked", description: "Your wallet is now linked to your profile.", variant: "success" as never });
                       } catch (e) {
                         const msg = e instanceof Error ? e.message : "Failed to link wallet";
                         toast({ title: "Link failed", description: msg, variant: "destructive" });
@@ -606,7 +606,7 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
                     await mergeWallet(walletMergeNonce);
                     await refreshSocialUser();
                     setWalletMergeNonce(null);
-                    toast({ title: "Accounts merged", description: "Your wallet is now linked to your profile." });
+                    toast({ title: "Accounts merged", description: "Your wallet is now linked to your profile.", variant: "success" as never });
                   } catch (e) {
                     const msg = e instanceof Error ? e.message : "Merge failed";
                     toast({ title: "Merge failed", description: msg, variant: "destructive" });

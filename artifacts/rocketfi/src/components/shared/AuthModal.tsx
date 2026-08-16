@@ -109,6 +109,7 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
         toast({
           title: "Google account linked",
           description: "Your Google account has been connected to your wallet profile.",
+          variant: "success" as never,
         });
         return;
       }
@@ -120,11 +121,13 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
         toast({
           title: "Google account linked",
           description: "Your Google account has been connected to your existing profile.",
+          variant: "success" as never,
         });
       } else if (isNewAccount) {
         toast({
-          title: "Welcome to Pumpi!",
-          description: "Your account is ready. You can set a custom username in your profile.",
+          title: "Welcome to Pumpi! 🚀",
+          description: "Your account is ready. Set a custom username in your profile.",
+          variant: "success" as never,
         });
       }
     } catch (e) {
