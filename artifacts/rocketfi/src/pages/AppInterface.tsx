@@ -2049,21 +2049,20 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           maxRetries:    5,
         });
 
-        // ── Optimistic release — same pattern as pump.fun path ────────────────
-        // The tx is broadcast; release the spinner immediately so the user isn't
-        // blocked for 30-90 s waiting for on-chain confirmation.
-        // Confirm in the background and trigger a second refetch once settled.
+        // ── Await on-chain confirmation before releasing the form ─────────────
+        // isTradePending stays true throughout — the button stays disabled until
+        // the tx either lands or fails. waitForJupiterTxConfirmation throws on
+        // timeout / on-chain failure, which propagates to submitTx and shows a
+        // "Failed" toast instead of silently leaving the UI looking successful.
+        const jupBlockhash = jupTx.message.recentBlockhash;
+        await waitForJupiterTxConfirmation(jupSig, jupBlockhash, jupLastBlock);
+
+        // Confirmed — release the form and refresh data.
         setAmount("");
         refetchToken();
         refetchHistory();
-        // Retry balance several times to cover RPC propagation delay.
         refreshAfterTrade();
         schedulePortfolioRefresh();
-
-        const jupBlockhash = jupTx.message.recentBlockhash;
-        waitForJupiterTxConfirmation(jupSig, jupBlockhash, jupLastBlock)
-          .then(() => { refetchToken(); refetchHistory(); refreshAfterTrade(); })
-          .catch(err => console.warn("[jupiter] bg confirmation:", err));
 
         return jupSig;
       }
@@ -2122,16 +2121,16 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           llHeight = res.lastValidBlockHeight;
         }
 
-        // Optimistic release — broadcast succeeded; clear spinner immediately.
+        // Await on-chain confirmation — button stays disabled until settled.
+        // Throws on timeout / failure → submitTx shows "Failed" toast.
+        await waitForTxConfirmation(llSig, llHash, llHeight);
+
+        // Confirmed — release the form and refresh data.
         setAmount("");
         refetchToken();
         refetchHistory();
         refreshAfterTrade();
         schedulePortfolioRefresh();
-
-        waitForTxConfirmation(llSig, llHash, llHeight)
-          .then(() => { refetchToken(); refetchHistory(); refreshAfterTrade(); })
-          .catch(err => console.warn("[launchlab] bg confirmation:", err));
 
         return llSig;
       }
@@ -2176,20 +2175,17 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         maxRetries:    5,
       });
 
-      // ── Optimistic release — same UX as pump.fun ──────────────────────────────
-      // The tx is now in the network and Alchemy is retrying on our behalf.
-      // Clear the input and trigger an immediate optimistic refetch so the UI
-      // feels instant. We confirm in the background and do a second refetch once
-      // the tx is finalized so any late-landing balance/reserve update is captured.
+      // Await on-chain confirmation — isTradePending stays true until the tx
+      // lands or definitively fails. Throws on timeout / on-chain error so
+      // submitTx can show a "Failed" toast instead of silently looking successful.
+      await waitForJupiterTxConfirmation(txSignature, blockhash, lastValidBlockHeight);
+
+      // Confirmed — release the form and refresh balances / trade history.
       setAmount("");
       refetchToken();
       refetchHistory();
       refreshAfterTrade();
       schedulePortfolioRefresh();
-
-      waitForJupiterTxConfirmation(txSignature, blockhash, lastValidBlockHeight)
-        .then(() => { refetchToken(); refetchHistory(); refreshAfterTrade(); })
-        .catch(err => console.warn("[pumpfun] bg confirmation:", err));
 
       // Real Solana signature (≥60 chars) → useTxToast shows Solscan link.
       return txSignature;
@@ -4796,13 +4792,12 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
 
       const txSignature = await signAndSendTransaction(transaction);
 
-      // Optimistic release — spinner clears as soon as the broadcast succeeds.
+      // Await on-chain confirmation — button stays disabled until settled.
+      await waitForJupiterTxConfirmation(txSignature, transaction.message.recentBlockhash, lastValidBlockHeight);
+
+      // Confirmed — release the form and refresh balance.
       setAmount("");
       refreshTokenBalanceAfterTrade();
-      waitForJupiterTxConfirmation(txSignature, transaction.message.recentBlockhash, lastValidBlockHeight)
-        .then(() => refreshTokenBalanceAfterTrade())
-        .catch(err => console.warn("[external-jupiter] bg confirmation:", err));
-
       return txSignature;
     };
 

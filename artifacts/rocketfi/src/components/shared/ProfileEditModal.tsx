@@ -187,13 +187,15 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
   const handleAvatarFile = useCallback(async (file: File) => {
     if (!file.type.startsWith("image/")) return;
     setAvatarUploading(true);
+    // Declared outside try so the finally block can always revoke it safely.
+    let previewUrl = "";
     try {
       // 1. Crop to 256×256 JPEG Blob
       const blob = await cropToBlob(file);
 
       // Show a local preview immediately while the upload is in progress.
       // The object URL is revoked in the finally block once no longer needed.
-      const previewUrl = URL.createObjectURL(blob);
+      previewUrl = URL.createObjectURL(blob);
       setForm((f) => f && { ...f, avatarPreview: previewUrl });
 
       const jwtHeaders = authHeaders();
@@ -252,7 +254,7 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
     } finally {
       // Revoke the object URL now that upload has completed or failed —
       // the form either holds the serving URL or has reverted to avatarUrl.
-      URL.revokeObjectURL(previewUrl);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
       setAvatarUploading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -65,7 +65,7 @@ export function useTxToast() {
 
     const { id, update, dismiss } = toast({
       title: `${title} Pending…`,
-      description: "Waiting for Solana network confirmation",
+      description: "Broadcasting & confirming on-chain — please wait",
     });
 
     try {
