@@ -166,7 +166,7 @@ export async function buildPumpFunCreateTx(
       denominatedInSol: "true",
       amount:           initialBuySOL ?? 0,
       slippage:         10,
-      priorityFee:      0.001,
+      priorityFee:      0.0001,
       pool:             "pump",
     }),
     signal: AbortSignal.timeout(20_000),
