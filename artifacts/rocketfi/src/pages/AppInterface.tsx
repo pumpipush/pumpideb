@@ -1674,6 +1674,17 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverOhlcv, liveTrades, chartTf, token?.address]);
 
+  // ── "Just launched" detection ─────────────────────────────────────────────
+  // True when: token was created < 60 s ago, has 0 DB trades, and no live SSE
+  // trades have arrived yet.  Used to show a friendlier empty state than the
+  // generic "No trades yet" text so the creator isn't confused by a blank chart.
+  // Disappears automatically once the first trade lands via the live WebSocket.
+  const isJustLaunched =
+    !!token?.createdAt &&
+    (token.tradeCount ?? 0) === 0 &&
+    liveTrades.length === 0 &&
+    Date.now() - new Date(token.createdAt).getTime() < 60_000;
+
   // Effective market cap: stored value first, then derive from virtual reserves as fallback.
   // DEX tokens (raydium/orca/meteora/pumpswap) use pump.fun default virtual reserves which
   // produce a meaningless ~$229B number — skip the formula for those platforms.
@@ -1750,11 +1761,21 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       return (
         <ChartPlaceholder>
           <div className="flex flex-col items-center gap-2 text-center px-8">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#3a3a3a" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-            </svg>
-            <p className="text-sm font-medium" style={{ color: "#555555" }}>No trades yet</p>
-            <p className="text-xs" style={{ color: "#3a3a3a" }}>Chart populates in real time as trades arrive</p>
+            {isJustLaunched ? (
+              <>
+                <span style={{ fontSize: 32, lineHeight: 1 }}>🚀</span>
+                <p className="text-sm font-medium" style={{ color: "#e0e0e0" }}>You just launched this coin!</p>
+                <p className="text-xs" style={{ color: "#555555" }}>Trades will appear here shortly.</p>
+              </>
+            ) : (
+              <>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#3a3a3a" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+                <p className="text-sm font-medium" style={{ color: "#555555" }}>No trades yet</p>
+                <p className="text-xs" style={{ color: "#3a3a3a" }}>Chart populates in real time as trades arrive</p>
+              </>
+            )}
           </div>
         </ChartPlaceholder>
       );
@@ -2709,8 +2730,18 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                             <tr>
                               <td colSpan={9} className="px-4 py-12 text-center">
                                 <div className="flex flex-col items-center gap-2">
-                                  <ArrowRightLeft className="h-5 w-5" style={{ color: "#3a3a3a" }} />
-                                  <span className="text-[13px]" style={{ color: "#555555" }}>No trades recorded yet</span>
+                                  {isJustLaunched ? (
+                                    <>
+                                      <span style={{ fontSize: 28, lineHeight: 1 }}>🚀</span>
+                                      <span className="text-[13px] font-medium" style={{ color: "#e0e0e0" }}>You just launched this coin!</span>
+                                      <span className="text-[12px]" style={{ color: "#555555" }}>Trades will appear here shortly.</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ArrowRightLeft className="h-5 w-5" style={{ color: "#3a3a3a" }} />
+                                      <span className="text-[13px]" style={{ color: "#555555" }}>No trades recorded yet</span>
+                                    </>
+                                  )}
                                 </div>
                               </td>
                             </tr>
