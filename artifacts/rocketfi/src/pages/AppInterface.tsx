@@ -273,7 +273,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       // times out / blockhash expires AFTER the wallet broadcast, we can check
       // getSignatureStatus before deciding to build a new coin (new mint).
       // Creating a new mint when the previous tx already confirmed = duplicate coin.
-      const MAX_TX_ATTEMPTS = 3;
+      const MAX_TX_ATTEMPTS = 5;
       let lastErr: unknown;
       for (let attempt = 0; attempt < MAX_TX_ATTEMPTS; attempt++) {
         setLaunchStep("building");
@@ -350,10 +350,10 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       const raw = err instanceof Error ? err.message : String(err);
       if (/rejected|cancel|user denied/i.test(raw)) {
         setLaunchError("Transaction cancelled. Click Launch again to retry.");
-      } else if (/ipfs|upload|fetch/i.test(raw)) {
+      } else if (/upload|ipfs/i.test(raw) && !/timeout|expired|block height/i.test(raw)) {
         setLaunchError(`Metadata upload failed: ${raw}. Check your internet connection and try again.`);
-      } else if (/timeout|not confirmed|Blockhash/i.test(raw)) {
-        setLaunchError("Confirmation timeout. The transaction may have already succeeded — check your wallet before retrying.");
+      } else if (/timeout|not confirmed|Blockhash|block height|expired/i.test(raw)) {
+        setLaunchError("Network congested — the transaction didn't confirm in time. Your coin was NOT launched. Click Try Again to retry with a fresh transaction.");
       } else {
         setLaunchError(raw);
       }
@@ -432,10 +432,10 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       const raw = err instanceof Error ? err.message : String(err);
       if (/rejected|cancel|user denied/i.test(raw)) {
         setLaunchError("Transaction cancelled. Click Launch again to retry.");
-      } else if (/upload|ipfs|fetch/i.test(raw)) {
+      } else if (/upload|ipfs/i.test(raw) && !/timeout|expired|block height/i.test(raw)) {
         setLaunchError(`Metadata upload failed: ${raw}. Check your internet connection and try again.`);
-      } else if (/timeout|not confirmed|Blockhash/i.test(raw)) {
-        setLaunchError("Confirmation timeout. The transaction may have already succeeded — check your wallet before retrying.");
+      } else if (/timeout|not confirmed|Blockhash|block height|expired/i.test(raw)) {
+        setLaunchError("Network congested — the transaction didn't confirm in time. Your coin was NOT launched. Click Try Again to retry with a fresh transaction.");
       } else if (/SDK tidak|config|launchpad/i.test(raw)) {
         setLaunchError(`Failed to connect to Raydium LaunchLab: ${raw}. Try again in a few seconds.`);
       } else {
