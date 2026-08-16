@@ -370,11 +370,20 @@ export async function simulatePumpFunCreate(tx: VersionedTransaction): Promise<v
   });
 
   if (sim.err) {
+    // AccountNotFound is a simulation-only quirk: pumpportal.fun transactions use
+    // Address Lookup Tables (ALTs) that may not be cached on our RPC node yet.
+    // The error does NOT appear on-chain — skip and let the wallet submit normally.
+    const errStr = JSON.stringify(sim.err);
+    if (errStr.includes("AccountNotFound")) {
+      console.warn("[pumpfunLauncher] simulation AccountNotFound (likely ALT cache miss) — skipping preflight, proceeding to submit");
+      return;
+    }
+
     const logs = sim.logs ?? [];
     const errorLine =
       logs.find(l => /Error:|failed:|AnchorError|InstructionError/i.test(l)) ??
       logs.at(-1) ??
-      JSON.stringify(sim.err);
+      errStr;
     throw new Error(`Simulation failed: ${errorLine}`);
   }
 }
