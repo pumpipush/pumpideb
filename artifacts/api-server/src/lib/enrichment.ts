@@ -1314,6 +1314,66 @@ export const LL_DEFAULT_SUPPLY_STR = "1000000000000000";
 const LL_SUPPLY_BACKFILL_PAGE = 20;
 
 /**
+ * Parse a non-negative decimal price string into an exact { num, den } BigInt
+ * ratio such that value = num / den.
+ *
+ * Supports plain decimal notation ("0.0000000004") and scientific notation
+ * ("4e-10"), both of which appear in Solana price strings.
+ *
+ * Returns null when the string is empty, contains invalid characters, or is
+ * negative.  Never calls parseFloat — the value is derived entirely from the
+ * string's characters so that prices with more decimal places than float64 can
+ * represent (> ~15 significant digits) are handled without rounding.
+ *
+ * Exported for unit testing.
+ */
+export function _parsePriceToRatio(
+  s: string,
+): { num: bigint; den: bigint } | null {
+  const trimmed = s.trim();
+  if (!trimmed) return null;
+  if (trimmed === "0") return { num: 0n, den: 1n };
+  if (trimmed.startsWith("-")) return null;
+
+  // Match optional scientific notation: e.g. "4e-10", "1.5E+3", "0.00003"
+  const m = trimmed.match(/^(\d+(?:\.\d+)?)(?:[eE]([+-]?\d+))?$/);
+  if (!m) return null;
+
+  const mantissa  = m[1]!;
+  const expShift  = m[2] ? parseInt(m[2], 10) : 0;
+
+  // Split mantissa into integer and fractional digit strings.
+  const dotIdx = mantissa.indexOf(".");
+  const intStr  = dotIdx === -1 ? mantissa : mantissa.slice(0, dotIdx);
+  const fracStr = dotIdx === -1 ? ""        : mantissa.slice(dotIdx + 1);
+
+  // Remove trailing zeros from fracStr — they don't change the value and
+  // keeping them just makes the BigInt numbers larger for no benefit.
+  const fracTrimmed = fracStr.replace(/0+$/, "");
+
+  // Combined integer representing mantissa × 10^fracTrimmed.length
+  //   e.g. "0.0000000004" → intStr="0", fracTrimmed="0000000004"
+  //         combined = "00000000004" → 4n
+  const combined = (intStr || "0") + fracTrimmed;
+
+  // Total denominator exponent = fracTrimmed.length − expShift
+  //   because: value = combined / 10^fracTrimmed.length × 10^expShift
+  //                  = combined / 10^(fracTrimmed.length − expShift)
+  const denExp = fracTrimmed.length - expShift;
+
+  try {
+    const num = BigInt(combined);
+    if (denExp <= 0) {
+      // The exponent shift makes this a whole-number value.
+      return { num: num * (10n ** BigInt(-denExp)), den: 1n };
+    }
+    return { num, den: 10n ** BigInt(denExp) };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Given a non-standard real supply and the token's stored priceEth, compute
  * the DB update that should be applied to correct the row.
  *
@@ -1337,9 +1397,22 @@ export function computeSupplyBackfillUpdate(
     totalSupply: realSupply.toString(),
   };
 
-  const priceNum = priceEth ? parseFloat(priceEth) : 0;
-  if (priceNum > 0) {
-    update.marketCapEth = String(Math.round(Number(realSupply) * priceNum * 1000));
+  // Parse priceEth directly into an exact BigInt num/den ratio — never via
+  // parseFloat — so that neither the supply nor the price ever passes through
+  // a lossy Number() conversion.  e.g. parseFloat("0.0000000004") → 4e-10
+  // which, scaled by 1e9, truncates to 0; _parsePriceToRatio handles it exactly.
+  //
+  // Formula: marketCapEth = realSupply × priceEth × 1000
+  //        = realSupply × (num / den) × 1000
+  //        = (realSupply × num × 1000) / den  — then half-up round
+  const ratio = priceEth ? _parsePriceToRatio(priceEth) : null;
+  if (ratio && ratio.num > 0n) {
+    const raw          = realSupply * ratio.num * 1000n;
+    const quotient     = raw / ratio.den;
+    const remainder    = raw % ratio.den;
+    // Half-up rounding matches Math.round / Postgres ROUND semantics.
+    const marketCapBig = remainder * 2n >= ratio.den ? quotient + 1n : quotient;
+    update.marketCapEth = marketCapBig.toString();
   }
 
   return update;
@@ -1386,14 +1459,18 @@ async function backfillLaunchLabSupply(): Promise<void> {
     cursor    = page[page.length - 1]!.address; // advance cursor past this page
     totalSeen += page.length;
 
-    for (const { address } of page) {
+    for (const { address, priceEth } of page) {
       try {
-        const realSupply = await fetchMintTotalSupply(address);
-        // Standard-1B or RPC-failed: computeSupplyBackfillUpdate returns null → skip.
-        // Cursor already advanced past this row regardless.
-        if (!realSupply || realSupply.toString() === LL_DEFAULT_SUPPLY_STR) continue;
+        const realSupply     = await fetchMintTotalSupply(address);
+        // Delegate guard check + exact totalSupply computation to the pure helper.
+        // Returns null when realSupply is null (RPC failed) or matches the
+        // standard 1B default (no correction needed). In both cases the
+        // keyset cursor has already advanced past this row, so it is not
+        // re-checked in the same run.
+        const backfillUpdate = computeSupplyBackfillUpdate(realSupply, priceEth);
+        if (!backfillUpdate) continue;
 
-        const supplyStr = realSupply.toString();
+        const supplyStr = backfillUpdate.totalSupply;
 
         // Compare-and-set UPDATE:
         //   WHERE totalSupply = LL_DEFAULT_SUPPLY_STR prevents this write from

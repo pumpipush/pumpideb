@@ -49,8 +49,8 @@
 
 import { and, eq, gt, sql } from "drizzle-orm";
 import { db, tokensTable } from "@workspace/db";
-import { fetchMintTotalSupply }          from "../lib/adapters/raydium-launchlab.js";
-import { LL_DEFAULT_SUPPLY_STR }         from "../lib/enrichment.js";
+import { fetchMintTotalSupply }             from "../lib/adapters/raydium-launchlab.js";
+import { LL_DEFAULT_SUPPLY_STR, computeSupplyBackfillUpdate } from "../lib/enrichment.js";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -104,13 +104,18 @@ async function main(): Promise<void> {
           continue;
         }
 
-        if (realSupply.toString() === LL_DEFAULT_SUPPLY_STR) {
+        // Delegate guard + totalSupply to the same pure helper as the startup
+        // backfill (computeSupplyBackfillUpdate).  Passing priceEth=null here
+        // because marketCapEth is always computed via SQL NUMERIC at write time
+        // (reads the current price_eth column value, not a stale page-select value).
+        const backfillUpdate = computeSupplyBackfillUpdate(realSupply, null);
+        if (!backfillUpdate) {
           // On-chain supply is genuinely 1B — this is a standard LaunchLab token.
           skipped++;
           continue;
         }
 
-        const supplyStr = realSupply.toString();
+        const supplyStr = backfillUpdate.totalSupply;
 
         if (isDryRun) {
           console.log(

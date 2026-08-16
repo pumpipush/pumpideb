@@ -16,6 +16,7 @@ import {
   computeEnrichmentUpdate,
   buildLabChainUpdate,
   computeSupplyBackfillUpdate,
+  _parsePriceToRatio,
   selectLongTailCandidates,
   needsStatReconciliation,
   LL_DEFAULT_SUPPLY_STR,
@@ -341,6 +342,73 @@ describe("buildLabChainUpdate", () => {
   });
 });
 
+// ── _parsePriceToRatio ─────────────────────────────────────────────────────────
+//
+// The helper that converts a decimal price string into an exact BigInt ratio
+// without going through parseFloat. These tests are the spec for how it
+// handles edge cases that would silently corrupt prices if floats were used.
+
+describe("_parsePriceToRatio", () => {
+  it("parses a plain decimal with many fractional digits", () => {
+    const r = _parsePriceToRatio("0.0000000004")!;
+    // 4 / 10_000_000_000 = 4e-10
+    expect(r.num).toBe(4n);
+    expect(r.den).toBe(10_000_000_000n);
+  });
+
+  it("parses scientific notation (negative exponent)", () => {
+    const r = _parsePriceToRatio("4e-10")!;
+    expect(r.num).toBe(4n);
+    expect(r.den).toBe(10_000_000_000n);
+  });
+
+  it("parses scientific notation (positive exponent)", () => {
+    const r = _parsePriceToRatio("1.5e3")!;
+    // 1.5 × 10^3 = 1500 → num=1500, den=1
+    expect(r.num).toBe(1500n);
+    expect(r.den).toBe(1n);
+  });
+
+  it("parses a plain integer", () => {
+    const r = _parsePriceToRatio("5")!;
+    expect(r.num).toBe(5n);
+    expect(r.den).toBe(1n);
+  });
+
+  it("parses '0' as zero ratio", () => {
+    const r = _parsePriceToRatio("0")!;
+    expect(r.num).toBe(0n);
+    expect(r.den).toBe(1n);
+  });
+
+  it("trims trailing zeros so the ratio is in lowest terms of its form", () => {
+    // "0.001000000" should behave the same as "0.001"
+    const r = _parsePriceToRatio("0.001000000")!;
+    expect(r.num).toBe(1n);
+    expect(r.den).toBe(1000n);
+  });
+
+  it("returns null for negative values", () => {
+    expect(_parsePriceToRatio("-0.001")).toBeNull();
+  });
+
+  it("returns null for empty string", () => {
+    expect(_parsePriceToRatio("")).toBeNull();
+  });
+
+  it("returns null for non-numeric input", () => {
+    expect(_parsePriceToRatio("abc")).toBeNull();
+  });
+
+  it("evaluates to the correct decimal value via num/den", () => {
+    // Verify a price from the DB: "0.000000001000000" → 1e-9
+    const r = _parsePriceToRatio("0.000000001000000")!;
+    // num=1n, den=1_000_000_000n (trailing zeros stripped from "001000000" → "001")
+    const quotient  = r.num * 10n ** 18n / r.den; // scale up for integer check
+    expect(quotient).toBe(1_000_000_000n);          // 1e-9 × 1e18 = 1e9
+  });
+});
+
 // ── computeSupplyBackfillUpdate ─────────────────────────────────────────────────
 //
 // Guards the pure helper that decides what DB fields to write when correcting
@@ -399,8 +467,70 @@ describe("computeSupplyBackfillUpdate", () => {
     const update = computeSupplyBackfillUpdate(supply, priceEth);
     expect(update).not.toBeNull();
     expect(update!.totalSupply).toBe("1000000000000000000");
-    // Allow ±1 for floating-point rounding in Math.round
-    expect(Math.abs(Number(update!.marketCapEth) - 1e12)).toBeLessThan(10);
+    // BigInt arithmetic: (1e18n × 1n × 1000n) / 1_000_000_000n = 1_000_000_000_000n exactly
+    expect(update!.marketCapEth).toBe("1000000000000");
+  });
+
+  it("preserves full integer precision for supply values above Number.MAX_SAFE_INTEGER (2^53) — production call path", () => {
+    // This test exercises the same code path as the production backfillLaunchLabSupply
+    // function, which calls computeSupplyBackfillUpdate(realSupply, priceEth) for
+    // every corrected token row.
+    //
+    // 2^53 + 1 = 9_007_199_254_740_993 is NOT exactly representable as float64.
+    // Number(9_007_199_254_740_993n) silently rounds to 9_007_199_254_740_992,
+    // so arithmetic through Number loses 1 unit.
+    //
+    // With priceEth = "0.001" the formula is: supply × 0.001 × 1000 = supply × 1.0
+    //   → marketCapEth should equal supply exactly.
+    //
+    // Buggy path (Number → float): Math.round(Number(2^53+1) × 0.001 × 1000)
+    //   = Math.round(9_007_199_254_740_992 × 1.0) = "9007199254740992"  ← off by 1
+    //
+    // Fixed path (pure BigInt ratio): supply × 1n × 1000n / 1000n = supply ← exact
+    const supply   = 9_007_199_254_740_993n; // 2^53 + 1
+    const priceEth = "0.001";
+    const update   = computeSupplyBackfillUpdate(supply, priceEth);
+    expect(update).not.toBeNull();
+    expect(update!.totalSupply).toBe("9007199254740993");
+    // Must be the exact string "9007199254740993", not the float-rounded "9007199254740992".
+    expect(update!.marketCapEth).toBe("9007199254740993");
+  });
+
+  it("handles prices with more than 9 decimal places without truncating to 0", () => {
+    // "0.0000000004" has 10 decimal places — more than a 1e9 scale factor can represent.
+    // Scaling by 1e9 would round 0.0000000004×1e9 = 0.4 → 0, producing MC = 0 (wrong).
+    // The correct result is 1e18 × 0.0000000004 × 1000 = 400_000_000_000 lamports.
+    const supply   = 1_000_000_000_000_000_000n; // 1e18 atoms
+    const priceEth = "0.0000000004";
+    const update   = computeSupplyBackfillUpdate(supply, priceEth);
+    expect(update).not.toBeNull();
+    expect(update!.marketCapEth).toBe("400000000000");
+  });
+
+  it("handles a 10-decimal-place price that is a half-unit without doubling the result", () => {
+    // "0.0000000005" × 1e9 = 0.5 → Math.round = 1 (rounds up) → wrong 2× result.
+    // The correct result is 1e18 × 0.0000000005 × 1000 = 500_000_000_000 lamports.
+    const supply   = 1_000_000_000_000_000_000n;
+    const priceEth = "0.0000000005";
+    const update   = computeSupplyBackfillUpdate(supply, priceEth);
+    expect(update).not.toBeNull();
+    expect(update!.marketCapEth).toBe("500000000000");
+  });
+
+  it("rounds fractional-lamport results half-up (≥0.5 rounds up, <0.5 rounds down)", () => {
+    // supply=1n, price="0.3333" → MC = 1 × 0.3333 × 1000 = 333.3 → round → 333
+    // supply=1n, price="0.6667" → MC = 1 × 0.6667 × 1000 = 666.7 → round → 667
+    // supply=1n, price="0.5"    → MC = 1 × 0.5    × 1000 = 500.0 → round → 500 (exact)
+    const cases: [bigint, string, string][] = [
+      [1n, "0.3333",  "333"],  // 333.3 → floor
+      [1n, "0.6667",  "667"],  // 666.7 → ceil
+      [1n, "0.5",     "500"],  // 500.0 exact
+      [3n, "0.33333", "1000"], // 999.99 → 1000
+    ];
+    for (const [supply, price, expected] of cases) {
+      const update = computeSupplyBackfillUpdate(supply, price);
+      expect(update!.marketCapEth, `price=${price}`).toBe(expected);
+    }
   });
 
   it("processes more than one batch worth of rows by exhausting the supply", () => {
