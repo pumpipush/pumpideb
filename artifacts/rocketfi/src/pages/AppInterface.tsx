@@ -64,6 +64,7 @@ import {
   getExternalToken, setExternalToken, ensureJupiterList, getJupiterTokenByAddress,
   type ExternalSolanaToken,
 } from "@/lib/external-tokens";
+import { awaitConfirmAndRelease } from "@/lib/tradeOrchestrator";
 import { computeSellPresetAmount } from "@/lib/tradePresets";
 import { getConnection } from "@/lib/solanaConnection";
 import { addFeeToVersionedTx, addFeeToLegacyTx } from "@/lib/platform-fee";
@@ -2064,16 +2065,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         // timeout / on-chain failure, which propagates to submitTx and shows a
         // "Failed" toast instead of silently leaving the UI looking successful.
         const jupBlockhash = jupTx.message.recentBlockhash;
-        await waitForJupiterTxConfirmation(jupSig, jupBlockhash, jupLastBlock);
-
-        // Confirmed — release the form and refresh data.
-        setAmount("");
-        refetchToken();
-        refetchHistory();
-        refreshAfterTrade();
-        schedulePortfolioRefresh();
-
-        return jupSig;
+        return await awaitConfirmAndRelease(jupSig, jupBlockhash, jupLastBlock, waitForJupiterTxConfirmation, () => {
+          setAmount("");
+          refetchToken();
+          refetchHistory();
+          refreshAfterTrade();
+          schedulePortfolioRefresh();
+        });
       }
 
       // ── Raydium LaunchLab bonding-curve path (non-graduated) ─────────────────
@@ -2132,16 +2130,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
         // Await on-chain confirmation — button stays disabled until settled.
         // Throws on timeout / failure → submitTx shows "Failed" toast.
-        await waitForTxConfirmation(llSig, llHash, llHeight);
-
-        // Confirmed — release the form and refresh data.
-        setAmount("");
-        refetchToken();
-        refetchHistory();
-        refreshAfterTrade();
-        schedulePortfolioRefresh();
-
-        return llSig;
+        return await awaitConfirmAndRelease(llSig, llHash, llHeight, waitForTxConfirmation, () => {
+          setAmount("");
+          refetchToken();
+          refetchHistory();
+          refreshAfterTrade();
+          schedulePortfolioRefresh();
+        });
       }
 
       // ── Build via pumpportal.fun — always uses the current account layout ────────
@@ -2187,17 +2182,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       // Await on-chain confirmation — isTradePending stays true until the tx
       // lands or definitively fails. Throws on timeout / on-chain error so
       // submitTx can show a "Failed" toast instead of silently looking successful.
-      await waitForJupiterTxConfirmation(txSignature, blockhash, lastValidBlockHeight);
-
-      // Confirmed — release the form and refresh balances / trade history.
-      setAmount("");
-      refetchToken();
-      refetchHistory();
-      refreshAfterTrade();
-      schedulePortfolioRefresh();
-
       // Real Solana signature (≥60 chars) → useTxToast shows Solscan link.
-      return txSignature;
+      return await awaitConfirmAndRelease(txSignature, blockhash, lastValidBlockHeight, waitForJupiterTxConfirmation, () => {
+        setAmount("");
+        refetchToken();
+        refetchHistory();
+        refreshAfterTrade();
+        schedulePortfolioRefresh();
+      });
     };
 
     // submitTx shows pending → confirmed/failed toast feedback.
@@ -4823,12 +4815,10 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
       const txSignature = await signAndSendTransaction(transaction);
 
       // Await on-chain confirmation — button stays disabled until settled.
-      await waitForJupiterTxConfirmation(txSignature, transaction.message.recentBlockhash, lastValidBlockHeight);
-
-      // Confirmed — release the form and refresh balance.
-      setAmount("");
-      refreshTokenBalanceAfterTrade();
-      return txSignature;
+      return await awaitConfirmAndRelease(txSignature, transaction.message.recentBlockhash, lastValidBlockHeight, waitForJupiterTxConfirmation, () => {
+        setAmount("");
+        refreshTokenBalanceAfterTrade();
+      });
     };
 
     setIsTradePending(true);
