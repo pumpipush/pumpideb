@@ -142,20 +142,6 @@ export default function AppInterface({ tokenAddress: routeAddress }: AppInterfac
 
 type LaunchStep = "idle" | "uploading" | "building" | "signing" | "confirming" | "done" | "error";
 
-const LAUNCH_STEPS: { key: LaunchStep; label: string }[] = [
-  { key: "uploading",  label: "Uploading metadata to IPFS" },
-  { key: "building",   label: "Building transaction" },
-  { key: "signing",    label: "Waiting for wallet signature" },
-  { key: "confirming", label: "Confirming on-chain" },
-];
-
-function StepIcon({ step, active, done }: { step: LaunchStep; active: boolean; done: boolean }) {
-  if (done) return <CheckCircle2 className="w-4 h-4" style={{ color: "#4ade80" }} />;
-  if (active) return <Loader2 className="w-4 h-4 animate-spin" style={{ color: "#b3b3b3" }} />;
-  if (step === "signing")    return <Wallet className="w-4 h-4" style={{ color: "#555555" }} />;
-  if (step === "confirming") return <Send   className="w-4 h-4" style={{ color: "#555555" }} />;
-  return <div className="w-4 h-4 rounded-full border" style={{ borderColor: "#3a3a3a" }} />;
-}
 
 type LaunchPlatform = "pumpfun" | "raydium";
 
@@ -444,7 +430,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   };
 
   const isLaunching = launchStep !== "idle" && launchStep !== "done" && launchStep !== "error";
-  const currentStepIdx = LAUNCH_STEPS.findIndex(s => s.key === launchStep);
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 lg:gap-10 max-w-[960px] mx-auto">
@@ -733,34 +718,26 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           <div className="px-5 pt-5 pb-5 space-y-4">
 
 
-            {/* Progress stepper (during launch) */}
+            {/* Launch progress — simple two-state indicator */}
             {isLaunching && (
-              <div className="space-y-2 py-1">
-                {LAUNCH_STEPS.map((step, idx) => {
-                  const isDone   = idx < currentStepIdx;
-                  const isActive = idx === currentStepIdx;
-                  const subLabel = isActive && step.key === "building"   ? buildingSubLabel
-                               : isActive && step.key === "confirming" ? confirmingDetail
-                               : null;
-                  return (
-                    <div key={step.key} className="flex items-start gap-3">
-                      <StepIcon step={step.key} active={isActive} done={isDone} />
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-[13px]" style={{
-                          color: isActive ? "#e0e0e0" : isDone ? "#4ade80" : "#555555",
-                          fontWeight: isActive ? 600 : 400,
-                        }}>
-                          {step.label}
-                        </span>
-                        {subLabel && (
-                          <span className="text-[11px] mt-0.5" style={{ color: "#b3b3b3" }}>
-                            {subLabel}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="flex items-center gap-3 py-2">
+                {launchStep === "signing" ? (
+                  <>
+                    <Wallet className="w-4 h-4 shrink-0" style={{ color: "#93c5fd" }} />
+                    <span className="text-[13px] font-semibold" style={{ color: "#93c5fd" }}>
+                      Approve in your wallet…
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0" style={{ color: "#b3b3b3" }} />
+                    <span className="text-[13px] font-semibold" style={{ color: "#b3b3b3" }}>
+                      {launchStep === "confirming"
+                        ? (confirmingDetail ?? "Confirming on-chain…")
+                        : "Building…"}
+                    </span>
+                  </>
+                )}
               </div>
             )}
 
