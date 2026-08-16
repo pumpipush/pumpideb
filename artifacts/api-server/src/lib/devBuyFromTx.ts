@@ -19,9 +19,10 @@
 
 import { parseTradeEventFromLogs as parsePumpTradeEvent } from "./adapters/pumpfun.js";
 import { parseTradeEventFromLogs as parseLabTradeEvent } from "./adapters/raydium-launchlab.js";
+import { bs58Decode, bs58Encode } from "./adapters/launchlabDecode.js";
 
-const PUMP_FUN_PROGRAM_ID  = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
-const LAUNCHLAB_PROGRAM_ID = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj";
+export const PUMP_FUN_PROGRAM_ID  = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
+export const LAUNCHLAB_PROGRAM_ID = "LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj";
 
 type TokBal = {
   accountIndex: number;
@@ -134,19 +135,37 @@ export function extractDevBuyFromConfirmedTx(
   return { solLamports, tokenBaseUnits, priceEth: computePriceEth(solLamports, tokenBaseUnits), blockTime };
 }
 
+/** Compiled instruction from getTransaction (encoding: "json"). */
+type CompiledInstruction = {
+  programIdIndex: number;
+  accounts?: number[];
+  data?: string;             // base58-encoded instruction data
+};
+
 /**
- * Fetch the confirmed transaction and extract the exact dev-buy swap.
- * Returns null when the tx cannot be fetched, failed on-chain, or contains no
- * verifiable buy event for (mint, creator).
+ * Raw transaction JSON shape from getTransaction (encoding: "json").
+ * Includes transaction message for signer extraction.
  */
-export async function deriveDevBuyFromTx(
+export type RawConfirmedTx = ConfirmedTxJson & {
+  transaction?: {
+    message?: {
+      accountKeys?: string[];         // base58-encoded public keys
+      header?: { numRequiredSignatures: number };
+      instructions?: CompiledInstruction[];
+    };
+    signatures?: string[];
+  };
+};
+
+/**
+ * Fetch the confirmed transaction JSON from the first RPC that returns it.
+ * Uses encoding: "json" which includes logMessages and meta.
+ * Returns null if all RPCs fail or the tx is not yet confirmed.
+ */
+export async function fetchConfirmedTx(
   rpcUrls: string[],
   signature: string,
-  mint: string,
-  creator: string,
-  platform: "pump_fun" | "raydium_launchlab",
-): Promise<DerivedDevBuy | null> {
-  let tx: ConfirmedTxJson | null = null;
+): Promise<RawConfirmedTx | null> {
   for (const url of rpcUrls) {
     try {
       const r = await fetch(url, {
@@ -160,10 +179,97 @@ export async function deriveDevBuyFromTx(
         signal: AbortSignal.timeout(8_000),
       });
       if (!r.ok) continue;
-      const json = await r.json() as { result?: ConfirmedTxJson | null };
-      if (json.result) { tx = json.result; break; }
+      const json = await r.json() as { result?: RawConfirmedTx | null };
+      if (json.result) return json.result;
     } catch { continue; }
   }
+  return null;
+}
+
+/**
+ * Extract the fee payer (first account key = always a signer) from a raw tx.
+ * Returns null if the transaction structure is unreadable.
+ */
+export function extractFeePayer(tx: RawConfirmedTx): string | null {
+  const keys = tx.transaction?.message?.accountKeys;
+  if (!keys || keys.length === 0) return null;
+  return typeof keys[0] === "string" ? keys[0] : null;
+}
+
+/**
+ * Anchor instruction discriminator for `createLaunchpad`.
+ * Computed as sha256("global:createLaunchpad")[0..8] = 2eef4b2f33dde9d3.
+ */
+const CREATE_LAUNCHPAD_DISC = new Uint8Array([0x2e, 0xef, 0x4b, 0x2f, 0x33, 0xdd, 0xe9, 0xd3]);
+
+function discMatches(data: Uint8Array, disc: Uint8Array): boolean {
+  if (data.length < disc.length) return false;
+  for (let i = 0; i < disc.length; i++) {
+    if (data[i] !== disc[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * Decode the mint address from a LaunchLab `createLaunchpad` instruction.
+ *
+ * The Anchor/Borsh instruction data layout is:
+ *   [0..7]  discriminator  (8 bytes) — sha256("global:createLaunchpad")[0..8]
+ *   [8..39] mintA pubkey   (32 bytes) ← the newly created token mint
+ *   [40..]  Borsh-encoded name / symbol / uri strings
+ *
+ * We identify the specific `createLaunchpad` instruction by its 8-byte Anchor
+ * discriminator, not just by program ID. This ensures that if a tx contains
+ * multiple LaunchLab instructions (e.g. a swap followed by a create), we always
+ * decode the right one. Token-balance presence is not used — it can be forged by
+ * bundling an SPL mint-to-new-account for an existing mint in the same tx.
+ *
+ * Returns the base58-encoded mint public key, or null if no `createLaunchpad`
+ * instruction with the expected discriminator is found.
+ */
+export function extractLaunchLabMintFromInstruction(
+  tx: RawConfirmedTx,
+  launchLabProgramId: string,
+): string | null {
+  const keys   = tx.transaction?.message?.accountKeys ?? [];
+  const instrs = tx.transaction?.message?.instructions ?? [];
+
+  const progIdx = keys.findIndex(k => k === launchLabProgramId);
+  if (progIdx < 0) return null;
+
+  // Find the instruction that (a) belongs to the LaunchLab program AND
+  // (b) has the exact createLaunchpad Anchor discriminator in its data.
+  for (const instr of instrs) {
+    if (instr.programIdIndex !== progIdx || !instr.data) continue;
+    try {
+      const raw = bs58Decode(instr.data);
+      // Need discriminator (8) + mint pubkey (32) = 40 bytes minimum
+      if (raw.length < 40) continue;
+      if (!discMatches(raw, CREATE_LAUNCHPAD_DISC)) continue;
+      // This is the createLaunchpad instruction — bytes 8-39 are the mint
+      return bs58Encode(raw.subarray(8, 40));
+    } catch { continue; }
+  }
+  return null;
+}
+
+/**
+ * Fetch the confirmed transaction and extract the exact dev-buy swap.
+ * Returns null when the tx cannot be fetched, failed on-chain, or contains no
+ * verifiable buy event for (mint, creator).
+ *
+ * Pass a pre-fetched `tx` to avoid a second RPC call when the caller already
+ * has the transaction (e.g. the register-launch route).
+ */
+export async function deriveDevBuyFromTx(
+  rpcUrls: string[],
+  signature: string,
+  mint: string,
+  creator: string,
+  platform: "pump_fun" | "raydium_launchlab",
+  prefetchedTx?: RawConfirmedTx | null,
+): Promise<DerivedDevBuy | null> {
+  const tx = prefetchedTx ?? await fetchConfirmedTx(rpcUrls, signature);
   if (!tx) return null;
   return extractDevBuyFromConfirmedTx(tx, mint, creator, platform);
 }

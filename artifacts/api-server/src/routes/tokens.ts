@@ -21,7 +21,12 @@ import { SERVER_START_TIME } from "../lib/serverMeta.js";
 import { logger } from "../lib/logger.js";
 import { getSolPriceUsd } from "../lib/birdeye.js";
 import { emitSnapshot } from "../lib/tradeEmitter.js";
-import { deriveDevBuyFromTx } from "../lib/devBuyFromTx.js";
+import {
+  deriveDevBuyFromTx, fetchConfirmedTx, extractFeePayer,
+  logsForProgramScope, PUMP_FUN_PROGRAM_ID, LAUNCHLAB_PROGRAM_ID,
+  extractLaunchLabMintFromInstruction,
+} from "../lib/devBuyFromTx.js";
+import { parseCreateEventFromLogs } from "../lib/adapters/pumpfun.js";
 
 const router: IRouter = Router();
 
@@ -639,10 +644,14 @@ router.get("/tokens/trending", asyncWrap(async (req, res) => {
 
 // POST /tokens/register-launch
 // Instantly registers a freshly-launched pump.fun / Raydium LaunchLab token by
-// verifying the tx signature on-chain (one cheap getSignatureStatuses call) and
-// inserting the initial DB record.  The frontend calls this right after
-// waitForTxConfirmation so the /coin/:address page shows the full bonding-curve
-// UI immediately — without waiting for pumpapi.io stream latency.
+// verifying the tx signature on-chain and inserting the initial DB record.
+// The frontend calls this right after waitForTxConfirmation so the /coin/:address
+// page shows the full bonding-curve UI immediately — without waiting for pumpapi.io
+// stream latency.
+//
+// Security: we fetch the full transaction (not just status) so we can verify that
+// creatorAddress is the fee payer (first signer) of the tx. This prevents anyone
+// from submitting a foreign tx signature to register or poison token metadata.
 router.post("/tokens/register-launch", asyncWrap(async (req, res) => {
   const {
     mint, txSignature, name, symbol, description, imageUrl, metadataUri,
@@ -659,45 +668,118 @@ router.post("/tokens/register-launch", asyncWrap(async (req, res) => {
     return;
   }
 
-  // ── Verify tx is confirmed on-chain ──────────────────────────────────────────
+  // ── Fetch & verify the transaction ───────────────────────────────────────────
+  // getTransaction replaces the old getSignatureStatuses check: if the tx exists
+  // with meta.err === null it is confirmed.  We also get logs and account keys
+  // needed for creator verification and dev-buy derivation — one RPC call total.
   const RPC_URLS = [
     "https://solana-rpc.publicnode.com",
     "https://api.mainnet-beta.solana.com",
   ];
-  let confirmed = false;
-  for (const url of RPC_URLS) {
-    try {
-      const r = await fetch(url, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({
-          jsonrpc: "2.0", id: 1,
-          method:  "getSignatureStatuses",
-          params:  [[txSignature]],
-        }),
-        signal: AbortSignal.timeout(5_000),
-      });
-      if (!r.ok) continue;
-      const json = await r.json() as {
-        result?: { value: Array<{ confirmationStatus: string; err: unknown } | null> };
-      };
-      const st = json.result?.value?.[0];
-      if (st && !st.err &&
-          (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized")) {
-        confirmed = true;
-        break;
-      }
-    } catch { continue; }
-  }
+  const confirmedTx = await fetchConfirmedTx(RPC_URLS, txSignature);
 
-  if (!confirmed) {
+  if (!confirmedTx) {
     res.status(422).json({ error: "Transaction not yet confirmed on-chain — retry in a moment" });
     return;
   }
+  if (confirmedTx.meta?.err !== null && confirmedTx.meta?.err !== undefined) {
+    res.status(422).json({ error: "Transaction failed on-chain" });
+    return;
+  }
+
+  // ── Verify creatorAddress is the fee payer of the transaction ─────────────────
+  // The fee payer is accountKeys[0] and is cryptographically required to sign.
+  // This prevents metadata poisoning: an attacker cannot claim creatorAddress =
+  // victim wallet unless they can sign as that wallet.
+  const feePayer = extractFeePayer(confirmedTx);
+  if (!feePayer) {
+    logger.warn({ txSignature }, "register-launch: could not extract fee payer from tx");
+    res.status(422).json({ error: "Could not read transaction account keys — retry in a moment" });
+    return;
+  }
+  if (feePayer !== creatorAddress) {
+    logger.warn({ txSignature, feePayer, creatorAddress }, "register-launch: creatorAddress is not the tx fee payer");
+    res.status(403).json({ error: "creatorAddress does not match the transaction fee payer" });
+    return;
+  }
+
+  // ── pump.fun: require an on-chain CreateEvent that matches the claimed mint ────
+  // We scope the raw log lines to those emitted while the pump.fun program is the
+  // active invocation frame (logsForProgramScope), then parse the Anchor CreateEvent
+  // from that scoped set. Scoping prevents a foreign program in the same tx from
+  // emitting a crafted "Program data:" payload that looks like a CreateEvent.
+  //
+  // Absence of a CreateEvent is also rejected: a valid pump.fun CREATE always
+  // emits one. Accepting a missing event would let an attacker reuse any of their
+  // own historical txs (where they're the fee payer) to register an arbitrary mint.
+  const platform = reqPlatform === "raydium_launchlab" ? "raydium_launchlab" : "pump_fun";
+  if (platform === "pump_fun") {
+    const allLogs    = confirmedTx.meta?.logMessages ?? [];
+    const scopedLogs = logsForProgramScope(allLogs, PUMP_FUN_PROGRAM_ID);
+    const createEvent = scopedLogs.length > 0 ? parseCreateEventFromLogs(scopedLogs) : null;
+
+    if (!createEvent) {
+      // No CreateEvent in the pump.fun program scope — this tx did not create a
+      // pump.fun token, or the logs are missing. Reject unconditionally.
+      logger.warn({ txSignature, mint }, "register-launch: no pump.fun CreateEvent found in tx logs");
+      res.status(403).json({ error: "No pump.fun CreateEvent found in the provided transaction" });
+      return;
+    }
+    if (createEvent.mint !== mint) {
+      logger.warn({ txSignature, claimedMint: mint, onChainMint: createEvent.mint }, "register-launch: mint mismatch vs CreateEvent");
+      res.status(403).json({ error: "mint does not match the token created in this transaction" });
+      return;
+    }
+    if (createEvent.creatorAddress !== creatorAddress) {
+      logger.warn({ txSignature }, "register-launch: creator mismatch vs CreateEvent");
+      res.status(403).json({ error: "creatorAddress does not match the on-chain CreateEvent" });
+      return;
+    }
+  }
+
+  // ── LaunchLab: verify the tx created the claimed mint via program logs + balances ─
+  // LaunchLab does NOT emit an Anchor CreateEvent log; instead we check two signals:
+  //   1. The tx contains an "Instruction: createLaunchpad" log emitted within the
+  //      LaunchLab program's own invocation scope — scoping prevents a foreign program
+  //      from emitting a matching log line.
+  //   2. The claimed mint appears in the tx's postTokenBalances — proves this specific
+  //      mint was created or first touched in this transaction.
+  // Combined with the fee-payer check above (creatorAddress paid for the tx), these
+  // three signals together prove the caller created this specific LaunchLab token.
+  if (platform === "raydium_launchlab") {
+    const allLogs    = confirmedTx.meta?.logMessages ?? [];
+    const scopedLogs = logsForProgramScope(allLogs, LAUNCHLAB_PROGRAM_ID);
+
+    const hasCreateInstruction = scopedLogs.some(l => /Instruction:\s*createLaunchpad/i.test(l));
+    if (!hasCreateInstruction) {
+      logger.warn({ txSignature, mint }, "register-launch: no LaunchLab createLaunchpad found in scoped tx logs");
+      res.status(403).json({ error: "No Raydium LaunchLab createLaunchpad instruction found in the provided transaction" });
+      return;
+    }
+
+    // Decode the mint directly from the createLaunchpad instruction data.
+    // The Anchor/Borsh layout is [disc(8)][mintA pubkey(32)][name][symbol][uri],
+    // so bytes 8–39 of the instruction payload ARE the mint address — no inference
+    // from token balances needed. Token-balance presence is insufficient because an
+    // attacker can bundle a genuine LaunchLab create for mint A with an unrelated
+    // SPL mint-to-new-account instruction for existing mint B in the same tx;
+    // B would then appear in postTokenBalances but not preTokenBalances (new token
+    // account, existing mint), defeating any balance-based check.
+    const txMint = extractLaunchLabMintFromInstruction(confirmedTx, LAUNCHLAB_PROGRAM_ID);
+    if (!txMint) {
+      logger.warn({ txSignature, mint }, "register-launch: could not decode mint from LaunchLab instruction data");
+      res.status(403).json({ error: "Could not decode mint from the LaunchLab createLaunchpad instruction" });
+      return;
+    }
+    if (txMint !== mint) {
+      logger.warn({ txSignature, txMint, claimedMint: mint }, "register-launch: instruction mint mismatch");
+      res.status(403).json({ error: "mint does not match the token created by this transaction's createLaunchpad instruction" });
+      return;
+    }
+  }
 
   // ── Upsert token ─────────────────────────────────────────────────────────────
-  const platform = reqPlatform === "raydium_launchlab" ? "raydium_launchlab" : "pump_fun";
-
+  // `platform` is already declared above (used in CreateEvent verification).
   // pump.fun bonding curve always starts at fixed virtual reserves.
   // Raydium LaunchLab reserves are computed from on-chain parameters and will
   // be filled by the enrichment service within ~30 s — use 0 as a placeholder.
@@ -759,7 +841,8 @@ router.post("/tokens/register-launch", asyncWrap(async (req, res) => {
   // values are on-chain-derived, a fallback row is equivalent to the stream row.
   if (isFinite(devBuySol) && devBuySol > 0) {
     try {
-      const derived = await deriveDevBuyFromTx(RPC_URLS, txSignature, mint, creatorAddress, platform);
+      // Pass the pre-fetched tx to avoid a second RPC call.
+      const derived = await deriveDevBuyFromTx(RPC_URLS, txSignature, mint, creatorAddress, platform, confirmedTx);
       if (derived) {
         const [inserted] = await db.insert(tradesTable).values({
           tokenAddress:  mint,

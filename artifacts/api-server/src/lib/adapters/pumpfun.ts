@@ -145,7 +145,7 @@ export function parseTradeEventFromLogs(logs: string[]): {
  *   discriminator (8)  name (borsh string)  symbol (borsh string)
  *   uri (borsh string)  mint (32)  bonding_curve (32)  user (32)
  */
-function parseCreateEventFromLogs(logs: string[]): {
+export function parseCreateEventFromLogs(logs: string[]): {
   name:           string;
   symbol:         string;
   uri:            string;

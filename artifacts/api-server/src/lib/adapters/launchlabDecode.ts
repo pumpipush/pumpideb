@@ -16,6 +16,22 @@
 export const BS58_ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 /**
+ * Encode raw bytes to a Base58 string (Solana public-key format).
+ */
+export function bs58Encode(bytes: Uint8Array): string {
+  let n = 0n;
+  for (const b of bytes) { n = n * 256n + BigInt(b); }
+  let result = "";
+  while (n > 0n) {
+    result = BS58_ALPHA[Number(n % 58n)]! + result;
+    n /= 58n;
+  }
+  let leading = 0;
+  for (const b of bytes) { if (b !== 0) break; leading++; }
+  return "1".repeat(leading) + result;
+}
+
+/**
  * Decode a Base58-encoded string to a Uint8Array.
  * Handles leading '1' characters (zero bytes) correctly.
  */
