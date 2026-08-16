@@ -44,15 +44,12 @@ import { buildLaunchLabBuyTx, buildLaunchLabSellTx } from "@/lib/launchlabSwap";
 import {
   uploadToPumpFunIpfs,
   buildPumpFunCreateTx,
-  simulatePumpFunCreate,
   buildPumpFunBuyTxViaPortal,
   buildPumpFunSellTxViaPortal,
-  PUMP_FUN_LAUNCH_COST_SOL,
 } from "@/lib/pumpfunLauncher";
 import {
   uploadToRaydiumIpfs,
   buildRaydiumLaunchTx,
-  simulateRaydiumLaunch,
   isRaydiumSdkCached,
   preloadRaydiumSdk,
   RAYDIUM_LAUNCH_COST_SOL,
@@ -147,7 +144,7 @@ type LaunchStep = "idle" | "uploading" | "building" | "signing" | "confirming" |
 
 const LAUNCH_STEPS: { key: LaunchStep; label: string }[] = [
   { key: "uploading",  label: "Uploading metadata to IPFS" },
-  { key: "building",   label: "Building transaction & simulation" },
+  { key: "building",   label: "Building transaction" },
   { key: "signing",    label: "Waiting for wallet signature" },
   { key: "confirming", label: "Confirming on-chain" },
 ];
@@ -279,8 +276,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       setLaunchStep("building");
       const { transaction, mintAddress: newMint, blockhash, lastValidBlockHeight } =
         await buildPumpFunCreateTx(wallet, name.trim(), symbol.trim().toUpperCase(), metadataUri);
-      await simulatePumpFunCreate(transaction);
-
       // Step 3: User signs in wallet (mint keypair already signed inside buildPumpFunCreateTx)
       setLaunchStep("signing");
       const sig = await signAndSendTransaction(transaction);
@@ -301,8 +296,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         setLaunchError("Transaction cancelled. Click Launch again to retry.");
       } else if (/ipfs|upload|fetch/i.test(raw)) {
         setLaunchError(`Metadata upload failed: ${raw}. Check your internet connection and try again.`);
-      } else if (/simulat/i.test(raw)) {
-        setLaunchError(`Simulation failed: ${raw}\n\nMake sure your SOL balance is sufficient (min ~${PUMP_FUN_LAUNCH_COST_SOL} SOL).`);
       } else if (/timeout|not confirmed|Blockhash/i.test(raw)) {
         setLaunchError("Confirmation timeout. The transaction may have already succeeded — check your wallet before retrying.");
       } else {
@@ -349,9 +342,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           () => setBuildingSubLabel(null), // clear once SDK import resolves
         );
 
-      // Simulate first transaction (covers the create instruction)
-      await simulateRaydiumLaunch(transactions[0]);
-
       // Step 3: User wallet signs and broadcasts each transaction in sequence.
       // Raydium may split the create flow into 2+ txs (e.g. create mint + init pool).
       setLaunchStep("signing");
@@ -385,9 +375,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         setLaunchError("Transaction cancelled. Click Launch again to retry.");
       } else if (/upload|ipfs|fetch/i.test(raw)) {
         setLaunchError(`Metadata upload failed: ${raw}. Check your internet connection and try again.`);
-      } else if (/simulat/i.test(raw)) {
-        const totalNeeded = (RAYDIUM_LAUNCH_COST_SOL + parseFloat(initialBuySOL || "0")).toFixed(3);
-        setLaunchError(`Simulation failed: ${raw}\n\nMake sure your SOL balance is sufficient (min ~${totalNeeded} SOL: ${RAYDIUM_LAUNCH_COST_SOL} launch fee + ${initialBuySOL} initial buy).`);
       } else if (/timeout|not confirmed|Blockhash/i.test(raw)) {
         setLaunchError("Confirmation timeout. The transaction may have already succeeded — check your wallet before retrying.");
       } else if (/SDK tidak|config|launchpad/i.test(raw)) {
