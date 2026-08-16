@@ -558,6 +558,25 @@ router.get("/tokens/:address/holders", heavyLimiter, asyncWrap(async (req, res) 
   const address = req.params.address as string;
   if (!address) { res.status(400).json({ error: "address required" }); return; }
 
+  // For DEX tokens (graduated pump.fun → pumpswap, raydium_launchlab), backfill
+  // Birdeye trade history before aggregating — same as /top-wallets. Without this,
+  // Jupiter/aggregator swaps that our indexer never captured are omitted, making the
+  // holder list materially wrong (missing sells → ghost holders; missing buys → missing holders).
+  const [tokenRowForHolders] = await db
+    .select({ platform: tokensTable.platform, name: tokensTable.name, symbol: tokensTable.symbol })
+    .from(tokensTable)
+    .where(eq(tokensTable.address, address))
+    .limit(1);
+
+  if (tokenRowForHolders && DEX_PLATFORMS.has(tokenRowForHolders.platform)) {
+    await backfillBirdeyeTradesToDb(
+      address,
+      tokenRowForHolders.platform,
+      tokenRowForHolders.name ?? null,
+      tokenRowForHolders.symbol ?? null,
+    );
+  }
+
   const { rows } = await pool.query<{
     trader_address: string;
     balance: string;
@@ -583,7 +602,7 @@ router.get("/tokens/:address/holders", heavyLimiter, asyncWrap(async (req, res) 
         THEN  CAST(NULLIF(token_amount, '') AS NUMERIC)
         ELSE -CAST(NULLIF(token_amount, '') AS NUMERIC)
       END
-    ) > 0
+    ) > 1000
     ORDER BY balance DESC
   `, [address]);
 

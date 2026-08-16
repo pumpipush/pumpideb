@@ -2657,9 +2657,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           // Use on-chain total supply as denominator so % of supply is accurate.
           // token.totalSupply is in atomic units (pump.fun: 1e15 = 1B × 10^6).
           // Guard: some DB rows have 1e27 (DB migration bug, now repaired).
-          // For pump_fun / pumpswap the supply is always 1B × 10^6 = 1e15.
+          // pump_fun / pumpswap / raydium_launchlab all use 1B × 10^6 = 1e15.
           const PUMP_SUPPLY = 1_000_000_000_000_000;
-          const isPumpPlatform = token?.platform === "pump_fun" || token?.platform === "pumpswap";
+          const isPumpPlatform = token?.platform === "pump_fun" || token?.platform === "pumpswap" || token?.platform === "raydium_launchlab";
           const rawSupply = token?.totalSupply ? parseFloat(token.totalSupply) : 0;
           const onChainSupply = rawSupply > 0 && (!isPumpPlatform || rawSupply <= PUMP_SUPPLY)
             ? rawSupply
@@ -3388,6 +3388,17 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   );
                 })()}
 
+                {/* DEX data disclaimer — holders are derived from indexed trades, not on-chain state */}
+                {isDexToken && (
+                  <div className="flex items-center gap-2 px-4 py-2"
+                    style={{ background: "rgba(251,191,36,0.05)", borderBottom: "1px solid rgba(251,191,36,0.12)" }}>
+                    <span className="text-[10px] font-mono shrink-0" style={{ color: "rgba(251,191,36,0.7)" }}>⚠</span>
+                    <span className="text-[11px]" style={{ color: "rgba(251,191,36,0.6)" }}>
+                      Based on indexed trades — may not capture all DEX / aggregator activity
+                    </span>
+                  </div>
+                )}
+
                 {/* Holder rows — DexScreener layout */}
                 <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                   <table style={{ minWidth: "580px", width: "100%", borderCollapse: "collapse" }}>
@@ -3433,8 +3444,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                           const barW   = maxBal > 0 ? (bal / maxBal) * 100 : 0;
 
                           // USD value: atomic balance → tokens → SOL → USD
+                          // Use token.decimals (not hardcoded 1e6) so LaunchLab / non-standard decimal tokens are correct.
+                          const tokenDivisor = Math.pow(10, token?.decimals ?? 6);
                           const priceSol = priceStats.currentPrice ?? 0;
-                          const valUsd   = (bal / 1e6) * priceSol * (solPrice ?? 0);
+                          const valUsd   = (bal / tokenDivisor) * priceSol * (solPrice ?? 0);
                           const fmtVal   = valUsd >= 1_000_000
                             ? `$${(valUsd / 1_000_000).toFixed(2)}M`
                             : valUsd >= 1_000
