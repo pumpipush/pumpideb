@@ -464,7 +464,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         // No signature-status verification happens on this path, so the outcome
         // is unknown — never claim the coin was NOT launched.
         setLaunchError("Network congested — the transaction didn't confirm in time. It may still have gone through — check your wallet before retrying to avoid launching a duplicate coin.");
-      } else if (/SDK tidak|config|launchpad/i.test(raw)) {
+      } else if (/config|launchpad/i.test(raw)) {
         setLaunchError(`Failed to connect to Raydium LaunchLab: ${raw}. Try again in a few seconds.`);
       } else {
         setLaunchError(raw);
