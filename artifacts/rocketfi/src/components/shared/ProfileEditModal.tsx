@@ -445,9 +445,14 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
             placeholder={generateUsername(address)}
             maxLength={32}
           />
-          <p className="text-[10px] text-muted-foreground">
-            Auto-generated: <span className="text-foreground/60">{generateUsername(address)}</span>
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] text-muted-foreground">
+              Auto-generated: <span className="text-foreground/60">{generateUsername(address)}</span>
+            </p>
+            <p className={`text-[10px] tabular-nums ${form.username.length >= 30 ? "text-amber-400" : "text-muted-foreground"}`}>
+              {form.username.length}/32
+            </p>
+          </div>
         </div>
 
         {/* Bio */}
@@ -579,7 +584,7 @@ export function ProfileEditModal({ open, onOpenChange, onSaved, focusUsername }:
                     className="h-7 text-xs rounded-sm shrink-0"
                     onClick={openWalletModal}
                   >
-                    <Wallet className="w-3 h-3 mr-1" /> Connect wallet
+                    <Wallet className="w-3 h-3 mr-1" /> Connect Wallet
                   </Button>
                 )}
               </div>

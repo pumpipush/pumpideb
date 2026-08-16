@@ -35,8 +35,7 @@ export function BondingCurveChart({ token }: { token: Token }) {
         });
       }
       return points;
-    } catch (e) {
-      console.error(e);
+    } catch {
       return [];
     }
   }, [token]);

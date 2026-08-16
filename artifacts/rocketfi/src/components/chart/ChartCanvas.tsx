@@ -678,7 +678,7 @@ export const ChartCanvas = memo(function ChartCanvas({
       }
 
       // Graduation marker removed — no annotation on chart
-    } catch (err) { console.warn("[ChartCanvas] setData:", err); }
+    } catch (err) { if (import.meta.env.DEV) console.warn("[ChartCanvas] setData:", err); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bars, chartType, graduatedAt]);
 
@@ -705,7 +705,7 @@ export const ChartCanvas = memo(function ChartCanvas({
         } as Partial<LineSeriesOptions>);
         if (clean.length) series.setData(calcOverlay(key, clean).map(p => ({ time: p.time as never, value: p.value })));
         current.set(key, series);
-      } catch (err) { console.warn(`[ChartCanvas] indicator ${key}:`, err); }
+      } catch (err) { if (import.meta.env.DEV) console.warn(`[ChartCanvas] indicator ${key}:`, err); }
     }
     syncPSAR(chart, clean, showPSAR);
   // eslint-disable-next-line react-hooks/exhaustive-deps

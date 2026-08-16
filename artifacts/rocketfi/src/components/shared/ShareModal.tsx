@@ -297,8 +297,9 @@ export function ShareModal({ token, open, onClose, solPrice, priceStats }: Share
         document.body.appendChild(a); a.click();
         setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 200);
       }, "image/png");
-    } catch (e) { console.error(e); }
-    finally { setDownloading(false); }
+    } catch {
+      // download failed silently — canvas or blob API not available
+    } finally { setDownloading(false); }
   };
 
   if (!open) return null;

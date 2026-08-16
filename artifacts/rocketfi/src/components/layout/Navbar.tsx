@@ -30,7 +30,7 @@ function WalletButton() {
   async function handleLogout() {
     if (wallet) await disconnect();
     if (socialUser) signOut();
-    toast({ title: "Logged out", description: "See you next time." });
+    toast({ title: "Signed out", description: "Your session has ended." });
   }
 
   // For social-only users (no wallet), query by the social address so the

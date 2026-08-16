@@ -119,7 +119,6 @@ export function Sidebar() {
         <Link href="/launch" className="block w-full">
           <LaunchTokenButton />
         </Link>
-        <span className="text-center text-[11px] text-muted-foreground">v1.0 beta</span>
       </div>
     </div>
   );

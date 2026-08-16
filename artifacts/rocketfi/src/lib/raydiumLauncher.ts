@@ -254,7 +254,7 @@ export async function buildRaydiumLaunchTx(
   // ── Fetch launchpad configs to get configId ───────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const configs: any[] = await raydium.api.fetchLaunchConfigs();
-  if (!configs?.length) throw new Error("Tidak ada konfigurasi Raydium LaunchLab tersedia");
+  if (!configs?.length) throw new Error("No Raydium LaunchLab configurations available");
 
   // Prefer SOL-denominated config, fall back to first available.
   // Check both c.mintB and c.key?.mintB — API shape may vary across SDK versions.
@@ -264,7 +264,7 @@ export async function buildRaydiumLaunchTx(
     c.mintB === solanaMint || c.key?.mintB === solanaMint
   ) ?? configs[0];
   const configPubKey: string = configEntry.key?.pubKey ?? configEntry.pubKey ?? configEntry.id;
-  if (!configPubKey) throw new Error("Config ID tidak ditemukan dari Raydium API");
+  if (!configPubKey) throw new Error("Config ID not found from Raydium API");
   const configId = new PublicKey(configPubKey);
 
   // ── Generate fresh mint keypair ──────────────────────────────────────────

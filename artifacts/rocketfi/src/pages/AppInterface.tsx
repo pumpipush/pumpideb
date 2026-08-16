@@ -813,7 +813,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 {pumpfunBuyEnabled && (
                   <div className="mt-3 space-y-3">
                     <p className="text-[12px]" style={{ color: "#b3b3b3" }}>
-                      Beli token kamu di awal untuk menjaga nilai coin. Token langsung masuk ke walletmu dalam satu transaksi bersama pembuatan coin.
+                      Buy tokens at launch to support the coin's initial value. Tokens are delivered to your wallet in the same transaction as the coin creation.
                     </p>
                     <div className="relative">
                       <Input

@@ -953,7 +953,7 @@ export default function ProfilePage() {
                         >
                           {linkingWallet
                             ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Linking…</>
-                            : <><Wallet className="w-3.5 h-3.5 mr-1.5" />{wallet ? "Link connected wallet" : "Connect wallet"}</>
+                            : <><Wallet className="w-3.5 h-3.5 mr-1.5" />{wallet ? "Link Wallet" : "Connect Wallet"}</>
                           }
                         </Button>
                         <Button
