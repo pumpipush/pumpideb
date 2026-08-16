@@ -303,7 +303,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           setLaunchInfo({ name: name.trim(), symbol: symbol.trim().toUpperCase(), imagePreview, imageUrl: uploadedImageUrl, mint: newMint });
           setIndexReady(false);
           setExternalToken({ address: newMint, name: name.trim(), symbol: symbol.trim().toUpperCase(), logoURI: uploadedImageUrl ?? imagePreview, decimals: 6 });
-          return; // success — user stays on launch page, sees rich success card
+          void _registerAndNavigate(newMint, sig!, metadataUri, uploadedImageUrl, "pump_fun");
+          return; // success — card shows briefly; _registerAndNavigate navigates once DB insert confirms
         } catch (confirmErr: unknown) {
           // Confirmation failed — but the tx may have already landed on-chain.
           // Check the signature BEFORE building a new mint to avoid duplicates.
@@ -319,6 +320,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
               setLaunchInfo({ name: name.trim(), symbol: symbol.trim().toUpperCase(), imagePreview, imageUrl: uploadedImageUrl, mint: newMint });
               setIndexReady(false);
               setExternalToken({ address: newMint, name: name.trim(), symbol: symbol.trim().toUpperCase(), logoURI: uploadedImageUrl ?? imagePreview, decimals: 6 });
+              void _registerAndNavigate(newMint, sig!, metadataUri, uploadedImageUrl, "pump_fun");
               return;
             }
           } catch {
@@ -416,6 +418,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       setLaunchInfo({ name: name.trim(), symbol: symbol.trim().toUpperCase(), imagePreview, imageUrl: uploadedImageUrl, mint: newMint });
       setIndexReady(false);
       setExternalToken({ address: newMint, name: name.trim(), symbol: symbol.trim().toUpperCase(), logoURI: uploadedImageUrl ?? imagePreview, decimals: 6 });
+      void _registerAndNavigate(newMint, lastSig, metadataUri, uploadedImageUrl, "raydium_launchlab");
 
     } catch (err: unknown) {
       setLaunchStep("error");
@@ -441,6 +444,45 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     setConfirmingDetail(null);
     setLaunchInfo(null);
     setIndexReady(false);
+  };
+
+  // ── Instant registration ─────────────────────────────────────────────────────
+  // After the tx confirms, POST to /api/tokens/register-launch so the DB record
+  // exists right away. On success, navigate to /coin/:address immediately.
+  // On any failure the success card + background polling serve as the fallback.
+  const _registerAndNavigate = async (
+    mint: string,
+    txSignature: string,
+    metadataUri: string | null,
+    imageUrl: string | null,
+    launchPlatform: "pump_fun" | "raydium_launchlab" = "pump_fun",
+  ) => {
+    try {
+      const r = await fetch("/api/tokens/register-launch", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          mint,
+          txSignature,
+          platform:       launchPlatform,
+          name:           name.trim(),
+          symbol:         symbol.trim().toUpperCase(),
+          description:    desc.trim()     || undefined,
+          imageUrl:       imageUrl        || undefined,
+          metadataUri:    metadataUri     || undefined,
+          twitter:        twitter.trim()  || undefined,
+          telegram:       telegram.trim() || undefined,
+          website:        website.trim()  || undefined,
+          creatorAddress: wallet,
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (r.ok) {
+        onLaunch(mint); // token is in DB — full bonding-curve UI shows immediately
+        return;
+      }
+      // 422 = not yet confirmed at RPC (should be rare) → fall through to polling
+    } catch { /* network error → fall through to polling */ }
   };
 
   // Poll our API every 3 s until the newly-launched token appears in our DB.

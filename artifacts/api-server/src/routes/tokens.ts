@@ -635,6 +635,111 @@ router.get("/tokens/trending", asyncWrap(async (req, res) => {
   res.json(GetTrendingTokensResponse.parse(tokens.map(t => formatToken(t, undefined, t.trades1h))));
 }));
 
+// POST /tokens/register-launch
+// Instantly registers a freshly-launched pump.fun / Raydium LaunchLab token by
+// verifying the tx signature on-chain (one cheap getSignatureStatuses call) and
+// inserting the initial DB record.  The frontend calls this right after
+// waitForTxConfirmation so the /coin/:address page shows the full bonding-curve
+// UI immediately — without waiting for pumpapi.io stream latency.
+router.post("/tokens/register-launch", asyncWrap(async (req, res) => {
+  const {
+    mint, txSignature, name, symbol, description, imageUrl, metadataUri,
+    twitter, telegram, website, creatorAddress,
+    platform: reqPlatform,
+  } = req.body as Record<string, string | undefined>;
+
+  if (!mint || !txSignature || !name || !symbol || !creatorAddress) {
+    res.status(400).json({ error: "Missing required fields: mint, txSignature, name, symbol, creatorAddress" });
+    return;
+  }
+
+  // ── Verify tx is confirmed on-chain ──────────────────────────────────────────
+  const RPC_URLS = [
+    "https://solana-rpc.publicnode.com",
+    "https://api.mainnet-beta.solana.com",
+  ];
+  let confirmed = false;
+  for (const url of RPC_URLS) {
+    try {
+      const r = await fetch(url, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          jsonrpc: "2.0", id: 1,
+          method:  "getSignatureStatuses",
+          params:  [[txSignature]],
+        }),
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!r.ok) continue;
+      const json = await r.json() as {
+        result?: { value: Array<{ confirmationStatus: string; err: unknown } | null> };
+      };
+      const st = json.result?.value?.[0];
+      if (st && !st.err &&
+          (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized")) {
+        confirmed = true;
+        break;
+      }
+    } catch { continue; }
+  }
+
+  if (!confirmed) {
+    res.status(422).json({ error: "Transaction not yet confirmed on-chain — retry in a moment" });
+    return;
+  }
+
+  // ── Upsert token ─────────────────────────────────────────────────────────────
+  const platform = reqPlatform === "raydium_launchlab" ? "raydium_launchlab" : "pump_fun";
+
+  // pump.fun bonding curve always starts at fixed virtual reserves.
+  // Raydium LaunchLab reserves are computed from on-chain parameters and will
+  // be filled by the enrichment service within ~30 s — use 0 as a placeholder.
+  const VTOK   = platform === "pump_fun" ? "1073000191045000" : "0";
+  const VSOL   = platform === "pump_fun" ? "30"               : "0";
+  const SUPPLY = platform === "pump_fun" ? "1000000000000000" : "0";
+
+  const [token] = await db
+    .insert(tokensTable)
+    .values({
+      address:              mint,
+      name:                 name.trim(),
+      symbol:               symbol.trim().toUpperCase(),
+      description:          description?.trim() ?? null,
+      imageUrl:             imageUrl   ?? null,
+      creatorAddress,
+      virtualTokenReserves: VTOK,
+      virtualEthReserves:   VSOL,
+      totalSupply:          SUPPLY,
+      twitterUrl:           twitter  ?? null,
+      telegramUrl:          telegram ?? null,
+      websiteUrl:           website  ?? null,
+      metadataUri:          metadataUri ?? null,
+      platform,
+      chain:    "solana",
+      decimals: 6,
+    })
+    .onConflictDoUpdate({
+      target: tokensTable.address,
+      // If the pumpapi.io indexer already created a stub row, enrich the metadata
+      // fields without touching reserves so live trade data isn't regressed.
+      set: {
+        name:        sql`COALESCE(NULLIF(EXCLUDED.name, '???'), ${tokensTable.name})`,
+        symbol:      sql`COALESCE(NULLIF(EXCLUDED.symbol, '???'), ${tokensTable.symbol})`,
+        description: sql`COALESCE(EXCLUDED.description, ${tokensTable.description})`,
+        imageUrl:    sql`COALESCE(EXCLUDED.image_url, ${tokensTable.imageUrl})`,
+        metadataUri: sql`COALESCE(EXCLUDED.metadata_uri, ${tokensTable.metadataUri})`,
+        twitterUrl:  sql`COALESCE(EXCLUDED.twitter_url, ${tokensTable.twitterUrl})`,
+        telegramUrl: sql`COALESCE(EXCLUDED.telegram_url, ${tokensTable.telegramUrl})`,
+        websiteUrl:  sql`COALESCE(EXCLUDED.website_url, ${tokensTable.websiteUrl})`,
+      },
+    })
+    .returning();
+
+  logger.info({ mint, platform }, "register-launch: token upserted");
+  res.status(201).json(GetTokenResponse.parse(formatToken(token)));
+}));
+
 // GET /tokens/:address
 router.get("/tokens/:address", asyncWrap(async (req, res) => {
   const params = GetTokenParams.safeParse(req.params);
