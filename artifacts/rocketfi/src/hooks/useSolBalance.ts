@@ -28,6 +28,9 @@ export function useSolBalance(wallet: string | null): {
   const fetchBalance = useCallback(async (address: string) => {
     try {
       const lamports = await getReadConnection().getBalance(new PublicKey(address), "confirmed");
+      // Fix #6 — guard against stale responses: a fetch for wallet A can resolve
+      // after the user has disconnected or switched to wallet B.
+      if (walletRef.current !== address) return;
       setSolBalance(lamports / 1e9);
     } catch {
       // silently ignore — balance stays at previous value

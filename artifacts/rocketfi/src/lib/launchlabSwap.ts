@@ -86,7 +86,7 @@ export interface BuildLaunchLabSellParams {
   mint:                      string;
   /** Base58 public key of the connected wallet */
   user:                      string;
-  /** Token atoms to sell (6-decimal base units — 1 display token = 1_000_000 atoms) */
+  /** Token atoms to sell in the token's native decimal base units (use Math.pow(10, decimals) to convert). */
   tokenAtoms:                bigint;
   /** Slippage tolerance in basis points */
   slippageBps:               number;

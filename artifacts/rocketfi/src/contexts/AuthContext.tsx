@@ -145,6 +145,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return t ? { Authorization: `Bearer ${t}` } : {};
   }, []);
 
+  // Fix #5 — listen for wallet account changes dispatched by WalletContext.
+  // When the user switches accounts in their wallet extension, any wallet-based
+  // JWT is now invalid for the new address. Clear the session so they re-auth.
+  useEffect(() => {
+    const handleWalletAccountChanged = () => {
+      const token = getToken();
+      if (!token) return;
+      // Re-validate the session against the server; a 401 will auto-clear it.
+      fetch(apiUrl("/auth/me"), { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => { if (r.status === 401) { clearToken(); setSocialUser(null); } })
+        .catch(() => {});
+    };
+    window.addEventListener("walletAccountChanged", handleWalletAccountChanged);
+    return () => window.removeEventListener("walletAccountChanged", handleWalletAccountChanged);
+  }, []);
+
   // On mount: restore session from localStorage
   useEffect(() => {
     const token = getToken();
@@ -247,6 +263,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const r = await fetch(apiUrl("/auth/me"), {
         headers: { Authorization: `Bearer ${token}` },
       });
+      // Fix #5 — JWT expired: clear session instead of silently keeping stale state.
+      // Without this, the app looks authenticated but every action fails with 401
+      // until the user manually reloads or signs out.
+      if (r.status === 401) {
+        clearToken();
+        setSocialUser(null);
+        return;
+      }
       if (!r.ok) return;
       const data = await r.json() as { profile: { address: string; username: string; avatarUrl?: string | null; email?: string | null; linkedWallet?: string | null }; authType: string };
       setSocialUser((u) => u ? applyMeResponse(u, data) : u);

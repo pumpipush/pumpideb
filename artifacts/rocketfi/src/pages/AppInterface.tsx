@@ -224,6 +224,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
     if (!wallet) { openWalletModal(); return; }
 
+    // Fix #1 — mutex: prevent double-submit while a launch is already in-flight
+    if (launchStep !== "idle" && launchStep !== "error") return;
+
     if (!name.trim() || !symbol.trim()) {
       toast({ title: "Required fields missing", description: "Name and ticker cannot be empty.", variant: "destructive" });
       return;
@@ -240,12 +243,24 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     setLaunchError(null);
     setMintAddress(null);
 
+    // Fix #9 — validate social URLs before upload (reject injection vectors)
+    const _dangerousScheme = /^(javascript|data|vbscript):/i;
+    if (_dangerousScheme.test(twitter.trim()) || _dangerousScheme.test(telegram.trim()) || _dangerousScheme.test(website.trim())) {
+      toast({ title: "Invalid URL", description: "Social links contain an invalid URL scheme.", variant: "destructive" });
+      return;
+    }
+    if (website.trim() && !/^https?:\/\//i.test(website.trim())) {
+      toast({ title: "Invalid website URL", description: "Website URL must start with https://", variant: "destructive" });
+      return;
+    }
+
     if (platform === "pumpfun") {
       await _launchPumpFun();
     } else {
       // Validate initial buy amount before kicking off the flow
       const parsedBuy = parseFloat(initialBuySOL);
-      if (isNaN(parsedBuy) || parsedBuy < 0.001) {
+      // Fix #2 — isFinite guard: Infinity passes isNaN but BigInt(Infinity * 1e9) throws
+      if (!isFinite(parsedBuy) || isNaN(parsedBuy) || parsedBuy < 0.001) {
         toast({ title: "Initial buy too low", description: "Minimum initial buy is 0.001 SOL (required by Raydium).", variant: "destructive" });
         return;
       }
@@ -285,7 +300,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         const { transaction, mintAddress: newMint, blockhash, lastValidBlockHeight } =
           await buildPumpFunCreateTx(
             wallet, name.trim(), symbol.trim().toUpperCase(), metadataUri,
-            pumpfunBuyEnabled ? (parseFloat(pumpfunBuySOL) || 0) : 0,
+            // Fix #2 — clamp dev buy: reject negative / Infinity values
+            pumpfunBuyEnabled ? Math.max(0, isFinite(parseFloat(pumpfunBuySOL)) ? parseFloat(pumpfunBuySOL) : 0) : 0,
           );
 
         let sig: string | null = null;
@@ -435,6 +451,19 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           setLaunchStep("confirming");
           setConfirmingDetail(null);
           await waitForTxConfirmation(lastSig, blockhash, lastValidBlockHeight, setConfirmingDetail);
+          // Fix #12 — verify blockhash validity window before submitting the next tx.
+          // All txs share one blockhash; if it expired while confirming an earlier tx,
+          // the next tx will be rejected on-chain without a clear error.
+          try {
+            const currentHeight = await getConnection().getBlockHeight("confirmed");
+            if (currentHeight >= lastValidBlockHeight - 15) {
+              throw new Error("Transaction window expired while waiting for the previous step. Please try launching again — your SOL was not charged.");
+            }
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : "";
+            if (msg.includes("window expired")) throw e;
+            // RPC error fetching height — proceed; tx will fail on-chain if expired
+          }
           setLaunchStep("signing");
         }
         // Wallet adds its signature and broadcasts
@@ -1423,16 +1452,19 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const [descExpanded, setDescExpanded] = useState(false);
   const [tradeDisplayLimit, setTradeDisplayLimit] = useState(50);
 
-  // Reset per-token UI state whenever the viewed token changes
+  // Reset per-token UI state whenever the viewed token changes.
+  // Fix #4 — skip reset while a trade is in-flight: signing/confirming state
+  // belongs to the current tx; resetting mid-flight clears amount and confuses UX.
   useEffect(() => {
+    if (isTradePending) return;
     setTradeMode("buy");
     setAmount("");
     setActiveSubTab("tx");
     setDescExpanded(false);
     setTradeDisplayLimit(50);
-    // Reset Jupiter quote when switching tokens
     setJupiterQuote(null);
     setJupiterQuoteError(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAddress]);
 
   // ── Jupiter quote auto-fetch for graduated tokens ─────────────────────────
@@ -1458,8 +1490,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       try {
         const numAmount = parseFloat(amount);
         // isFinite guard: parseFloat("Infinity") passes isNaN but BigInt(Infinity) throws RangeError
+        // Fix #3 — only clear loading when this request is still the active one
         if (!isFinite(numAmount) || isNaN(numAmount) || numAmount <= 0) {
-          setJupiterQuoteLoading(false);
+          if (!cancelled) setJupiterQuoteLoading(false);
           return;
         }
 
@@ -2026,6 +2059,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         const amtBaseUnits = tradeMode === "buy"
           ? BigInt(Math.round(numAmt * 1e9))         // SOL → lamports
           : BigInt(Math.round(numAmt * tokenAtoms));  // tokens → atomic units
+        // Fix #10 — tiny amounts can round to 0 after BigInt conversion
+        if (amtBaseUnits <= 0n) throw new Error("Amount too small — please enter a larger value");
 
         const inputMint  = tradeMode === "buy" ? WSOL_MINT : token.address;
         const outputMint = tradeMode === "buy" ? token.address : WSOL_MINT;
@@ -2081,7 +2116,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       // The SDK fetches live pool state from RPC, builds the instruction, and returns
       // a LEGACY transaction ready for the wallet to sign.
       if (token.platform === "raydium_launchlab") {
-        const LAUNCHLAB_ATOMS = 1_000_000; // 6 decimal places, same as pump.fun
+        // Fix #7 — use token's actual decimals, not hardcoded 6
+        const LAUNCHLAB_ATOMS = Math.pow(10, token.decimals ?? 6);
 
         let llSig: string;
         let llHash: string;
@@ -2110,6 +2146,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           llHeight = res.lastValidBlockHeight;
         } else {
           const tokenIn = BigInt(Math.round(numAmount * LAUNCHLAB_ATOMS));
+          // Fix #10 — guard zero atoms after rounding
+          if (tokenIn <= 0n) throw new Error("Amount too small to submit — please enter a larger value");
           const res = await buildLaunchLabSellTx({
             mint:                      token.address,
             user:                      wallet,

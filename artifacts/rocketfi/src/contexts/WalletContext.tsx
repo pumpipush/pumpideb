@@ -145,6 +145,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (publicKey && typeof publicKey === "object" && "toBase58" in publicKey) {
       const addr = (publicKey as { toBase58(): string }).toBase58();
       setWallet(addr);
+      // Fix #11 — notify AuthContext that the wallet account changed so it can
+      // re-validate the JWT. A wallet-based session issued for the previous address
+      // is no longer valid once the user switches accounts in their extension.
+      window.dispatchEvent(new CustomEvent("walletAccountChanged", { detail: { address: addr } }));
     } else {
       // Wallet locked or account removed
       handleDisconnect();

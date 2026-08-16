@@ -76,6 +76,8 @@ export function useTokenBalance(
   const timerRef            = useRef<ReturnType<typeof setInterval> | null>(null);
   /** Monotonically-incrementing epoch — incremented on any wallet/mint change, including clears. */
   const epochRef            = useRef(0);
+  /** Fix #8 — track refreshAfterTrade timeout IDs so they can be cancelled on cleanup. */
+  const tradeTimerIdsRef    = useRef<ReturnType<typeof setTimeout>[]>([]);
   /**
    * Pinned to the active wallet+mint+epoch. No-op when that selection is cleared.
    * Allows trade `finally` blocks to refresh the CURRENT token, not a stale one.
@@ -151,11 +153,17 @@ export function useTokenBalance(
   const TRADE_RETRY_DELAYS = [2_000, 4_000, 7_000];
 
   const refreshAfterTrade = useCallback(() => {
+    // Cancel any previously-scheduled retries before scheduling new ones.
+    // Without this, rapid trades or token switches accumulate pending timers
+    // that fire against whatever token is selected when they expire.
+    tradeTimerIdsRef.current.forEach(clearTimeout);
+    tradeTimerIdsRef.current = [];
     // Immediate fetch
     refreshWithEpochRef.current();
     // Scheduled retries — staggered so we catch the balance once it propagates
     TRADE_RETRY_DELAYS.forEach(ms => {
-      setTimeout(() => refreshWithEpochRef.current(), ms);
+      const id = setTimeout(() => refreshWithEpochRef.current(), ms);
+      tradeTimerIdsRef.current.push(id);
     });
   }, []);
 
@@ -223,6 +231,10 @@ export function useTokenBalance(
       stopInterval();
       document.removeEventListener("visibilitychange", handleVisibility);
       refreshWithEpochRef.current = () => {};
+      // Fix #8 — cancel pending trade-refresh timers so they don't fire for a
+      // now-inactive wallet/token combination.
+      tradeTimerIdsRef.current.forEach(clearTimeout);
+      tradeTimerIdsRef.current = [];
     };
   }, [wallet, mintAddress, fetchBalance]);
 
