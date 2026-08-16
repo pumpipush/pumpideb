@@ -95,6 +95,8 @@ server {
         proxy_set_header   X-Forwarded-Proto $scheme;
         proxy_buffering    off;
         proxy_read_timeout 3600s;
+        # Allow up to 10 MB uploads (token image + metadata for pump-ipfs-upload)
+        client_max_body_size 10m;
     }
 
     # ── index.html — NEVER cache ─────────────────────────────────────────────
