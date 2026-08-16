@@ -131,7 +131,14 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
         });
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Google sign-in failed");
+      const msg = e instanceof Error ? e.message : "";
+      if (/cancel|dismiss|closed|popup/i.test(msg)) {
+        setError("Sign-in cancelled.");
+      } else if (/network|fetch|timeout|offline/i.test(msg)) {
+        setError("Connection failed — check your internet and try again.");
+      } else {
+        setError("Google sign-in failed. Please try again.");
+      }
     } finally {
       setLoading(null);
     }
@@ -166,7 +173,14 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
       reset();
       close();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Wallet connection failed");
+      const msg = e instanceof Error ? e.message : "";
+      if (/reject|cancel|dismiss|denied/i.test(msg)) {
+        setError("Connection cancelled.");
+      } else if (/not installed|not found|no provider/i.test(msg)) {
+        setError("Wallet extension not detected — please install it and try again.");
+      } else {
+        setError("Could not connect wallet — check your wallet extension and try again.");
+      }
     } finally {
       setLoading(null);
     }
@@ -282,8 +296,8 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                           reset();
                           close();
                           toast({ title: "Accounts merged", description: "Your wallet is now linked to your profile." });
-                        } catch (e) {
-                          setError(e instanceof Error ? e.message : "Merge failed");
+                        } catch {
+                          setError("Account merge failed. Please try again.");
                         } finally {
                           setMerging(false);
                         }

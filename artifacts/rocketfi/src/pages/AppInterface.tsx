@@ -703,12 +703,13 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
             <div className="flex items-center gap-2 mb-4">
               <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
                 style={{ background: "rgba(255,255,255,0.08)", color: "#bbbbbb", border: "1px solid rgba(255,255,255,0.18)" }}>3</span>
-              <span className="text-[13px] font-semibold text-foreground">Description</span>
+              <label htmlFor="launch-desc" className="text-[13px] font-semibold text-foreground cursor-pointer">Description</label>
               <span className="ml-auto text-[11px] tabular-nums" style={{ color: desc.length >= 270 ? "#f87171" : "#b3b3b3" }}>
                 {desc.length}/300
               </span>
             </div>
             <Textarea
+              id="launch-desc"
               placeholder="Write a short description about your coin..."
               value={desc}
               onChange={e => setDesc(e.target.value.slice(0, 300))}
@@ -796,7 +797,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                       color:      pumpfunBuyEnabled ? "#86efac" : "#bbbbbb",
                       border:     `1px solid ${pumpfunBuyEnabled ? "rgba(34,197,94,0.30)" : "rgba(255,255,255,0.18)"}`,
                     }}>5</span>
-                  <span className="text-[13px] font-semibold text-foreground">Dev Buy</span>
+                  <span className="text-[13px] font-semibold text-foreground">Developer buy</span>
                   <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.06)", color: "#b3b3b3" }}>
                     Optional
                   </span>
@@ -872,7 +873,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                 <div className="flex items-center gap-2 mb-3">
                   <span className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
                     style={{ background: "rgba(59,130,246,0.15)", color: "#93c5fd", border: "1px solid rgba(59,130,246,0.30)" }}>5</span>
-                  <span className="text-[13px] font-semibold text-foreground">Initial Buy</span>
+                  <span className="text-[13px] font-semibold text-foreground">Initial buy</span>
                   <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(59,130,246,0.10)", color: "#60a5fa" }}>
                     Required by Raydium
                   </span>
@@ -1814,11 +1815,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               </>
             ) : (
               <>
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#3a3a3a" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#3f3f46" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                 </svg>
-                <p className="text-sm font-medium" style={{ color: "#555555" }}>No trades yet</p>
-                <p className="text-xs" style={{ color: "#3a3a3a" }}>Chart populates in real time as trades arrive</p>
+                <p className="text-sm font-medium text-zinc-400">No trades yet — be the first</p>
+                <p className="text-xs text-zinc-600">Chart updates in real time as trades arrive</p>
               </>
             )}
           </div>

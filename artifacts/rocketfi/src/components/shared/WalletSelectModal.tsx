@@ -56,8 +56,15 @@ export function WalletSelectModal({ open, onOpenChange, onSuccess }: WalletSelec
       onSuccess?.();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setError(msg.toLowerCase().includes("user rejected") || msg.toLowerCase().includes("cancelled")
-        ? "Connection cancelled." : msg || "Failed to connect. Please try again.");
+      if (/reject|cancel|dismiss|denied/i.test(msg)) {
+        setError("Connection cancelled.");
+      } else if (/not installed|not found|no provider/i.test(msg)) {
+        setError("Wallet extension not detected — please install it first.");
+      } else if (/network|timeout|offline/i.test(msg)) {
+        setError("Connection failed — check your internet and try again.");
+      } else {
+        setError("Could not connect wallet — check your extension and try again.");
+      }
     } finally {
       setConnecting(null);
     }
