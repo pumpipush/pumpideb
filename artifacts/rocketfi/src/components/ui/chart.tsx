@@ -74,6 +74,9 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   }
 
   return (
+    // dangerouslySetInnerHTML is intentional here: this injects CSS custom
+    // properties (color tokens) into a <style> element from the chart's own
+    // config object — never from user input or token on-chain data.
     <style
       dangerouslySetInnerHTML={{
         __html: Object.entries(THEMES)

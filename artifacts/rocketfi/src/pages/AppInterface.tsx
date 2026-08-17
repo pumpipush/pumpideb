@@ -1725,12 +1725,20 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       if (sp && n > 0) return formatUSD(n * sp * 1_000_000_000);
       return n < 0.00001 ? n.toExponential(3) : n.toPrecision(4);
     };
-    el.innerHTML = `
-      <span style="color:#b3b3b3">O <span style="color:#bbbbbb">${fmt(bar.open)}</span></span>
-      <span style="color:#b3b3b3">H <span style="color:#4ade80">${fmt(bar.high)}</span></span>
-      <span style="color:#b3b3b3">L <span style="color:#f87171">${fmt(bar.low)}</span></span>
-      <span style="color:#b3b3b3">C <span style="color:#e0e0e0">${fmt(bar.close)}</span></span>
-    `;
+    // Build child nodes without innerHTML to avoid an unnecessary HTML sink.
+    const mkOhlc = (label: string, value: string, valueColor: string) => {
+      const wrap = document.createElement("span"); wrap.style.color = "#b3b3b3";
+      wrap.appendChild(document.createTextNode(`${label} `));
+      const val = document.createElement("span"); val.textContent = value; val.style.color = valueColor;
+      wrap.appendChild(val);
+      return wrap;
+    };
+    el.replaceChildren(
+      mkOhlc("O", fmt(bar.open),  "#bbbbbb"), document.createTextNode(" "),
+      mkOhlc("H", fmt(bar.high),  "#4ade80"), document.createTextNode(" "),
+      mkOhlc("L", fmt(bar.low),   "#f87171"), document.createTextNode(" "),
+      mkOhlc("C", fmt(bar.close), "#e0e0e0"),
+    );
   }, []);
 
   // Memoized bars — reference is stable until trades or timeframe actually change.
@@ -3977,12 +3985,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 key={`price-${priceFlash.key}`}
                 className={`font-mono font-bold text-[15px]${priceFlash.key > 0 ? (priceFlash.up ? " animate-price-up" : " animate-price-down") : ""}`}
                 style={{ color: "#e0e0e0" }}
-                dangerouslySetInnerHTML={{
-                  __html: priceStats.currentPrice > 0
-                    ? formatTokenPrice(solPrice ? priceStats.currentPrice * solPrice : priceStats.currentPrice)
-                    : "—"
-                }}
-              />
+              >
+                {priceStats.currentPrice > 0
+                  ? formatTokenPrice(solPrice ? priceStats.currentPrice * solPrice : priceStats.currentPrice)
+                  : "—"}
+              </span>
             </div>
             <div className="flex flex-col px-4 py-3">
               <span className="text-[13px] font-medium mb-1" style={{ color: "#b3b3b3" }}>Vol 24h</span>

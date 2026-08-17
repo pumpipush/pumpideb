@@ -425,15 +425,23 @@ export const ChartCanvas = memo(function ChartCanvas({
     // When all four OHLC values are identical (single trade / flat candle),
     // showing "O $x H $x L $x C $x" is redundant — just show the price.
     const allSame = bar.open === bar.high && bar.high === bar.low && bar.low === bar.close;
-    if (allSame) {
-      el.innerHTML = `<span style="color:#b3b3b3">MC</span><span style="color:${VAL}"> ${fmt(bar.close)}</span>`;
-    } else {
-      el.innerHTML =
-        `<span style="color:#b3b3b3">O</span><span style="color:${VAL}"> ${fmt(bar.open)}</span> ` +
-        `<span style="color:#b3b3b3">H</span><span style="color:${UP}"> ${fmt(bar.high)}</span> ` +
-        `<span style="color:#b3b3b3">L</span><span style="color:${DN}"> ${fmt(bar.low)}</span> ` +
-        `<span style="color:#b3b3b3">C</span><span style="color:${VAL}"> ${fmt(bar.close)}</span>`;
-    }
+    // Build child nodes without innerHTML to avoid creating an unnecessary HTML sink.
+    const mk = (label: string, value: string, labelColor: string, valueColor: string) => {
+      const l = document.createElement("span"); l.textContent = label; l.style.color = labelColor;
+      const v = document.createElement("span"); v.textContent = ` ${value}`;   v.style.color = valueColor;
+      return [l, v] as const;
+    };
+    el.replaceChildren(
+      ...(allSame
+        ? [...mk("MC", fmt(bar.close), "#b3b3b3", VAL)]
+        : [
+            ...mk("O", fmt(bar.open),  "#b3b3b3", VAL), document.createTextNode(" "),
+            ...mk("H", fmt(bar.high),  "#b3b3b3", UP),  document.createTextNode(" "),
+            ...mk("L", fmt(bar.low),   "#b3b3b3", DN),  document.createTextNode(" "),
+            ...mk("C", fmt(bar.close), "#b3b3b3", VAL),
+          ]
+      ),
+    );
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const writeInnerOhlcRef = useRef(writeInnerOhlc);
   useEffect(() => { writeInnerOhlcRef.current = writeInnerOhlc; }, [writeInnerOhlc]);
