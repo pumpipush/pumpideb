@@ -98,12 +98,12 @@ async function fetchRaydiumMeta(mint: string): Promise<RaydiumItem | null> {
   }
 }
 
-// ── Birdeye token overview — high-res image + metadata URI ────────────────────
+// ── Birdeye token overview — high-res image fallback ──────────────────────────
 //
 // Raydium's /mint/ids endpoint returns a tiny 32×32 px icon from img-v1.raydium.io.
-// Birdeye's /defi/token_overview returns the real IPFS/Arweave image URL (100-400 KB)
-// stored in the token's on-chain Metaplex metadata.  We prefer this over the CDN icon
-// whenever BIRDEYE_API_KEY is available.
+// DexScreener (free, no API key) is tried first for the full-res image via
+// pair.info?.imageUrl.  Birdeye's /defi/token_overview is kept as a fallback
+// for tokens that DexScreener has not yet indexed (very new LaunchLab tokens).
 
 interface BirdeyeOverview {
   logoURI?: string;
@@ -262,13 +262,22 @@ async function fetchMeta(
     // Birdeye image below.
     const ray = await fetchRaydiumMeta(mint);
     if (ray?.name && ray?.symbol) {
-      // Fetch full-res image (Birdeye) and metadata URI (DAS) in parallel.
-      // Both are best-effort — fall back to Raydium CDN icon if they fail.
-      const [birdeyeImg, dasUri] = await Promise.all([
-        platform === "raydium_launchlab" ? fetchBirdeyeLogoURI(mint) : Promise.resolve(null),
+      // Fetch full-res image and metadata URI in parallel.
+      // DexScreener (free) is tried first for the image; Birdeye is the fallback
+      // for tokens not yet indexed there (very new LaunchLab tokens).
+      const [dsImage, dasUri] = await Promise.all([
+        platform === "raydium_launchlab"
+          ? fetchDexScreenerTokens([mint]).then(pairs => bestSolanaPair(pairs)?.info?.imageUrl ?? null)
+          : Promise.resolve(null),
         platform === "raydium_launchlab" ? fetchDasMetadataUri(mint) : Promise.resolve(null),
       ]);
-      const imageUrl = birdeyeImg ?? ray.logoURI ?? null;
+
+      // Image priority: DexScreener → Birdeye fallback (costs CU) → Raydium 32×32 CDN icon
+      let imageUrl: string | null = dsImage;
+      if (!imageUrl && platform === "raydium_launchlab") {
+        imageUrl = await fetchBirdeyeLogoURI(mint);
+      }
+      imageUrl = imageUrl ?? ray.logoURI ?? null;
       const result: EnrichResult = { name: ray.name, symbol: ray.symbol, imageUrl };
 
       // If we got a DAS metadata URI and didn't already have one, fetch socials from it
