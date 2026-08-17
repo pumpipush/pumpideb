@@ -847,40 +847,58 @@ async function enrichPumpSwapPrices(): Promise<void> {
 // per-second rate limit.  ~150 CU/min for 30 tokens at 5 CU each.
 
 /**
- * Enrich a single LaunchLab token with Birdeye price data and persist to DB.
+ * Enrich a single LaunchLab token with live price data and persist to DB.
  * Returns true when the token was successfully updated, false otherwise.
  *
  * Shared by both the primary (top-60) pass and the secondary (long-tail) pass
  * so the enrichment logic stays in one place.
+ *
+ * Data source priority: DexScreener (free) → Birdeye (API key, fallback).
  */
 async function enrichOneLaunchLabToken(address: string, solPrice: number): Promise<boolean> {
-  const overview = await fetchBirdeyeTokenOverview(address);
-  if (!overview || !overview.price || overview.price <= 0) return false;
-
-  const priceUsd = overview.price;
-  const mcUsd    = overview.mc;
-
-  // priceEth: SOL per token (text column)
-  const priceEth = (priceUsd / solPrice).toFixed(15);
-
-  // marketCapEth: total market cap in lamports (text column)
-  const marketCapEth = mcUsd != null && mcUsd > 0
-    ? String(Math.round((mcUsd / solPrice) * 1e9))
-    : null;
-
   type DbUpdate = {
-    priceUsd: number;
+    priceUsd?: number;
     priceEth: string;
     marketCapUsd?: number;
     marketCapEth?: string;
     pctChange24h?: number;
   };
 
-  const update: DbUpdate = { priceUsd, priceEth };
-  if (mcUsd        != null) update.marketCapUsd  = mcUsd;
-  if (marketCapEth != null) update.marketCapEth  = marketCapEth;
-  if (overview.priceChange24hPercent != null)
-    update.pctChange24h = overview.priceChange24hPercent;
+  let update: DbUpdate | null = null;
+
+  // ── Primary: DexScreener (free, no API key) ───────────────────────────────
+  const dsPairs = await fetchDexScreenerTokens([address]);
+  const dsPair  = bestSolanaPair(dsPairs);
+  if (dsPair?.priceUsd && parseFloat(dsPair.priceUsd) > 0) {
+    const dbFields = pairToDbFields(dsPair);
+    if (dbFields.priceEth) {
+      // pairToDbFields returns undefined priceEth when price is absurdly high
+      update = { priceEth: dbFields.priceEth };
+      if (dbFields.priceUsd     != null) update.priceUsd     = dbFields.priceUsd;
+      if (dbFields.marketCapUsd != null) update.marketCapUsd = dbFields.marketCapUsd;
+      if (dbFields.marketCapEth != null) update.marketCapEth = dbFields.marketCapEth;
+      if (dbFields.pctChange24h != null) update.pctChange24h = dbFields.pctChange24h;
+    }
+  }
+
+  // ── Fallback: Birdeye ─────────────────────────────────────────────────────
+  if (!update) {
+    const overview = await fetchBirdeyeTokenOverview(address);
+    if (!overview || !overview.price || overview.price <= 0) return false;
+
+    const priceUsd     = overview.price;
+    const mcUsd        = overview.mc;
+    const priceEth     = (priceUsd / solPrice).toFixed(15);
+    const marketCapEth = mcUsd != null && mcUsd > 0
+      ? String(Math.round((mcUsd / solPrice) * 1e9))
+      : null;
+
+    update = { priceUsd, priceEth };
+    if (mcUsd        != null) update.marketCapUsd = mcUsd;
+    if (marketCapEth != null) update.marketCapEth = marketCapEth;
+    if (overview.priceChange24hPercent != null)
+      update.pctChange24h = overview.priceChange24hPercent;
+  }
 
   const [updatedRow] = await db
     .update(tokensTable)

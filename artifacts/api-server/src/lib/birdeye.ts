@@ -5,7 +5,13 @@
  * Base URL: https://public-api.birdeye.so
  *
  * All functions return null on error / missing key — callers must handle.
+ *
+ * Data source priority:
+ *   getSolPriceUsd  → DexScreener primary (free), Birdeye fallback
+ *   OHLCV / trades  → Birdeye only (DexScreener has no equivalent)
  */
+
+import { fetchDexScreenerTokens } from "./dexscreener.js";
 
 const BIRDEYE_BASE = "https://public-api.birdeye.so";
 
@@ -279,33 +285,57 @@ export async function fetchBirdeyeTokenTrades(
 }
 
 // In-memory cache for SOL/USD price — refreshed at most once per 60 s.
-// Eliminates redundant Birdeye /defi/price calls when multiple endpoints
-// (ohlcv, stats, price-history, trades) are hit in the same page-load cycle.
+// Eliminates redundant API calls when multiple endpoints are hit in the same
+// page-load cycle (ohlcv, stats, price-history, trades).
 let _solPriceCache: { value: number; expiresAt: number } | null = null;
+
+const WSOL = "So11111111111111111111111111111111111111112";
 
 export async function getSolPriceUsd(): Promise<number> {
   const now = Date.now();
   if (_solPriceCache && now < _solPriceCache.expiresAt) {
     return _solPriceCache.value;
   }
-  const WSOL = "So11111111111111111111111111111111111111112";
+
+  // ── Primary: DexScreener (free, no API key required) ─────────────────────
+  // Query WSOL pairs; pick the highest-liquidity pair where SOL is the base
+  // token — priceUsd on such a pair is the SOL/USD rate directly.
+  try {
+    const pairs = await fetchDexScreenerTokens([WSOL]);
+    const solPair = pairs
+      .filter(p =>
+        p.chainId === "solana" &&
+        p.baseToken?.address === WSOL &&
+        p.priceUsd,
+      )
+      .sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0))[0];
+
+    if (solPair?.priceUsd) {
+      const price = parseFloat(solPair.priceUsd);
+      // Sanity gate: SOL is always between $10 and $100 000
+      if (price > 10 && price < 100_000) {
+        _solPriceCache = { value: price, expiresAt: now + 60_000 };
+        return price;
+      }
+    }
+  } catch {
+    // fall through to Birdeye
+  }
+
+  // ── Fallback: Birdeye ─────────────────────────────────────────────────────
   const data = await birdeyeGet<{ value: number }>(`/defi/price?address=${WSOL}`);
   const freshPrice = data?.value;
 
   if (freshPrice && freshPrice > 0) {
-    // Fresh price from Birdeye — cache it
     _solPriceCache = { value: freshPrice, expiresAt: now + 60_000 };
     return freshPrice;
   }
 
-  // Birdeye unavailable — return stale cached value if present (even if expired),
-  // rather than silently corrupting all SOL-denominated values with a hardcoded guess.
-  if (_solPriceCache) {
-    return _solPriceCache.value; // stale but real
-  }
+  // Both sources unavailable — return stale cached value rather than
+  // corrupting SOL-denominated values with a hardcoded guess.
+  if (_solPriceCache) return _solPriceCache.value;
 
   // No cached value at all — return 0 so callers can detect unavailability.
-  // Callers must guard against 0 (e.g. skip conversion rather than divide-by-zero).
   return 0;
 }
 

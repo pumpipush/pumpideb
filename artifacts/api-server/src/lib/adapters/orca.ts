@@ -19,6 +19,11 @@ import {
   getSolPriceUsd,
   usdToLamports,
 } from "../birdeye.js";
+import {
+  fetchDexScreenerTokens,
+  bestSolanaPair,
+  pairToDbFields,
+} from "../dexscreener.js";
 
 const ORCA_WHIRLPOOL_PROGRAM = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
 const PLATFORM               = "orca";
@@ -80,14 +85,41 @@ export class OrcaIndexer extends SolanaRpcIndexer {
 
     this.log.info({ mint, isPlaceholder }, "orca: new pool — fetching metadata");
 
-    const [meta, solPrice] = await Promise.all([
-      fetchBirdeyeTokenMeta(mint),
-      getSolPriceUsd(),
-    ]);
-    if (!meta) return;
+    // ── Primary: DexScreener (free, no API key) ───────────────────────────
+    const dsPairs = await fetchDexScreenerTokens([mint]);
+    const dsPair  = bestSolanaPair(dsPairs);
 
-    const priceEth     = meta.priceUsd     ? usdToLamports(meta.priceUsd,     solPrice) : null;
-    const marketCapEth = meta.marketCapUsd ? usdToLamports(meta.marketCapUsd, solPrice) : null;
+    let meta: {
+      name: string; symbol: string; logoURI?: string | null;
+      priceUsd?: number | null; marketCapUsd?: number | null; liquidity?: number | null;
+    } | null = null;
+    let priceEth:     string | null = null;
+    let marketCapEth: string | null = null;
+
+    if (dsPair?.baseToken?.name) {
+      const dbFields = pairToDbFields(dsPair);
+      meta = {
+        name:         dsPair.baseToken.name,
+        symbol:       dsPair.baseToken.symbol,
+        logoURI:      dsPair.info?.imageUrl    ?? null,
+        priceUsd:     dsPair.priceUsd ? parseFloat(dsPair.priceUsd) : null,
+        marketCapUsd: dsPair.marketCap         ?? null,
+        liquidity:    dsPair.liquidity?.usd    ?? null,
+      };
+      priceEth     = dbFields.priceEth     ?? null;
+      marketCapEth = dbFields.marketCapEth ?? null;
+    } else {
+      // ── Fallback: Birdeye ───────────────────────────────────────────────
+      const [birdMeta, solPrice] = await Promise.all([
+        fetchBirdeyeTokenMeta(mint),
+        getSolPriceUsd(),
+      ]);
+      if (!birdMeta) return;
+      meta         = birdMeta;
+      priceEth     = birdMeta.priceUsd     ? usdToLamports(birdMeta.priceUsd,     solPrice) : null;
+      marketCapEth = birdMeta.marketCapUsd ? usdToLamports(birdMeta.marketCapUsd, solPrice) : null;
+    }
+    if (!meta) return;
 
     // Atomic upsert covering three arrival orderings in one SQL statement:
     //
