@@ -250,7 +250,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     // Solflare shows a password popup instead of silently rejecting when the
     // wallet is locked. Skip the connect() call to avoid the unwanted popup.
-    if (savedName === "Solflare") return;
+    // BUT: Solflare injects its publicKey asynchronously after page load even
+    // when the wallet is already unlocked and the site is trusted.  Poll for
+    // up to 1.5 s so we pick up the address without any user interaction.
+    if (savedName === "Solflare") {
+      let attempts = 0;
+      const INTERVALS = [100, 200, 400, 800]; // 100ms, 200ms, 400ms, 800ms
+      const poll = () => {
+        if (cancelled) return;
+        if (provider.publicKey) {
+          const address = provider.publicKey.toBase58();
+          if (address) { attachAndSet(address); return; }
+        }
+        if (attempts < INTERVALS.length) {
+          setTimeout(poll, INTERVALS[attempts++]);
+        }
+        // After all retries, give up — user must connect manually (wallet is locked)
+      };
+      setTimeout(poll, INTERVALS[attempts++]);
+      return () => { cancelled = true; };
+    }
 
     // Phantom / Backpack: onlyIfTrusted silently rejects when locked — safe.
     // Guard against stale resolution: if the user disconnects/switches wallet

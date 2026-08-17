@@ -973,6 +973,30 @@ router.get("/tokens/:address", asyncWrap(async (req, res) => {
     return;
   }
 
+  // Background enrichment: if imageUrl is missing but metadataUri is set,
+  // fetch the metadata JSON to extract the image URL and persist it.
+  // This covers the case where the IPFS/GCS metadata fetch failed at launch time.
+  // Fire-and-forget — no latency added to this request; next GET will have the URL.
+  if (!token.imageUrl && token.metadataUri) {
+    const mintToEnrich = token.address;
+    const metaUri      = token.metadataUri;
+    setImmediate(async () => {
+      try {
+        const metaRes = await fetch(metaUri, { signal: AbortSignal.timeout(8_000) });
+        if (!metaRes.ok) return;
+        const meta = await metaRes.json() as { image?: unknown };
+        const imageUrl = typeof meta.image === "string" && meta.image ? meta.image : null;
+        if (!imageUrl) return;
+        await db.update(tokensTable)
+          .set({ imageUrl })
+          .where(eq(tokensTable.address, mintToEnrich));
+        logger.info({ mint: mintToEnrich, imageUrl }, "tokens: enriched imageUrl from metadataUri");
+        // Push updated snapshot so connected SSE clients see the logo immediately.
+        emitSnapshot({ type: "snapshot", token: { address: mintToEnrich, imageUrl } });
+      } catch { /* non-fatal — will retry on next GET */ }
+    });
+  }
+
   res.json(GetTokenResponse.parse(formatToken(token)));
 }));
 
