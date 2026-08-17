@@ -16,7 +16,7 @@ import { startAdapters } from "./lib/adapters/index";
 import { startEnrichmentLoop } from "./lib/enrichment";
 import { startJupiterTokenSync } from "./lib/jupiter-tokens";
 import { startLaunchLabBackfill } from "./lib/launchlabBackfill";
-import { runMigrations, pool } from "@workspace/db";
+import { runMigrations, createTrgmIndexes, pool } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
 
@@ -159,6 +159,14 @@ async function start(): Promise<void> {
   logger.info({ migrationsFolder }, "db: running migrations");
   await runMigrations(migrationsFolder);
   logger.info("db: migrations complete");
+
+  // Build GIN trigram indexes on tokens.name / tokens.symbol AFTER migrations
+  // so the pg_trgm extension (added in migration 0018) is guaranteed to exist.
+  // CREATE INDEX CONCURRENTLY cannot run inside a transaction, which is why these
+  // are issued here via plain pool queries rather than inside the migration SQL.
+  logger.info("db: creating trgm indexes (CONCURRENTLY — safe to run mid-traffic)");
+  await createTrgmIndexes();
+  logger.info("db: trgm indexes ready");
 
   const server = http.createServer(app);
 
