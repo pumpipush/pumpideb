@@ -127,6 +127,20 @@
       "when": 1786990000000,
       "tag": "0011_add_trades_timestamp_index",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787000000000,
+      "tag": "0018_cleanup_orphan_trades",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1787010000000,
+      "tag": "0019_orphan_cleanup_tracking",
+      "breakpoints": true
     }
   ]
 }

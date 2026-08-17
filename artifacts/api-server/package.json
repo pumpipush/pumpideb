@@ -15,7 +15,8 @@
     "backfill:launchlab-supply": "node ./build.mjs && node --enable-source-maps ./dist/scripts/backfill-launchlab-supply.mjs",
     "migrate:merge-duplicate-profiles": "node ./build.mjs && node --enable-source-maps ./dist/scripts/merge-duplicate-profiles.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "cleanup:orphan-trades": "node ./build.mjs && node --enable-source-maps ./dist/scripts/cleanup-orphan-trades.mjs"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.21.0",

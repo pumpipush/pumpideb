@@ -520,6 +520,21 @@ export class PumpFunChainIndexer extends SolanaRpcIndexer {
       return;
     }
 
+    // Ensure the token row exists before inserting the trade.
+    // Migration 0017 added a FK (fk_trades_token) that rejects inserts when
+    // the token_address has no matching tokens.address.  Pump.fun trade events
+    // can arrive before (or without) the corresponding create event, so we
+    // upsert a minimal placeholder here.  onConflictDoNothing means existing
+    // rows are untouched; the full metadata is filled in by handleCreate later.
+    await db.insert(tokensTable).values({
+      address:        mint,
+      name:           mint.slice(0, 8),
+      symbol:         "???",
+      creatorAddress: "unknown",
+      platform:       PLATFORM,
+      chain:          CHAIN,
+    }).onConflictDoNothing();
+
     const [trade] = await db.insert(tradesTable).values({
       tokenAddress:  mint,
       tokenName:     null,

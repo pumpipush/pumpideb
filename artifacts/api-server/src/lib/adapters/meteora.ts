@@ -127,6 +127,19 @@ class MeteoraIndexer extends SolanaRpcIndexer {
       ? (Number(solLamports) / Number(tokenAmount) / 1000).toFixed(15)
       : null;
 
+    // Ensure the token row exists before inserting the trade.
+    // Migration 0017 added a FK that rejects trade inserts with no matching
+    // token row.  Meteora swap events can arrive before the new-pool event, so
+    // we upsert a minimal placeholder; handleNewPool fills in metadata later.
+    await db.insert(tokensTable).values({
+      address:        mint,
+      name:           mint.slice(0, 8),
+      symbol:         "???",
+      creatorAddress: "unknown",
+      platform:       PLATFORM,
+      chain:          CHAIN,
+    }).onConflictDoNothing();
+
     const [trade] = await db.insert(tradesTable).values({
       tokenAddress:  mint,
       traderAddress,

@@ -22,6 +22,7 @@ async function buildAll() {
       path.resolve(artifactDir, "src/scripts/backfill-launchlab-names.ts"),
       path.resolve(artifactDir, "src/scripts/backfill-launchlab-supply.ts"),
       path.resolve(artifactDir, "src/scripts/merge-duplicate-profiles.ts"),
+      path.resolve(artifactDir, "src/scripts/cleanup-orphan-trades.ts"),
     ],
     platform: "node",
     bundle: true,

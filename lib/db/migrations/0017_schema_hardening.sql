@@ -1,18 +1,20 @@
 -- Migration 0017: Schema hardening — FK, duplicate index cleanup, missing indexes
 --
--- 1. Purge orphan trades so the FK constraint can be added cleanly.
---    Orphan rows (token_address references a deleted/never-inserted token) would
---    prevent ALTER TABLE ... ADD CONSTRAINT from succeeding.
-DELETE FROM trades
-  WHERE token_address NOT IN (SELECT address FROM tokens);
-
--- 2. Add FK: trades.token_address → tokens.address ON DELETE CASCADE.
+-- 1. Add FK: trades.token_address → tokens.address ON DELETE CASCADE.
 --    Ensures referential integrity; cascading delete removes trades automatically
 --    when a token is hard-deleted (e.g. moderation removal).
+--
+--    NOT VALID: skips the expensive full-table validation scan of existing rows
+--    (which would take minutes on a large trades table and block the migration).
+--    New inserts and ON DELETE CASCADE are still fully enforced immediately.
+--    Run `ALTER TABLE trades VALIDATE CONSTRAINT fk_trades_token;` offline
+--    (outside a transaction, ideally during a low-traffic window) to back-fill
+--    the historical validation without blocking the app.
 ALTER TABLE trades
   ADD CONSTRAINT fk_trades_token
   FOREIGN KEY (token_address) REFERENCES tokens(address)
-  ON DELETE CASCADE;
+  ON DELETE CASCADE
+  NOT VALID;
 
 -- 3. Drop the redundant explicit index on trades.tx_hash.
 --    The UNIQUE constraint on tx_hash already creates a B-tree index; the
