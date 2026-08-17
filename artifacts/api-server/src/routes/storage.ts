@@ -5,6 +5,7 @@ import {
 } from '@workspace/api-zod';
 import { Router, type IRouter, type Request, type Response } from 'express';
 import { asyncWrap } from '../lib/asyncHandler.js';
+import { uploadLimiter } from '../lib/rateLimiters.js';
 
 import { extractBearer, verifyToken } from '../lib/auth-jwt';
 import { ObjectPermission } from '../lib/objectAcl';
@@ -169,6 +170,7 @@ router.post(
  */
 router.post(
   '/storage/uploads/confirm',
+  uploadLimiter,
   asyncWrap(async (req: Request, res: Response) => {
     // Authentication — require a valid JWT
     const token = extractBearer(req.headers.authorization);

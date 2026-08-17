@@ -27,6 +27,7 @@ import {
   extractLaunchLabMintFromInstruction,
 } from "../lib/devBuyFromTx.js";
 import { parseCreateEventFromLogs } from "../lib/adapters/pumpfun.js";
+import { launchLimiter } from "../lib/rateLimiters.js";
 
 const router: IRouter = Router();
 
@@ -535,6 +536,13 @@ router.get("/tokens/search", asyncWrap(async (req, res) => {
     res.json({ platformTokens: [], solanaTokens: [] });
     return;
   }
+  // Cap search query length — unbounded ILIKE on very long strings causes
+  // full-table scans that are disproportionately expensive relative to value.
+  const MAX_SEARCH_LEN = 100;
+  if (q.length > MAX_SEARCH_LEN) {
+    res.status(400).json({ error: `Search query must be ${MAX_SEARCH_LEN} characters or fewer` });
+    return;
+  }
 
   // ── Platform tokens (from DB) — limit 5, sorted by trade activity ────────
   const dbRows = await db
@@ -652,21 +660,72 @@ router.get("/tokens/trending", asyncWrap(async (req, res) => {
 // Security: we fetch the full transaction (not just status) so we can verify that
 // creatorAddress is the fee payer (first signer) of the tx. This prevents anyone
 // from submitting a foreign tx signature to register or poison token metadata.
-router.post("/tokens/register-launch", asyncWrap(async (req, res) => {
-  const {
-    mint, txSignature, name, symbol, description, imageUrl, metadataUri,
-    twitter, telegram, website, creatorAddress,
-    platform: reqPlatform,
-  } = req.body as Record<string, string | undefined>;
+router.post("/tokens/register-launch", launchLimiter, asyncWrap(async (req, res) => {
+  // ── Body validation & length limits ──────────────────────────────────────────
+  // Validate before any RPC call so malformed/oversized requests are rejected
+  // cheaply without consuming Solana RPC quota.
+  const body = req.body as Record<string, unknown>;
+
+  // Helper: require a non-empty string within a character limit.
+  const requireStr = (key: string, max: number): string | null => {
+    const v = body[key];
+    return typeof v === "string" && v.trim().length > 0 && v.length <= max ? v.trim() : null;
+  };
+  // Helper: accept an optional string within a character limit (returns undefined on absent/invalid).
+  const optStr = (key: string, max: number): string | undefined => {
+    const v = body[key];
+    if (v === undefined || v === null || v === "") return undefined;
+    if (typeof v !== "string" || v.length > max) return null as unknown as undefined; // sentinel for invalid
+    return v.trim() || undefined;
+  };
+  // Helper: detect oversized optional field (distinct from absent).
+  const optStrValid = (key: string, max: number): boolean => {
+    const v = body[key];
+    if (v === undefined || v === null || v === "") return true;
+    return typeof v === "string" && v.length <= max;
+  };
+
+  const mint            = requireStr("mint",            44);
+  const txSignature     = requireStr("txSignature",     88);
+  const name            = requireStr("name",            32);
+  const symbol          = requireStr("symbol",          10);
+  const creatorAddress  = requireStr("creatorAddress",  44);
+
+  if (!mint || !txSignature || !name || !symbol || !creatorAddress) {
+    res.status(400).json({
+      error: "Missing or invalid required fields: mint (≤44), txSignature (≤88), name (≤32), symbol (≤10), creatorAddress (≤44)",
+    });
+    return;
+  }
+
+  // Optional fields with length caps — reject if present but oversized.
+  const OPTIONAL_LIMITS: Record<string, number> = {
+    description: 500,
+    imageUrl:    500,
+    metadataUri: 500,
+    twitter:     100,
+    telegram:    100,
+    website:     200,
+  };
+  for (const [key, max] of Object.entries(OPTIONAL_LIMITS)) {
+    if (!optStrValid(key, max)) {
+      res.status(400).json({ error: `Field "${key}" exceeds maximum length of ${max} characters` });
+      return;
+    }
+  }
+
+  const description  = optStr("description",  500);
+  const imageUrl     = optStr("imageUrl",      500);
+  const metadataUri  = optStr("metadataUri",   500);
+  const twitter      = optStr("twitter",       100);
+  const telegram     = optStr("telegram",      100);
+  const website      = optStr("website",       200);
+  const reqPlatform  = body["platform"];
+
   // Client-supplied hint that a dev buy was bundled into the launch tx. Used
   // ONLY as a trigger to inspect the tx — all inserted values are derived from
   // the confirmed transaction itself, never from this number.
-  const devBuySol = Number((req.body as Record<string, unknown>).devBuySol ?? 0);
-
-  if (!mint || !txSignature || !name || !symbol || !creatorAddress) {
-    res.status(400).json({ error: "Missing required fields: mint, txSignature, name, symbol, creatorAddress" });
-    return;
-  }
+  const devBuySol = Number(body["devBuySol"] ?? 0);
 
   // ── Fetch & verify the transaction ───────────────────────────────────────────
   // getTransaction replaces the old getSignatureStatuses check: if the tx exists

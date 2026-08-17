@@ -60,3 +60,18 @@ export const uploadLimiter = rateLimit({
   legacyHeaders: false,
   message: MESSAGE_UPLOAD,
 });
+
+/**
+ * Launch-registration endpoint (POST /tokens/register-launch).
+ *
+ * 10 req / min / IP — each request triggers a Solana getTransaction RPC call,
+ * making it the most expensive unauthenticated endpoint.  10/min allows rapid
+ * retries (e.g. tx not yet confirmed) while bounding RPC amplification.
+ */
+export const launchLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many launch registrations — please wait a moment and try again." },
+});
