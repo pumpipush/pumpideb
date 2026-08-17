@@ -69,9 +69,10 @@ const SKIP_MINTS = new Set([
 
 // HTTP RPC pool — free public endpoints with round-robin on rate-limit errors.
 const FREE_HTTP_RPCS = [
-  "https://solana-rpc.publicnode.com",   // PublicNode (primary)
+  "https://solana-rpc.publicnode.com",   // PublicNode (primary — most reliable)
   "https://api.mainnet-beta.solana.com", // Solana Foundation
-  "https://rpc.ankr.com/solana",         // Ankr free tier
+  "https://solana.drpc.org",             // dRPC public endpoint
+  // Ankr removed — returns 403 Forbidden on batch getTransactions requests (Aug 2026)
 ];
 
 async function rpcPost(body: unknown, timeoutMs = 30_000): Promise<unknown> {
