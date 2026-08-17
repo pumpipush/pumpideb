@@ -386,25 +386,25 @@ router.post("/profiles/:address/follow", asyncWrap(async (req, res) => {
     .where(eq(profilesTable.address, callerAddress)).limit(1);
   if (!caller) { res.status(403).json({ error: "You need a profile to follow others" }); return; }
 
-  // Insert follow + increment counters in a transaction
+  // Insert follow + increment counters in a transaction.
+  // .returning() returns 0 rows when ON CONFLICT DO NOTHING fires (row already
+  // existed), so we can guard counter updates behind `inserted.length > 0` to
+  // prevent double-counting when the same follow request fires twice.
   await db.transaction(async (tx) => {
-    await tx.insert(followsTable)
+    const inserted = await tx.insert(followsTable)
       .values({ followerAddress: callerAddress, followingAddress: targetAddress })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning();
+
+    // No new row → already following. Skip counter updates entirely.
+    if (inserted.length === 0) return;
+
     await tx.update(profilesTable)
       .set({ followingCount: sql`${profilesTable.followingCount} + 1` })
-      .where(and(
-        eq(profilesTable.address, callerAddress),
-        // Only increment if the follow row was actually new (prevent double-counting)
-        // We use a subquery: only update if the follow now exists
-        sql`EXISTS (SELECT 1 FROM follows WHERE follower_address = ${callerAddress} AND following_address = ${targetAddress})`
-      ));
+      .where(eq(profilesTable.address, callerAddress));
     await tx.update(profilesTable)
       .set({ followersCount: sql`${profilesTable.followersCount} + 1` })
       .where(eq(profilesTable.address, targetAddress));
-  }).catch((err: unknown) => {
-    // Unique constraint: already following — silently OK
-    if ((err as { code?: string }).code !== "23505") throw err;
   });
 
   // Re-read counters to return accurate values
