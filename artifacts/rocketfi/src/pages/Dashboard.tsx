@@ -889,9 +889,13 @@ export default function Dashboard() {
   // Newest sort — bubbles reflect the latest launches so the map feels live.
   // 5 s poll matches the server-side cache TTL for sort=newest, so every tick
   // gets a genuinely fresh list without hammering the DB.
+  // Bubble map respects the same platform filter as the Explore section below —
+  // switching Pump.fun / PumpSwap / LaunchLab instantly re-queries the bubble list.
+  const bubblePlatform = platformFilter === "all" ? undefined : platformFilter as ListTokensPlatform;
   const bubbleListParams = {
     sort: bubbleView === "newest" ? ListTokensSort.newest : ListTokensSort.volume,
     limit: 30,
+    platform: bubblePlatform,
   };
   const { data: bubbleRawTokens, isError: bubbleError } = useListTokens(
     bubbleListParams,

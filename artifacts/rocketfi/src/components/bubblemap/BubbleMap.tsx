@@ -79,7 +79,9 @@ interface TooltipState {
 const MIN_R      = 12;
 const MAX_R      = 104;
 const GAP        = 5;
-const TOP_CIRCLES = 999; // all tokens get a circle — no floating-text-only mode
+// Top N tokens get full glass circles; the rest render as floating text labels.
+// 12 gives a clear visual cluster of "important" coins without over-crowding.
+const TOP_CIRCLES = 12;
 const SOL_PRICE_USD = 160;  // fallback if no solPrice prop
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
@@ -163,26 +165,28 @@ function halton(idx: number, base: number): number {
 // 2. Inflate radii 0→target over simulation
 // 3. Collision repulsion + hard boundary walls only (no gravity) → fills uniformly
 
-function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 460) {
+function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 180) {
   if (W <= 0 || H <= 0 || bubbles.length === 0) return;
   const n = bubbles.length;
   const targetR = bubbles.map(b => b.r);
 
-  // ── Halton initialization — covers full W×H rectangle uniformly ───────────
+  // ── Halton initialization — start near center so bubbles don't fly in from corners
+  const cx0 = W / 2, cy0 = H / 2;
+  const spread = Math.min(W, H) * 0.15; // tight cluster at center
   bubbles.forEach((b, i) => {
-    const margin = MIN_R;
-    b.x  = margin + halton(i + 1, 2) * (W - 2 * margin);
-    b.y  = margin + halton(i + 1, 3) * (H - 2 * margin);
+    b.x  = cx0 + (halton(i + 1, 2) - 0.5) * spread * 2;
+    b.y  = cy0 + (halton(i + 1, 3) - 0.5) * spread * 2;
     b.vx = 0;
     b.vy = 0;
-    b.r  = Math.max(2, targetR[i] * 0.07);
+    b.r  = Math.max(2, targetR[i] * 0.12); // start bigger → less inflate travel
   });
 
   for (let step = 0; step < steps; step++) {
     const progress = step / steps;
-    // Inflate: slow start, fast middle, settle at end
-    const inflate = Math.pow(progress, 0.45);
-    const damping = 0.78 + 0.10 * progress;  // 0.78 early (energetic), 0.88 late (settled)
+    // Aggressive early inflate: bubbles reach near-final size quickly,
+    // then fine-tune collision in the last 30% of steps.
+    const inflate = Math.pow(progress, 0.28);
+    const damping = 0.72 + 0.14 * progress;  // energetic early, settled late
 
     for (let i = 0; i < n; i++) {
       bubbles[i].r = Math.max(1, targetR[i] * inflate);
