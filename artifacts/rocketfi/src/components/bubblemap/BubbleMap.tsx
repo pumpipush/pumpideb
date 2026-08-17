@@ -80,7 +80,9 @@ const MIN_R      = 9;
 // MAX_R is computed dynamically inside BubbleMap from the canvas width so
 // circles always fit the column — see dynamicMaxR below.
 const MAX_R_FALLBACK = 62; // used only when canvas width is unknown
-const GAP        = 6;
+// GAP must be ≥ 2× max float amplitude so neighbouring bubbles don't visually
+// collide when drifting in opposite directions.
+const GAP        = 14;
 // Top N tokens get full glass circles; the rest render as floating text labels.
 const TOP_CIRCLES = 10;
 const SOL_PRICE_USD = 160;  // fallback if no solPrice prop
@@ -670,8 +672,8 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
           * (i < TOP_CIRCLES ? (0.85 + Math.random() * 0.30)    // circles: 85-115% of X
                               : (0.70 + Math.random() * 0.60)), // labels: wider ratio
         floatAmp: i < TOP_CIRCLES
-          ? r * 0.22 + Math.random() * r * 0.10   // 22-32% of radius — clearly visible
-          : 3 + Math.random() * 3,                 // text labels: small 3-6px bob
+          ? r * 0.07 + Math.random() * r * 0.04   // 7-11% of radius — visible but safe
+          : 1.5 + Math.random() * 1.5,             // text labels: subtle 1.5-3px bob
         pulsePhase:  prev?.pulsePhase ?? Math.random() * Math.PI * 2,
         pulseFreq:   0.00079 + Math.random() * 0.00047,
         lastTradeAt: prev?.lastTradeAt ?? 0,
