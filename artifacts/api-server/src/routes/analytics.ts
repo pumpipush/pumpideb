@@ -18,6 +18,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { asyncWrap } from "../lib/asyncHandler.js";
+import { verifyAdminSecret } from "../lib/auth-jwt.js";
 
 const router: IRouter = Router();
 
@@ -26,8 +27,10 @@ const router: IRouter = Router();
 function requireAdminSecret(req: Request, res: Response, next: () => void): void {
   const secret = process.env.ADMIN_SECRET;
   if (!secret) { res.status(503).json({ error: "Admin secret not configured." }); return; }
-  const provided = req.headers["x-admin-secret"];
-  if (!provided || provided !== secret) { res.status(401).json({ error: "Unauthorized." }); return; }
+  if (!verifyAdminSecret(req.headers["x-admin-secret"], secret)) {
+    res.status(401).json({ error: "Unauthorized." });
+    return;
+  }
   next();
 }
 

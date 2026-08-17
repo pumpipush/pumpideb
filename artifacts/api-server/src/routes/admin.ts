@@ -10,6 +10,7 @@ import { db, tokensTable, tradesTable, profilesTable } from "@workspace/db";
 import { sql, desc, ilike, or, eq } from "drizzle-orm";
 import { getSolPriceUsd } from "../lib/birdeye.js";
 import { asyncWrap } from "../lib/asyncHandler.js";
+import { verifyAdminSecret } from "../lib/auth-jwt.js";
 
 const router: IRouter = Router();
 
@@ -21,8 +22,7 @@ function requireAdminSecret(req: Request, res: Response, next: () => void): void
     res.status(503).json({ error: "Admin secret not configured on this server." });
     return;
   }
-  const provided = req.headers["x-admin-secret"];
-  if (!provided || provided !== secret) {
+  if (!verifyAdminSecret(req.headers["x-admin-secret"], secret)) {
     res.status(401).json({ error: "Unauthorized." });
     return;
   }
