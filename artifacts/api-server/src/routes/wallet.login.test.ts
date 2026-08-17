@@ -345,55 +345,62 @@ describe("POST /api/auth/wallet/login", () => {
   });
 
   it("leading-zero signature — keypair whose signature happens to start with 0x00 can log in", async () => {
-    // Generate keypairs until we get one whose signature on a test message
-    // starts with 0x00.  Expected after ~256 attempts on average; cap at 2000.
-    let kp: ReturnType<typeof makeKeypair> | null = null;
-    let challengeMsg = "";
-    let realSig: Uint8Array | null = null;
+    // Pre-computed deterministic fixture: a keypair whose Ed25519 signature on
+    // `Pumpi:login:<address>:FIXTURE_NONCE_v1` begins with 0x00.
+    //
+    // Generated once offline (scanning ~200 k keypairs on average).  Using a
+    // fixture avoids a brute-force loop that can exceed the test timeout when
+    // the full suite runs under CPU contention.
+    //
+    // To regenerate:
+    //   node -e "
+    //     const nacl=require('tweetnacl');
+    //     const BS58='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    //     function enc(b){let n=0n;for(const x of b)n=n*256n+BigInt(x);const c=[];
+    //       while(n>0n){c.unshift(BS58[Number(n%58n)]);n/=58n;}
+    //       let l=0;for(const x of b){if(x!==0)break;l++;}
+    //       return '1'.repeat(l)+c.join('');}
+    //     for(let i=0;;i++){const kp=nacl.sign.keyPair();const a=enc(kp.publicKey);
+    //       const m='Pumpi:login:'+a+':FIXTURE_NONCE_v1';
+    //       const s=nacl.sign.detached(new TextEncoder().encode(m),kp.secretKey);
+    //       if(s[0]===0){console.log(Buffer.from(kp.secretKey).toString('hex'),a);break;}}"
+    const FIXTURE_SECRET_HEX =
+      "f9f579f0a4d4535a79a3a696d6b7b1ac5e64b3a38f9bcee5a030100d1976e9c" +
+      "6c86f034ad0486ccf5875138291e232f141cf9638a55c3fb4eb7ba7c1986aa73d";
+    const FIXTURE_ADDRESS    = "EVQikhvMQur5pF47Jt5yTWrea2935nUfeYTqHs986WVS";
+    const FIXTURE_NONCE      = "FIXTURE_NONCE_v1";
 
-    for (let i = 0; i < 2000; i++) {
-      const candidate = makeKeypair();
-      // Use a stable message for this candidate to avoid consuming challenges
-      const testMsg = `Pumpi:login:${candidate.address}:test-nonce`;
-      const sig = nacl.sign.detached(new TextEncoder().encode(testMsg), candidate.secretKey);
-      if (sig[0] === 0x00) {
-        kp = candidate;
-        challengeMsg = testMsg;
-        realSig = sig;
-        break;
-      }
-    }
+    const secretKey      = Uint8Array.from(Buffer.from(FIXTURE_SECRET_HEX, "hex"));
+    const publicKeyBytes = secretKey.slice(32); // nacl secretKey = [privateKey(32) | publicKey(32)]
+    const fixtureMsg     = `Pumpi:login:${FIXTURE_ADDRESS}:${FIXTURE_NONCE}`;
 
-    if (!kp || !realSig) {
-      // Statistically very unlikely to reach here; skip rather than flake
-      console.warn("Could not find a keypair with a leading-zero signature in 2000 tries; skipping");
-      return;
-    }
+    // ── Part 1: verify the fixture signature has a leading 0x00 ──────────────
+    const fixtureSig = nacl.sign.detached(new TextEncoder().encode(fixtureMsg), secretKey);
+    expect(fixtureSig[0]).toBe(0x00);
 
-    // Verify that our bs58Encode correctly represents the leading zero
-    const encoded = bs58Encode(realSig);
-    expect(encoded.startsWith("1")).toBe(true);
+    // ── Part 2: bs58Encode round-trip ─────────────────────────────────────────
+    const encoded = bs58Encode(fixtureSig);
+    expect(encoded.startsWith("1")).toBe(true); // leading 0x00 → "1" in Base58
 
-    // Verify the round-trip: decode should reconstruct the 64-byte array
-    const decoded = bs58Decode(encoded);
+    const decoded  = bs58Decode(encoded);
     const restored = decoded.length === 64 ? decoded : decoded.slice(decoded.length - 64);
     expect(restored[0]).toBe(0x00);
     expect(nacl.sign.detached.verify(
-      new TextEncoder().encode(challengeMsg),
+      new TextEncoder().encode(fixtureMsg),
       restored,
-      kp.publicKeyBytes,
+      publicKeyBytes,
     )).toBe(true);
 
-    // Now do a real end-to-end HTTP login with this keypair (using a real challenge)
-    createdAddresses.push(kp.address);
-    const { message } = await getChallenge(kp.address);
-    const sigBytes = nacl.sign.detached(new TextEncoder().encode(message), kp.secretKey);
-    const signature = bs58Encode(sigBytes);
+    // ── Part 3: real end-to-end HTTP login with this keypair ─────────────────
+    // The server-issued challenge has a fresh nonce; this signature may or may
+    // not have a leading zero, but the Base58 encoding must be correct either way.
+    createdAddresses.push(FIXTURE_ADDRESS);
+    const { message } = await getChallenge(FIXTURE_ADDRESS);
+    const sigBytes    = nacl.sign.detached(new TextEncoder().encode(message), secretKey);
+    const signature   = bs58Encode(sigBytes);
 
-    // Leading-zero check may not apply to THIS challenge's sig, but the flow
-    // must succeed regardless — the encoding must be correct in both cases.
-    const res = await doLogin({ walletAddress: kp.address, signature, message });
+    const res = await doLogin({ walletAddress: FIXTURE_ADDRESS, signature, message });
     expect(res.status).toBe(200);
-    expect(res.body.profile.address).toBe(kp.address);
+    expect(res.body.profile.address).toBe(FIXTURE_ADDRESS);
   });
 });
