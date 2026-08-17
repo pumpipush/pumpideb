@@ -233,10 +233,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       toast({ title: "Required fields missing", description: "Name and ticker cannot be empty.", variant: "destructive" });
       return;
     }
-    if (symbol.trim().length > 10) {
-      toast({ title: "Ticker too long", description: "Ticker must be 10 characters or fewer.", variant: "destructive" });
-      return;
-    }
     if (!imageFile) {
       toast({ title: "Image required", description: "Upload a token image so it displays correctly on the platform.", variant: "destructive" });
       return;
@@ -312,7 +308,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       await _ensureAuth();
       const { metadataUri, imageUrl: uploadedImageUrl } = await uploadToPumpFunIpfs({
         name:        name.trim(),
-        symbol:      symbol.trim().toUpperCase(),
+        symbol:      symbol.trim(),
         description: desc.trim(),
         twitter:     twitter.trim() || undefined,
         telegram:    telegram.trim() || undefined,
@@ -331,7 +327,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         setLaunchStep("building");
         const { transaction, mintAddress: newMint, blockhash, lastValidBlockHeight } =
           await buildPumpFunCreateTx(
-            wallet, name.trim(), symbol.trim().toUpperCase(), metadataUri,
+            wallet, name.trim(), symbol.trim(), metadataUri,
             // Fix #2 — clamp dev buy: reject negative / Infinity values
             pumpfunBuyEnabled ? Math.max(0, isFinite(parseFloat(pumpfunBuySOL)) ? parseFloat(pumpfunBuySOL) : 0) : 0,
           );
@@ -360,9 +356,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
           setLaunchStep("done");
           setMintAddress(newMint);
-          setLaunchInfo({ name: name.trim(), symbol: symbol.trim().toUpperCase(), imagePreview, imageUrl: uploadedImageUrl, mint: newMint });
+          setLaunchInfo({ name: name.trim(), symbol: symbol.trim(), imagePreview, imageUrl: uploadedImageUrl, mint: newMint });
           setIndexReady(false);
-          setExternalToken({ address: newMint, name: name.trim(), symbol: symbol.trim().toUpperCase(), logoURI: uploadedImageUrl ?? imagePreview, decimals: 6 });
+          setExternalToken({ address: newMint, name: name.trim(), symbol: symbol.trim(), logoURI: uploadedImageUrl ?? imagePreview, decimals: 6 });
           void _registerAndNavigate(newMint, sig!, metadataUri, uploadedImageUrl, "pump_fun", pumpfunBuyEnabled ? (parseFloat(pumpfunBuySOL) || 0) : 0);
           return; // success — card shows briefly; _registerAndNavigate navigates once DB insert confirms
         } catch (confirmErr: unknown) {
@@ -390,9 +386,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
             // The coin WAS created — treat as success.
             setLaunchStep("done");
             setMintAddress(newMint);
-            setLaunchInfo({ name: name.trim(), symbol: symbol.trim().toUpperCase(), imagePreview, imageUrl: uploadedImageUrl, mint: newMint });
+            setLaunchInfo({ name: name.trim(), symbol: symbol.trim(), imagePreview, imageUrl: uploadedImageUrl, mint: newMint });
             setIndexReady(false);
-            setExternalToken({ address: newMint, name: name.trim(), symbol: symbol.trim().toUpperCase(), logoURI: uploadedImageUrl ?? imagePreview, decimals: 6 });
+            setExternalToken({ address: newMint, name: name.trim(), symbol: symbol.trim(), logoURI: uploadedImageUrl ?? imagePreview, decimals: 6 });
             void _registerAndNavigate(newMint, sig!, metadataUri, uploadedImageUrl, "pump_fun", pumpfunBuyEnabled ? (parseFloat(pumpfunBuySOL) || 0) : 0);
             return;
           }
@@ -447,7 +443,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       await _ensureAuth();
       const { metadataUri, imageUrl: uploadedImageUrl } = await uploadToRaydiumIpfs({
         name:        name.trim(),
-        symbol:      symbol.trim().toUpperCase(),
+        symbol:      symbol.trim(),
         description: desc.trim(),
         twitter:     twitter.trim() || undefined,
         telegram:    telegram.trim() || undefined,
@@ -470,7 +466,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         await buildRaydiumLaunchTx(
           wallet,
           name.trim(),
-          symbol.trim().toUpperCase(),
+          symbol.trim(),
           metadataUri,
           buyLamports,
           () => setBuildingSubLabel(null), // clear once SDK import resolves
@@ -535,9 +531,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
       setLaunchStep("done");
       setMintAddress(newMint);
-      setLaunchInfo({ name: name.trim(), symbol: symbol.trim().toUpperCase(), imagePreview, imageUrl: uploadedImageUrl, mint: newMint });
+      setLaunchInfo({ name: name.trim(), symbol: symbol.trim(), imagePreview, imageUrl: uploadedImageUrl, mint: newMint });
       setIndexReady(false);
-      setExternalToken({ address: newMint, name: name.trim(), symbol: symbol.trim().toUpperCase(), logoURI: uploadedImageUrl ?? imagePreview, decimals: 6 });
+      setExternalToken({ address: newMint, name: name.trim(), symbol: symbol.trim(), logoURI: uploadedImageUrl ?? imagePreview, decimals: 6 });
       void _registerAndNavigate(newMint, lastSig, metadataUri, uploadedImageUrl, "raydium_launchlab", parseFloat(initialBuySOL) || 0);
 
     } catch (err: unknown) {
@@ -589,7 +585,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           txSignature,
           platform:       launchPlatform,
           name:           name.trim(),
-          symbol:         symbol.trim().toUpperCase(),
+          symbol:         symbol.trim(),
           description:    desc.trim()     || undefined,
           imageUrl:       imageUrl        || undefined,
           metadataUri:    metadataUri     || undefined,
@@ -724,17 +720,11 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                   <Input
                     placeholder="DOGE"
                     value={symbol}
-                    onChange={e => setSymbol(e.target.value.toUpperCase())}
+                    onChange={e => setSymbol(e.target.value)}
                     disabled={isLaunching}
-                    className="h-10 pl-7 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 font-mono uppercase tracking-widest text-[14px] placeholder:text-slate-600"
-                    maxLength={10}
+                    className="h-10 pl-7 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 font-mono tracking-widest text-[14px] placeholder:text-slate-600"
                   />
                 </div>
-                {symbol && (
-                  <p className="text-[11px] tabular-nums" style={{ color: symbol.length >= 9 ? "#f87171" : "#b3b3b3" }}>
-                    {symbol.length}/10
-                  </p>
-                )}
               </div>
             </div>
           </div>
