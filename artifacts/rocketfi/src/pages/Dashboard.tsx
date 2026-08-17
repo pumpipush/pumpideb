@@ -1386,8 +1386,8 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* ── Pagination ── */}
-            {!loadingTokens && tokens && tokens.length > 0 && (
+            {/* ── Pagination — only render when there is something to paginate ── */}
+            {!loadingTokens && tokens && tokens.length > 0 && (page > 1 || hasMore) && (
               <div className="flex items-center justify-center gap-1.5 pt-4 pb-2">
                 {/* Previous */}
                 <button

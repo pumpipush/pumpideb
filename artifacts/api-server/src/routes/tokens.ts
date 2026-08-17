@@ -193,10 +193,9 @@ router.get("/tokens", asyncWrap(async (req, res) => {
         where.push(`t.platform = $${params.length}`);
       }
     }
-    // Smart filter: only show tokens with recent trading activity.
-    // Tokens with zero trades in both 1h and 5m windows have no trending signal
-    // and should not appear, regardless of their all-time trade count.
-    where.push(`(r1h.token_address IS NOT NULL OR r5m.token_address IS NOT NULL)`);
+    // No hard activity filter — smart_score already pushes inactive tokens to the
+    // bottom (score 0). Filtering by recent trades was too aggressive for smaller
+    // platforms (PumpSwap) where activity density is lower.
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
     params.push(fetchLimit);
     const limitParamIdx = params.length;
