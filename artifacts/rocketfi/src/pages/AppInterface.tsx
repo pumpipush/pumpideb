@@ -838,7 +838,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                     style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
                     <UploadCloud className="h-5 w-5" style={{ color: "#b3b3b3" }} />
                   </div>
-                  <p className="text-[13px] font-medium" style={{ color: "#555555" }}>
+                  <p className="text-[13px] font-medium" style={{ color: "#b3b3b3" }}>
                     Drop image here or <span style={{ color: "#e0e0e0" }}>browse</span>
                   </p>
                 </div>
@@ -1234,7 +1234,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
           {/* Header */}
           <div className="flex items-center gap-2 mb-1">
-            <Eye className="h-3.5 w-3.5 shrink-0" style={{ color: "#555555" }} />
+            <Eye className="h-3.5 w-3.5 shrink-0" style={{ color: "#b3b3b3" }} />
             <span className="text-[12px] font-medium" style={{ color: "#b3b3b3" }}>Live Preview</span>
             <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
           </div>
@@ -1988,7 +1988,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               <>
                 <span style={{ fontSize: 32, lineHeight: 1 }}>🚀</span>
                 <p className="text-sm font-medium" style={{ color: "#e0e0e0" }}>You just launched this coin!</p>
-                <p className="text-xs" style={{ color: "#555555" }}>Trades will appear here shortly.</p>
+                <p className="text-xs" style={{ color: "#b3b3b3" }}>Trades will appear here shortly.</p>
               </>
             ) : hasKnownTrades ? (
               <>
@@ -2627,7 +2627,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             ) : (
               <div className="flex items-center justify-between mt-1">
                 <span className="text-[12px] font-mono" style={{ color: "#bbbbbb" }}>
-                  {realSolInCurve.toFixed(2)}<span className="ml-1" style={{ color: "#555555" }}>/ 85 SOL</span>
+                  {realSolInCurve.toFixed(2)}<span className="ml-1" style={{ color: "#b3b3b3" }}>/ 85 SOL</span>
                   {/* Math.max(0, …) guards -0.0% from floating-point imprecision */}
                   <span className="ml-1.5 text-[11px] font-bold" style={{ color: "#10b981" }}>· {Math.max(0, progressPercent).toFixed(1)}%</span>
                 </span>
@@ -2708,7 +2708,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               ) : (
                 <div className="flex items-center justify-between mt-1">
                   <span className="text-[12px] font-mono" style={{ color: "#bbbbbb" }}>
-                    {realSolInCurve.toFixed(2)}<span className="ml-1" style={{ color: "#555555" }}>/ 85 SOL</span>
+                    {realSolInCurve.toFixed(2)}<span className="ml-1" style={{ color: "#b3b3b3" }}>/ 85 SOL</span>
                     {/* Math.max(0, …) guards -0.0% from floating-point imprecision */}
                     <span className="ml-1.5 text-[11px] font-bold" style={{ color: "#10b981" }}>· {Math.max(0, progressPercent).toFixed(1)}%</span>
                   </span>
@@ -2946,12 +2946,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                                     <>
                                       <span style={{ fontSize: 28, lineHeight: 1 }}>🚀</span>
                                       <span className="text-[13px] font-medium" style={{ color: "#e0e0e0" }}>You just launched this coin!</span>
-                                      <span className="text-[12px]" style={{ color: "#555555" }}>Trades will appear here shortly.</span>
+                                      <span className="text-[12px]" style={{ color: "#b3b3b3" }}>Trades will appear here shortly.</span>
                                     </>
                                   ) : (
                                     <>
                                       <ArrowRightLeft className="h-5 w-5" style={{ color: "#3a3a3a" }} />
-                                      <span className="text-[13px]" style={{ color: "#555555" }}>No trades recorded yet</span>
+                                      <span className="text-[13px]" style={{ color: "#b3b3b3" }}>No trades recorded yet</span>
                                     </>
                                   )}
                                 </div>
@@ -3178,7 +3178,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               <td colSpan={8} className="px-4 py-14 text-center">
                                 <div className="flex flex-col items-center gap-2">
                                   <Eye className="h-6 w-6" style={{ color: "#3a3a3a" }} />
-                                  <span className="text-[14px] font-semibold" style={{ color: "#555555" }}>No wallet data yet</span>
+                                  <span className="text-[14px] font-semibold" style={{ color: "#b3b3b3" }}>No wallet data yet</span>
                                   <span className="text-[12px]" style={{ color: "#3a3a3a" }}>Wallets appear once trades are recorded</span>
                                 </div>
                               </td>
@@ -3314,11 +3314,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
                       <div className="w-12 h-12 rounded-xl flex items-center justify-center"
                         style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                        <Wallet className="h-5 w-5" style={{ color: "#555555" }} />
+                        <Wallet className="h-5 w-5" style={{ color: "#b3b3b3" }} />
                       </div>
                       <div className="text-center space-y-1">
                         <p className="text-[14px] font-semibold" style={{ color: "#bbbbbb" }}>Connect your wallet</p>
-                        <p className="text-[12px]" style={{ color: "#555555" }}>Track your position and PnL for this coin</p>
+                        <p className="text-[12px]" style={{ color: "#b3b3b3" }}>Track your position and PnL for this coin</p>
                       </div>
                       <button
                         onClick={() => openWalletModal()}
@@ -3347,7 +3347,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         <p className="text-[14px] font-semibold text-center" style={{ color: "#b3b3b3" }}>
                           P&L tracking coming for this platform
                         </p>
-                        <p className="text-[12px]" style={{ color: "#555555" }}>Currently live for Pump.fun and PumpSwap tokens</p>
+                        <p className="text-[12px]" style={{ color: "#b3b3b3" }}>Currently live for Pump.fun and PumpSwap tokens</p>
                       </div>
                     </div>
                   );
@@ -3416,7 +3416,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       <TrendingUp className="h-8 w-8" style={{ color: "#3a3a3a" }} />
                       <div className="text-center space-y-1">
                         <p className="text-[14px] font-semibold" style={{ color: "#bbbbbb" }}>No position yet</p>
-                        <p className="text-[12px]" style={{ color: "#555555" }}>Buy this coin to start tracking your P&L</p>
+                        <p className="text-[12px]" style={{ color: "#b3b3b3" }}>Buy this coin to start tracking your P&L</p>
                       </div>
                     </div>
                   );
@@ -3474,10 +3474,10 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         <div className="text-right">
                           <span className="text-[13px] font-mono font-semibold" style={{ color: "#e0e0e0" }}>{value}</span>
                           {sub && sub !== token.symbol && (
-                            <p className="text-[11px] font-mono" style={{ color: "#555555" }}>{sub}</p>
+                            <p className="text-[11px] font-mono" style={{ color: "#b3b3b3" }}>{sub}</p>
                           )}
                           {sub === token.symbol && (
-                            <p className="text-[11px]" style={{ color: "#555555" }}>{sub}</p>
+                            <p className="text-[11px]" style={{ color: "#b3b3b3" }}>{sub}</p>
                           )}
                         </div>
                       </div>
@@ -3539,11 +3539,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                   <table style={{ minWidth: "580px", width: "100%", borderCollapse: "collapse" }}>
                     <thead>
                       <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}>
-                        <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#555555", width: 40 }}>Rank</th>
-                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#555555" }}>Address</th>
-                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#555555", minWidth: 140 }}>%</th>
-                        <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#555555" }}>Amount</th>
-                        <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#555555" }}>Value</th>
+                        <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#b3b3b3", width: 40 }}>Rank</th>
+                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#b3b3b3" }}>Address</th>
+                        <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#b3b3b3", minWidth: 140 }}>%</th>
+                        <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#b3b3b3" }}>Amount</th>
+                        <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#b3b3b3" }}>Value</th>
                         <th style={{ width: 36 }} />
                       </tr>
                     </thead>
@@ -3564,7 +3564,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                           <td colSpan={6} className="px-4 py-14 text-center">
                             <div className="flex flex-col items-center gap-2">
                               <Users className="h-5 w-5" style={{ color: "#3a3a3a" }} />
-                              <p className="text-[13px] font-semibold" style={{ color: "#555555" }}>No holders yet</p>
+                              <p className="text-[13px] font-semibold" style={{ color: "#b3b3b3" }}>No holders yet</p>
                               <p className="text-[11px]" style={{ color: "#3a3a3a" }}>Appears once the first buy is made</p>
                             </div>
                           </td>
@@ -3703,7 +3703,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       <div className="flex items-center gap-2 min-w-0">
                         <ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "#f87171" }} />
                         <span className="text-[14px] font-semibold whitespace-nowrap" style={{ color: "#e0e0e0" }}>Dev Activity</span>
-                        <span className="text-[12px] hidden sm:inline whitespace-nowrap" style={{ color: "#555555" }}>creator wallet</span>
+                        <span className="text-[12px] hidden sm:inline whitespace-nowrap" style={{ color: "#b3b3b3" }}>creator wallet</span>
                       </div>
                       {!loadingDevActivity && dev?.creatorAddress && isSoldOut && (
                         <span className="text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0"
@@ -3733,7 +3733,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       <div className="px-4 py-14 text-center">
                         <div className="flex flex-col items-center gap-2">
                           <ShieldCheck className="h-5 w-5" style={{ color: "#3a3a3a" }} />
-                          <p className="text-[13px] font-semibold" style={{ color: "#555555" }}>Failed to load dev data</p>
+                          <p className="text-[13px] font-semibold" style={{ color: "#b3b3b3" }}>Failed to load dev data</p>
                           <p className="text-[11px]" style={{ color: "#3a3a3a" }}>Try refreshing the page</p>
                         </div>
                       </div>
@@ -3741,7 +3741,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       <div className="px-4 py-14 text-center">
                         <div className="flex flex-col items-center gap-2">
                           <ShieldCheck className="h-5 w-5" style={{ color: "#3a3a3a" }} />
-                          <p className="text-[13px] font-semibold" style={{ color: "#555555" }}>No creator data</p>
+                          <p className="text-[13px] font-semibold" style={{ color: "#b3b3b3" }}>No creator data</p>
                           <p className="text-[11px]" style={{ color: "#3a3a3a" }}>Creator address not recorded for this token</p>
                         </div>
                       </div>
@@ -3761,7 +3761,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         {/* Creator address row */}
                         <div className="flex items-center justify-between py-3"
                           style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                          <span className="text-[12px] uppercase tracking-widest font-semibold" style={{ color: "#555555" }}>Creator</span>
+                          <span className="text-[12px] uppercase tracking-widest font-semibold" style={{ color: "#b3b3b3" }}>Creator</span>
                           <div className="flex items-center gap-2">
                             <button
                               className="flex items-center gap-1.5 group/addr"
@@ -3788,7 +3788,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         {/* SOL bought */}
                         <div className="flex items-center justify-between py-3"
                           style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                          <span className="text-[12px] uppercase tracking-wider font-semibold whitespace-nowrap" style={{ color: "#555555" }}>SOL Spent</span>
+                          <span className="text-[12px] uppercase tracking-wider font-semibold whitespace-nowrap" style={{ color: "#b3b3b3" }}>SOL Spent</span>
                           <span className="font-mono text-[13px]" style={{ color: "#4ade80" }}>
                             {solBought < 0.001 ? "<0.001" : solBought.toFixed(3)} SOL
                           </span>
@@ -3797,7 +3797,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         {/* SOL sold */}
                         <div className="flex items-center justify-between py-3"
                           style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                          <span className="text-[12px] uppercase tracking-wider font-semibold whitespace-nowrap" style={{ color: "#555555" }}>SOL Received</span>
+                          <span className="text-[12px] uppercase tracking-wider font-semibold whitespace-nowrap" style={{ color: "#b3b3b3" }}>SOL Received</span>
                           <span className="font-mono text-[13px]" style={{ color: solSold > 0 ? "#f87171" : "#555555" }}>
                             {solSold < 0.001 && solSold > 0 ? "<0.001" : solSold.toFixed(3)} SOL
                           </span>
@@ -3806,7 +3806,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         {/* Net P&L */}
                         <div className="flex items-center justify-between py-3"
                           style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                          <span className="text-[12px] uppercase tracking-widest font-semibold" style={{ color: "#555555" }}>Net P&L</span>
+                          <span className="text-[12px] uppercase tracking-widest font-semibold" style={{ color: "#b3b3b3" }}>Net P&L</span>
                           <span className="font-mono text-[13px] font-bold"
                             style={{ color: netSol >= 0 ? "#4ade80" : "#f87171" }}>
                             {netSol >= 0 ? "+" : ""}{netSol.toFixed(3)} SOL
@@ -3816,7 +3816,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         {/* Still holding */}
                         <div className="flex items-center justify-between py-3"
                           style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                          <span className="text-[12px] uppercase tracking-widest font-semibold" style={{ color: "#555555" }}>Still Holding</span>
+                          <span className="text-[12px] uppercase tracking-widest font-semibold" style={{ color: "#b3b3b3" }}>Still Holding</span>
                           <div className="flex items-center gap-2">
                             <span className="font-mono text-[13px]" style={{ color: "#bbbbbb" }}>
                               {formatAtomicTokenAmount(String(Math.round(netBalance)))}
@@ -3842,7 +3842,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
                         {/* Trade counts + last sell */}
                         <div className="flex items-center justify-between py-3">
-                          <span className="text-[12px] uppercase tracking-widest font-semibold" style={{ color: "#555555" }}>Trades</span>
+                          <span className="text-[12px] uppercase tracking-widest font-semibold" style={{ color: "#b3b3b3" }}>Trades</span>
                           <div className="flex items-center gap-3">
                             <span className="text-[12px]" style={{ color: "#4ade80" }}>
                               {dev.buyCount} buy{dev.buyCount !== 1 ? "s" : ""}
@@ -3851,7 +3851,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               {dev.sellCount} sell{dev.sellCount !== 1 ? "s" : ""}
                             </span>
                             {dev.lastSellAt && (
-                              <span className="text-[11px]" style={{ color: "#555555" }}>
+                              <span className="text-[11px]" style={{ color: "#b3b3b3" }}>
                                 last sell {timeAgo(new Date(dev.lastSellAt).getTime())}
                               </span>
                             )}
@@ -3876,7 +3876,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         <span className="text-[14px] font-semibold" style={{ color: "#e0e0e0" }}>
                           {snipersTotalCount > snipers.length ? `>${snipers.length}` : snipersTotalCount} sniper{snipersTotalCount !== 1 ? "s" : ""}
                         </span>
-                        <span className="text-[12px] hidden sm:inline whitespace-nowrap" style={{ color: "#555555" }}>first 5 min</span>
+                        <span className="text-[12px] hidden sm:inline whitespace-nowrap" style={{ color: "#b3b3b3" }}>first 5 min</span>
                       </div>
                       {snipers.length > 0 && (() => {
                         const sold = snipers.filter(s => {
@@ -3911,14 +3911,14 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                       if (snipersError) return (
                         <div className="px-4 py-14 text-center flex flex-col items-center gap-2">
                           <Zap className="h-5 w-5" style={{ color: "#3a3a3a" }} />
-                          <p className="text-[13px] font-semibold" style={{ color: "#555555" }}>Failed to load snipers</p>
+                          <p className="text-[13px] font-semibold" style={{ color: "#b3b3b3" }}>Failed to load snipers</p>
                           <p className="text-[11px]" style={{ color: "#3a3a3a" }}>Try refreshing the page</p>
                         </div>
                       );
                       if (snipers.length === 0) return (
                         <div className="px-4 py-14 text-center flex flex-col items-center gap-2">
                           <Zap className="h-5 w-5" style={{ color: "#3a3a3a" }} />
-                          <p className="text-[13px] font-semibold" style={{ color: "#555555" }}>No snipers detected</p>
+                          <p className="text-[13px] font-semibold" style={{ color: "#b3b3b3" }}>No snipers detected</p>
                           <p className="text-[11px]" style={{ color: "#3a3a3a" }}>No buys in the first 5 minutes</p>
                         </div>
                       );
@@ -3990,12 +3990,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "520px" }}>
                               <thead>
                                 <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}>
-                                  <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#555555", width: 40 }}>#</th>
-                                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#555555" }}>Address</th>
-                                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#555555" }}>Speed</th>
-                                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#555555" }}>SOL Spent</th>
-                                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#555555" }}>Tokens</th>
-                                  <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#555555" }}>Status</th>
+                                  <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#b3b3b3", width: 40 }}>#</th>
+                                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#b3b3b3" }}>Address</th>
+                                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#b3b3b3" }}>Speed</th>
+                                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#b3b3b3" }}>SOL Spent</th>
+                                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#b3b3b3" }}>Tokens</th>
+                                  <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-widest" style={{ color: "#b3b3b3" }}>Status</th>
                                   <th style={{ width: 36 }} />
                                 </tr>
                               </thead>
@@ -4735,7 +4735,7 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
             {holdings.length}
           </span>
         </h2>
-        <span className="text-[12px] font-mono" style={{ color: "#555555" }}>{formatAddress(wallet)}</span>
+        <span className="text-[12px] font-mono" style={{ color: "#b3b3b3" }}>{formatAddress(wallet)}</span>
       </div>
 
       <div className="space-y-2">
@@ -4763,7 +4763,7 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
               }}
             >
               {/* Rank */}
-              <span className="text-[12px] w-5 text-center shrink-0 tabular-nums" style={{ color: "#555555" }}>{idx + 1}</span>
+              <span className="text-[12px] w-5 text-center shrink-0 tabular-nums" style={{ color: "#b3b3b3" }}>{idx + 1}</span>
 
               {/* Avatar */}
               <TokenAvatar symbol={token.symbol} imageUrl={token.imageUrl ?? undefined} size={40} shape="square" />
@@ -4974,7 +4974,7 @@ function ExternalTokenLoader({ address, wallet }: { address: string | null; wall
             View on Solscan ↗
           </a>
         </div>
-        <p className="text-[10px] font-mono break-all max-w-xs" style={{ color: "#555555" }}>{address}</p>
+        <p className="text-[10px] font-mono break-all max-w-xs" style={{ color: "#b3b3b3" }}>{address}</p>
       </div>
     );
   }
