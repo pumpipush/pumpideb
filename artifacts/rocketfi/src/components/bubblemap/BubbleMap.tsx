@@ -76,12 +76,14 @@ interface TooltipState {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MIN_R      = 12;
-const MAX_R      = 104;
+const MIN_R      = 10;
+// MAX_R is computed dynamically inside BubbleMap from the canvas width so
+// circles always fit the column — see dynamicMaxR below.
+const MAX_R_FALLBACK = 58; // used only when canvas width is unknown
 const GAP        = 5;
 // Top N tokens get full glass circles; the rest render as floating text labels.
-// 12 gives a clear visual cluster of "important" coins without over-crowding.
-const TOP_CIRCLES = 12;
+// 10 gives a clear visual cluster of "important" coins without over-crowding.
+const TOP_CIRCLES = 10;
 const SOL_PRICE_USD = 160;  // fallback if no solPrice prop
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
@@ -137,13 +139,13 @@ function toHex(n: number) { return Math.round(Math.max(0, Math.min(255, n))).toS
 // (e.g. all pump.fun tokens at bonding-curve start have nearly equal volumes).
 // rank 0 = highest volume → MAX_R; rank n-1 = lowest → MIN_R.
 
-function calcRadius(rank: number, total: number): number {
+function calcRadius(rank: number, total: number, maxR: number = MAX_R_FALLBACK): number {
   // Steep power-curve — top coins are dramatically larger, creating clear
   // visual hierarchy. Power 0.40 makes top-5 stand out strongly while
   // lower-ranked coins shrink quickly to small colored dots.
   const n = Math.max(total - 1, 1);
   const t = 1 - rank / n;                         // 1.0 → 0.0
-  return Math.round(MIN_R + (MAX_R - MIN_R) * Math.pow(t, 0.40));
+  return Math.round(MIN_R + (maxR - MIN_R) * Math.pow(t, 0.40));
 }
 
 // ─── Force layout — inflate-and-pack ─────────────────────────────────────────
@@ -590,14 +592,18 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
     const W = containerRef.current?.offsetWidth ?? 600;
     const H = height;
 
+    // Dynamic max radius: ~6 % of canvas width so the largest circle always
+    // fits the column. Clamped between 36 (readable) and 58 (not overwhelming).
+    const dynamicMaxR = Math.round(Math.min(58, Math.max(36, W * 0.060)));
+
     // tokens arrive pre-sorted by volume desc from the API
     const prevMap = new Map(bubblesRef.current.map(b => [b.address, b]));
 
     const newBubbles: BubbleState[] = tokens.map((t, i) => {
       const volSol = parseFloat(t.volumeEth ?? t.marketCapEth ?? "0") / 1e9;
       const mcSol  = parseFloat(t.marketCapEth ?? "0") / 1e9;
-      // Rank-based sizing: index 0 = highest volume → MAX_R; scaled for mobile
-      const r      = Math.round(calcRadius(i, tokens.length) * radiusScale);
+      // Rank-based sizing: largest circle = dynamicMaxR (fits column), scaled for mobile
+      const r      = Math.round(calcRadius(i, tokens.length, dynamicMaxR) * radiusScale);
       const prev   = prevMap.get(t.address);
 
       // Seed initPricesRef with the 24h open price so that live WebSocket

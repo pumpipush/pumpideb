@@ -1162,7 +1162,7 @@ export default function Dashboard() {
                   tokens={isMobile ? bubbleTokens.slice(0, 15) : bubbleTokens}
                   liveUpdates={liveTradeStats}
                   solPrice={solPrice}
-                  height={isMobile ? 260 : 500}
+                  height={isMobile ? 240 : 380}
                   radiusScale={isMobile ? 0.60 : 1}
                 />
               )}
