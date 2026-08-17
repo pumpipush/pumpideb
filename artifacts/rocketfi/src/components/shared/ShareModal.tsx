@@ -2,7 +2,7 @@
  * ShareModal — professional share sheet for a token.
  * Card drawn via Canvas 2D API (no html2canvas, no CORS issues).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Copy, Send, Link2, ExternalLink, Download, Loader2 } from "lucide-react";
 const XIcon = ({ className }: { className?: string }) => (
@@ -14,6 +14,7 @@ import { TokenAvatar, getGradient, GRADIENTS, hashSymbol } from "@/components/sh
 import { formatMCUsd, formatUSD, formatTokenPrice } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { copyToClipboard } from "@/components/shared/CopyToast";
+import { useToast } from "@/hooks/use-toast";
 
 interface PctStat { val: string; up: boolean }
 
@@ -266,6 +267,17 @@ export function ShareModal({ token, open, onClose, solPrice, priceStats }: Share
 
   const [c1, c2] = getGradient(token.symbol);
   const [downloading, setDownloading] = useState(false);
+  const { toast } = useToast();
+  /** Ref to the pending cleanup timeout so it can be cancelled on unmount. */
+  const cleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cancel the download-link cleanup timer if the component unmounts before it fires
+  // to avoid calling removeChild on an element that has already been removed.
+  useEffect(() => {
+    return () => {
+      if (cleanupTimerRef.current !== null) clearTimeout(cleanupTimerRef.current);
+    };
+  }, []);
 
   const priceUsd = priceStats?.currentPrice && solPrice ? priceStats.currentPrice * solPrice : null;
   const priceStr = priceUsd
@@ -289,17 +301,38 @@ export function ShareModal({ token, open, onClose, solPrice, priceStats }: Share
     setDownloading(true);
     try {
       const canvas = await generateCardCanvas(token, solPrice ?? null, priceStats);
-      canvas.toBlob(blob => {
-        if (!blob) return;
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = blobUrl; a.download = `${token.symbol}-pumpi.png`;
-        document.body.appendChild(a); a.click();
-        setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 200);
-      }, "image/png");
+
+      // Promisify toBlob so setDownloading(false) only fires after the blob is
+      // ready — not immediately after scheduling the callback.
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, "image/png");
+      });
+
+      if (!blob) {
+        toast({ title: "Download failed", description: "Could not generate the image — please try again.", variant: "destructive" });
+        return;
+      }
+
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `${token.symbol}-pumpi.png`;
+      document.body.appendChild(a);
+      a.click();
+
+      // Store the timer ref so it can be cancelled if the component unmounts
+      // before the 200 ms elapses; guard removeChild with isConnected.
+      if (cleanupTimerRef.current !== null) clearTimeout(cleanupTimerRef.current);
+      cleanupTimerRef.current = setTimeout(() => {
+        if (a.isConnected) document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+        cleanupTimerRef.current = null;
+      }, 200);
     } catch {
-      // download failed silently — canvas or blob API not available
-    } finally { setDownloading(false); }
+      toast({ title: "Download failed", description: "An error occurred while generating the image.", variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
   };
 
   if (!open) return null;
