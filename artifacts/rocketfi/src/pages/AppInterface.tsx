@@ -691,7 +691,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                   onChange={e => setName(e.target.value)}
                   disabled={isLaunching}
                   className="h-10 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 text-[14px] placeholder:text-slate-600"
-                  required
                 />
               </div>
               <div className="space-y-1.5">
@@ -708,7 +707,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                     disabled={isLaunching}
                     className="h-10 pl-7 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 font-mono uppercase tracking-widest text-[14px] placeholder:text-slate-600"
                     maxLength={10}
-                    required
                   />
                 </div>
                 {symbol && (

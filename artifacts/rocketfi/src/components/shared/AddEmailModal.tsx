@@ -212,7 +212,6 @@ export function AddEmailModal({ open, onClose }: AddEmailModalProps) {
               </p>
               <input
                 type="email"
-                required
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -241,7 +240,6 @@ export function AddEmailModal({ open, onClose }: AddEmailModalProps) {
                 inputMode="numeric"
                 pattern="[0-9]*"
                 maxLength={6}
-                required
                 placeholder="000000"
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
