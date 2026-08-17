@@ -69,3 +69,48 @@ export function resetConnection(): void {
   _txConnection = null;
   _readConnection = null;
 }
+
+// ── Multi-RPC fanout broadcast ────────────────────────────────────────────────
+//
+// Sending a raw transaction to only one RPC is unreliable — if that node is
+// not well-connected to validators, the tx may never land even with maxRetries.
+// Broadcasting to ALL configured endpoints in parallel significantly increases
+// the landing rate at zero extra cost (all endpoints are free).
+//
+// The transaction signature is deterministic (it's the Ed25519 signature
+// already embedded in the serialized bytes), so all endpoints return the same
+// value. We fire-and-forget to the secondary endpoints and return the first
+// signature we receive (from whichever endpoint responds first).
+
+/**
+ * Broadcast a signed transaction to all configured RPC endpoints simultaneously.
+ *
+ * Returns the transaction signature (same value regardless of which endpoint
+ * confirmed receipt first). Errors from individual endpoints are suppressed as
+ * long as at least one endpoint accepts the transaction.
+ *
+ * @param serializedTx  Result of `transaction.serialize()`
+ */
+export async function broadcastWithFanout(serializedTx: Uint8Array): Promise<string> {
+  const opts = { skipPreflight: true, maxRetries: 3 } as const;
+
+  // Deduplicate endpoints in case PRIMARY_RPC is the same as PUBLICNODE.
+  const endpoints = [...new Set(RPC_ENDPOINTS)];
+
+  // Broadcast to all endpoints in parallel. Use Promise.any so we resolve
+  // as soon as ONE endpoint accepts the tx, and we only fail if ALL reject.
+  try {
+    const signature = await Promise.any(
+      endpoints.map(async (url) => {
+        const conn = new Connection(url, "confirmed");
+        return conn.sendRawTransaction(serializedTx, opts);
+      }),
+    );
+    return signature;
+  } catch {
+    // All endpoints rejected — fall back to the primary and let its error
+    // propagate with the original message for easier debugging.
+    const conn = new Connection(PRIMARY_RPC, "confirmed");
+    return conn.sendRawTransaction(serializedTx, opts);
+  }
+}

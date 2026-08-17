@@ -67,7 +67,7 @@ import {
 } from "@/lib/external-tokens";
 import { awaitConfirmAndRelease } from "@/lib/tradeOrchestrator";
 import { computeSellPresetAmount } from "@/lib/tradePresets";
-import { getConnection } from "@/lib/solanaConnection";
+import { getConnection, broadcastWithFanout } from "@/lib/solanaConnection";
 import { addFeeToVersionedTx, addFeeToLegacyTx } from "@/lib/platform-fee";
 import { SEO } from "@/components/seo/SEO";
 import { PlatformBadge, getPlatformUrl, type PlatformId } from "@/components/shared/PlatformBadge";
@@ -2203,10 +2203,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         // same pattern as the pump.fun portal path.  Alchemy has dedicated
         // validator connections and retries stalled txs; wallet default RPC does not.
         const signedJupTx = await signVersionedTransaction(jupTx);
-        const jupSig = await getConnection().sendRawTransaction(signedJupTx.serialize(), {
-          skipPreflight: true,
-          maxRetries:    5,
-        });
+        // Fanout to all RPCs simultaneously — maximises landing rate at zero cost.
+        const jupSig = await broadcastWithFanout(signedJupTx.serialize());
 
         // ── Await on-chain confirmation before releasing the form ─────────────
         // isTradePending stays true throughout — the button stays disabled until
@@ -2247,14 +2245,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           });
           // Inject 1% platform fee (SOL in) into the legacy transaction before signing.
           addFeeToLegacyTx(res.transaction, wallet, solIn);
-          // Sign via wallet, broadcast via Alchemy (skipPreflight + 5 retries).
+          // Sign via wallet, fanout broadcast to all RPCs simultaneously.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const signedLLBuyTx = await signVersionedTransaction(res.transaction as any);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          llSig = await getConnection().sendRawTransaction((signedLLBuyTx as any).serialize(), {
-            skipPreflight: true,
-            maxRetries:    5,
-          });
+          llSig = await broadcastWithFanout((signedLLBuyTx as any).serialize());
           llHash = res.blockhash;
           llHeight = res.lastValidBlockHeight;
         } else {
@@ -2268,14 +2263,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             slippageBps:               safeBps,
             priorityFeeMicroLamports:  priorityFee,
           });
-          // Sign via wallet, broadcast via Alchemy (skipPreflight + 5 retries).
+          // Sign via wallet, fanout broadcast to all RPCs simultaneously.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const signedLLSellTx = await signVersionedTransaction(res.transaction as any);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          llSig = await getConnection().sendRawTransaction((signedLLSellTx as any).serialize(), {
-            skipPreflight: true,
-            maxRetries:    5,
-          });
+          llSig = await broadcastWithFanout((signedLLSellTx as any).serialize());
           llHash = res.blockhash;
           llHeight = res.lastValidBlockHeight;
         }
@@ -2317,19 +2309,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       const portalSolLamports = tradeMode === "buy" ? BigInt(Math.round(numAmount * 1e9)) : 0n;
       const portalTx = await addFeeToVersionedTx(portalTxRaw, wallet, portalSolLamports, getConnection());
 
-      // Sign via the wallet (shows Phantom popup), then submit through our Alchemy RPC.
+      // Sign via the wallet (shows Phantom popup), then fanout broadcast to ALL RPCs.
       // Using sign-then-send (instead of signAndSendTransaction) lets us control the
-      // submission endpoint: Alchemy has dedicated stake-weighted connections to validators
-      // and retries stalled transactions, unlike the wallet's default free RPC endpoint.
-      const signedPortalTx  = await signVersionedTransaction(portalTx);
-      const conn            = getConnection();
-      // Broadcast via Alchemy (fast stake-weighted connections, 5 auto-retries).
+      // submission endpoint and broadcast to multiple RPC nodes simultaneously.
       // skipPreflight=true avoids the stale-state simulation error that fires when
       // price moves between pumpportal building the tx and the user approving it.
-      const txSignature = await conn.sendRawTransaction(signedPortalTx.serialize(), {
-        skipPreflight: true,
-        maxRetries:    5,
-      });
+      const signedPortalTx = await signVersionedTransaction(portalTx);
+      const txSignature    = await broadcastWithFanout(signedPortalTx.serialize());
 
       // Await on-chain confirmation — isTradePending stays true until the tx
       // lands or definitively fails. Throws on timeout / on-chain error so
