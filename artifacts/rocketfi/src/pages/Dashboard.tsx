@@ -1159,10 +1159,10 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <BubbleMap
-                  tokens={isMobile ? bubbleTokens.slice(0, 12) : bubbleTokens}
+                  tokens={isMobile ? bubbleTokens.slice(0, 22) : bubbleTokens}
                   liveUpdates={liveTradeStats}
                   solPrice={solPrice}
-                  height={isMobile ? 300 : 380}
+                  height={isMobile ? 340 : 380}
                 />
               )}
             </div>

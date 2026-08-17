@@ -660,21 +660,18 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
         // Unique floating bob per bubble — keep existing if re-using prev
         floatPhaseX: prev?.floatPhaseX ?? Math.random() * Math.PI * 2,
         floatPhaseY: prev?.floatPhaseY ?? Math.random() * Math.PI * 2,
-        // ── Circular orbit params (top-5 only) ───────────────────────────────
-        // Circular orbit: X = amp·cos(ωt + φ), Y = amp·sin(ωt + φ)
-        // Same ω for X and Y → perfect circle (no Lissajous reversal artifacts).
-        // Each bubble gets a random phase so they orbit at different positions.
-        // Period 22–38s → slow, majestic, clearly visible drift.
-        // Amplitude is rank-based: biggest circle gets largest orbit.
-        floatFreqX:  i < TOP_CIRCLES
-          ? 0.000165 + Math.random() * 0.000121  // 22–38s period
-          : 0,                                    // labels: no orbit
-        floatFreqY:  i < TOP_CIRCLES              // same ω → circular (not ellipse)
-          ? 0.000165 + Math.random() * 0.000121
-          : 0,
-        floatAmp:    i < TOP_CIRCLES
-          ? ([9, 8, 7, 6.5, 6, 5.5, 5, 4.5][i] ?? 4) // rank-based, always regenerate
-          : 0,
+        // ── Organic drift — independent X/Y frequencies for Lissajous-like paths
+        // Period 8–16s: clearly visible gentle bob without looking jittery.
+        // X and Y get slightly different periods so paths are ellipse/figure-8
+        // rather than a perfect circle — looks natural, not mechanical.
+        // All bubbles float (circles + text labels), text labels with smaller amp.
+        floatFreqX: 0.00042 + Math.random() * 0.00035,          // 9–15s period
+        floatFreqY: 0.00042 + Math.random() * 0.00035            // independent period
+          * (i < TOP_CIRCLES ? (0.85 + Math.random() * 0.30)    // circles: 85-115% of X
+                              : (0.70 + Math.random() * 0.60)), // labels: wider ratio
+        floatAmp: i < TOP_CIRCLES
+          ? r * 0.22 + Math.random() * r * 0.10   // 22-32% of radius — clearly visible
+          : 3 + Math.random() * 3,                 // text labels: small 3-6px bob
         pulsePhase:  prev?.pulsePhase ?? Math.random() * Math.PI * 2,
         pulseFreq:   0.00079 + Math.random() * 0.00047,
         lastTradeAt: prev?.lastTradeAt ?? 0,
@@ -783,13 +780,12 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
         b.colorR += (b.targetR - b.colorR) * 0.04;
         b.colorG += (b.targetG - b.colorG) * 0.04;
         b.colorB += (b.targetB - b.colorB) * 0.04;
-        // Top circles: gentle circular orbit
-        const amp = (i < TOP_CIRCLES && b.floatAmp > 0 && b.floatFreqX > 0) ? b.floatAmp : 0;
-        const floatX = amp ? amp * Math.cos(b.floatFreqX * now + b.floatPhaseX) : 0;
-        const floatY = amp ? amp * Math.sin(b.floatFreqY * now + b.floatPhaseY) : 0;
-        // Fast lerp for first 1.2s after layout (snappy open), slow float after
+        // All bubbles drift with organic Lissajous paths (circles larger, labels smaller)
+        const floatX = b.floatAmp * Math.cos(b.floatFreqX * now + b.floatPhaseX);
+        const floatY = b.floatAmp * Math.sin(b.floatFreqY * now + b.floatPhaseY);
+        // Fast lerp for first 1.2s after layout (snappy open), smooth float after
         const age = now - layoutTimeRef.current;
-        const lerpXY = age < 1200 ? 0.075 : 0.018;
+        const lerpXY = age < 1200 ? 0.080 : 0.032;
         b.dispX += (b.x + floatX - b.dispX) * lerpXY;
         b.dispY += (b.y + floatY - b.dispY) * lerpXY;
       }
