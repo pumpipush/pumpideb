@@ -13,6 +13,7 @@ import {
   getListTokensQueryKey,
 } from "@workspace/api-client-react";
 import { useWallet } from "@/contexts/WalletContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -195,7 +196,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const [indexReady, setIndexReady] = useState(false);
 
   const { toast } = useToast();
-  const { openWalletModal, signAndSendTransaction } = useWallet();
+  const { openWalletModal, signAndSendTransaction, signMessage } = useWallet();
+  const { loginWithWallet } = useAuth();
 
   // ── Image handler ────────────────────────────────────────────────────────────
 
@@ -280,6 +282,21 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     }
   };
 
+  // ── Auth helper: ensure a Pumpi JWT exists before hitting authenticated endpoints ──
+  // Connecting a Solana wallet ≠ having a pumpi_auth_token JWT.  If the token is
+  // missing (first visit, token expired, or cleared storage), silently call
+  // loginWithWallet() so the upload endpoint gets a valid Bearer header.
+  const _ensureAuth = async () => {
+    const existing = typeof localStorage !== "undefined"
+      ? localStorage.getItem("pumpi_auth_token")
+      : null;
+    if (existing) return; // already authenticated
+    if (!wallet) throw new Error("Wallet not connected");
+    // loginWithWallet fetches a challenge from the server, has the wallet sign it,
+    // then exchanges the signature for a JWT stored in localStorage.
+    await loginWithWallet(wallet, signMessage);
+  };
+
   // ── pump.fun flow ─────────────────────────────────────────────────────────────
 
   const _launchPumpFun = async () => {
@@ -290,6 +307,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     try {
       // Step 1: Upload metadata + image ke pump.fun IPFS
       setLaunchStep("uploading");
+      // Ensure we have a valid JWT before hitting the authenticated upload endpoint.
+      // This silently signs-in wallet-only users without breaking the launch flow.
+      await _ensureAuth();
       const { metadataUri, imageUrl: uploadedImageUrl } = await uploadToPumpFunIpfs({
         name:        name.trim(),
         symbol:      symbol.trim().toUpperCase(),
@@ -424,6 +444,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     try {
       // Step 1: Upload metadata via Raydium IPFS (fallback: pump.fun IPFS)
       setLaunchStep("uploading");
+      await _ensureAuth();
       const { metadataUri, imageUrl: uploadedImageUrl } = await uploadToRaydiumIpfs({
         name:        name.trim(),
         symbol:      symbol.trim().toUpperCase(),
