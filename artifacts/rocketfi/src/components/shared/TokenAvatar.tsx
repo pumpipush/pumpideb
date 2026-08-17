@@ -99,9 +99,12 @@ export function TokenAvatar({ symbol, imageUrl, size = 40, className, shape = "s
     );
   }
 
-  // Gradient SVG placeholder
-  const fontSize = size * 0.42;
-  const r = shape === "circle" ? size / 2 : 0;
+  // Dark "?" fallback — clean, universal, no colour distraction
+  const rx =
+    shape === "circle"  ? size / 2 :
+    shape === "rounded" ? size * 0.2 :
+    size * 0.1;
+  const fontSize = size * 0.46;
 
   return (
     <svg
@@ -112,66 +115,20 @@ export function TokenAvatar({ symbol, imageUrl, size = 40, className, shape = "s
       style={{ display: "block" }}
       aria-label={symbol}
     >
-      <defs>
-        <radialGradient id={`${gradId}-r`} cx="30%" cy="25%" r="80%">
-          <stop offset="0%" stopColor={c1} stopOpacity="0.95" />
-          <stop offset="100%" stopColor={c2} stopOpacity="0.85" />
-        </radialGradient>
-        <linearGradient id={`${gradId}-l`} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor={c1} />
-          <stop offset="100%" stopColor={c2} />
-        </linearGradient>
-        <clipPath id={`${gradId}-clip`}>
-          <rect width={size} height={size} rx={shape === "circle" ? r : shape === "rounded" ? size * 0.2 : size * 0.1} ry={shape === "circle" ? r : shape === "rounded" ? size * 0.2 : size * 0.1} />
-        </clipPath>
-      </defs>
-
-      <g clipPath={`url(#${gradId}-clip)`}>
-        {/* Base fill */}
-        <rect width={size} height={size} fill={bg} />
-
-        {/* Radial glow */}
-        <rect width={size} height={size} fill={`url(#${gradId}-r)`} opacity="0.8" />
-
-        {/* Subtle grid pattern */}
-        <pattern id={`${gradId}-p`} x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse">
-          <circle cx="1" cy="1" r="0.8" fill="white" opacity="0.04" />
-        </pattern>
-        <rect width={size} height={size} fill={`url(#${gradId}-p)`} />
-
-        {/* Shine highlight */}
-        <ellipse cx={size * 0.35} cy={size * 0.25} rx={size * 0.4} ry={size * 0.3} fill="white" opacity="0.07" />
-
-        {/* Letter */}
-        <text
-          x="50%"
-          y="50%"
-          dominantBaseline="central"
-          textAnchor="middle"
-          fontSize={fontSize}
-          fontWeight="700"
-          fontFamily="'Plus Jakarta Sans', sans-serif"
-          fill="white"
-          opacity="0.95"
-          style={{ letterSpacing: "-0.5px" }}
-        >
-          {letter}
-        </text>
-
-        {/* Subtle inner border */}
-        <rect
-          width={size - 1}
-          height={size - 1}
-          x="0.5"
-          y="0.5"
-          rx={shape === "circle" ? r - 0.5 : shape === "rounded" ? size * 0.2 : size * 0.1}
-          ry={shape === "circle" ? r - 0.5 : shape === "rounded" ? size * 0.2 : size * 0.1}
-          fill="none"
-          stroke="white"
-          strokeOpacity="0.08"
-          strokeWidth="1"
-        />
-      </g>
+      <rect width={size} height={size} rx={rx} ry={rx} fill="#0d0d0d" />
+      <text
+        x="50%"
+        y="50%"
+        dominantBaseline="central"
+        textAnchor="middle"
+        fontSize={fontSize}
+        fontWeight="700"
+        fontFamily="'Plus Jakarta Sans', sans-serif"
+        fill="white"
+        opacity="0.20"
+      >
+        ?
+      </text>
     </svg>
   );
 }

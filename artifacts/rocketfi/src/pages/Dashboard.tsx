@@ -157,9 +157,9 @@ function TokenImage({ imageUrl, symbol, className, textSize = "text-5xl" }: {
   const src = resolveImageUrl(imageUrl ?? "") ?? "";
   if (!imageUrl || broken) {
     return (
-      <div className={cn("w-full h-full flex items-center justify-center font-bold text-white/80", textSize, className)}
-        style={{ background: tokenCardBackground(symbol) }}>
-        {symbol.replace(/^\$/, "").charAt(0).toUpperCase()}
+      <div className={cn("w-full h-full flex items-center justify-center font-bold text-white/20 select-none", textSize, className)}
+        style={{ background: "#0d0d0d" }}>
+        ?
       </div>
     );
   }
@@ -299,11 +299,7 @@ function MobileListRow({ token, rank, solPrice, isTrending, isVolume }: {
       <div className="relative shrink-0">
         <div className="w-9 h-9 rounded-lg overflow-hidden" style={{ outline: "1px solid rgba(255,255,255,0.08)" }}>
           {isPlaceholder(token.symbol) ? (
-            <div className="w-full h-full flex items-center justify-center" style={{ background: tokenCardBackground(token.symbol) }}>
-              <span className="flex gap-0.5">
-                {[0,150,300].map(d => <span key={d} className="w-1 h-1 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: `${d}ms` }} />)}
-              </span>
-            </div>
+            <div className="w-full h-full flex items-center justify-center font-bold text-white/20 select-none text-base" style={{ background: "#0d0d0d" }}>?</div>
           ) : (
             <TokenImage imageUrl={token.imageUrl} symbol={token.symbol} textSize="text-base" />
           )}
@@ -493,11 +489,7 @@ function TableView({ tokens, solPrice, activeTab, startRank }: {
                       <div className="relative shrink-0">
                         <div className="w-9 h-9 rounded-lg overflow-hidden ring-1 ring-white/[0.08]">
                           {isPlaceholder(token.symbol) ? (
-                            <div className="w-full h-full flex items-center justify-center" style={{ background: tokenCardBackground(token.symbol) }}>
-                              <span className="flex gap-0.5">
-                                {[0,150,300].map(d => <span key={d} className="w-1 h-1 rounded-full bg-white/40 animate-bounce" style={{ animationDelay: `${d}ms` }} />)}
-                              </span>
-                            </div>
+                            <div className="w-full h-full flex items-center justify-center font-bold text-white/20 select-none text-base" style={{ background: "#0d0d0d" }}>?</div>
                           ) : (
                             <TokenImage imageUrl={token.imageUrl} symbol={token.symbol} textSize="text-base" />
                           )}
@@ -647,13 +639,7 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
     >
       <div className="aspect-square w-full bg-muted border-b border-border/50 relative overflow-hidden rounded-t-sm">
         {isPlaceholder(token.symbol) ? (
-          <div className="w-full h-full flex items-center justify-center" style={{ background: tokenCardBackground(token.symbol) }}>
-            <span className="flex gap-1.5 items-center">
-              <span className="w-2.5 h-2.5 rounded-full bg-white/30 animate-bounce [animation-delay:0ms]" />
-              <span className="w-2.5 h-2.5 rounded-full bg-white/30 animate-bounce [animation-delay:150ms]" />
-              <span className="w-2.5 h-2.5 rounded-full bg-white/30 animate-bounce [animation-delay:300ms]" />
-            </span>
-          </div>
+          <div className="w-full h-full flex items-center justify-center font-bold text-white/20 select-none text-5xl" style={{ background: "#0d0d0d" }}>?</div>
         ) : (
           <TokenImage imageUrl={token.imageUrl} symbol={token.symbol} textSize="text-5xl"
             className="group-hover:scale-[1.07] transition-transform duration-500 ease-out" />
