@@ -130,7 +130,7 @@ export function SearchDialog() {
   /* ── Unified search: platform DB + Jupiter strict list ── */
   // queryKey includes jupiterReady so React Query auto-refetches when the
   // client-side Jupiter list finishes downloading (even if server DNS blocked).
-  const { data: searchResult, isFetching } = useQuery<SearchResult>({
+  const { data: searchResult, isFetching, isError: searchError, refetch: retrySearch } = useQuery<SearchResult>({
     queryKey: ["token-search", query, jupiterAttempts],
     queryFn: async () => {
       // Start fetching the Jupiter list if not already in progress.
@@ -140,8 +140,20 @@ export function SearchDialog() {
       void ensureJupiterList();
 
       const res = await fetch(`/api/tokens/search?q=${encodeURIComponent(query)}`);
-      if (!res.ok) throw new Error("Search failed");
-      const serverResult = await res.json() as SearchResult;
+      if (!res.ok) throw new Error(`Search request failed (${res.status})`);
+
+      // Validate the response shape before trusting it — a malformed payload
+      // would otherwise throw inside the merge logic and produce an empty-result
+      // UI with no indication of why.
+      const raw = await res.json() as unknown;
+      const isValidShape = (
+        raw !== null &&
+        typeof raw === "object" &&
+        Array.isArray((raw as Record<string, unknown>).platformTokens) &&
+        Array.isArray((raw as Record<string, unknown>).solanaTokens)
+      );
+      if (!isValidShape) throw new Error("Unexpected search response shape");
+      const serverResult = raw as SearchResult;
 
       // Merge server results with client-side Jupiter search.
       // The client-side search covers tokens the server can't reach when DNS
@@ -160,6 +172,7 @@ export function SearchDialog() {
     enabled: query.length >= 1,
     staleTime: 10_000,
     placeholderData: (prev) => prev,
+    retry: 1,
   });
 
   /* ── Trending (empty query state) ── */
@@ -206,7 +219,7 @@ export function SearchDialog() {
   const showTrending   = query.length === 0;
   const noPlatform     = platformTokens.length === 0;
   const noSolana       = solanaTokens.length   === 0;
-  const noResults      = noPlatform && noSolana && !isFetching && !isAddress;
+  const noResults      = noPlatform && noSolana && !isFetching && !isAddress && !searchError;
 
   return (
     <CommandDialog
@@ -292,6 +305,23 @@ export function SearchDialog() {
                     <kbd className="hidden sm:inline-flex h-5 items-center rounded border border-border/50 bg-muted/50 px-1.5 text-[10px] font-mono text-muted-foreground/50">↵</kbd>
                     <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-primary transition-colors" />
                   </div>
+                </button>
+              </div>
+            )}
+
+            {/* Search error state */}
+            {searchError && !isFetching && (
+              <div className="py-10 text-center">
+                <Search className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  Search unavailable — please try again
+                </p>
+                <button
+                  onClick={() => void retrySearch()}
+                  className="mt-3 text-xs px-3 py-1.5 rounded-md font-medium transition-colors"
+                  style={{ background: "rgba(255,255,255,0.07)", color: "#b3b3b3", border: "1px solid rgba(255,255,255,0.12)" }}
+                >
+                  Retry
                 </button>
               </div>
             )}
