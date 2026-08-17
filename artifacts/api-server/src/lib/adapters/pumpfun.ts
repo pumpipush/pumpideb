@@ -363,7 +363,28 @@ export class PumpFunChainIndexer extends SolanaRpcIndexer {
       priceEth:             PUMP_INIT_PRICE_ETH,
       platform:             PLATFORM,
       chain:                CHAIN,
-    }).onConflictDoNothing();
+    }).onConflictDoUpdate({
+      target: tokensTable.address,
+      set: {
+        // The create event is always authoritative for name/symbol — overwrite
+        // any placeholder that handleTrade may have inserted earlier.
+        name,
+        symbol,
+        // Prefer a known creator over the "unknown" placeholder set by handleTrade.
+        creatorAddress: creatorAddress
+          ? sql`CASE WHEN ${tokensTable.creatorAddress} = 'unknown' THEN ${creatorAddress} ELSE ${tokensTable.creatorAddress} END`
+          : sql`${tokensTable.creatorAddress}`,
+        // Bonding-curve fields: only initialise if still at the default "0" left by
+        // the placeholder — trades running before handleCreate may have already
+        // updated these with real on-chain values.
+        totalSupply:          sql`CASE WHEN ${tokensTable.totalSupply} = '0' THEN ${PUMP_TOTAL_SUPPLY.toString()} ELSE ${tokensTable.totalSupply} END`,
+        virtualTokenReserves: sql`CASE WHEN ${tokensTable.virtualTokenReserves} = '0' THEN ${PUMP_INIT_VTOK.toString()} ELSE ${tokensTable.virtualTokenReserves} END`,
+        virtualEthReserves:   sql`CASE WHEN ${tokensTable.virtualEthReserves} = '0' THEN ${PUMP_INIT_VSOL_SOL} ELSE ${tokensTable.virtualEthReserves} END`,
+        // Price/MC: set initial values only if not yet computed by a trade.
+        marketCapEth: sql`COALESCE(${tokensTable.marketCapEth}, ${PUMP_INIT_MC_LAMPORTS})`,
+        priceEth:     sql`COALESCE(${tokensTable.priceEth}, ${PUMP_INIT_PRICE_ETH})`,
+      },
+    });
 
     this.log.info({ mint, name, symbol, marketCapEth: PUMP_INIT_MC_LAMPORTS },
       "pump_fun: new token ingested");

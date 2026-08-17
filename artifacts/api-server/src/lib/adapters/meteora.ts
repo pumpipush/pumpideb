@@ -63,14 +63,22 @@ class MeteoraIndexer extends SolanaRpcIndexer {
   }
 
   private async handleNewPool(mint: string): Promise<void> {
+    // Fetch existing row (name included) so we can tell if it is a
+    // trade-first placeholder (name === mint.slice(0, 8)) that needs
+    // upgrading, or an already-complete row that can be skipped.
     const existing = await db
-      .select({ id: tokensTable.id })
+      .select({ id: tokensTable.id, name: tokensTable.name })
       .from(tokensTable)
       .where(eq(tokensTable.address, mint))
       .limit(1);
-    if (existing.length > 0) return;
 
-    this.log.info({ mint }, "meteora: new pool detected — fetching metadata");
+    const isPlaceholder =
+      existing.length > 0 && existing[0].name === mint.slice(0, 8);
+
+    // Skip if the token already has real metadata — nothing to upgrade.
+    if (existing.length > 0 && !isPlaceholder) return;
+
+    this.log.info({ mint, isPlaceholder }, "meteora: new pool detected — fetching metadata");
 
     const [meta, solPrice] = await Promise.all([
       fetchBirdeyeTokenMeta(mint),
@@ -81,27 +89,46 @@ class MeteoraIndexer extends SolanaRpcIndexer {
     const priceEth     = meta.priceUsd     ? usdToLamports(meta.priceUsd,     solPrice) : null;
     const marketCapEth = meta.marketCapUsd ? usdToLamports(meta.marketCapUsd, solPrice) : null;
 
-    const inserted = await db.insert(tokensTable).values({
-      address:        mint,
-      name:           meta.name,
-      symbol:         meta.symbol,
-      imageUrl:       meta.logoURI,
-      creatorAddress: "unknown",
-      platform:       PLATFORM,
-      chain:          CHAIN,
-      priceEth,
-      marketCapEth,
-      graduated:      true,
-      liquidityUsd:   meta.liquidity    ?? null,
-      priceUsd:       meta.priceUsd     ?? null,
-      marketCapUsd:   meta.marketCapUsd ?? null,
-    }).onConflictDoNothing().returning({ id: tokensTable.id });
+    if (isPlaceholder) {
+      // A trade arrived before the pool event and inserted a placeholder.
+      // Upgrade it now with real name/symbol/metadata.
+      await db.update(tokensTable).set({
+        name:         meta.name,
+        symbol:       meta.symbol,
+        imageUrl:     meta.logoURI    ?? null,
+        graduated:    true,
+        priceEth:     priceEth        ?? null,
+        marketCapEth: marketCapEth    ?? null,
+        liquidityUsd: meta.liquidity  ?? null,
+        priceUsd:     meta.priceUsd   ?? null,
+        marketCapUsd: meta.marketCapUsd ?? null,
+      }).where(eq(tokensTable.address, mint));
 
-    // Only broadcast if we actually inserted a new row — concurrent pool events
-    // for the same mint can both pass the SELECT check above and reach this point.
-    if (inserted.length === 0) return;
+      this.log.info({ mint, name: meta.name }, "meteora: placeholder upgraded with real metadata");
+    } else {
+      // Brand-new token — insert it.
+      const inserted = await db.insert(tokensTable).values({
+        address:        mint,
+        name:           meta.name,
+        symbol:         meta.symbol,
+        imageUrl:       meta.logoURI,
+        creatorAddress: "unknown",
+        platform:       PLATFORM,
+        chain:          CHAIN,
+        priceEth,
+        marketCapEth,
+        graduated:      true,
+        liquidityUsd:   meta.liquidity    ?? null,
+        priceUsd:       meta.priceUsd     ?? null,
+        marketCapUsd:   meta.marketCapUsd ?? null,
+      }).onConflictDoNothing().returning({ id: tokensTable.id });
 
-    this.log.info({ mint, name: meta.name }, "meteora: new token indexed");
+      // onConflictDoNothing can still produce no row if a concurrent handler
+      // beat us to the insert — skip the broadcast in that case.
+      if (inserted.length === 0) return;
+
+      this.log.info({ mint, name: meta.name }, "meteora: new token indexed");
+    }
 
     emitNewToken({
       type: "newToken",
@@ -109,7 +136,7 @@ class MeteoraIndexer extends SolanaRpcIndexer {
         address:      mint,
         name:         meta.name,
         symbol:       meta.symbol,
-        imageUrl:     meta.logoURI,
+        imageUrl:     meta.logoURI ?? null,
         priceEth,
         marketCapEth,
         platform:     PLATFORM,
