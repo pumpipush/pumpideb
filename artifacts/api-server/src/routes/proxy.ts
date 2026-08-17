@@ -4,6 +4,7 @@ import { URL } from "url";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { asyncWrap } from "../lib/asyncHandler.js";
 import { uploadLimiter } from "../lib/rateLimiters.js";
+import { extractBearer, verifyToken } from "../lib/auth-jwt.js";
 
 const router = Router();
 const storageService = new ObjectStorageService();
@@ -115,6 +116,15 @@ function isAllowedUrl(raw: string): boolean {
  * Rate: 6 req / min / IP via uploadLimiter (uses req.ip, respects trust-proxy header).
  */
 router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
+  // ── Auth check ──────────────────────────────────────────────────────────────
+  // This endpoint writes to object storage and consumes pump.fun quota.
+  // Require a valid wallet/social JWT so only authenticated Pumpi users can upload.
+  const bearerToken = extractBearer(req.headers.authorization);
+  const authPayload = bearerToken ? verifyToken(bearerToken) : null;
+  if (!authPayload) {
+    return res.status(401).json({ error: "Authentication required — please connect your wallet and try again." });
+  }
+
   // Body parser skips non-JSON content-types → req.body is undefined.
   // Return a clear 400 instead of letting destructuring throw a 500.
   if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {

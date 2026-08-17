@@ -82,6 +82,12 @@ export async function uploadToPumpFunIpfs(fields: PumpFunIpfsFields): Promise<{ 
     reader.readAsDataURL(fields.image);
   });
 
+  // Read the JWT from localStorage — the auth endpoint stores it under this key.
+  // This module runs in the browser only; localStorage is always available here.
+  const authToken = typeof localStorage !== "undefined"
+    ? (localStorage.getItem("pumpi_auth_token") ?? "")
+    : "";
+
   const attempt = async () => {
     const body: Record<string, string> = {
       name:        fields.name,
@@ -94,9 +100,12 @@ export async function uploadToPumpFunIpfs(fields: PumpFunIpfsFields): Promise<{ 
     if (fields.telegram) body.telegram = fields.telegram;
     if (fields.website)  body.website  = fields.website;
 
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
     const res = await fetch("/api/pump-ipfs-upload", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(30_000),
     });
