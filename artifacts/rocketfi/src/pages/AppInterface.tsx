@@ -4839,8 +4839,10 @@ function ExternalTokenLoader({ address, wallet }: { address: string | null; wall
 
   useEffect(() => {
     if (!address) { setNotFound(true); return; }
+    // Use cache only if it has a logo — a null-logo entry may be stale (set before
+    // image upload finished). We always re-check our API so the logo is always fresh.
     const cached = getExternalToken(address);
-    if (cached) { setExtToken(cached); return; }
+    if (cached?.logoURI) { setExtToken(cached); return; }
 
     let cancelled = false;
 
