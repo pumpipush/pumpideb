@@ -372,7 +372,14 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
         );
       }
 
-      const payload = { bars, maxTradeId: 0 };
+      // Derive currentMcEth from the last bar so the header MC always matches
+      // the chart without a separate Birdeye token_overview call.
+      // bar.close is SOL/token; lamports = bar.close × 1e9 lam/SOL × 1e9 supply = × 1e18
+      const lastBar = bars[bars.length - 1];
+      const currentMcEth = lastBar && lastBar.close > 0
+        ? String(Math.round(lastBar.close * 1e18))
+        : undefined;
+      const payload = { bars, maxTradeId: 0, currentMcEth };
       _ohlcvCacheSet(cacheKey, payload, tf);
       res.setHeader("X-Cache", "MISS");
       res.json(payload);
@@ -485,7 +492,13 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
     }
   }
 
-  const payload = { bars, maxTradeId };
+  // Derive currentMcEth from the last bar — keeps header MC in sync with chart
+  // without a separate price API call. bar.close (SOL/token) × 1e18 = lamports.
+  const lastBarDb = bars[bars.length - 1];
+  const currentMcEthDb = lastBarDb && lastBarDb.close > 0
+    ? String(Math.round(lastBarDb.close * 1e18))
+    : undefined;
+  const payload = { bars, maxTradeId, currentMcEth: currentMcEthDb };
   _ohlcvCacheSet(cacheKey, payload, tf);
   res.setHeader("X-Cache", "MISS");
   res.json(payload);
