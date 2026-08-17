@@ -278,15 +278,36 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     }
   };
 
-  // ── Auth helper: ensure a Pumpi JWT exists before hitting authenticated endpoints ──
+  // ── Auth helper: ensure a Pumpi JWT exists AND is not expired ───────────────
   // Connecting a Solana wallet ≠ having a pumpi_auth_token JWT.  If the token is
-  // missing (first visit, token expired, or cleared storage), silently call
-  // loginWithWallet() so the upload endpoint gets a valid Bearer header.
+  // missing, expired, or malformed, silently call loginWithWallet() so the upload
+  // endpoint gets a valid Bearer header.
+  //
+  // BUG FIX: previous version only checked whether the key existed in localStorage,
+  // not whether the JWT was still valid.  Tokens expire after 7 days — an expired
+  // token causes the upload endpoint to return 401, which surfaces as a confusing
+  // "Metadata upload failed" error instead of prompting a silent re-login.
   const _ensureAuth = async () => {
-    const existing = typeof localStorage !== "undefined"
+    const token = typeof localStorage !== "undefined"
       ? localStorage.getItem("pumpi_auth_token")
       : null;
-    if (existing) return; // already authenticated
+
+    if (token) {
+      // Decode the JWT payload (base64url, no library needed) to check expiry.
+      // Tokens that expire more than 60 seconds from now are considered valid.
+      try {
+        const [, payloadB64] = token.split(".");
+        const decoded = JSON.parse(atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/"))) as { exp?: number };
+        const expiresAt = typeof decoded.exp === "number" ? decoded.exp : 0;
+        if (expiresAt > Date.now() / 1000 + 60) return; // valid, use as-is
+        // Expired or about to expire — remove and re-authenticate below.
+        localStorage.removeItem("pumpi_auth_token");
+      } catch {
+        // Malformed token — remove and re-authenticate below.
+        localStorage.removeItem("pumpi_auth_token");
+      }
+    }
+
     if (!wallet) throw new Error("Wallet not connected");
     // loginWithWallet fetches a challenge from the server, has the wallet sign it,
     // then exchanges the signature for a JWT stored in localStorage.
@@ -424,6 +445,13 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         setLaunchError(verifiedNotLanded
           ? "Network congested — the transaction didn't confirm in time. Your coin was NOT launched. Click Try Again to retry with a fresh transaction."
           : "Network congested — the transaction didn't confirm in time. It may still have gone through — check your wallet before retrying to avoid launching a duplicate coin.");
+      } else if (/^Internal error$/i.test(raw)) {
+        // "Internal error" is Phantom's generic preflight simulation failure.
+        // It also appears when signMessage fails due to a wallet connection issue.
+        // Instruct the user to reconnect their wallet and retry.
+        setLaunchError("Wallet error — try disconnecting and reconnecting your wallet, then launch again. If the issue persists, refresh the page.");
+      } else if (/authentication required|login.*required|wallet.*login/i.test(raw)) {
+        setLaunchError("Session expired — please reconnect your wallet and try again.");
       } else {
         setLaunchError(raw);
       }
@@ -549,6 +577,10 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           : "Network congested — the transaction didn't confirm in time. It may still have gone through — check your wallet before retrying to avoid launching a duplicate coin.");
       } else if (/config|launchpad/i.test(raw)) {
         setLaunchError(`Failed to connect to Raydium LaunchLab: ${raw}. Try again in a few seconds.`);
+      } else if (/^Internal error$/i.test(raw)) {
+        setLaunchError("Wallet error — try disconnecting and reconnecting your wallet, then launch again. If the issue persists, refresh the page.");
+      } else if (/authentication required|login.*required|wallet.*login/i.test(raw)) {
+        setLaunchError("Session expired — please reconnect your wallet and try again.");
       } else {
         setLaunchError(raw);
       }
