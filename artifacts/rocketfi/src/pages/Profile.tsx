@@ -160,7 +160,7 @@ function StatChip({
         {label}
       </span>
       <span
-        className="text-lg font-bold tabular-nums leading-none tracking-tight"
+        className="text-sm sm:text-lg font-bold tabular-nums leading-none tracking-tight"
         style={{ color: color ?? "var(--foreground)" }}
       >
         {value}
@@ -781,12 +781,12 @@ export default function ProfilePage() {
                   </span>
                   <div className="flex items-center gap-1">
                     {realizedPnlLamports > 0
-                      ? <TrendingUp className="w-4 h-4" style={{ color: "#22c55e" }} />
+                      ? <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: "#22c55e" }} />
                       : realizedPnlLamports < 0
-                        ? <TrendingDown className="w-4 h-4" style={{ color: "#ef4444" }} />
+                        ? <TrendingDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: "#ef4444" }} />
                         : null}
                     <span
-                      className="text-lg font-bold tabular-nums leading-none tracking-tight"
+                      className="text-sm sm:text-lg font-bold tabular-nums leading-none tracking-tight"
                       style={{
                         color: realizedPnlLamports > 0 ? "#22c55e"
                           : realizedPnlLamports < 0 ? "#ef4444"
