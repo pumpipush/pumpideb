@@ -539,7 +539,9 @@ router.get("/auth/wallet/login/challenge", authLimiter, asyncWrap(async (req, re
     // Global cap reached — caller should retry after a moment
     return void res.status(503).json({ error: "Server busy, please retry" });
   }
-  const message = `Pumpi:login:${walletAddress}:${nonce}`;
+  // Keep message short — the full wallet address added ~44 chars but is redundant:
+  // the nonce alone is enough for the server to look up which wallet it belongs to.
+  const message = `Pumpi:login:${nonce}`;
   return void res.json({ nonce, message });
 }));
 
@@ -559,12 +561,12 @@ router.post("/auth/wallet/login", authLimiter, asyncWrap(async (req, res) => {
     return void res.status(400).json({ error: "Invalid Solana wallet address" });
   }
 
-  // Validate message format: "Pumpi:login:<walletAddress>:<nonce>"
+  // Validate message format: "Pumpi:login:<nonce>"
   const parts = message.split(":");
-  if (parts.length !== 4 || parts[0] !== "Pumpi" || parts[1] !== "login" || parts[2] !== walletAddress) {
+  if (parts.length !== 3 || parts[0] !== "Pumpi" || parts[1] !== "login") {
     return void res.status(400).json({ error: "Malformed challenge message" });
   }
-  const nonce = parts[3];
+  const nonce = parts[2];
 
   // Atomically consume the nonce — single-use guarantee
   const boundAddress = consumeWalletLoginNonce(nonce);

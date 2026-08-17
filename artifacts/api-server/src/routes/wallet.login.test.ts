@@ -107,7 +107,7 @@ describe("GET /api/auth/wallet/login/challenge", () => {
       .expect(200);
 
     expect(res.body.nonce).toBeTruthy();
-    expect(res.body.message).toBe(`Pumpi:login:${address}:${res.body.nonce}`);
+    expect(res.body.message).toBe(`Pumpi:login:${res.body.nonce}`);
   });
 
   it("returns 400 for a missing wallet param", async () => {
@@ -199,9 +199,10 @@ describe("POST /api/auth/wallet/login", () => {
     const { message } = await getChallenge(kp.address);
     const signature = signMessage(message, kp.secretKey);
 
-    // Claim a different walletAddress — message format check should catch this
+    // Claim a different walletAddress — nonce was issued for kp.address, not otherKp.address,
+    // so consumeWalletLoginNonce returns the bound address which won't match otherKp.address → 401.
     const res = await doLogin({ walletAddress: otherKp.address, signature, message });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(401);
   });
 
   it("bad signature — flipped byte in signature is rejected with 401", async () => {
@@ -346,24 +347,13 @@ describe("POST /api/auth/wallet/login", () => {
 
   it("leading-zero signature — keypair whose signature happens to start with 0x00 can log in", async () => {
     // Pre-computed deterministic fixture: a keypair whose Ed25519 signature on
-    // `Pumpi:login:<address>:FIXTURE_NONCE_v1` begins with 0x00.
+    // a fixed message begins with 0x00.  The message format below is used only
+    // for the base58 encoding round-trip test (Parts 1 & 2) — the actual
+    // end-to-end login test (Part 3) signs whatever message the server issues.
     //
     // Generated once offline (scanning ~200 k keypairs on average).  Using a
     // fixture avoids a brute-force loop that can exceed the test timeout when
     // the full suite runs under CPU contention.
-    //
-    // To regenerate:
-    //   node -e "
-    //     const nacl=require('tweetnacl');
-    //     const BS58='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-    //     function enc(b){let n=0n;for(const x of b)n=n*256n+BigInt(x);const c=[];
-    //       while(n>0n){c.unshift(BS58[Number(n%58n)]);n/=58n;}
-    //       let l=0;for(const x of b){if(x!==0)break;l++;}
-    //       return '1'.repeat(l)+c.join('');}
-    //     for(let i=0;;i++){const kp=nacl.sign.keyPair();const a=enc(kp.publicKey);
-    //       const m='Pumpi:login:'+a+':FIXTURE_NONCE_v1';
-    //       const s=nacl.sign.detached(new TextEncoder().encode(m),kp.secretKey);
-    //       if(s[0]===0){console.log(Buffer.from(kp.secretKey).toString('hex'),a);break;}}"
     const FIXTURE_SECRET_HEX =
       "f9f579f0a4d4535a79a3a696d6b7b1ac5e64b3a38f9bcee5a030100d1976e9c" +
       "6c86f034ad0486ccf5875138291e232f141cf9638a55c3fb4eb7ba7c1986aa73d";
