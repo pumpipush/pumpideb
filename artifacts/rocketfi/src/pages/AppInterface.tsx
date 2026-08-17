@@ -655,16 +655,27 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
   // Poll our API every 3 s until the newly-launched token appears in our DB.
   // Once indexed, reveal the "View on Pumpi →" button and stop polling.
+  // Cap at 20 retries (~1 min) — after that, mark ready anyway so the user
+  // always gets a working "View on Pumpi" link and never sees an endless spinner.
   useEffect(() => {
     if (launchStep !== "done" || !mintAddress || indexReady) return;
     let cancelled = false;
+    let attempts = 0;
+    const MAX_POLL_ATTEMPTS = 20;
     const poll = async () => {
       if (cancelled) return;
+      attempts++;
       try {
         const res = await fetch(`/api/tokens/${mintAddress}`, { signal: AbortSignal.timeout(5_000) });
         if (res.ok && !cancelled) { setIndexReady(true); return; }
       } catch { /* network hiccup — keep polling */ }
-      if (!cancelled) setTimeout(poll, 3_000);
+      if (cancelled) return;
+      if (attempts >= MAX_POLL_ATTEMPTS) {
+        // Give up polling — the token link still works via the mint address
+        setIndexReady(true);
+        return;
+      }
+      setTimeout(poll, 3_000);
     };
     // Small initial delay so the tx has time to propagate before first check
     const t = setTimeout(poll, 4_000);

@@ -257,7 +257,10 @@ router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
     if (typeof website  === "string" && website.trim())  form.append("website",  website.trim());
 
     const ext = mimeToExt(imageType);
-    const blob = new (globalThis.Blob ?? Blob)([imageBuffer.buffer as ArrayBuffer], { type: imageType });
+    // Use imageBuffer directly (not imageBuffer.buffer) — Node Buffers are
+    // views into a pooled ArrayBuffer and have a byteOffset; using .buffer
+    // would include unrelated bytes before/after the decoded image data.
+    const blob = new (globalThis.Blob ?? Blob)([imageBuffer], { type: imageType });
     form.append("file", blob, `image.${ext}`);
 
     const pumpRes = await fetch("https://pump.fun/api/ipfs", {
