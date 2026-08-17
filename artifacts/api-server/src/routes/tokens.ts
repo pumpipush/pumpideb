@@ -851,7 +851,7 @@ router.post("/tokens/register-launch", launchLimiter, asyncWrap(async (req, res)
     .values({
       address:              mint,
       name:                 name.trim(),
-      symbol:               symbol.trim().toUpperCase(),
+      symbol:               symbol.trim(),
       description:          description?.trim() ?? null,
       imageUrl:             imageUrl   ?? null,
       creatorAddress,
