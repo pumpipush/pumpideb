@@ -255,6 +255,18 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     }
 
     if (platform === "pumpfun") {
+      // Validate dev-buy amount when enabled — silent conversion to 0 is confusing
+      if (pumpfunBuyEnabled) {
+        const parsedBuy = parseFloat(pumpfunBuySOL);
+        if (!isFinite(parsedBuy) || isNaN(parsedBuy) || parsedBuy <= 0) {
+          toast({
+            title: "Invalid developer buy amount",
+            description: "Enter a valid SOL amount (e.g. 0.1) for the developer buy, or disable it.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
       await _launchPumpFun();
     } else {
       // Validate initial buy amount before kicking off the flow
@@ -406,6 +418,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
   const _launchRaydium = async () => {
     if (!wallet || !imageFile) return;
+    // True only when getSignatureStatus confirms the final tx definitively did NOT land —
+    // the only case where we can safely tell the user the coin was NOT launched.
+    let verifiedNotLanded = false;
     try {
       // Step 1: Upload metadata via Raydium IPFS (fallback: pump.fun IPFS)
       setLaunchStep("uploading");
@@ -473,7 +488,29 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       // Step 4: Wait for final transaction confirmation
       setLaunchStep("confirming");
       setConfirmingDetail(null);
-      await waitForTxConfirmation(lastSig, blockhash, lastValidBlockHeight, setConfirmingDetail);
+      try {
+        await waitForTxConfirmation(lastSig, blockhash, lastValidBlockHeight, setConfirmingDetail);
+      } catch (confirmErr: unknown) {
+        // Mirror pump.fun: inspect signature status before surfacing uncertainty.
+        // Raydium generates a fresh mint each attempt so duplicate risk is lower,
+        // but we still need to know if the tx confirmed so we can show the right message.
+        let status: SigStatusValue | undefined;
+        let currentBlockHeight: number | null = null;
+        try {
+          ({ value: status } = await getConnection().getSignatureStatus(lastSig, { searchTransactionHistory: true }));
+        } catch { status = undefined; }
+        try {
+          currentBlockHeight = await getConnection().getBlockHeight("confirmed");
+        } catch { currentBlockHeight = null; }
+
+        const outcome = classifyLaunchConfirmOutcome({ status, currentBlockHeight, lastValidBlockHeight });
+        if (outcome === "confirmed") {
+          // tx landed despite the timeout — fall through to success path
+        } else {
+          verifiedNotLanded = outcome === "not_landed";
+          throw confirmErr;
+        }
+      }
 
       setLaunchStep("done");
       setMintAddress(newMint);
@@ -490,9 +527,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       } else if (/upload|ipfs/i.test(raw) && !/timeout|expired|block height/i.test(raw)) {
         setLaunchError(`Metadata upload failed: ${raw}. Check your internet connection and try again.`);
       } else if (/timeout|not confirmed|Blockhash|block height|expired/i.test(raw)) {
-        // No signature-status verification happens on this path, so the outcome
-        // is unknown — never claim the coin was NOT launched.
-        setLaunchError("Network congested — the transaction didn't confirm in time. It may still have gone through — check your wallet before retrying to avoid launching a duplicate coin.");
+        setLaunchError(verifiedNotLanded
+          ? "Network congested — the transaction didn't confirm in time. Your coin was NOT launched. Click Try Again to retry."
+          : "Network congested — the transaction didn't confirm in time. It may still have gone through — check your wallet before retrying to avoid launching a duplicate coin.");
       } else if (/config|launchpad/i.test(raw)) {
         setLaunchError(`Failed to connect to Raydium LaunchLab: ${raw}. Try again in a few seconds.`);
       } else {
@@ -575,6 +612,12 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 lg:gap-10 max-w-[960px] mx-auto">
+      <SEO
+        title="Launch a Solana Memecoin"
+        description="Create and launch your Solana memecoin in seconds. Choose pump.fun or Raydium LaunchLab — no presales, no team allocations, pure price discovery from the very first trade."
+        url="/launch"
+        keywords="launch solana memecoin, create token pump.fun, raydium launchlab, solana token launch, memecoin creator"
+      />
 
       {/* ── LEFT: Form ── */}
       <div className="flex-1 min-w-0 space-y-5">
@@ -4569,6 +4612,11 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
   // ── Holdings list ──
   return (
     <div className="max-w-[800px] animate-slideDown">
+      <SEO
+        title="My Coins"
+        description="Your Solana memecoin portfolio — track all tokens you hold, their current value, and performance."
+        noIndex
+      />
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-[16px] font-bold text-foreground">
           My Coins
