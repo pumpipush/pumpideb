@@ -48,6 +48,26 @@ export const ALLOWED_META_HOSTS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Active IPFS gateways — raced in parallel so the fastest one wins.
+ * cf-ipfs.com was shut down by Cloudflare; it has been removed.
+ * All entries must also appear in ALLOWED_META_HOSTS.
+ */
+export const IPFS_GATEWAYS = [
+  "https://ipfs.io/ipfs/",
+  "https://gateway.pinata.cloud/ipfs/",
+  "https://dweb.link/ipfs/",
+  "https://nftstorage.link/ipfs/",
+  "https://w3s.link/ipfs/",
+] as const;
+
+/** Extract the bare CID from any IPFS URL variant (ipfs://, https://gateway/ipfs/…). */
+export function extractIpfsCid(url: string): string | null {
+  if (url.startsWith("ipfs://")) return url.slice(7);
+  const m = url.match(/\/ipfs\/(.+)$/);
+  return m?.[1] ?? null;
+}
+
+/**
  * Resolve ipfs:// and cf-ipfs.com URLs to the canonical ipfs.io gateway.
  * Exported so consumers always use the same resolution rules as the safety check.
  */
@@ -109,14 +129,23 @@ export interface UriMeta {
  */
 export async function fetchSafeUriMeta(rawUri: string): Promise<UriMeta | null> {
   if (!isSafeMetaUri(rawUri)) return null;
-  const url = resolveIpfs(rawUri.trim());
   try {
-    const res = await fetch(url, {
-      signal:   AbortSignal.timeout(10_000),
-      headers:  { "User-Agent": "Pumpi/1.0" },
-      redirect: "error",  // never follow redirects — prevents chaining to internal hosts
-    });
-    if (!res.ok) return null;
+    // For IPFS URIs, race all active gateways so the fastest one wins.
+    // This prevents a slow ipfs.io from blocking logo enrichment for minutes.
+    const cid = extractIpfsCid(rawUri.trim());
+    const urlsToTry = cid
+      ? IPFS_GATEWAYS.map(g => g + cid)
+      : [resolveIpfs(rawUri.trim())];
+
+    const res = await Promise.any(
+      urlsToTry.map(u =>
+        fetch(u, {
+          signal:   AbortSignal.timeout(12_000),
+          headers:  { "User-Agent": "Pumpi/1.0" },
+          redirect: "error",  // never follow redirects — prevents chaining to internal hosts
+        }).then(r => r.ok ? r : Promise.reject(new Error(`HTTP ${r.status}`)))
+      )
+    );
     const json = (await res.json()) as {
       name?:        string;
       symbol?:      string;

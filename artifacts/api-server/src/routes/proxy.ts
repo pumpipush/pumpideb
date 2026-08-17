@@ -39,13 +39,31 @@ function mimeToExt(mime: string): string {
 
 // Allowlisted hostnames for image proxying — prevents SSRF to internal services.
 // Add new CDN/IPFS hosts here as needed; never allow bare IP addresses or localhost.
+// ── IPFS gateway list ─────────────────────────────────────────────────────────
+// cf-ipfs.com was shut down by Cloudflare. These are the active public gateways
+// we race in parallel when fetching IPFS content (both metadata and images).
+const IPFS_GATEWAYS = [
+  "https://ipfs.io/ipfs/",
+  "https://gateway.pinata.cloud/ipfs/",
+  "https://dweb.link/ipfs/",
+  "https://nftstorage.link/ipfs/",
+  "https://w3s.link/ipfs/",
+] as const;
+
+/** Extract the bare CID from any IPFS URL variant (ipfs://, https://gateway/ipfs/…). */
+function extractIpfsCid(url: string): string | null {
+  if (url.startsWith("ipfs://")) return url.slice(7);
+  const m = url.match(/\/ipfs\/(.+)$/);
+  return m?.[1] ?? null;
+}
+
 const ALLOWED_HOSTS = new Set([
-  // pump.fun CDN
-  "cf-ipfs.com",
+  // IPFS gateways
   "ipfs.io",
   "gateway.ipfs.io",
   "dweb.link",
   "nftstorage.link",
+  "w3s.link",
   // Arweave gateways
   "arweave.net",
   "gateway.arweave.net",
@@ -255,20 +273,14 @@ router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
 
     // Fetch the metadata JSON to extract the image URL so the frontend
     // can store it in the DB and display the logo immediately after launch.
-    // ipfs.io alone is often slow from VPS IPs; race several gateways so the
-    // fastest one wins and we stay well inside the request timeout.
+    // Race all active IPFS gateways; fastest one wins.
     let ipfsImageUrl: string | null = null;
     try {
-      const cid = pumpData.metadataUri.replace(/^https?:\/\/[^/]+\/ipfs\//, "");
-      const gateways = [
-        pumpData.metadataUri,                          // whatever pump.fun returned (ipfs.io)
-        `https://cf-ipfs.com/ipfs/${cid}`,             // Cloudflare IPFS
-        `https://gateway.pinata.cloud/ipfs/${cid}`,    // Pinata
-        `https://dweb.link/ipfs/${cid}`,               // Protocol Labs
-      ];
+      const cid = extractIpfsCid(pumpData.metadataUri) ?? pumpData.metadataUri;
+      const gateways = IPFS_GATEWAYS.map(g => g + cid);
       const metaJson = await Promise.any(
         gateways.map(url =>
-          fetch(url, { signal: AbortSignal.timeout(8_000) })
+          fetch(url, { signal: AbortSignal.timeout(12_000) })
             .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
         )
       );
@@ -291,24 +303,34 @@ router.get("/proxy-image", asyncWrap(async (req, res) => {
   if (!url) return res.status(400).send("Missing url");
   if (!isAllowedUrl(url)) return res.status(403).send("Domain not allowed");
 
-  try {
-    const upstream = await fetch(url, {
+  // For IPFS URLs, race all active gateways so the fastest one serves the image.
+  // This prevents ipfs.io timeouts from showing a broken logo to the user.
+  const cid = extractIpfsCid(url);
+  const urlsToTry: string[] = cid ? IPFS_GATEWAYS.map(g => g + cid) : [url];
+
+  const fetchImage = (u: string) =>
+    fetch(u, {
       headers: { "User-Agent": "Mozilla/5.0" },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(12_000),
+    }).then(r => {
+      if (!r.ok) return Promise.reject(new Error(`HTTP ${r.status}`));
+      const ct = r.headers.get("content-type") ?? "";
+      if (!ct.startsWith("image/")) return Promise.reject(new Error("Not an image"));
+      return r;
     });
-    if (!upstream.ok) return res.status(502).send("Upstream error");
+
+  try {
+    const upstream = await Promise.any(urlsToTry.map(fetchImage));
 
     const contentType = upstream.headers.get("content-type") ?? "image/png";
-    // Only proxy image content types
-    if (!contentType.startsWith("image/")) return res.status(415).send("Not an image");
-
     // Cap response at 5 MB to prevent memory abuse
     const MAX_BYTES = 5 * 1024 * 1024;
     const buf = await upstream.arrayBuffer();
     if (buf.byteLength > MAX_BYTES) return res.status(413).send("Image too large");
 
     res.setHeader("Content-Type", contentType);
-    res.setHeader("Cache-Control", "public, max-age=86400");
+    // Immutable cache — IPFS content is content-addressed and never changes
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
     return res.send(Buffer.from(buf));
   } catch {
     return res.status(502).send("Failed to fetch image");

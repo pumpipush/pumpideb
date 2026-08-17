@@ -205,11 +205,27 @@ function decodePumpCreate(tx: RpcTx): { name: string; symbol: string; uri: strin
   }
 }
 
-/** Swap slow public IPFS gateway to Cloudflare's CDN-backed gateway. */
+// Active IPFS gateways — cf-ipfs.com was shut down by Cloudflare.
+const IPFS_GATEWAYS = [
+  "https://ipfs.io/ipfs/",
+  "https://gateway.pinata.cloud/ipfs/",
+  "https://dweb.link/ipfs/",
+  "https://nftstorage.link/ipfs/",
+  "https://w3s.link/ipfs/",
+];
+
+/** Normalise any IPFS URL variant to canonical https://ipfs.io/ipfs/{cid} form. */
 function resolveIpfs(url: string): string {
   return url
     .replace(/^ipfs:\/\//, "https://ipfs.io/ipfs/")
     .replace(/https?:\/\/cf-ipfs\.com\/ipfs\//, "https://ipfs.io/ipfs/");
+}
+
+/** Extract the bare CID from any IPFS URL variant. */
+function extractIpfsCid(url: string): string | null {
+  if (url.startsWith("ipfs://")) return url.slice(7);
+  const m = url.match(/\/ipfs\/(.+)$/);
+  return m?.[1] ?? null;
 }
 
 interface UriMeta {
@@ -223,15 +239,24 @@ interface UriMeta {
 /**
  * Download the metadata JSON at a URI (IPFS / CDN) and extract all useful
  * fields: image, description, twitter, telegram, website.
+ *
+ * For IPFS URIs, races all active gateways simultaneously so the fastest one
+ * wins — this prevents a slow ipfs.io from delaying logo display.
  */
 async function fetchMetaFromUri(uri: string): Promise<UriMeta | null> {
   if (!uri) return null;
   try {
-    const res = await fetch(resolveIpfs(uri), {
-      signal:  AbortSignal.timeout(10_000),
-      headers: { "User-Agent": "Pumpi/1.0" },
-    });
-    if (!res.ok) return null;
+    const cid = extractIpfsCid(uri);
+    const urlsToTry = cid ? IPFS_GATEWAYS.map(g => g + cid) : [resolveIpfs(uri)];
+
+    const res = await Promise.any(
+      urlsToTry.map(u =>
+        fetch(u, {
+          signal:  AbortSignal.timeout(12_000),
+          headers: { "User-Agent": "Pumpi/1.0" },
+        }).then(r => r.ok ? r : Promise.reject(new Error(`HTTP ${r.status}`)))
+      )
+    );
     const json = (await res.json()) as {
       image?:       string;
       description?: string;

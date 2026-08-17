@@ -82,15 +82,26 @@ export function formatUSD(usd: number): string {
 }
 
 /**
- * Normalise IPFS URLs to the ipfs.io public gateway.
- * cf-ipfs.com was shut down by Cloudflare — ipfs.io is the canonical fallback.
+ * Normalise an image URL before rendering it in an <img> tag.
+ *
+ * IPFS images are proxied through our server (/api/proxy-image) instead of
+ * being fetched directly from ipfs.io.  The proxy races several IPFS gateways
+ * simultaneously and returns the first successful response, which makes logos
+ * appear reliably even when the primary gateway is slow or offline.
+ *
+ * cf-ipfs.com was shut down by Cloudflare — this function also rewrites any
+ * stale cf-ipfs.com URLs to the canonical ipfs.io form before proxying.
  */
 export function resolveImageUrl(url: string | null | undefined): string | null {
   if (!url) return null;
+  // Normalise protocol and dead-gateway variants into a canonical https://ipfs.io/ipfs/{cid} form
   if (url.startsWith("ipfs://"))
-    return "https://ipfs.io/ipfs/" + url.slice(7);
+    url = "https://ipfs.io/ipfs/" + url.slice(7);
   if (url.includes("cf-ipfs.com/ipfs/"))
-    return url.replace(/https?:\/\/cf-ipfs\.com\/ipfs\//, "https://ipfs.io/ipfs/");
+    url = url.replace(/https?:\/\/cf-ipfs\.com\/ipfs\//, "https://ipfs.io/ipfs/");
+  // Route all IPFS URLs through our proxy which races multiple gateways
+  if (url.includes("/ipfs/"))
+    return `/api/proxy-image?url=${encodeURIComponent(url)}`;
   return url;
 }
 
