@@ -18,9 +18,16 @@ const POLL_INTERVAL_MS = 15_000;
 
 export function useSolBalance(wallet: string | null): {
   solBalance: number | null;
+  /**
+   * True when the most recent RPC fetch failed (network error, rate-limit, etc.).
+   * The previous solBalance is still shown so the user has a reference, but the
+   * UI should indicate the value may be stale. Resets to false on next success.
+   */
+  isError: boolean;
   refresh: () => void;
 } {
   const [solBalance, setSolBalance] = useState<number | null>(null);
+  const [isError,    setIsError]    = useState(false);
   const timerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const walletRef  = useRef<string | null>(null);
   const fetchFnRef = useRef<((address: string) => Promise<void>) | null>(null);
@@ -32,8 +39,11 @@ export function useSolBalance(wallet: string | null): {
       // after the user has disconnected or switched to wallet B.
       if (walletRef.current !== address) return;
       setSolBalance(lamports / 1e9);
+      setIsError(false);
     } catch {
-      // silently ignore — balance stays at previous value
+      // Keep the previous balance visible; surface the error so the UI can
+      // show a staleness indicator rather than silently displaying a stale value.
+      if (walletRef.current === address) setIsError(true);
     }
   }, []);
 
@@ -47,6 +57,7 @@ export function useSolBalance(wallet: string | null): {
 
     if (!wallet) {
       setSolBalance(null);
+      setIsError(false);
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
       return;
     }
@@ -87,5 +98,5 @@ export function useSolBalance(wallet: string | null): {
     };
   }, [wallet, fetchBalance]);
 
-  return { solBalance, refresh };
+  return { solBalance, isError, refresh };
 }

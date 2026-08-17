@@ -1414,9 +1414,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   const { toast } = useToast();
   const { submitTx } = useTxToast();
   const solPrice = useSolPrice();
-  const { solBalance, refresh: refreshSolBalance } = useSolBalance(wallet);
+  const { solBalance, isError: solBalanceError, refresh: refreshSolBalance } = useSolBalance(wallet);
   // SPL token balance for the currently-viewed token — drives sell preset buttons
-  const { tokenBalance, atomicBalance, isLoading: balanceLoading, refresh: refreshTokenBalance, refreshAfterTrade } = useTokenBalance(wallet, selectedAddress);
+  const { tokenBalance, atomicBalance, isLoading: balanceLoading, isError: tokenBalanceError, refresh: refreshTokenBalance, refreshAfterTrade } = useTokenBalance(wallet, selectedAddress);
 
   // After a trade, schedule portfolio query invalidation so My Coins + Profile Wallet
   // stay in sync. We stagger the timing: the on-chain RPC portfolio can refresh after
@@ -2680,6 +2680,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               tokenBalance={tokenBalance}
               atomicBalance={atomicBalance}
               balanceLoading={balanceLoading}
+              solBalanceError={solBalanceError}
+              tokenBalanceError={tokenBalanceError}
             />
           </div>
         </div>
@@ -4127,6 +4129,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
             tokenBalance={tokenBalance}
             atomicBalance={atomicBalance}
             balanceLoading={balanceLoading}
+            solBalanceError={solBalanceError}
+            tokenBalanceError={tokenBalanceError}
           />
         </div>
 
@@ -4197,6 +4201,10 @@ interface TradePanelFormProps {
    * than flashing "–".
    */
   balanceLoading?: boolean;
+  /** True when the last SOL balance RPC fetch failed — balance shown may be stale. */
+  solBalanceError?: boolean;
+  /** True when the last token balance RPC fetch failed — balance shown may be stale. */
+  tokenBalanceError?: boolean;
   /**
    * Seconds elapsed since the trade was submitted — shown in the button label as
    * "Confirming… Xs" so users know the app hasn't frozen during the confirmation wait.
@@ -4209,6 +4217,7 @@ function TradePanelForm({
   tradeMode, setTradeMode, amount, setAmount, token, wallet, handleTrade, isPending, pendingSecs,
   isGraduated, jupiterQuote, jupiterQuoteLoading, jupiterQuoteError, tokenDecimals = 6,
   solBalance, tokenBalance, atomicBalance, balanceLoading,
+  solBalanceError, tokenBalanceError,
 }: TradePanelFormProps) {
   const swapSettings = useSwapSettings();
   const solPrice = useSolPrice();
@@ -4374,20 +4383,35 @@ function TradePanelForm({
           </div>
         )}
 
-        {/* Balance row */}
-        {tradeMode === "buy" && wallet && solBalance !== null && solBalance !== undefined && (
+        {/* Balance row — show when balance is known OR when an error occurred on first fetch */}
+        {tradeMode === "buy" && wallet && (solBalance !== null || solBalanceError) && (
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span>Balance</span>
-            <span className="font-mono">
-              {solBalance.toFixed(4)} SOL
-              {solPrice && <span className="opacity-50 ml-1">({formatUSD(solBalance * solPrice)})</span>}
+            <span className="flex items-center gap-1">
+              Balance
+              {solBalanceError && (
+                <span title="Balance may be outdated — RPC refresh failed" className="text-yellow-500 opacity-80">⚠</span>
+              )}
+            </span>
+            <span className={`font-mono transition-opacity duration-200 ${solBalanceError ? "opacity-60" : ""}`}>
+              {solBalance != null
+                ? <>
+                    {solBalance.toFixed(4)} SOL
+                    {solPrice && <span className="opacity-50 ml-1">({formatUSD(solBalance * solPrice)})</span>}
+                  </>
+                : "–"
+              }
             </span>
           </div>
         )}
         {tradeMode === "sell" && wallet && (
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span>{token.symbol} balance</span>
-            <span className={`font-mono transition-opacity duration-200 ${balanceLoading ? "opacity-40" : ""}`}>
+            <span className="flex items-center gap-1">
+              {token.symbol} balance
+              {tokenBalanceError && (
+                <span title="Balance may be outdated — RPC refresh failed" className="text-yellow-500 opacity-80">⚠</span>
+              )}
+            </span>
+            <span className={`font-mono transition-opacity duration-200 ${balanceLoading ? "opacity-40" : tokenBalanceError ? "opacity-60" : ""}`}>
               {tokenBalance == null
                 ? "–"
                 : tokenBalance === 0
@@ -4852,8 +4876,8 @@ interface ExternalTokenTradeProps {
 function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
   const { openWalletModal, signAndSendTransaction } = useWallet();
   const { submitTx } = useTxToast();
-  const { solBalance, refresh: refreshSolBalance } = useSolBalance(wallet);
-  const { tokenBalance, atomicBalance, isLoading: balanceLoading, refresh: refreshTokenBalance, refreshAfterTrade: refreshTokenBalanceAfterTrade } = useTokenBalance(wallet, token.address);
+  const { solBalance, isError: solBalanceError, refresh: refreshSolBalance } = useSolBalance(wallet);
+  const { tokenBalance, atomicBalance, isLoading: balanceLoading, isError: tokenBalanceError, refresh: refreshTokenBalance, refreshAfterTrade: refreshTokenBalanceAfterTrade } = useTokenBalance(wallet, token.address);
   const [tradeMode, setTradeMode]           = useState<"buy" | "sell">("buy");
   const [amount, setAmount]                 = useState("");
   const [isTradePending, setIsTradePending] = useState(false);
@@ -5037,6 +5061,8 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
               tokenBalance={tokenBalance}
               atomicBalance={atomicBalance}
               balanceLoading={balanceLoading}
+              solBalanceError={solBalanceError}
+              tokenBalanceError={tokenBalanceError}
             />
           </div>
         </div>

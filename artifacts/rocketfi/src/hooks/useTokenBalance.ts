@@ -55,6 +55,13 @@ export interface TokenBalanceResult {
    * waiting for null to indicate loading.
    */
   isLoading: boolean;
+  /**
+   * True when the most recent RPC fetch failed (network error, rate-limit, etc.).
+   * The previous tokenBalance/atomicBalance are still shown so the user has a
+   * reference, but the UI should indicate the value may be stale.
+   * Resets to false on the next successful fetch.
+   */
+  isError: boolean;
   /** Single immediate refresh — use after non-trade actions. */
   refresh: () => void;
   /**
@@ -72,6 +79,7 @@ export function useTokenBalance(
   const [tokenBalance,  setTokenBalance]  = useState<number | null>(null);
   const [atomicBalance, setAtomicBalance] = useState<string | null>(null);
   const [isLoading,     setIsLoading]     = useState(false);
+  const [isError,       setIsError]       = useState(false);
 
   const timerRef            = useRef<ReturnType<typeof setInterval> | null>(null);
   /** Monotonically-incrementing epoch — incremented on any wallet/mint change, including clears. */
@@ -108,6 +116,9 @@ export function useTokenBalance(
       // Drop response if a newer wallet/mint combination was established while awaiting
       if (epoch !== epochRef.current) return;
 
+      // Clear error on any successful RPC response (including empty-account wallets).
+      setIsError(false);
+
       if (accounts.length === 0) {
         setTokenBalance(0);
         setAtomicBalance("0");
@@ -137,10 +148,13 @@ export function useTokenBalance(
       setTokenBalance(totalDisplay);
       setAtomicBalance(totalAtomic.toString());
       setIsLoading(false);
+      setIsError(false);
     } catch {
-      // Silently ignore RPC errors — state stays at previous value (null on first fetch)
+      // Keep the previous balance visible; expose the error so the UI can show a
+      // staleness indicator rather than silently displaying a potentially stale value.
       if (epoch === epochRef.current) {
         setIsLoading(false);
+        setIsError(true);
       }
     }
   }, []);
@@ -178,6 +192,7 @@ export function useTokenBalance(
       setTokenBalance(null);
       setAtomicBalance(null);
       setIsLoading(false);
+      setIsError(false);
       refreshWithEpochRef.current = () => {};
       return;
     }
@@ -238,5 +253,5 @@ export function useTokenBalance(
     };
   }, [wallet, mintAddress, fetchBalance]);
 
-  return { tokenBalance, atomicBalance, isLoading, refresh, refreshAfterTrade };
+  return { tokenBalance, atomicBalance, isLoading, isError, refresh, refreshAfterTrade };
 }
