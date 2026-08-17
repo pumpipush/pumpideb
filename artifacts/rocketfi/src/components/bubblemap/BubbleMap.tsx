@@ -76,9 +76,9 @@ interface TooltipState {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MIN_R      = 16;
-const MAX_R      = 80;
-const GAP        = 3;
+const MIN_R      = 12;
+const MAX_R      = 104;
+const GAP        = 5;
 const TOP_CIRCLES = 999; // all tokens get a circle — no floating-text-only mode
 const SOL_PRICE_USD = 160;  // fallback if no solPrice prop
 
@@ -136,12 +136,12 @@ function toHex(n: number) { return Math.round(Math.max(0, Math.min(255, n))).toS
 // rank 0 = highest volume → MAX_R; rank n-1 = lowest → MIN_R.
 
 function calcRadius(rank: number, total: number): number {
-  // Smooth power-curve from MAX_R (rank 0) down to MIN_R (last rank).
-  // Power 0.55 gives a wide mid-range so most tokens are readable circles,
-  // not just the top few large ones.
+  // Steep power-curve — top coins are dramatically larger, creating clear
+  // visual hierarchy. Power 0.40 makes top-5 stand out strongly while
+  // lower-ranked coins shrink quickly to small colored dots.
   const n = Math.max(total - 1, 1);
   const t = 1 - rank / n;                         // 1.0 → 0.0
-  return Math.round(MIN_R + (MAX_R - MIN_R) * Math.pow(t, 0.55));
+  return Math.round(MIN_R + (MAX_R - MIN_R) * Math.pow(t, 0.40));
 }
 
 // ─── Force layout — inflate-and-pack ─────────────────────────────────────────
@@ -188,9 +188,21 @@ function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 460) {
       bubbles[i].r = Math.max(1, targetR[i] * inflate);
     }
 
+    // Center-of-mass gravity: larger bubbles pull harder toward center so the
+    // biggest coins cluster in the middle (BirdEye style). Strength ramps up
+    // during inflation so bubbles settle inward rather than at random corners.
+    const cx = W / 2, cy = H / 2;
+    const gravityStrength = 0.0008 * progress;
+
     for (let i = 0; i < n; i++) {
       const a   = bubbles[i];
       const pad = a.r + GAP;
+
+      // Center gravity — proportional to bubble rank weight (bigger = stronger pull)
+      const rankWeight = 1 - i / n; // rank 0 (biggest) = 1.0, last = ~0
+      const gK = gravityStrength * (0.4 + 0.6 * rankWeight);
+      a.vx += (cx - a.x) * gK;
+      a.vy += (cy - a.y) * gK;
 
       // Collision repulsion — push apart when overlapping
       for (let j = i + 1; j < n; j++) {
@@ -210,8 +222,8 @@ function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 460) {
         }
       }
 
-      // Hard wall — strong elastic boundary, fills corners
-      const wK = 0.60;
+      // Soft wall — gentle elastic boundary (gravity handles centering)
+      const wK = 0.40;
       if (a.x < pad)      a.vx += (pad - a.x)      * wK;
       if (a.x > W - pad)  a.vx += (W - pad - a.x)  * wK;
       if (a.y < pad)      a.vy += (pad - a.y)       * wK;
@@ -459,13 +471,17 @@ function drawBubble(
   ctx.restore();
 
   // ── Content inside circle ─────────────────────────────────────────────────
-  const showLogo   = r >= 36 && b.img && b.imgLoaded && b.img.naturalWidth > 0;
-  const showSymbol = r >= 22;
+  const showLogo   = r >= 48 && b.img && b.imgLoaded && b.img.naturalWidth > 0;
+  const showSymbol = r >= 30;
+  const showPct    = r >= 16; // very small circles: just colored dot, no text
   const pctText    = formatPct(b.pctChange);
-  const pctFontSz  = Math.max(7, Math.min(10, r * 0.36));
-  const symFontSz  = Math.max(7, Math.min(r * 0.18, 13));
+  const pctFontSz  = Math.max(7, Math.min(10, r * 0.28));
+  const symFontSz  = Math.max(8, Math.min(r * 0.17, 14));
   const logoR      = r * 0.25;
   const gap        = r * 0.08;
+
+  // Very small circles (r < 16): just a colored dot — no text clutter
+  if (!showPct) { ctx.globalAlpha = 1; return; }
 
   let blockH = pctFontSz;
   if (showSymbol) blockH += symFontSz + gap;

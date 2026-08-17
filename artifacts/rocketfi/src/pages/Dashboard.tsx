@@ -891,7 +891,7 @@ export default function Dashboard() {
   // gets a genuinely fresh list without hammering the DB.
   const bubbleListParams = {
     sort: bubbleView === "newest" ? ListTokensSort.newest : ListTokensSort.volume,
-    limit: 50,
+    limit: 30,
   };
   const { data: bubbleRawTokens, isError: bubbleError } = useListTokens(
     bubbleListParams,
@@ -1155,11 +1155,11 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <BubbleMap
-                  tokens={isMobile ? bubbleTokens.slice(0, 20) : bubbleTokens}
+                  tokens={isMobile ? bubbleTokens.slice(0, 15) : bubbleTokens}
                   liveUpdates={liveTradeStats}
                   solPrice={solPrice}
-                  height={isMobile ? 240 : 380}
-                  radiusScale={isMobile ? 0.55 : 1}
+                  height={isMobile ? 260 : 500}
+                  radiusScale={isMobile ? 0.60 : 1}
                 />
               )}
             </div>
