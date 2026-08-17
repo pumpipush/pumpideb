@@ -1557,7 +1557,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestLiveTradeId]);
 
-  const { openWalletModal, signAndSendTransaction, signVersionedTransaction, connected } = useWallet();
+  const { openWalletModal, signAndSendTransaction, signVersionedTransaction, connected: walletConnected } = useWallet();
   const [tradeMode, setTradeMode] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
   /** True while a trade is in-flight (signing + broadcast + on-chain confirmation). */
@@ -2167,7 +2167,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
   const handleTrade = async () => {
     if (!wallet) { openWalletModal(); return; }
-    if (!connected) { openWalletModal(); return; }
+    if (!walletConnected) { openWalletModal(); return; }
     if (!token || !amount) return;
     // Prevent concurrent submissions: user must wait for signing + on-chain confirmation.
     if (isTradePending) return;
