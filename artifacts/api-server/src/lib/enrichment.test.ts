@@ -19,13 +19,28 @@ import {
   _parsePriceToRatio,
   selectLongTailCandidates,
   needsStatReconciliation,
+  fetchMeta,
   LL_DEFAULT_SUPPLY_STR,
   LL_PRICE_VERIFY_MIN_TRADES,
   LL_PRICE_VERIFY_BATCH,
   ENRICHABLE_PLATFORMS_EXPORT,
 } from "./enrichment";
 
-afterEach(() => vi.restoreAllMocks());
+// Auto-mock safeUriFetch so fetchMeta tests can control its behaviour per-test
+// without any real network calls. vi.mock is hoisted by Vitest, so this always
+// runs before module imports even though it appears after them in source order.
+vi.mock("./safeUriFetch", () => ({
+  fetchSafeUriMeta:  vi.fn(),
+  isSafeMetaUri:     vi.fn(() => true),
+  resolveIpfs:       vi.fn((u: string) => u),
+  ALLOWED_META_HOSTS: new Set<string>(),
+}));
+import * as safeUriFetchMod from "./safeUriFetch";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 // ── Placeholder detection ──────────────────────────────────────────────────────
 
@@ -774,5 +789,123 @@ describe("needsStatReconciliation", () => {
       { tradeCount: 1, volumeEth: "1000000001" },
       { tradeCount: 1, volumeEth: 1_000_000_000n },
     )).toBe(true);
+  });
+});
+
+// ── fetchMeta: pump_fun metadataUri fallback ───────────────────────────────────
+//
+// When a token is launched via the proxy and the IPFS image fetch times out,
+// imageUrl lands as null in the DB even though metadataUri was saved.
+// The three cases below verify that the enrichment loop recovers the logo
+// from the stored metadataUri on the next tick.
+//
+// fetch is stubbed globally per test; safeUriFetch is mocked at module level
+// (vi.mock above) so no real network calls are made.
+
+describe("fetchMeta — pump_fun metadataUri image fallback", () => {
+  const MINT         = "TokenMint1111111111111111111111111111111111";
+  const META_URI     = "https://storage.googleapis.com/bucket/token-meta/abc.json";
+  const EXPECTED_IMG = "https://storage.googleapis.com/bucket/token-images/abc.png";
+
+  // Reset mock call counts between tests so assertions like not.toHaveBeenCalled
+  // don't accumulate calls from earlier tests in this describe block.
+  afterEach(() => vi.clearAllMocks());
+
+  /** Build a minimal Response-like object for vi.stubGlobal('fetch', ...) */
+  function mockResponse(ok: boolean, body?: unknown): Response {
+    return {
+      ok,
+      status: ok ? 200 : 404,
+      json:   () => Promise.resolve(body),
+      text:   () => Promise.resolve(""),
+    } as unknown as Response;
+  }
+
+  /**
+   * Stub globalThis.fetch so pump.fun and Raydium API calls can be controlled
+   * per test without touching the safeUriFetch mock.
+   */
+  function stubApiFetch({
+    pumpOk,   pumpBody,
+    raydiumOk, raydiumBody,
+  }: {
+    pumpOk:      boolean; pumpBody?:    unknown;
+    raydiumOk:   boolean; raydiumBody?: unknown;
+  }) {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string) => {
+      if (url.includes("frontend-api.pump.fun"))  return Promise.resolve(mockResponse(pumpOk,    pumpBody));
+      if (url.includes("api-v3.raydium.io"))       return Promise.resolve(mockResponse(raydiumOk, raydiumBody));
+      return Promise.reject(new Error(`Unexpected fetch call: ${url}`));
+    }));
+  }
+
+  it("recovers image from metadataUri when pump.fun API returns identity but no image_uri", async () => {
+    // pump.fun knows the token (name+symbol resolved) but image_uri is absent.
+    // safeUriFetch returns the full metadata including the image URL.
+    stubApiFetch({
+      pumpOk:   true,  pumpBody:   { name: "Moon Cat", symbol: "MCAT" },
+      raydiumOk: false,
+    });
+    vi.mocked(safeUriFetchMod.fetchSafeUriMeta).mockResolvedValue({
+      name: "Moon Cat", symbol: "MCAT", imageUrl: EXPECTED_IMG,
+      description: null, twitterUrl: null, telegramUrl: null, websiteUrl: null,
+    });
+
+    const result = await fetchMeta(MINT, "pump_fun", META_URI);
+
+    expect(result?.imageUrl).toBe(EXPECTED_IMG);
+    expect(result?.name).toBe("Moon Cat");
+    expect(result?.symbol).toBe("MCAT");
+    expect(vi.mocked(safeUriFetchMod.fetchSafeUriMeta)).toHaveBeenCalledWith(META_URI);
+  });
+
+  it("recovers image from metadataUri when Raydium returns identity but no logoURI", async () => {
+    // pump.fun API unavailable; Raydium knows the token but has no logo.
+    // safeUriFetch fills the image gap.
+    stubApiFetch({
+      pumpOk:    false,
+      raydiumOk: true, raydiumBody: { data: [{ name: "Moon Cat", symbol: "MCAT" }] },
+    });
+    vi.mocked(safeUriFetchMod.fetchSafeUriMeta).mockResolvedValue({
+      name: "Moon Cat", symbol: "MCAT", imageUrl: EXPECTED_IMG,
+      description: null, twitterUrl: null, telegramUrl: null, websiteUrl: null,
+    });
+
+    const result = await fetchMeta(MINT, "pump_fun", META_URI);
+
+    expect(result?.imageUrl).toBe(EXPECTED_IMG);
+    expect(vi.mocked(safeUriFetchMod.fetchSafeUriMeta)).toHaveBeenCalledWith(META_URI);
+  });
+
+  it("returns full metadata from metadataUri when both pump.fun and Raydium APIs fail", async () => {
+    // Neither upstream API responds — fall through to the stored metadataUri.
+    // This path must return name+symbol+image so placeholder identity can also
+    // be resolved in the same tick.
+    stubApiFetch({ pumpOk: false, raydiumOk: false });
+    vi.mocked(safeUriFetchMod.fetchSafeUriMeta).mockResolvedValue({
+      name: "Moon Cat", symbol: "MCAT", imageUrl: EXPECTED_IMG,
+      description: "A test token", twitterUrl: "https://twitter.com/mooncat",
+      telegramUrl: null, websiteUrl: null,
+    });
+
+    const result = await fetchMeta(MINT, "pump_fun", META_URI);
+
+    expect(result?.name).toBe("Moon Cat");
+    expect(result?.symbol).toBe("MCAT");
+    expect(result?.imageUrl).toBe(EXPECTED_IMG);
+    expect(result?.description).toBe("A test token");
+    expect(result?.twitterUrl).toBe("https://twitter.com/mooncat");
+    expect(vi.mocked(safeUriFetchMod.fetchSafeUriMeta)).toHaveBeenCalledWith(META_URI);
+  });
+
+  it("returns null without calling safeUriFetch when metadataUri is null and both APIs fail", async () => {
+    // Regression guard: no metadataUri → no URI fetch attempted, result is null.
+    stubApiFetch({ pumpOk: false, raydiumOk: false });
+    vi.mocked(safeUriFetchMod.fetchSafeUriMeta).mockResolvedValue(null);
+
+    const result = await fetchMeta(MINT, "pump_fun", null);
+
+    expect(result).toBeNull();
+    expect(vi.mocked(safeUriFetchMod.fetchSafeUriMeta)).not.toHaveBeenCalled();
   });
 });

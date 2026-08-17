@@ -225,7 +225,8 @@ interface EnrichResult {
   websiteUrl?:  string | null;
 }
 
-async function fetchMeta(
+/** Exported for unit testing — internal implementation detail, not public API. */
+export async function fetchMeta(
   mint:        string,
   platform:    string,
   metadataUri: string | null = null,
@@ -233,21 +234,58 @@ async function fetchMeta(
   if (platform === "pump_fun") {
     // Primary: pump.fun API (may be blocked/rate-limited from hosted environments)
     const pump = await fetchPumpMeta(mint);
-    if (pump) return {
-      name:        pump.name,
-      symbol:      pump.symbol,
-      imageUrl:    pump.image_uri  ?? null,
-      description: pump.description ? pump.description.trim() || null : null,
-      twitterUrl:  pump.twitter    ? pump.twitter.trim()    || null : null,
-      telegramUrl: pump.telegram   ? pump.telegram.trim()   || null : null,
-      websiteUrl:  pump.website    ? pump.website.trim()    || null : null,
-    };
+    if (pump) {
+      const result: EnrichResult = {
+        name:        pump.name,
+        symbol:      pump.symbol,
+        imageUrl:    pump.image_uri  ?? null,
+        description: pump.description ? pump.description.trim() || null : null,
+        twitterUrl:  pump.twitter    ? pump.twitter.trim()    || null : null,
+        telegramUrl: pump.telegram   ? pump.telegram.trim()   || null : null,
+        websiteUrl:  pump.website    ? pump.website.trim()    || null : null,
+      };
+      // If pump.fun API returned identity but no image, try the stored metadata URI.
+      // This covers the case where the IPFS image fetch timed out at launch time
+      // and imageUrl was stored as null in the DB even though metadataUri was saved.
+      if (!result.imageUrl && metadataUri) {
+        const uriMeta = await fetchSafeUriMeta(metadataUri).catch(() => null);
+        if (uriMeta?.imageUrl) result.imageUrl = uriMeta.imageUrl;
+      }
+      return result;
+    }
 
     // Fallback: Raydium's /mint/ids works for any SPL token, including pump.fun tokens
     // that have been indexed after launch. Brand-new tokens won't appear here yet
     // but tokens a few minutes old often do.
     const ray = await fetchRaydiumMeta(mint);
-    if (ray) return { name: ray.name, symbol: ray.symbol, imageUrl: ray.logoURI ?? null };
+    if (ray) {
+      let imageUrl = ray.logoURI ?? null;
+      // Same metadataUri fallback for the image when Raydium doesn't have one.
+      if (!imageUrl && metadataUri) {
+        const uriMeta = await fetchSafeUriMeta(metadataUri).catch(() => null);
+        if (uriMeta?.imageUrl) imageUrl = uriMeta.imageUrl;
+      }
+      return { name: ray.name, symbol: ray.symbol, imageUrl };
+    }
+
+    // Both pump.fun and Raydium APIs failed — if we have a stored metadataUri, fetch
+    // name/symbol/image directly from it. This is the last-resort path for tokens
+    // launched via our proxy whose IPFS URL is now available even if the upload
+    // response timed out before the image could be stored.
+    if (metadataUri) {
+      const uriMeta = await fetchSafeUriMeta(metadataUri);
+      if (uriMeta) {
+        return {
+          name:        uriMeta.name   ?? undefined,
+          symbol:      uriMeta.symbol ?? undefined,
+          imageUrl:    uriMeta.imageUrl,
+          description: uriMeta.description,
+          twitterUrl:  uriMeta.twitterUrl,
+          telegramUrl: uriMeta.telegramUrl,
+          websiteUrl:  uriMeta.websiteUrl,
+        };
+      }
+    }
 
     return null;
   }
