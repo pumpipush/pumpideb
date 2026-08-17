@@ -6,9 +6,18 @@
  *
  * All limiters use `req.ip` which respects the `trust proxy 1` setting in
  * app.ts so the real client IP is used (not the reverse-proxy address).
+ *
+ * In test mode (NODE_ENV === 'test', set automatically by vitest) every
+ * limiter is bypassed via the `skip` callback.  A single test file can easily
+ * make 30+ auth requests in under a second, which would exhaust the 10/min
+ * budget and cause unrelated tests to receive 429.  Rate-limiting behaviour
+ * is not tested here; it is an infrastructure concern best verified with a
+ * dedicated load-testing tool against a staging environment.
  */
 
 import rateLimit from "express-rate-limit";
+
+const IS_TEST = process.env.NODE_ENV === "test";
 
 const MESSAGE_SLOW_DOWN = { error: "Too many requests — please wait a moment and try again." };
 const MESSAGE_AUTH      = { error: "Too many authentication attempts — please wait before trying again." };
@@ -28,6 +37,7 @@ export const heavyLimiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: MESSAGE_SLOW_DOWN,
+  skip: () => IS_TEST,
 });
 
 /**
@@ -44,6 +54,7 @@ export const authLimiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: MESSAGE_AUTH,
+  skip: () => IS_TEST,
 });
 
 /**
@@ -59,6 +70,7 @@ export const uploadLimiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: MESSAGE_UPLOAD,
+  skip: () => IS_TEST,
 });
 
 /**
@@ -74,4 +86,5 @@ export const launchLimiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: { error: "Too many launch registrations — please wait a moment and try again." },
+  skip: () => IS_TEST,
 });

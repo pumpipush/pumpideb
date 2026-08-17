@@ -166,17 +166,23 @@ describe("cross-profile nonce replay prevention", () => {
   // ── 2. Replay against original target also rejected ───────────────────────
   it("the same auth is also rejected when replayed against target A a second time", async () => {
     // At this point the previous test already consumed a nonce and followed A.
-    // Issue a fresh nonce, follow A successfully, then try to replay to A again.
-    const auth = await buildFollowAuth();
+    // Unfollow A FIRST (using its own nonce), then capture a fresh follow nonce,
+    // follow A, then confirm replay is rejected.
+    //
+    // Order matters: obtaining the DELETE nonce after the follow nonce would
+    // invalidate the follow nonce (nonces are per-wallet, last-write-wins).
+    // So we drain the unfollow path before capturing the auth we want to test.
 
-    // Unfollow A first so the follow can succeed (may already be following from prev test)
     await fetch(`${base}/profiles/${TARGET_A}/follow`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(await buildFollowAuth()),
     });
 
-    // Now follow A with the captured auth
+    // Capture the follow auth AFTER the unfollow nonce has been consumed.
+    const auth = await buildFollowAuth();
+
+    // Follow A with the captured auth
     const followRes = await postFollowTo(TARGET_A, auth);
     expect(followRes.status).toBe(200);
 

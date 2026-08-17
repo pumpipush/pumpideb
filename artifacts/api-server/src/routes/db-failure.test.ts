@@ -109,10 +109,17 @@ const VALID_TX_SIG = "1".repeat(88);
 
 const VALID_TOKEN_ADDR = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"; // USDC on Solana (format only)
 
-/** Fetch with an explicit 2 s timeout so tests never hang forever. */
+/**
+ * Fetch with an explicit 8 s abort so tests never hang forever.
+ *
+ * 8 s (not 2 s) because under full-suite load the in-process server can take
+ * a few seconds to warm up before responding.  The actual no-hang assertion is
+ * the separate "all four responses within 1 second" test which uses a
+ * Date.now() elapsed check — not this abort signal.
+ */
 async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 2_000);
+  const timer = setTimeout(() => ctrl.abort(), 8_000);
   try {
     return await fetch(url, { ...init, signal: ctrl.signal });
   } finally {

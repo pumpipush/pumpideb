@@ -122,6 +122,7 @@ const restLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many requests — please wait a moment and try again." },
   skip: (req) =>
+    process.env.NODE_ENV === "test" ||    // bypass in test — suites easily exceed 120 req/min
     req.method === "OPTIONS" ||           // never block CORS preflight
     req.path === "/healthz" ||            // never block health checks
     req.path.endsWith("/stream"),         // SSE streams get their own bucket below
@@ -136,6 +137,7 @@ const sseLimiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: { error: "Too many stream connections — please wait before reconnecting." },
+  skip: () => process.env.NODE_ENV === "test",
 });
 
 // Apply REST limiter to all /api/* except SSE paths (excluded via skip above).
@@ -164,7 +166,7 @@ const challengeLimiter = rateLimit({
       error: "Too many challenge requests — please wait a minute and try again.",
     });
   },
-  skip: (req) => req.method === "OPTIONS",
+  skip: (req) => process.env.NODE_ENV === "test" || req.method === "OPTIONS",
 });
 app.post("/api/profiles/challenge", challengeLimiter);
 
