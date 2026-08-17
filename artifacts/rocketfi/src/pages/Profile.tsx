@@ -152,20 +152,24 @@ function ProfileSkeleton() {
 
 // ─── Stat chip ────────────────────────────────────────────────────────────────
 function StatChip({
-  label, value, sub, color,
-}: { label: string; value: string | number; sub?: string; color?: string }) {
+  label, value, sub, color, isLoading,
+}: { label: string; value: string | number; sub?: string; color?: string; isLoading?: boolean }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center py-3 px-3 min-w-0 relative">
       <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 mb-1.5 font-medium">
         {label}
       </span>
-      <span
-        className="text-sm sm:text-lg font-bold tabular-nums leading-none tracking-tight"
-        style={{ color: color ?? "var(--foreground)" }}
-      >
-        {value}
-      </span>
-      {sub && (
+      {isLoading ? (
+        <div className="h-4 w-8 rounded bg-white/[0.08] animate-pulse" />
+      ) : (
+        <span
+          className="text-sm sm:text-lg font-bold tabular-nums leading-none tracking-tight"
+          style={{ color: color ?? "var(--foreground)" }}
+        >
+          {value}
+        </span>
+      )}
+      {!isLoading && sub && (
         <span className="text-[11px] font-medium tabular-nums mt-0.5" style={{ color: color ?? "#b3b3b3" }}>
           {sub}
         </span>
@@ -203,6 +207,8 @@ export default function ProfilePage() {
   const [localIsFollowing, setLocalIsFollowing] = useState<boolean | null>(null);
   const [localFollowersCount, setLocalFollowersCount] = useState<number | null>(null);
   const qc = useQueryClient();
+  // Track previous follower count to detect new-follower events
+  const prevFollowersRef = useRef<number | null>(null);
   // Set to true when user clicks "Connect wallet" from the social-no-wallet CTA,
   // so we auto-run the link flow the moment the wallet extension connects.
   const pendingLinkRef = useRef(false);
@@ -237,11 +243,13 @@ export default function ProfilePage() {
       setLocalIsFollowing(followStatusData.isFollowing);
     }
   }, [followStatusData, localIsFollowing]);
+
+  // Always sync localFollowersCount from server (when not in the middle of a follow op).
+  // This keeps the count accurate after polling picks up someone else following.
   useEffect(() => {
-    if (profile?.followersCount !== undefined && localFollowersCount === null) {
-      setLocalFollowersCount(profile.followersCount);
-    }
-  }, [profile?.followersCount, localFollowersCount]);
+    if (profile?.followersCount === undefined || followLoading) return;
+    setLocalFollowersCount(profile.followersCount);
+  }, [profile?.followersCount, followLoading]);
 
   // ── Canonical URL redirect ────────────────────────────────────────────────
   // If the URL uses a wallet address or UUID instead of the profile username,
@@ -281,6 +289,29 @@ export default function ProfilePage() {
       socialUser.address === address ||
       (!!socialUser.linkedWallet && socialUser.linkedWallet.toLowerCase() === address.toLowerCase())
     ));
+
+  // ── New-follower notification (owner only) ────────────────────────────────
+  // Poll the profile every 30 s so the owner sees their follower count update
+  // in real-time. When the count goes up, fire a toast.
+  useEffect(() => {
+    if (!isOwner || !profileAddress) return;
+    const id = setInterval(() => { void refetch(); }, 30_000);
+    return () => clearInterval(id);
+  }, [isOwner, profileAddress, refetch]);
+
+  useEffect(() => {
+    if (!isOwner || profile?.followersCount === undefined) return;
+    const serverCount = profile.followersCount;
+    if (prevFollowersRef.current !== null && serverCount > prevFollowersRef.current) {
+      const diff = serverCount - prevFollowersRef.current;
+      toast({
+        title: diff === 1 ? "You have a new follower! 🎉" : `You have ${diff} new followers! 🎉`,
+        description: "Tap Followers to see who's following you.",
+        variant: "success" as never,
+      });
+    }
+    prevFollowersRef.current = serverCount;
+  }, [profile?.followersCount, isOwner, toast]);
 
   // ── Seamless wallet link flow ─────────────────────────────────────────────
   // Called either directly (wallet already connected) or auto-triggered by
@@ -377,7 +408,7 @@ export default function ProfilePage() {
     retry: 1,
   });
 
-  const { data: history } = useQuery<ActivityTrade[]>({
+  const { data: history, isLoading: historyLoading } = useQuery<ActivityTrade[]>({
     queryKey: ["wallet-activity", address],
     queryFn: async () => {
       const res = await fetch(`/api/wallet/${address}/activity?limit=100`);
@@ -766,6 +797,7 @@ export default function ProfilePage() {
               <StatChip
                 label="Trades"
                 value={totalTrades || "—"}
+                isLoading={historyLoading}
               />
               <StatChip
                 label="Volume"
@@ -773,45 +805,53 @@ export default function ProfilePage() {
                 sub={totalVolumeLamports > 0 && solPrice
                   ? `$${((totalVolumeLamports / 1e9) * solPrice).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
                   : undefined}
+                isLoading={historyLoading}
               />
-              {realizedPnlLamports !== null && (
-                <div className="flex-1 flex flex-col items-center justify-center py-3 px-3 min-w-0">
-                  <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 mb-1.5 font-medium">
-                    Realized PNL
-                  </span>
-                  <div className="flex items-center gap-1">
-                    {realizedPnlLamports > 0
-                      ? <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: "#22c55e" }} />
-                      : realizedPnlLamports < 0
-                        ? <TrendingDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: "#ef4444" }} />
-                        : null}
-                    <span
-                      className="text-sm sm:text-lg font-bold tabular-nums leading-none tracking-tight"
-                      style={{
-                        color: realizedPnlLamports > 0 ? "#22c55e"
-                          : realizedPnlLamports < 0 ? "#ef4444"
-                          : undefined,
-                      }}
-                    >
-                      {realizedPnlLamports > 0 ? "+" : ""}
-                      {formatSol(realizedPnlLamports.toFixed(0))}
-                    </span>
-                  </div>
-                  {solPrice && (
-                    <span
-                      className="text-[11px] font-medium tabular-nums mt-0.5"
-                      style={{
-                        color: realizedPnlLamports > 0 ? "#16a34a"
-                          : realizedPnlLamports < 0 ? "#dc2626"
-                          : "#b3b3b3",
-                      }}
-                    >
-                      {realizedPnlLamports > 0 ? "+" : ""}
-                      ${((realizedPnlLamports / 1e9) * solPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                    </span>
-                  )}
-                </div>
-              )}
+              {/* PNL — show skeleton while loading, then value once history arrives */}
+              <div className="flex-1 flex flex-col items-center justify-center py-3 px-3 min-w-0">
+                <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 mb-1.5 font-medium">
+                  Realized PNL
+                </span>
+                {historyLoading ? (
+                  <div className="h-4 w-10 rounded bg-white/[0.08] animate-pulse" />
+                ) : realizedPnlLamports !== null ? (
+                  <>
+                    <div className="flex items-center gap-1">
+                      {realizedPnlLamports > 0
+                        ? <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: "#22c55e" }} />
+                        : realizedPnlLamports < 0
+                          ? <TrendingDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: "#ef4444" }} />
+                          : null}
+                      <span
+                        className="text-sm sm:text-lg font-bold tabular-nums leading-none tracking-tight"
+                        style={{
+                          color: realizedPnlLamports > 0 ? "#22c55e"
+                            : realizedPnlLamports < 0 ? "#ef4444"
+                            : undefined,
+                        }}
+                      >
+                        {realizedPnlLamports > 0 ? "+" : ""}
+                        {formatSol(realizedPnlLamports.toFixed(0))}
+                      </span>
+                    </div>
+                    {solPrice && (
+                      <span
+                        className="text-[11px] font-medium tabular-nums mt-0.5"
+                        style={{
+                          color: realizedPnlLamports > 0 ? "#16a34a"
+                            : realizedPnlLamports < 0 ? "#dc2626"
+                            : "#b3b3b3",
+                        }}
+                      >
+                        {realizedPnlLamports > 0 ? "+" : ""}
+                        ${((realizedPnlLamports / 1e9) * solPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-sm sm:text-lg font-bold tabular-nums leading-none tracking-tight">—</span>
+                )}
+              </div>
             </div>
 
             {/* Creator fee badge — quick hint to switch to the tab */}
