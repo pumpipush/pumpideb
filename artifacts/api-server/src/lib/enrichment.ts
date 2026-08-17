@@ -24,7 +24,7 @@
  */
 
 import { and, desc, gte, isNull, like, or, not, eq, inArray, sql, gt } from "drizzle-orm";
-import { db, tokensTable, tradesTable } from "@workspace/db";
+import { db, pool, tokensTable, tradesTable } from "@workspace/db";
 import { logger } from "./logger";
 import { emitSnapshot } from "./tradeEmitter";
 import { fetchSafeUriMeta } from "./safeUriFetch";
@@ -538,42 +538,79 @@ async function backfillBondingCurves(): Promise<void> {
   if (stale.length === 0) return;
   log.info({ count: stale.length }, "enrichment: backfilling bonding curve reserves");
 
+  const staleAddresses = stale.map((t) => t.address);
+
+  // ── 1. Single grouped aggregate query for all stale tokens ──────────────────
+  // Replaces the per-token SELECT inside the loop (was up to 500 queries → 1).
+  const aggRows = await db
+    .select({
+      tokenAddress: tradesTable.tokenAddress,
+      netLamports:  sql<string>`
+        SUM(CASE WHEN ${tradesTable.isBuy} THEN CAST(${tradesTable.ethAmount} AS NUMERIC)
+                 ELSE -CAST(${tradesTable.ethAmount} AS NUMERIC) END)
+      `,
+    })
+    .from(tradesTable)
+    .where(inArray(tradesTable.tokenAddress, staleAddresses))
+    .groupBy(tradesTable.tokenAddress);
+
+  // Index by address for O(1) lookup when computing reserves below.
+  const aggByAddress = new Map(aggRows.map((r) => [r.tokenAddress, r.netLamports]));
+
+  // ── 2. Compute new reserve values in JS (BigInt arithmetic) ─────────────────
+  // Parse SQL NUMERIC result as BigInt — avoids Number() precision loss for large
+  // lamport sums (>2^53 ≈ 9 PETAlamports = ~9 billion SOL, well outside real range
+  // but worth being precise). SUM on whole-number strings gives integer arithmetic.
+  const updateAddresses:    string[] = [];
+  const updateVSolStrs:     string[] = [];
+  const updateVTokStrs:     string[] = [];
+  const updateMCStrs:       string[] = [];
+
   for (const token of stale) {
-    try {
-      // Aggregate net SOL for this token: positive = bought in, negative = sold out
-      const [agg] = await db
-        .select({
-          netLamports: sql<string>`
-            SUM(CASE WHEN ${tradesTable.isBuy} THEN CAST(${tradesTable.ethAmount} AS NUMERIC)
-                     ELSE -CAST(${tradesTable.ethAmount} AS NUMERIC) END)
-          `,
-        })
-        .from(tradesTable)
-        .where(eq(tradesTable.tokenAddress, token.address));
+    const rawNet   = aggByAddress.get(token.address) ?? "0";
+    const netLamStr = rawNet.split(".")[0] || "0";
+    let netLam: bigint;
+    try { netLam = BigInt(netLamStr); }
+    catch { log.warn({ address: token.address, netLamStr }, "enrichment: bad netLamStr, skipping"); continue; }
 
-      // Parse SQL NUMERIC result as BigInt directly — avoids Number() precision loss
-      // for large lamport sums (>2^53 ≈ 9 PETAlamports = ~9 billion SOL, safe margin
-      // but worth being precise). SQL SUM returns integer arithmetic on whole numbers.
-      const netLamStr = (agg?.netLamports ?? "0").split(".")[0] || "0";
-      const netLam = BigInt(netLamStr);
-      const newVSolLam = PUMP_INIT_VSOL_LAM + netLam;
-      if (newVSolLam <= 0n) continue;
+    const newVSolLam = PUMP_INIT_VSOL_LAM + netLam;
+    if (newVSolLam <= 0n) continue;
 
-      const newVTok    = PUMP_K0 / newVSolLam;
-      const newMC      = PUMP_TOTAL_SUPPLY * newVSolLam / newVTok;
-      const newVSolStr = (Number(newVSolLam) / 1e9).toFixed(6).replace(/\.?0+$/, "");
+    const newVTok    = PUMP_K0 / newVSolLam;
+    const newMC      = PUMP_TOTAL_SUPPLY * newVSolLam / newVTok;
+    const newVSolStr = (Number(newVSolLam) / 1e9).toFixed(6).replace(/\.?0+$/, "");
 
-      await db.update(tokensTable).set({
-        virtualEthReserves:   newVSolStr,
-        virtualTokenReserves: newVTok.toString(),
-        marketCapEth:         newMC.toString(),
-      }).where(eq(tokensTable.address, token.address));
-    } catch (err) {
-      log.warn({ address: token.address, err }, "enrichment: backfill failed for token");
-    }
+    updateAddresses.push(token.address);
+    updateVSolStrs.push(newVSolStr);
+    updateVTokStrs.push(newVTok.toString());
+    updateMCStrs.push(newMC.toString());
   }
 
-  log.info({ count: stale.length }, "enrichment: bonding curve backfill complete");
+  if (updateAddresses.length === 0) {
+    log.info("enrichment: bonding curve backfill — no valid updates to apply");
+    return;
+  }
+
+  // ── 3. Single batch UPDATE using unnest ────────────────────────────────────
+  // Replaces the per-token UPDATE inside the loop (was up to 500 queries → 1).
+  // unnest($1::text[], ...) expands the arrays into a virtual table that the
+  // UPDATE joins against on address, applying all rows in one round-trip.
+  await pool.query(`
+    UPDATE tokens AS t
+    SET
+      virtual_eth_reserves   = v.ver,
+      virtual_token_reserves = v.vtr,
+      market_cap_eth         = v.mce
+    FROM unnest(
+      $1::text[],
+      $2::text[],
+      $3::text[],
+      $4::text[]
+    ) AS v(address, ver, vtr, mce)
+    WHERE t.address = v.address
+  `, [updateAddresses, updateVSolStrs, updateVTokStrs, updateMCStrs]);
+
+  log.info({ count: updateAddresses.length }, "enrichment: bonding curve backfill complete");
 }
 
 // ── Graduation detection ───────────────────────────────────────────────────────
