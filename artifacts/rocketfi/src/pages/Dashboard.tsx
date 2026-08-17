@@ -885,7 +885,7 @@ export default function Dashboard() {
   // Newest sort — bubbles reflect the latest launches so the map feels live.
   // 5 s poll matches the server-side cache TTL for sort=newest, so every tick
   // gets a genuinely fresh list without hammering the DB.
-  const bubbleListParams = { sort: ListTokensSort.volume, limit: 30 };
+  const bubbleListParams = { sort: ListTokensSort.volume, limit: 50 };
   const { data: bubbleRawTokens, isError: bubbleError } = useListTokens(
     bubbleListParams,
     {
@@ -1122,7 +1122,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <BubbleMap
-                  tokens={isMobile ? bubbleTokens.slice(0, 15) : bubbleTokens}
+                  tokens={isMobile ? bubbleTokens.slice(0, 20) : bubbleTokens}
                   liveUpdates={liveTradeStats}
                   solPrice={solPrice}
                   height={isMobile ? 240 : 380}

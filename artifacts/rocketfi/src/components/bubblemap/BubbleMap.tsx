@@ -74,10 +74,10 @@ interface TooltipState {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MIN_R      = 14;
+const MIN_R      = 16;
 const MAX_R      = 80;
-const GAP        = 2;
-const TOP_CIRCLES = 8;   // top N get a circle; rest = floating text label
+const GAP        = 3;
+const TOP_CIRCLES = 999; // all tokens get a circle — no floating-text-only mode
 const SOL_PRICE_USD = 160;  // fallback if no solPrice prop
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
@@ -133,11 +133,13 @@ function toHex(n: number) { return Math.round(Math.max(0, Math.min(255, n))).toS
 // (e.g. all pump.fun tokens at bonding-curve start have nearly equal volumes).
 // rank 0 = highest volume → MAX_R; rank n-1 = lowest → MIN_R.
 
-function calcRadius(rank: number, _total: number): number {
-  // Top 8 → explicit circle sizes; rest → uniform small for text-label layout
-  const topSizes = [80, 70, 62, 56, 50, 46, 42, 38];
-  if (rank < TOP_CIRCLES) return topSizes[rank] ?? 38;
-  return 26; // text-label layout radius (no circle drawn)
+function calcRadius(rank: number, total: number): number {
+  // Smooth power-curve from MAX_R (rank 0) down to MIN_R (last rank).
+  // Power 0.55 gives a wide mid-range so most tokens are readable circles,
+  // not just the top few large ones.
+  const n = Math.max(total - 1, 1);
+  const t = 1 - rank / n;                         // 1.0 → 0.0
+  return Math.round(MIN_R + (MAX_R - MIN_R) * Math.pow(t, 0.55));
 }
 
 // ─── Force layout — inflate-and-pack ─────────────────────────────────────────
@@ -429,11 +431,11 @@ function drawBubble(
   ctx.restore();
 
   // ── Content inside circle ─────────────────────────────────────────────────
-  const showLogo   = r >= 44 && b.img && b.imgLoaded && b.img.naturalWidth > 0;
-  const showSymbol = r >= 32;
+  const showLogo   = r >= 36 && b.img && b.imgLoaded && b.img.naturalWidth > 0;
+  const showSymbol = r >= 22;
   const pctText    = formatPct(b.pctChange);
-  const pctFontSz  = 10;
-  const symFontSz  = Math.max(9,  Math.min(r * 0.18, 13));
+  const pctFontSz  = Math.max(7, Math.min(10, r * 0.36));
+  const symFontSz  = Math.max(7, Math.min(r * 0.18, 13));
   const logoR      = r * 0.25;
   const gap        = r * 0.08;
 
