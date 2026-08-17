@@ -59,6 +59,8 @@ interface BubbleState {
   floatAmp:    number; // pixels amplitude
   pulsePhase:  number; // for top-5 radius breathing
   pulseFreq:   number;
+  // trade activity — drives expanding ripple ring
+  lastTradeAt: number; // performance.now() timestamp of last trade (0 = never)
   // assets
   img?: HTMLImageElement;
   imgLoaded: boolean;
@@ -283,6 +285,28 @@ function circleColors(pct: number): CircleStyle {
   };
 }
 
+// Expanding ripple ring drawn UNDER a bubble to show recent trade activity.
+// age: 0 → 1 over RIPPLE_MS. Ring expands from r → r*2.2 and fades out.
+const RIPPLE_MS = 1_400;
+
+function drawRipple(ctx: CanvasRenderingContext2D, b: BubbleState, now: number) {
+  if (!b.lastTradeAt || b.lastTradeAt <= 0) return;
+  const age = now - b.lastTradeAt;
+  if (age < 0 || age > RIPPLE_MS) return;
+  const t    = age / RIPPLE_MS;          // 0 → 1
+  const eased = 1 - Math.pow(1 - t, 3); // ease-out-cubic
+  const ringR  = b.dispR + eased * b.dispR * 1.4; // expand outward
+  const alpha  = (1 - t) * 0.7;         // fade out
+  // Color matches the bubble's current pct sentiment
+  const col = circleColors(b.pctChange);
+  ctx.beginPath();
+  ctx.arc(b.dispX, b.dispY, ringR, 0, Math.PI * 2);
+  ctx.strokeStyle = col.glow.replace(/[\d.]+\)$/, `${alpha})`);
+  ctx.lineWidth   = 2.5 * (1 - t);
+  ctx.shadowBlur  = 0;
+  ctx.stroke();
+}
+
 function drawBubble(
   ctx: CanvasRenderingContext2D,
   b: BubbleState,
@@ -290,6 +314,7 @@ function drawBubble(
   _colors: ReturnType<typeof pctToColors>,
   dpr: number,
   rank: number,
+  now: number,
 ) {
   const x = b.dispX, y = b.dispY, r = b.dispR;
 
@@ -300,6 +325,9 @@ function drawBubble(
   // Fade-in opacity driven by dispR growth (0 → r over ~3s on first open)
   const fadeAlpha = Math.min(1, r / Math.max(b.r, 1));
   if (fadeAlpha < 0.02) return;
+
+  // Ripple ring (drawn before the bubble so it appears behind)
+  drawRipple(ctx, b, now);
 
   // ── MODE B: Small label (rank ≥ TOP_CIRCLES) — logo + name + % ───────────
   if (rank >= TOP_CIRCLES) {
@@ -617,6 +645,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
           : 0,
         pulsePhase:  prev?.pulsePhase ?? Math.random() * Math.PI * 2,
         pulseFreq:   0.00079 + Math.random() * 0.00047,
+        lastTradeAt: prev?.lastTradeAt ?? 0,
         imgLoaded: prev?.imgLoaded ?? false,
         img: prev?.img,
       };
@@ -645,13 +674,19 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
     layoutTimeRef.current = performance.now(); // mark layout time for fast-open lerp
   }, [tokens]);
 
-  // ── Update colors when live prices come in (no layout recalc) ─────────────
+  // ── Update colors + trade timestamp when live prices come in (no layout recalc)
   useEffect(() => {
     if (!liveUpdates) return;
     bubblesRef.current.forEach(b => {
       const update = liveUpdates.get(b.address);
-      if (!update?.priceEth) return;
+      if (!update) return;
 
+      // Mark trade time for ripple ring (even when priceEth is null)
+      if (update.lastTradeAt && update.lastTradeAt > b.lastTradeAt) {
+        b.lastTradeAt = update.lastTradeAt;
+      }
+
+      if (!update.priceEth) return;
       const livePrice = parseFloat(update.priceEth);
       const initPrice = initPricesRef.current.get(b.address) ?? livePrice;
       if (initPrice <= 0) return;
@@ -733,7 +768,7 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
         const b = bubbles[i];
         if (!b || b === hoveredBubble) continue;
         b.dispR += (b.r - b.dispR) * lerpR;
-        drawBubble(ctx, b, false, pctToColors(b.pctChange), dpr, i);
+        drawBubble(ctx, b, false, pctToColors(b.pctChange), dpr, i, now);
       }
 
       // Pass 2: top circles (rank 0–4), smallest-first so rank 0 is on top
@@ -741,14 +776,14 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
         const b = bubbles[i];
         if (!b || b === hoveredBubble) continue;
         b.dispR += (b.r - b.dispR) * lerpR;
-        drawBubble(ctx, b, false, pctToColors(b.pctChange), dpr, i);
+        drawBubble(ctx, b, false, pctToColors(b.pctChange), dpr, i, now);
       }
 
       // Pass 3: hovered bubble always on top
       if (hoveredBubble) {
         const hRank = bubbles.indexOf(hoveredBubble);
         hoveredBubble.dispR += (hoveredBubble.r * (hRank < TOP_CIRCLES ? 1.08 : 1) - hoveredBubble.dispR) * 0.16;
-        drawBubble(ctx, hoveredBubble, true, pctToColors(hoveredBubble.pctChange), dpr, hRank);
+        drawBubble(ctx, hoveredBubble, true, pctToColors(hoveredBubble.pctChange), dpr, hRank, now);
       }
 
       ctx.restore();
