@@ -237,10 +237,6 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       toast({ title: "Name too long", description: "Token name must be 32 characters or fewer.", variant: "destructive" });
       return;
     }
-    if (symbol.trim().length > 10) {
-      toast({ title: "Ticker too long", description: "Ticker must be 10 characters or fewer.", variant: "destructive" });
-      return;
-    }
     if (!imageFile) {
       toast({ title: "Image required", description: "Upload a token image so it displays correctly on the platform.", variant: "destructive" });
       return;
@@ -778,8 +774,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                   <label className="text-[12px] font-medium text-muted-foreground">
                     Ticker <span className="text-destructive">*</span>
                   </label>
-                  <span className="text-[10px] tabular-nums" style={{ color: symbol.length >= 8 ? "#f87171" : "#555" }}>
-                    {symbol.length}/10
+                  <span className="text-[10px] tabular-nums" style={{ color: "#555" }}>
+                    {symbol.length}
                   </span>
                 </div>
                 <div className="relative">
@@ -788,8 +784,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                   <Input
                     placeholder="DOGE"
                     value={symbol}
-                    maxLength={10}
-                    onChange={e => setSymbol(e.target.value.toUpperCase().slice(0, 10))}
+                    onChange={e => setSymbol(e.target.value)}
                     disabled={isLaunching}
                     className="h-10 pl-7 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 font-mono tracking-widest text-[14px] placeholder:text-slate-600"
                   />
