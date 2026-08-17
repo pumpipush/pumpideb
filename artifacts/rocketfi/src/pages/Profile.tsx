@@ -689,12 +689,35 @@ export default function ProfilePage() {
               {solanaAddress && (
                 <button
                   onClick={() => copyToClipboard(solanaAddress)}
-                  className="inline-flex items-center gap-1.5 text-xs font-mono text-muted-foreground/60 hover:text-muted-foreground transition-colors group"
+                  className="inline-flex items-center gap-1.5 text-xs font-mono text-muted-foreground/60 hover:text-muted-foreground transition-colors group mb-2"
                 >
                   {formatAddress(solanaAddress)}
                   <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </button>
               )}
+              {/* Followers / Following — inline text links (Twitter-style) */}
+              <div className="flex items-center gap-4 mt-1">
+                <button
+                  onClick={() => { setFollowModalMode("followers"); setFollowModalOpen(true); }}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <span className="font-bold text-foreground">
+                    {localFollowersCount ?? profile?.followersCount ?? 0}
+                  </span>
+                  {" "}
+                  <span>Followers</span>
+                </button>
+                <button
+                  onClick={() => { setFollowModalMode("following"); setFollowModalOpen(true); }}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <span className="font-bold text-foreground">
+                    {profile?.followingCount ?? 0}
+                  </span>
+                  {" "}
+                  <span>Following</span>
+                </button>
+              </div>
             </div>
 
             {/* Bio */}
@@ -740,30 +763,6 @@ export default function ProfilePage() {
                 backdropFilter: "blur(12px)",
               }}
             >
-              {/* Followers chip — clickable */}
-              <button
-                className="flex-1 flex flex-col items-center justify-center py-3 px-3 min-w-0 hover:bg-white/[0.03] transition-colors"
-                onClick={() => { setFollowModalMode("followers"); setFollowModalOpen(true); }}
-              >
-                <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 mb-1.5 font-medium">
-                  Followers
-                </span>
-                <span className="text-lg font-bold tabular-nums leading-none tracking-tight">
-                  {localFollowersCount ?? profile?.followersCount ?? 0}
-                </span>
-              </button>
-              {/* Following chip — clickable */}
-              <button
-                className="flex-1 flex flex-col items-center justify-center py-3 px-3 min-w-0 hover:bg-white/[0.03] transition-colors"
-                onClick={() => { setFollowModalMode("following"); setFollowModalOpen(true); }}
-              >
-                <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 mb-1.5 font-medium">
-                  Following
-                </span>
-                <span className="text-lg font-bold tabular-nums leading-none tracking-tight">
-                  {profile?.followingCount ?? 0}
-                </span>
-              </button>
               <StatChip
                 label="Trades"
                 value={totalTrades || "—"}
