@@ -1907,6 +1907,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
     // Empty state — only show after server has responded with zero bars.
     if (chartBars.length === 0) {
+      // Stats endpoint confirmed trades exist (via DexScreener/Birdeye fallback)
+      // but OHLCV candles haven't been indexed yet — show syncing state.
+      const statsTradeCount = (serverStats?.txns24hBuy ?? 0) + (serverStats?.txns24hSell ?? 0);
+      const hasKnownTrades  = statsTradeCount > 0 || (token.tradeCount ?? 0) > 0;
+
       return (
         <ChartPlaceholder>
           <div className="flex flex-col items-center gap-2 text-center px-8">
@@ -1915,6 +1920,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                 <span style={{ fontSize: 32, lineHeight: 1 }}>🚀</span>
                 <p className="text-sm font-medium" style={{ color: "#e0e0e0" }}>You just launched this coin!</p>
                 <p className="text-xs" style={{ color: "#555555" }}>Trades will appear here shortly.</p>
+              </>
+            ) : hasKnownTrades ? (
+              <>
+                <ChartSpinner />
+                <p className="text-sm font-medium text-zinc-400 mt-2">Syncing chart data…</p>
+                <p className="text-xs text-zinc-600">Chart will appear shortly</p>
               </>
             ) : (
               <>
@@ -2074,7 +2085,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       </div>
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartBars, chartType, chartTf, indicators, indOpen, connected, token?.address, token?.graduated, onCrosshairMove, solPrice, isSwitching]);
+  }, [chartBars, chartType, chartTf, indicators, indOpen, connected, token?.address, token?.graduated, token?.tradeCount, onCrosshairMove, solPrice, isSwitching, serverStats, isJustLaunched]);
 
   const handleTrade = async () => {
     if (!wallet) {
