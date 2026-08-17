@@ -102,6 +102,25 @@ app.use("/api/tokens", (req, _res, next) => {
   next();
 });
 
+// Challenge endpoint — very tight limit (10 nonces / minute per IP).
+// This endpoint is public/unauthenticated by design, so without a dedicated
+// limit a script could flood the in-memory nonce store between prune cycles.
+const challengeLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  handler: (_req, res, _next, options) => {
+    const retryAfterSecs = Math.ceil(options.windowMs / 1000);
+    res.setHeader("Retry-After", String(retryAfterSecs));
+    res.status(options.statusCode).json({
+      error: "Too many challenge requests — please wait a minute and try again.",
+    });
+  },
+  skip: (req) => req.method === "OPTIONS",
+});
+app.post("/api/profiles/challenge", challengeLimiter);
+
 app.use("/api", router);
 
 // ── Security headers ──────────────────────────────────────────────────────
