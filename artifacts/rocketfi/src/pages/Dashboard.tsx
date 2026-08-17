@@ -878,6 +878,10 @@ export default function Dashboard() {
   });
 
 
+  // ── Bubble map view toggle ────────────────────────────────────────────────
+  type BubbleView = "volume" | "newest";
+  const [bubbleView, setBubbleView] = useState<BubbleView>("volume");
+
   // Bubble map: top trending tokens by smart score (5m + 1h activity).
   // Poll every 30s — trending rankings shift faster than all-time volume.
   // staleTime=25s prevents redundant refetches on window-focus / tab switch.
@@ -885,7 +889,10 @@ export default function Dashboard() {
   // Newest sort — bubbles reflect the latest launches so the map feels live.
   // 5 s poll matches the server-side cache TTL for sort=newest, so every tick
   // gets a genuinely fresh list without hammering the DB.
-  const bubbleListParams = { sort: ListTokensSort.volume, limit: 50 };
+  const bubbleListParams = {
+    sort: bubbleView === "newest" ? ListTokensSort.newest : ListTokensSort.volume,
+    limit: 50,
+  };
   const { data: bubbleRawTokens, isError: bubbleError } = useListTokens(
     bubbleListParams,
     {
@@ -1097,7 +1104,9 @@ export default function Dashboard() {
                       style={{ borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: "6px solid #141414" }} />
                     <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
                       style={{ background: "#141414", border: "1px solid rgba(255,255,255,0.1)", color: "#bbbbbb", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
-                      Shows the hottest tokens right now — ranked by volume. Bubble size reflects rank. Green = price up, red = price down in the last 24h.
+                      {bubbleView === "newest"
+                        ? "Shows the 50 most recently launched tokens. Bubble size reflects launch order. Green = price up, red = price down in the last 24h."
+                        : "Shows the hottest tokens right now — ranked by volume. Bubble size reflects rank. Green = price up, red = price down in the last 24h."}
                     </div>
                   </div>
                   {/* Mobile backdrop — tap outside to close */}
@@ -1105,6 +1114,30 @@ export default function Dashboard() {
                     <div className="fixed inset-0 z-40 md:hidden" onClick={() => setBubbleInfoOpen(false)} />
                   )}
                 </div>
+              </div>
+
+              {/* View toggle pill */}
+              <div className="flex items-center rounded-full p-0.5" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <button
+                  onClick={() => setBubbleView("volume")}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all duration-150"
+                  style={bubbleView === "volume"
+                    ? { background: "rgba(255,255,255,0.12)", color: "#f2f2f2" }
+                    : { color: "rgba(180,180,180,0.6)" }}
+                >
+                  <BarChart2 className="w-3 h-3" />
+                  <span>Top Volume</span>
+                </button>
+                <button
+                  onClick={() => setBubbleView("newest")}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all duration-150"
+                  style={bubbleView === "newest"
+                    ? { background: "rgba(255,255,255,0.12)", color: "#f2f2f2" }
+                    : { color: "rgba(180,180,180,0.6)" }}
+                >
+                  <Clock className="w-3 h-3" />
+                  <span>New Launches</span>
+                </button>
               </div>
             </div>
             <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
