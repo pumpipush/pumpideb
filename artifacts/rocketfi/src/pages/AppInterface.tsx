@@ -94,7 +94,18 @@ export default function AppInterface({ tokenAddress: routeAddress }: AppInterfac
   const tokenParam = routeAddress ?? _params.get("token");
   const tabParam   = _params.get("tab"); // "portfolio" makes My Tokens deep-linkable
 
-  const { wallet } = useWallet();
+  const { wallet: adapterWallet } = useWallet();
+  const { socialUser } = useAuth();
+  // Derive effective wallet: adapter first (needed for signing), then fall back
+  // to the wallet address stored in the JWT session.  This prevents "Connect
+  // Wallet" from showing when the user is authenticated but the adapter hasn't
+  // auto-reconnected yet (common after a page reload with Solflare).
+  // The connected check in each action handler ensures the adapter is actually
+  // live before attempting to sign — and opens the modal if it isn't.
+  const authWallet = socialUser?.authType === "wallet"
+    ? socialUser.address
+    : (socialUser?.linkedWallet ?? null);
+  const wallet = adapterWallet ?? authWallet;
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(tokenParam);
 
   // Sync selectedTokenId to URL; scroll to top whenever a token is opened
@@ -196,7 +207,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const [indexReady, setIndexReady] = useState(false);
 
   const { toast } = useToast();
-  const { openWalletModal, signTransaction, signVersionedTransaction, signMessage } = useWallet();
+  const { openWalletModal, signTransaction, signVersionedTransaction, signMessage, connected } = useWallet();
   const { loginWithWallet } = useAuth();
 
   // ── Image handler ────────────────────────────────────────────────────────────
@@ -225,6 +236,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
     e.preventDefault();
 
     if (!wallet) { openWalletModal(); return; }
+    // Wallet address known from auth session but adapter not yet reconnected —
+    // open the modal so the user can reconnect (needed for signing).
+    if (!connected) { openWalletModal(); return; }
 
     // Fix #1 — mutex: prevent double-submit while a launch is already in-flight
     if (launchStep !== "idle" && launchStep !== "error") return;
@@ -1543,7 +1557,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestLiveTradeId]);
 
-  const { openWalletModal, signAndSendTransaction, signVersionedTransaction } = useWallet();
+  const { openWalletModal, signAndSendTransaction, signVersionedTransaction, connected } = useWallet();
   const [tradeMode, setTradeMode] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
   /** True while a trade is in-flight (signing + broadcast + on-chain confirmation). */
@@ -2152,10 +2166,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   }, [chartBars, chartType, chartTf, indicators, indOpen, connected, token?.address, token?.graduated, token?.tradeCount, onCrosshairMove, solPrice, isSwitching, serverStats, isJustLaunched]);
 
   const handleTrade = async () => {
-    if (!wallet) {
-      openWalletModal();
-      return;
-    }
+    if (!wallet) { openWalletModal(); return; }
+    if (!connected) { openWalletModal(); return; }
     if (!token || !amount) return;
     // Prevent concurrent submissions: user must wait for signing + on-chain confirmation.
     if (isTradePending) return;
@@ -5001,7 +5013,7 @@ interface ExternalTokenTradeProps {
 }
 
 function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
-  const { openWalletModal, signAndSendTransaction } = useWallet();
+  const { openWalletModal, signAndSendTransaction, connected } = useWallet();
   const { submitTx } = useTxToast();
   const { solBalance, isError: solBalanceError, refresh: refreshSolBalance } = useSolBalance(wallet);
   const { tokenBalance, atomicBalance, isLoading: balanceLoading, isError: tokenBalanceError, refresh: refreshTokenBalance, refreshAfterTrade: refreshTokenBalanceAfterTrade } = useTokenBalance(wallet, token.address);
@@ -5072,6 +5084,7 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
 
   const handleTrade = async () => {
     if (!wallet) { openWalletModal(); return; }
+    if (!connected) { openWalletModal(); return; }
     if (!amount || parseFloat(amount) <= 0) return;
     if (isTradePending) return;
 
