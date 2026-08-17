@@ -319,17 +319,27 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
     return;
   }
 
-  // ── Early DEX path: skip internal aggregation, go straight to Birdeye ───────
-  // Our indexer samples PumpSwap/Raydium at low frequency; internal DB has at
-  // most a handful of trades and would produce a misleading chart.
+  // ── Early Birdeye path: only for platforms where our DB is sparse ───────────
+  // PumpSwap: our adapter throttles to 30-second samples, so the DB has only a
+  // handful of trades even for very active tokens — Birdeye is more complete.
+  //
+  // Raydium LaunchLab:
+  //   • NOT graduated (bonding curve): adapter streams ALL trades → DB is the
+  //     authoritative full history. Build the chart from DB like pump.fun does.
+  //   • Graduated: bonding curve program is no longer used, adapter stops
+  //     capturing trades → Birdeye needed.
   {
     const [tokenRow] = await db
-      .select({ platform: tokensTable.platform })
+      .select({ platform: tokensTable.platform, graduated: tokensTable.graduated })
       .from(tokensTable)
       .where(eq(tokensTable.address, address))
       .limit(1);
 
-    if (tokenRow && DEX_PLATFORMS.has(tokenRow.platform)) {
+    const needsBirdeyeOhlcv =
+      tokenRow?.platform === "pumpswap" ||
+      (tokenRow?.platform === "raydium_launchlab" && tokenRow.graduated === true);
+
+    if (needsBirdeyeOhlcv) {
       const now      = Math.floor(Date.now() / 1000);
       const timeFrom = now - (BIRDEYE_HISTORY_SECS[tf] ?? 86400);
 
