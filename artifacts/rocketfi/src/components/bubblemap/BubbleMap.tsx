@@ -176,7 +176,7 @@ function halton(idx: number, base: number): number {
 //   NO gravity — gravity was causing all bubbles to collapse into the centre
 //   and overlap. Wall repulsion alone keeps the layout spread.
 
-function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 260) {
+function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 140) {
   if (W <= 0 || H <= 0 || bubbles.length === 0) return;
   const n = bubbles.length;
   const targetR = bubbles.map(b => b.r);

@@ -1090,21 +1090,27 @@ export default function Dashboard() {
 
           {/* ── Bubble Map — full width ── */}
           <section className="mb-3 md:mb-5">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <h2 className="text-[22px] font-extrabold text-foreground tracking-tight">Bubble Map</h2>
+            {/* ── Bubble Map header: title left, controls right — never wraps ── */}
+            <div className="flex items-center justify-between mb-2 gap-2">
+              {/* Title — whitespace-nowrap prevents "Bubble\nMap" wrap on mobile */}
+              <h2 className="whitespace-nowrap text-lg md:text-[22px] font-extrabold text-foreground tracking-tight">
+                Bubble Map
+              </h2>
+
+              {/* Right side: info icon + view toggle — shrink-0 keeps them on one row */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* Info icon + tooltip */}
                 <div className="relative group">
                   <Info
                     className="w-4 h-4 cursor-pointer transition-colors duration-150"
                     style={{ color: bubbleInfoOpen ? "#b3b3b3" : "rgba(136,136,136,0.75)" }}
                     onClick={() => setBubbleInfoOpen(v => !v)}
                   />
-                  {/* Desktop: hover tooltip / Mobile: tap toggle */}
                   <div className={[
-                    "absolute left-0 top-full mt-2 z-50 transition-opacity duration-150 w-64",
+                    "absolute right-0 top-full mt-2 z-50 transition-opacity duration-150 w-64",
                     bubbleInfoOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
                   ].join(" ")}>
-                    <div className="absolute left-3 -top-1.5 w-0 h-0"
+                    <div className="absolute right-3 -top-1.5 w-0 h-0"
                       style={{ borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: "6px solid #141414" }} />
                     <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
                       style={{ background: "#141414", border: "1px solid rgba(255,255,255,0.1)", color: "#bbbbbb", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
@@ -1113,35 +1119,36 @@ export default function Dashboard() {
                         : "Shows the hottest tokens right now — ranked by volume. Bubble size reflects rank. Green = price up, red = price down in the last 24h."}
                     </div>
                   </div>
-                  {/* Mobile backdrop — tap outside to close */}
                   {bubbleInfoOpen && (
                     <div className="fixed inset-0 z-40 md:hidden" onClick={() => setBubbleInfoOpen(false)} />
                   )}
                 </div>
-              </div>
 
-              {/* View toggle pill */}
-              <div className="flex items-center rounded-full p-0.5" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <button
-                  onClick={() => setBubbleView("volume")}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all duration-150"
-                  style={bubbleView === "volume"
-                    ? { background: "rgba(255,255,255,0.12)", color: "#f2f2f2" }
-                    : { color: "rgba(180,180,180,0.6)" }}
-                >
-                  <BarChart2 className="w-3 h-3" />
-                  <span>Top Volume</span>
-                </button>
-                <button
-                  onClick={() => setBubbleView("newest")}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all duration-150"
-                  style={bubbleView === "newest"
-                    ? { background: "rgba(255,255,255,0.12)", color: "#f2f2f2" }
-                    : { color: "rgba(180,180,180,0.6)" }}
-                >
-                  <Clock className="w-3 h-3" />
-                  <span>New Launches</span>
-                </button>
+                {/* View toggle — compact labels on mobile, full on desktop */}
+                <div className="flex items-center rounded-full p-0.5" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <button
+                    onClick={() => setBubbleView("volume")}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all duration-150"
+                    style={bubbleView === "volume"
+                      ? { background: "rgba(255,255,255,0.12)", color: "#f2f2f2" }
+                      : { color: "rgba(180,180,180,0.6)" }}
+                  >
+                    <BarChart2 className="w-3 h-3 shrink-0" />
+                    <span className="hidden md:inline">Top </span>
+                    <span>Volume</span>
+                  </button>
+                  <button
+                    onClick={() => setBubbleView("newest")}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all duration-150"
+                    style={bubbleView === "newest"
+                      ? { background: "rgba(255,255,255,0.12)", color: "#f2f2f2" }
+                      : { color: "rgba(180,180,180,0.6)" }}
+                  >
+                    <Clock className="w-3 h-3 shrink-0" />
+                    <span className="md:hidden">New</span>
+                    <span className="hidden md:inline">New Launches</span>
+                  </button>
+                </div>
               </div>
             </div>
             <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
