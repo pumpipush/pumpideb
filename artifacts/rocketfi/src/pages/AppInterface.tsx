@@ -196,7 +196,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const [indexReady, setIndexReady] = useState(false);
 
   const { toast } = useToast();
-  const { openWalletModal, signAndSendTransaction, signMessage } = useWallet();
+  const { openWalletModal, signTransaction, signVersionedTransaction, signMessage } = useWallet();
   const { loginWithWallet } = useAuth();
 
   // ── Image handler ────────────────────────────────────────────────────────────
@@ -231,6 +231,14 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 
     if (!name.trim() || !symbol.trim()) {
       toast({ title: "Required fields missing", description: "Name and ticker cannot be empty.", variant: "destructive" });
+      return;
+    }
+    if (name.trim().length > 32) {
+      toast({ title: "Name too long", description: "Token name must be 32 characters or fewer.", variant: "destructive" });
+      return;
+    }
+    if (symbol.trim().length > 10) {
+      toast({ title: "Ticker too long", description: "Ticker must be 10 characters or fewer.", variant: "destructive" });
       return;
     }
     if (!imageFile) {
@@ -356,7 +364,11 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
         let sig: string | null = null;
         try {
           setLaunchStep("signing");
-          sig = await signAndSendTransaction(transaction);
+          // Use sign-then-fanout so the tx is broadcast to ALL configured RPC
+          // endpoints in parallel — same pattern as trades, eliminates wallet-RPC
+          // timeouts during launch.
+          const signedCreateTx = await signVersionedTransaction(transaction);
+          sig = await broadcastWithFanout(signedCreateTx.serialize());
           // tx was broadcast — now wait for confirmation
         } catch (signErr: unknown) {
           // Error came from the wallet before broadcasting (user rejected, or
@@ -526,8 +538,10 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
           }
           setLaunchStep("signing");
         }
-        // Wallet adds its signature and broadcasts
-        lastSig = await signAndSendTransaction(transactions[i]);
+        // Wallet adds its signature then broadcast via fanout (all RPCs in parallel)
+        // to avoid wallet-RPC timeouts — same pattern as the trade flow.
+        const signedLLTx = await signTransaction(transactions[i]);
+        lastSig = await broadcastWithFanout(signedLLTx.serialize());
       }
 
       // Step 4: Wait for final transaction confirmation
@@ -731,28 +745,40 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-[12px] font-medium text-muted-foreground">
-                  Name <span className="text-destructive">*</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-[12px] font-medium text-muted-foreground">
+                    Name <span className="text-destructive">*</span>
+                  </label>
+                  <span className="text-[10px] tabular-nums" style={{ color: name.length >= 28 ? "#f87171" : "#555" }}>
+                    {name.length}/32
+                  </span>
+                </div>
                 <Input
                   placeholder="e.g. Doge on Solana"
                   value={name}
-                  onChange={e => setName(e.target.value)}
+                  maxLength={32}
+                  onChange={e => setName(e.target.value.slice(0, 32))}
                   disabled={isLaunching}
                   className="h-10 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 text-[14px] placeholder:text-slate-600"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-[12px] font-medium text-muted-foreground">
-                  Ticker <span className="text-destructive">*</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-[12px] font-medium text-muted-foreground">
+                    Ticker <span className="text-destructive">*</span>
+                  </label>
+                  <span className="text-[10px] tabular-nums" style={{ color: symbol.length >= 8 ? "#f87171" : "#555" }}>
+                    {symbol.length}/10
+                  </span>
+                </div>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[14px] font-bold pointer-events-none"
                     style={{ color: "#b3b3b3" }}>$</span>
                   <Input
                     placeholder="DOGE"
                     value={symbol}
-                    onChange={e => setSymbol(e.target.value)}
+                    maxLength={10}
+                    onChange={e => setSymbol(e.target.value.toUpperCase().slice(0, 10))}
                     disabled={isLaunching}
                     className="h-10 pl-7 rounded-lg bg-background/40 border-white/25 focus-visible:ring-white/20 font-mono tracking-widest text-[14px] placeholder:text-slate-600"
                   />
