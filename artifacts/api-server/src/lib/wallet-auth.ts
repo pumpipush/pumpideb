@@ -140,7 +140,7 @@ export function verifyWalletSignature(
 
 interface NonceEntry {
   address:   string;
-  action:    "create" | "update";
+  action:    "create" | "update" | "follow";
   expiresAt: number; // ms epoch
 }
 
@@ -155,7 +155,7 @@ setInterval(() => {
 }, 60_000).unref();
 
 /** Issue a fresh single-use nonce tied to one action + wallet address. */
-export function issueNonce(action: "create" | "update", address: string): string {
+export function issueNonce(action: "create" | "update" | "follow", address: string): string {
   const nonce = randomUUID();
   nonceStore.set(nonce, { address, action, expiresAt: Date.now() + MAX_AGE_SECONDS * 1_000 });
   return nonce;
@@ -168,7 +168,7 @@ export function issueNonce(action: "create" | "update", address: string): string
  */
 export function consumeNonce(
   nonce: string,
-  action: "create" | "update",
+  action: "create" | "update" | "follow",
   address: string,
 ): boolean {
   const entry = nonceStore.get(nonce);
@@ -180,7 +180,7 @@ export function consumeNonce(
 
 /** Build the canonical message string for profile nonce-based auth. */
 export function buildProfileSignMessage(
-  action: "create" | "update",
+  action: "create" | "update" | "follow",
   address: string,
   nonce: string,
 ): string {
@@ -194,7 +194,7 @@ export function buildProfileSignMessage(
  */
 export function verifyWalletSignatureWithNonce(
   payload: WalletAuthPayload,
-  expectedAction: "create" | "update",
+  expectedAction: "create" | "update" | "follow",
   expectedAddress: string,
 ): void {
   const { walletAddress, signature, message } = payload;

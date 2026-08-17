@@ -41,7 +41,7 @@ function bs58Encode(bytes: Uint8Array): string {
 /** Build a valid signed payload for a given keypair, action, and address. */
 function makeSignedPayload(
   kp: ReturnType<typeof makeWallet>,
-  action: "create" | "update",
+  action: "create" | "update" | "follow",
   address: string,
   nonce: string,
 ) {
@@ -108,6 +108,21 @@ describe("issueNonce / consumeNonce", () => {
     const n1 = issueNonce("update", address);
     const n2 = issueNonce("update", address);
     expect(n1).not.toBe(n2);
+  });
+
+  it("supports the 'follow' action alongside 'create' and 'update'", () => {
+    const address = "Addr9999999999999999999999999999";
+    const nonce = issueNonce("follow", address);
+    expect(typeof nonce).toBe("string");
+    expect(nonce.length).toBeGreaterThan(10);
+    expect(consumeNonce(nonce, "follow", address)).toBe(true);
+  });
+
+  it("rejects a 'follow' nonce when the wrong action is specified on consumption", () => {
+    const address = "AddrAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    const nonce = issueNonce("follow", address);
+    // Trying to consume a "follow" nonce as "update" must fail
+    expect(consumeNonce(nonce, "update", address)).toBe(false);
   });
 });
 
@@ -187,6 +202,29 @@ describe("verifyWalletSignatureWithNonce", () => {
     // Server expects "update" but message says "create"
     expect(() =>
       verifyWalletSignatureWithNonce(payload, "update", walletAddress)
+    ).toThrow();
+  });
+
+  it("accepts a valid signed nonce message for 'follow' action", () => {
+    const kp = makeWallet();
+    const walletAddress = bs58Encode(kp.publicKey);
+    const nonce = issueNonce("follow", walletAddress);
+    const payload = makeSignedPayload(kp, "follow", walletAddress, nonce);
+    expect(() =>
+      verifyWalletSignatureWithNonce(payload, "follow", walletAddress)
+    ).not.toThrow();
+  });
+
+  it("rejects a 'create'-action nonce when the endpoint expects 'follow'", () => {
+    const kp = makeWallet();
+    const walletAddress = bs58Encode(kp.publicKey);
+    // Issue a nonce for "create" — wrong action for a follow endpoint
+    const nonce = issueNonce("create", walletAddress);
+    // Sign the message with the correct create prefix
+    const payload = makeSignedPayload(kp, "create", walletAddress, nonce);
+    // Server verifying "follow" must reject it
+    expect(() =>
+      verifyWalletSignatureWithNonce(payload, "follow", walletAddress)
     ).toThrow();
   });
 

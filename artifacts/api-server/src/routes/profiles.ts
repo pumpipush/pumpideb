@@ -53,12 +53,12 @@ router.post("/profiles/challenge", (req, res): void => {
   const action = body.action;
   const address = body.address;
 
-  if ((action !== "create" && action !== "update") || typeof address !== "string" || address.length < 32) {
-    res.status(400).json({ error: "Required: action ('create'|'update') and address (string ≥ 32 chars)" });
+  if ((action !== "create" && action !== "update" && action !== "follow") || typeof address !== "string" || address.length < 32) {
+    res.status(400).json({ error: "Required: action ('create'|'update'|'follow') and address (string ≥ 32 chars)" });
     return;
   }
 
-  const nonce = issueNonce(action as "create" | "update", address);
+  const nonce = issueNonce(action as "create" | "update" | "follow", address);
   res.json({ nonce });
 });
 
@@ -341,35 +341,45 @@ router.patch("/profiles/:address", asyncWrap(async (req, res) => {
 
 // ── Follow auth helper ────────────────────────────────────────────────────────
 // Resolves the caller's profile address from either:
-//   A) JWT Bearer token  (social / email users)
-//   B) Authorization: Wallet <address>  (wallet-only users, lightweight)
-// Returns null if no valid auth found.
-function resolveFollowCaller(authHeader: string | undefined): string | null {
-  if (!authHeader) return null;
-
-  // Path A: JWT Bearer
-  const bearer = extractBearer(authHeader);
-  if (bearer) {
-    const payload = verifyToken(bearer);
-    return payload ? payload.sub : null;
+//   A) JWT Bearer token  (social / email users) — Authorization: Bearer <token>
+//   B) Wallet signature in body  (wallet-only users) — { walletAddress, signature, message }
+//      message must be "Pumpi:follow:<walletAddress>:<nonce>" with a valid server-issued nonce
+// Returns the verified caller address, or null if no valid auth found.
+// Throws a string error message when auth is present but invalid (caller should 401).
+function resolveFollowCaller(authHeader: string | undefined, body: unknown): string | null {
+  // Path A: JWT Bearer token
+  if (authHeader) {
+    const bearer = extractBearer(authHeader);
+    if (bearer) {
+      const payload = verifyToken(bearer);
+      return payload ? payload.sub : null;
+    }
   }
 
-  // Path B: Wallet <address>
-  if (authHeader.startsWith("Wallet ")) {
-    const addr = authHeader.slice(7).trim();
-    if (addr.length >= 32) return addr;
+  // Path B: Wallet signature in request body
+  const fields = parseWalletAuthFields(body);
+  if (fields) {
+    // verifyWalletSignatureWithNonce throws on any failure — let it bubble so
+    // the caller can surface a descriptive 401.
+    verifyWalletSignatureWithNonce(fields, "follow", fields.walletAddress);
+    return fields.walletAddress;
   }
 
   return null;
 }
 
 // ── POST /profiles/:address/follow ────────────────────────────────────────────
-// Follow a profile. Auth required (JWT or Wallet header). No self-follow.
+// Follow a profile. Auth required (JWT Bearer or wallet signature). No self-follow.
 router.post("/profiles/:address/follow", asyncWrap(async (req, res) => {
   const targetAddress = String(req.params.address ?? "").trim();
   if (!targetAddress) { res.status(400).json({ error: "Missing target address" }); return; }
 
-  const callerAddress = resolveFollowCaller(req.headers.authorization);
+  let callerAddress: string | null;
+  try {
+    callerAddress = resolveFollowCaller(req.headers.authorization, req.body);
+  } catch (err) {
+    res.status(401).json({ error: `Authentication failed: ${(err as Error).message}` }); return;
+  }
   if (!callerAddress) { res.status(401).json({ error: "Authentication required" }); return; }
 
   if (callerAddress === targetAddress) {
@@ -417,12 +427,17 @@ router.post("/profiles/:address/follow", asyncWrap(async (req, res) => {
 }));
 
 // ── DELETE /profiles/:address/follow ──────────────────────────────────────────
-// Unfollow a profile. Auth required.
+// Unfollow a profile. Auth required (JWT Bearer or wallet signature).
 router.delete("/profiles/:address/follow", asyncWrap(async (req, res) => {
   const targetAddress = String(req.params.address ?? "").trim();
   if (!targetAddress) { res.status(400).json({ error: "Missing target address" }); return; }
 
-  const callerAddress = resolveFollowCaller(req.headers.authorization);
+  let callerAddress: string | null;
+  try {
+    callerAddress = resolveFollowCaller(req.headers.authorization, req.body);
+  } catch (err) {
+    res.status(401).json({ error: `Authentication failed: ${(err as Error).message}` }); return;
+  }
   if (!callerAddress) { res.status(401).json({ error: "Authentication required" }); return; }
 
   // Delete follow row

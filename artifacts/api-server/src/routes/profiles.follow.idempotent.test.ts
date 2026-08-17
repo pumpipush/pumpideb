@@ -11,6 +11,10 @@
  * Fix: use INSERT … RETURNING and only update counters when a row was actually
  * inserted (returned.length > 0).
  *
+ * Auth: each call uses a fresh server-issued nonce + Ed25519 wallet signature
+ * (the wallet-signed body path added in task #438).  The two requests are
+ * distinct authenticated operations that both resolve to the same follow intent.
+ *
  * Strategy: spin up an in-process Express server against the real dev DB,
  * insert ephemeral test profiles, call the follow endpoint twice, then assert
  * counters are exactly 1.  Cleanup runs in afterAll.
@@ -19,6 +23,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import nacl from "tweetnacl";
 import { db, profilesTable, followsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import app from "../app.js";
@@ -26,10 +31,24 @@ import app from "../app.js";
 // DB operations on a shared dev DB can be slow under load
 vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
+// ── Base58 helper ──────────────────────────────────────────────────────────────
+const BS58_ALPHA = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function bs58Encode(bytes: Uint8Array): string {
+  let n = 0n;
+  for (const b of bytes) n = n * 256n + BigInt(b);
+  const chars: string[] = [];
+  while (n > 0n) { chars.unshift(BS58_ALPHA[Number(n % 58n)]!); n /= 58n; }
+  let leading = 0;
+  for (const b of bytes) { if (b !== 0) break; leading++; }
+  return "1".repeat(leading) + chars.join("");
+}
+
 // ── Test identities ────────────────────────────────────────────────────────────
+// CALLER uses a real Ed25519 keypair so wallet-signature auth can be verified.
 // Unique per test run so parallel runs and stale rows don't collide.
 const RUN = Date.now().toString(36);
-const CALLER_ADDR = `TstFollowCaller${RUN}`.padEnd(44, "1").slice(0, 44);
+const callerKp = nacl.sign.keyPair();
+const CALLER_ADDR = bs58Encode(callerKp.publicKey); // valid base58 public key
 const TARGET_ADDR = `TstFollowTarget${RUN}`.padEnd(44, "2").slice(0, 44);
 
 // ── Server lifecycle ───────────────────────────────────────────────────────────
@@ -77,10 +96,34 @@ afterAll(async () => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * POST a follow request using a freshly-issued server nonce + Ed25519 signature.
+ * Each call obtains its own nonce so two calls are two independently-authenticated
+ * requests — testing DB-level idempotency, not auth idempotency.
+ */
 async function postFollow(): Promise<Response> {
+  // 1. Obtain a single-use challenge nonce from the server
+  const challengeRes = await fetch(`${base}/profiles/challenge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "follow", address: CALLER_ADDR }),
+  });
+  if (!challengeRes.ok) {
+    throw new Error(`Challenge failed: ${challengeRes.status}`);
+  }
+  const { nonce } = await challengeRes.json() as { nonce: string };
+
+  // 2. Build the canonical message and sign it
+  const message = `Pumpi:follow:${CALLER_ADDR}:${nonce}`;
+  const msgBytes = new TextEncoder().encode(message);
+  const sigBytes = nacl.sign.detached(msgBytes, callerKp.secretKey);
+  const signature = bs58Encode(sigBytes);
+
+  // 3. POST the follow with wallet auth in the body
   return fetch(`${base}/profiles/${TARGET_ADDR}/follow`, {
     method: "POST",
-    headers: { Authorization: `Wallet ${CALLER_ADDR}` },
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ walletAddress: CALLER_ADDR, signature, message }),
   });
 }
 
@@ -120,6 +163,7 @@ describe("POST /profiles/:address/follow — duplicate-request idempotency", () 
   });
 
   it("returns 200 and isFollowing:true when the same follow is sent again", async () => {
+    // New nonce + fresh signature — a second authenticated follow request
     const res = await postFollow();
     expect(res.status).toBe(200);
     const body = (await res.json()) as { isFollowing: boolean };

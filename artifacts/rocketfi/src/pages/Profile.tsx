@@ -11,6 +11,7 @@ import {
   getGetFollowersQueryKey,
   getGetFollowingQueryKey,
 } from "@workspace/api-client-react";
+import type { FollowAuth } from "@workspace/api-client-react";
 import { ProfileEditModal } from "@/components/shared/ProfileEditModal";
 import { AddEmailModal } from "@/components/shared/AddEmailModal";
 import { FollowListModal } from "@/components/shared/FollowListModal";
@@ -274,14 +275,37 @@ export default function ProfilePage() {
     : (socialUser?.linkedWallet && IS_SOLANA.test(socialUser.linkedWallet)) ? socialUser.linkedWallet
     : null;
 
-  // Build the Authorization header to send with follow/unfollow requests.
-  // Social users: Bearer JWT (from localStorage); wallet users: Wallet <address>.
-  function getFollowAuthHeader(): string | null {
+  // Build a FollowAuth token for follow/unfollow operations.
+  // Social users: Bearer JWT from localStorage (no signing needed).
+  // Wallet-only users: request a server nonce, sign it, return wallet auth fields.
+  const getFollowAuth = useCallback(async (): Promise<FollowAuth | null> => {
     const jwt = typeof window !== "undefined" ? localStorage.getItem("pumpi_auth_token") : null;
-    if (jwt) return `Bearer ${jwt}`;
-    if (wallet && IS_SOLANA.test(wallet)) return `Wallet ${wallet}`;
+    if (jwt) return { type: "bearer", token: jwt };
+
+    const IS_SOL = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+    if (wallet && IS_SOL.test(wallet)) {
+      // Request a single-use challenge nonce from the server
+      const challengeRes = await fetch("/api/profiles/challenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "follow", address: wallet }),
+      });
+      if (!challengeRes.ok) throw new Error("Failed to get follow challenge");
+      const { nonce } = await challengeRes.json() as { nonce: string };
+
+      // Build the canonical message and sign it with the wallet
+      const message = `Pumpi:follow:${wallet}:${nonce}`;
+      const msgBytes = new TextEncoder().encode(message);
+      const sigRaw = await signMessage(msgBytes);
+      if (!(sigRaw instanceof Uint8Array) || sigRaw.length !== 64) {
+        throw new Error("Wallet returned an invalid signature — please try again");
+      }
+      const signature = bs58Encode(sigRaw);
+      return { type: "wallet", walletAddress: wallet, signature, message };
+    }
+
     return null;
-  }
+  }, [wallet, signMessage]);
 
   const isOwner =
     (!!wallet && !!address && wallet.toLowerCase() === address.toLowerCase()) ||
@@ -408,6 +432,25 @@ export default function ProfilePage() {
     retry: 1,
   });
 
+  // ── Fast wallet stats (drives stat chips) ───────────────────────────────
+  // Hits a lightweight SQL aggregate endpoint — no JOIN, no row payload.
+  // Loads independently so chips appear quickly while the full activity list loads.
+  const { data: walletStats, isLoading: statsLoading } = useQuery<{
+    tradeCount: number;
+    totalVolumeLamports: number;
+    realizedPnlLamports: number;
+  }>({
+    queryKey: ["wallet-stats", address],
+    queryFn: async () => {
+      const res = await fetch(`/api/wallet/${address}/stats`);
+      if (!res.ok) return { tradeCount: 0, totalVolumeLamports: 0, realizedPnlLamports: 0 };
+      return res.json();
+    },
+    enabled: !!address,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
   const { data: history, isLoading: historyLoading } = useQuery<ActivityTrade[]>({
     queryKey: ["wallet-activity", address],
     queryFn: async () => {
@@ -466,8 +509,7 @@ export default function ProfilePage() {
   };
 
   const handleFollow = async () => {
-    const authHeader = getFollowAuthHeader();
-    if (!authHeader || !profileAddress || followLoading) return;
+    if (!profileAddress || followLoading) return;
 
     const wasFollowing = localIsFollowing ?? false;
     // Optimistic update
@@ -478,9 +520,12 @@ export default function ProfilePage() {
     setFollowLoading(true);
 
     try {
+      const auth = await getFollowAuth();
+      if (!auth) throw new Error("Please connect a wallet or sign in to follow");
+
       const result = wasFollowing
-        ? await unfollowProfile(profileAddress, authHeader)
-        : await followProfile(profileAddress, authHeader);
+        ? await unfollowProfile(profileAddress, auth)
+        : await followProfile(profileAddress, auth);
 
       // Sync server-confirmed count
       setLocalFollowersCount(result.followersCount);
@@ -517,14 +562,15 @@ export default function ProfilePage() {
   };
 
   const historyArr = Array.isArray(history) ? history : [];
-  const totalTrades = historyArr.length;
-  const totalVolumeLamports = historyArr.reduce((s, t) => s + (parseFloat(t.ethAmount) || 0), 0);
-  const realizedPnlLamports: number | null = history != null
-    ? historyArr.reduce((s, t) => {
-        const lam = parseFloat(t.ethAmount) || 0;
-        return s + (t.isBuy ? -lam : lam);
-      }, 0)
-    : null;
+  // Stat chips come from the fast /stats endpoint; fall back to activity data when available
+  const totalTrades        = walletStats?.tradeCount        ?? historyArr.length;
+  const totalVolumeLamports = walletStats?.totalVolumeLamports
+    ?? (historyArr.length ? historyArr.reduce((s, t) => s + (parseFloat(t.ethAmount) || 0), 0) : 0);
+  const realizedPnlLamports: number | null = walletStats != null
+    ? walletStats.realizedPnlLamports
+    : history != null
+      ? historyArr.reduce((s, t) => { const lam = parseFloat(t.ethAmount) || 0; return s + (t.isBuy ? -lam : lam); }, 0)
+      : null;
 
   const hue = address ? accentHue(address) : 220;
 
@@ -797,7 +843,7 @@ export default function ProfilePage() {
               <StatChip
                 label="Trades"
                 value={totalTrades || "—"}
-                isLoading={historyLoading}
+                isLoading={statsLoading}
               />
               <StatChip
                 label="Volume"
@@ -805,14 +851,14 @@ export default function ProfilePage() {
                 sub={totalVolumeLamports > 0 && solPrice
                   ? `$${((totalVolumeLamports / 1e9) * solPrice).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
                   : undefined}
-                isLoading={historyLoading}
+                isLoading={statsLoading}
               />
-              {/* PNL — show skeleton while loading, then value once history arrives */}
+              {/* PNL — show skeleton while loading, then value once stats arrive */}
               <div className="flex-1 flex flex-col items-center justify-center py-3 px-3 min-w-0">
                 <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 mb-1.5 font-medium">
                   Realized PNL
                 </span>
-                {historyLoading ? (
+                {statsLoading ? (
                   <div className="h-4 w-10 rounded bg-white/[0.08] animate-pulse" />
                 ) : realizedPnlLamports !== null ? (
                   <>
@@ -1572,7 +1618,7 @@ export default function ProfilePage() {
           mode={followModalMode}
           address={profile.address}
           viewerAddress={viewerAddress ?? undefined}
-          authHeader={getFollowAuthHeader() ?? undefined}
+          getFollowAuth={getFollowAuth}
         />
       )}
     </div>

@@ -64,29 +64,58 @@ export const useGetFollowStatus = <
   return query;
 };
 
+// ── auth type ────────────────────────────────────────────────────────────────
+
+/**
+ * Discriminated union for follow/unfollow auth.
+ *   bearer — social/email users: pass the JWT as a Bearer token header
+ *   wallet — wallet-only users: pass a server-issued signed nonce in the body
+ */
+export type FollowAuth =
+  | { type: "bearer"; token: string }
+  | { type: "wallet"; walletAddress: string; signature: string; message: string };
+
 // ── follow ───────────────────────────────────────────────────────────────────
 
 export const followProfile = async (
   address: string,
-  authHeader: string,
+  auth: FollowAuth,
   options?: Parameters<typeof customFetch>[1],
-): Promise<{ isFollowing: boolean; followersCount: number }> =>
-  customFetch(`/api/profiles/${address}/follow`, {
+): Promise<{ isFollowing: boolean; followersCount: number }> => {
+  if (auth.type === "bearer") {
+    return customFetch(`/api/profiles/${address}/follow`, {
+      ...options,
+      method: "POST",
+      headers: { ...(options?.headers as Record<string, string>), Authorization: `Bearer ${auth.token}` },
+    });
+  }
+  // Wallet — signature auth fields go in the POST body
+  return customFetch(`/api/profiles/${address}/follow`, {
     ...options,
     method: "POST",
-    headers: { ...(options?.headers as Record<string, string>), Authorization: authHeader },
+    body: JSON.stringify({ walletAddress: auth.walletAddress, signature: auth.signature, message: auth.message }),
   });
+};
 
 export const unfollowProfile = async (
   address: string,
-  authHeader: string,
+  auth: FollowAuth,
   options?: Parameters<typeof customFetch>[1],
-): Promise<{ isFollowing: boolean; followersCount: number }> =>
-  customFetch(`/api/profiles/${address}/follow`, {
+): Promise<{ isFollowing: boolean; followersCount: number }> => {
+  if (auth.type === "bearer") {
+    return customFetch(`/api/profiles/${address}/follow`, {
+      ...options,
+      method: "DELETE",
+      headers: { ...(options?.headers as Record<string, string>), Authorization: `Bearer ${auth.token}` },
+    });
+  }
+  // Wallet — signature auth fields go in the DELETE body
+  return customFetch(`/api/profiles/${address}/follow`, {
     ...options,
     method: "DELETE",
-    headers: { ...(options?.headers as Record<string, string>), Authorization: authHeader },
+    body: JSON.stringify({ walletAddress: auth.walletAddress, signature: auth.signature, message: auth.message }),
   });
+};
 
 // ── followers list ───────────────────────────────────────────────────────────
 
@@ -190,7 +219,7 @@ export const useGetFollowing = <
 
 export type FollowMutationVariables = {
   targetAddress: string;
-  authHeader: string;
+  auth: FollowAuth;
   action: "follow" | "unfollow";
 };
 
@@ -198,9 +227,9 @@ export const useFollowMutation = <TError = ErrorType<unknown>, TContext = unknow
   options?: { mutation?: UseMutationOptions<{ isFollowing: boolean; followersCount: number }, TError, FollowMutationVariables, TContext> },
 ): UseMutationResult<{ isFollowing: boolean; followersCount: number }, TError, FollowMutationVariables, TContext> => {
   const mutationFn: MutationFunction<{ isFollowing: boolean; followersCount: number }, FollowMutationVariables> =
-    ({ targetAddress, authHeader, action }) =>
+    ({ targetAddress, auth, action }) =>
       action === "follow"
-        ? followProfile(targetAddress, authHeader)
-        : unfollowProfile(targetAddress, authHeader);
+        ? followProfile(targetAddress, auth)
+        : unfollowProfile(targetAddress, auth);
   return useMutation({ mutationFn, ...options?.mutation });
 };

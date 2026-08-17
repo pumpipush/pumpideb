@@ -2,12 +2,13 @@
  * FollowListModal — shows followers or following for a profile.
  *
  * Props:
- *   open         — controlled visibility
- *   onOpenChange — close handler
- *   mode         — "followers" | "following"
- *   address      — profile address being viewed
+ *   open          — controlled visibility
+ *   onOpenChange  — close handler
+ *   mode          — "followers" | "following"
+ *   address       — profile address being viewed
  *   viewerAddress — optional; current user's address (for isFollowedByViewer)
- *   authHeader   — optional; "Bearer <token>" or "Wallet <addr>" for follow/unfollow
+ *   getFollowAuth — optional async callback that returns a FollowAuth token
+ *                   (called on demand when a follow button is clicked)
  */
 
 import { createPortal } from "react-dom";
@@ -20,7 +21,7 @@ import {
   followProfile,
   unfollowProfile,
 } from "@workspace/api-client-react";
-import type { FollowListItem } from "@workspace/api-client-react";
+import type { FollowListItem, FollowAuth } from "@workspace/api-client-react";
 import { diceBearUrl, formatAddress } from "@/lib/utils";
 import { X, Loader2 } from "lucide-react";
 import { Link } from "wouter";
@@ -32,18 +33,19 @@ interface FollowListModalProps {
   mode: "followers" | "following";
   address: string;
   viewerAddress?: string;
-  authHeader?: string;
+  /** Async callback that returns auth for follow/unfollow; called on demand. */
+  getFollowAuth?: () => Promise<FollowAuth | null>;
 }
 
 function FollowListItem({
   item,
   viewerAddress,
-  authHeader,
+  getFollowAuth,
   onClose,
 }: {
   item: FollowListItem;
   viewerAddress?: string;
-  authHeader?: string;
+  getFollowAuth?: () => Promise<FollowAuth | null>;
   onClose: () => void;
 }) {
   const qc = useQueryClient();
@@ -51,18 +53,20 @@ function FollowListItem({
   const [loading, setLoading] = useState(false);
 
   const isOwnProfile = viewerAddress && viewerAddress === item.address;
-  const canFollow = !!authHeader && !!viewerAddress && !isOwnProfile;
+  const canFollow = !!getFollowAuth && !!viewerAddress && !isOwnProfile;
 
   const handleToggle = useCallback(async () => {
-    if (!authHeader || loading) return;
+    if (!getFollowAuth || loading) return;
     setLoading(true);
     const wasFollowing = following;
     setFollowing(!wasFollowing); // optimistic
     try {
+      const auth = await getFollowAuth();
+      if (!auth) throw new Error("Not authenticated");
       if (wasFollowing) {
-        await unfollowProfile(item.address, authHeader);
+        await unfollowProfile(item.address, auth);
       } else {
-        await followProfile(item.address, authHeader);
+        await followProfile(item.address, auth);
       }
       // Invalidate profile query so counts refresh
       void qc.invalidateQueries({ queryKey: [`/api/profiles/${item.address}`] });
@@ -71,7 +75,7 @@ function FollowListItem({
     } finally {
       setLoading(false);
     }
-  }, [authHeader, following, item.address, loading, qc]);
+  }, [getFollowAuth, following, item.address, loading, qc]);
 
   const displayUsername = item.username.startsWith("user_")
     ? formatAddress(item.address)
@@ -120,7 +124,7 @@ export function FollowListModal({
   mode,
   address,
   viewerAddress,
-  authHeader,
+  getFollowAuth,
 }: FollowListModalProps) {
   const [tab, setTab] = useState<"followers" | "following">(mode);
 
@@ -205,7 +209,7 @@ export function FollowListModal({
                   key={item.address}
                   item={item}
                   viewerAddress={viewerAddress}
-                  authHeader={authHeader}
+                  getFollowAuth={getFollowAuth}
                   onClose={() => onOpenChange(false)}
                 />
               ))}

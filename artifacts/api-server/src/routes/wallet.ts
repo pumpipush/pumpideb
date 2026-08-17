@@ -137,6 +137,35 @@ router.get("/wallet/:address/portfolio", asyncWrap(async (req, res) => {
   }
 }));
 
+// ── GET /api/wallet/:address/stats ────────────────────────────────────────────
+// Fast aggregate summary for a wallet: trade count, total volume, realized PnL.
+// No JOIN, no row payload — just 3 numbers from the indexed trader_address column.
+// Drives the stat chips on the Profile page independently of the full activity list.
+router.get("/wallet/:address/stats", asyncWrap(async (req, res) => {
+  const address = String(req.params["address"] ?? "");
+  if (!address || address.length < 32) {
+    res.status(400).json({ error: "Invalid address" });
+    return;
+  }
+
+  const [row] = await db
+    .select({
+      tradeCount:           sql<string>`COUNT(*)`,
+      // ethAmount is stored as text — cast to numeric for aggregate functions
+      totalVolumeLamports:  sql<string>`COALESCE(SUM(CAST(${tradesTable.ethAmount} AS numeric)), 0)`,
+      // PnL = SOL received (sells) minus SOL spent (buys)
+      realizedPnlLamports:  sql<string>`COALESCE(SUM(CASE WHEN NOT ${tradesTable.isBuy} THEN CAST(${tradesTable.ethAmount} AS numeric) ELSE -CAST(${tradesTable.ethAmount} AS numeric) END), 0)`,
+    })
+    .from(tradesTable)
+    .where(eq(tradesTable.traderAddress, address));
+
+  res.json({
+    tradeCount:          parseInt(row?.tradeCount ?? "0", 10),
+    totalVolumeLamports: parseFloat(row?.totalVolumeLamports ?? "0"),
+    realizedPnlLamports: parseFloat(row?.realizedPnlLamports ?? "0"),
+  });
+}));
+
 // ── GET /api/wallet/:address/activity ──────────────────────────────────────────
 // Returns the trade history for a specific wallet address directly from the DB.
 // Unlike /stats/recent-activity (which fetches global latest N rows and relies on
