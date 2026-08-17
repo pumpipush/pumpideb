@@ -591,9 +591,10 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
     const W = containerRef.current?.offsetWidth ?? 600;
     const H = height;
 
-    // Dynamic max radius: ~7% of canvas width so the top coin is prominent
-    // but doesn't dominate. Clamped 38–70px so it works on any screen size.
-    const dynamicMaxR = Math.round(Math.min(70, Math.max(38, W * 0.072)));
+    // Dynamic max radius: scales with canvas width so circles are always
+    // readable. Higher % on narrow screens (mobile) so content is visible.
+    // Mobile W≈390 → maxR≈55   Desktop W≈950 → maxR≈68 (capped at 72).
+    const dynamicMaxR = Math.round(Math.min(72, Math.max(44, W * 0.14 * (1 - W / 4000))));
 
     // tokens arrive pre-sorted by volume desc from the API
     const prevMap = new Map(bubblesRef.current.map(b => [b.address, b]));
@@ -601,8 +602,9 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
     const newBubbles: BubbleState[] = tokens.map((t, i) => {
       const volSol = parseFloat(t.volumeEth ?? t.marketCapEth ?? "0") / 1e9;
       const mcSol  = parseFloat(t.marketCapEth ?? "0") / 1e9;
-      // Rank-based sizing: largest circle = dynamicMaxR (fits column), scaled for mobile
-      const r      = Math.round(calcRadius(i, tokens.length, dynamicMaxR) * radiusScale);
+      // Rank-based sizing: largest circle = dynamicMaxR (fits column).
+      // dynamicMaxR already adapts to canvas width — no additional scale factor.
+      const r      = calcRadius(i, tokens.length, dynamicMaxR);
       const prev   = prevMap.get(t.address);
 
       // Seed initPricesRef with the 24h open price so that live WebSocket
