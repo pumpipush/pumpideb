@@ -30,7 +30,7 @@ const SKIP_MINTS = new Set([
   "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
 ]);
 
-class OrcaIndexer extends SolanaRpcIndexer {
+export class OrcaIndexer extends SolanaRpcIndexer {
   constructor() {
     super({
       programId:   ORCA_WHIRLPOOL_PROGRAM,
@@ -63,22 +63,22 @@ class OrcaIndexer extends SolanaRpcIndexer {
   }
 
   private async handleNewPool(mint: string): Promise<void> {
-    // Fetch existing row (name included) so we can tell if it is a
-    // trade-first placeholder (name === mint.slice(0, 8)) that needs
-    // upgrading, or an already-complete row that can be skipped.
+    // Skip cheaply if a real (non-placeholder) token row already exists.
+    // A placeholder has name === mint.slice(0, 8) AND symbol === '???'.
     const existing = await db
-      .select({ id: tokensTable.id, name: tokensTable.name })
+      .select({ id: tokensTable.id, name: tokensTable.name, symbol: tokensTable.symbol })
       .from(tokensTable)
       .where(eq(tokensTable.address, mint))
       .limit(1);
 
     const isPlaceholder =
-      existing.length > 0 && existing[0].name === mint.slice(0, 8);
+      existing.length > 0 &&
+      existing[0].name === mint.slice(0, 8) &&
+      existing[0].symbol === "???";
 
-    // Skip if the token already has real metadata — nothing to upgrade.
     if (existing.length > 0 && !isPlaceholder) return;
 
-    this.log.info({ mint, isPlaceholder }, "orca: new pool detected — fetching metadata");
+    this.log.info({ mint, isPlaceholder }, "orca: new pool — fetching metadata");
 
     const [meta, solPrice] = await Promise.all([
       fetchBirdeyeTokenMeta(mint),
@@ -89,46 +89,59 @@ class OrcaIndexer extends SolanaRpcIndexer {
     const priceEth     = meta.priceUsd     ? usdToLamports(meta.priceUsd,     solPrice) : null;
     const marketCapEth = meta.marketCapUsd ? usdToLamports(meta.marketCapUsd, solPrice) : null;
 
-    if (isPlaceholder) {
-      // A trade arrived before the pool event and inserted a placeholder.
-      // Upgrade it now with real name/symbol/metadata.
-      await db.update(tokensTable).set({
+    // Atomic upsert covering three arrival orderings in one SQL statement:
+    //
+    //   a. No conflict (new token):        INSERT real metadata → RETURNING row → broadcast
+    //   b. Placeholder conflict (TOCTOU):  handleTrade inserted symbol='???' during the
+    //                                      Birdeye fetch; DO UPDATE WHERE fires → upgrades
+    //                                      name/symbol/metadata → RETURNING row → broadcast
+    //   c. Real-row conflict (concurrent   handleNewPool beat us and already wrote real
+    //      handleNewPool):                 metadata; DO UPDATE WHERE condition (symbol='???')
+    //                                      is false → DO UPDATE is skipped → RETURNING empty
+    //                                      → row === undefined → skip broadcast (no duplicate)
+    //
+    // The WHERE guard on symbol='???' is the key: when the condition is false,
+    // PostgreSQL skips the DO UPDATE entirely and returns nothing from RETURNING,
+    // so the check `if (!row)` reliably detects "real row already exists".
+    const [row] = await db.insert(tokensTable).values({
+      address:        mint,
+      name:           meta.name,
+      symbol:         meta.symbol,
+      imageUrl:       meta.logoURI ?? null,
+      creatorAddress: "unknown",
+      platform:       PLATFORM,
+      chain:          CHAIN,
+      priceEth,
+      marketCapEth,
+      graduated:      true,
+      liquidityUsd:   meta.liquidity    ?? null,
+      priceUsd:       meta.priceUsd     ?? null,
+      marketCapUsd:   meta.marketCapUsd ?? null,
+    }).onConflictDoUpdate({
+      target: tokensTable.address,
+      // Only fire when the existing row is still a trade-first placeholder.
+      where: sql`${tokensTable.symbol} = '???'`,
+      set: {
         name:         meta.name,
         symbol:       meta.symbol,
-        imageUrl:     meta.logoURI    ?? null,
+        imageUrl:     meta.logoURI ?? null,
         graduated:    true,
-        priceEth:     priceEth        ?? null,
-        marketCapEth: marketCapEth    ?? null,
-        liquidityUsd: meta.liquidity  ?? null,
-        priceUsd:     meta.priceUsd   ?? null,
-        marketCapUsd: meta.marketCapUsd ?? null,
-      }).where(eq(tokensTable.address, mint));
-
-      this.log.info({ mint, name: meta.name }, "orca: placeholder upgraded with real metadata");
-    } else {
-      // Brand-new token — insert it.
-      const inserted = await db.insert(tokensTable).values({
-        address:        mint,
-        name:           meta.name,
-        symbol:         meta.symbol,
-        imageUrl:       meta.logoURI,
-        creatorAddress: "unknown",
-        platform:       PLATFORM,
-        chain:          CHAIN,
         priceEth,
         marketCapEth,
-        graduated:      true,
-        liquidityUsd:   meta.liquidity    ?? null,
-        priceUsd:       meta.priceUsd     ?? null,
-        marketCapUsd:   meta.marketCapUsd ?? null,
-      }).onConflictDoNothing().returning({ id: tokensTable.id });
+        liquidityUsd: meta.liquidity    ?? null,
+        priceUsd:     meta.priceUsd     ?? null,
+        marketCapUsd: meta.marketCapUsd ?? null,
+      },
+    }).returning({ id: tokensTable.id });
 
-      // onConflictDoNothing can still produce no row if a concurrent handler
-      // beat us to the insert — skip the broadcast in that case.
-      if (inserted.length === 0) return;
-
-      this.log.info({ mint, name: meta.name }, "orca: new token indexed");
+    // Empty RETURNING means the DO UPDATE WHERE condition was false:
+    // a concurrent handleNewPool already wrote real metadata. Skip broadcast.
+    if (!row) {
+      this.log.debug({ mint }, "orca: real token row preserved by concurrent handler — skipping");
+      return;
     }
+
+    this.log.info({ mint, name: meta.name }, "orca: token indexed/upgraded");
 
     emitNewToken({
       type: "newToken",
