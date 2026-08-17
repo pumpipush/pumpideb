@@ -11,7 +11,7 @@ import {
 import { emitTrade, emitSnapshot, tradeEmitter, type TradeEvent, type SnapshotEvent } from "../lib/tradeEmitter";
 import type { NewTokenEvent } from "../lib/tradeEmitter"; // imported for type completeness
 import { registerGraduatedMint } from "../lib/adapters/raydium-amm";
-import { fetchBirdeyeOHLCV, fetchBirdeyeTokenTrades, fetchBirdeyeTokenOverview, getSolPriceUsd, type BirdeyeOHLCVBar } from "../lib/birdeye.js";
+import { fetchBirdeyeOHLCV, fetchBirdeyeTokenTrades, getSolPriceUsd, type BirdeyeOHLCVBar } from "../lib/birdeye.js";
 import { fetchDexScreenerTokens, bestSolanaPair, pairToSolPrice, pairToPriceHistory } from "../lib/dexscreener.js";
 import { fetchAndParseTrade } from "../lib/tradeVerifier.js";
 import { asyncWrap } from "../lib/asyncHandler.js";
@@ -26,13 +26,13 @@ const DEX_PLATFORMS = new Set(["pumpswap", "raydium_launchlab"]);
 // so the first poll after expiry always gets fresh data.
 const _ohlcvCache = new Map<string, { payload: unknown; expiresAt: number }>();
 const OHLCV_CACHE_TTL: Record<string, number> = {
-  "1m":  6_000,   // client polls 8 s  → cache 6 s
-  "5m":  6_000,
-  "15m": 12_000,  // client polls 15 s → cache 12 s
-  "1H":  12_000,
-  "4H":  25_000,  // client polls 30 s → cache 25 s
-  "1D":  25_000,
-  "1W":  25_000,
+  "1m":   15_000,       // 15 s  — intra-minute candles still feel live
+  "5m":   30_000,       // 30 s
+  "15m":  60_000,       // 1 min
+  "1H":   120_000,      // 2 min
+  "4H":   300_000,      // 5 min  — saves ~10× calls vs previous 25 s
+  "1D":   600_000,      // 10 min — saves ~24× calls vs previous 25 s
+  "1W":   1_800_000,    // 30 min — weekly chart barely changes
 };
 function _ohlcvCacheGet(key: string): unknown | null {
   const entry = _ohlcvCache.get(key);
@@ -48,6 +48,15 @@ function _ohlcvCacheSet(key: string, payload: unknown, tf: string): void {
     for (const [k, v] of _ohlcvCache) { if (now > v.expiresAt) _ohlcvCache.delete(k); }
   }
 }
+
+// ── Birdeye backfill dedup cache ──────────────────────────────────────────────
+// backfillBirdeyeTradesToDb is called from four separate routes (token-subscribe,
+// holders, trades, top-wallets).  A single user opening a graduated DEX token
+// page can hit all four within milliseconds, firing four Birdeye /defi/txs/token
+// calls for the same address.  This map rate-limits to once per 5 minutes per
+// address, eliminating ~75 % of backfill API calls.
+const _backfillDedup = new Map<string, number>(); // address → timestamp (ms)
+const BACKFILL_DEDUP_TTL_MS = 5 * 60_000; // 5 minutes
 
 // ── Birdeye backfill helper ────────────────────────────────────────────────────
 // Fetches the last 50 trades from Birdeye for a DEX token and persists them to
@@ -66,6 +75,12 @@ async function backfillBirdeyeTradesToDb(
   tokenName: string | null,
   tokenSymbol: string | null,
 ): Promise<number> {
+  // Rate-limit: skip if this address was already backfilled within the dedup window.
+  // Prevents 4× Birdeye calls when holders / trades / top-wallets all fire at once.
+  const lastAt = _backfillDedup.get(address);
+  if (lastAt && Date.now() - lastAt < BACKFILL_DEDUP_TTL_MS) return 0;
+  _backfillDedup.set(address, Date.now());
+
   try {
     const [birdeyeTrades, solPrice] = await Promise.all([
       fetchBirdeyeTokenTrades(address, 50),
@@ -153,7 +168,10 @@ const BIRDEYE_HISTORY_SECS: Record<string, number> = {
 };
 
 // Candle bucket size in seconds — used to compute the current-candle timestamp
-const BIRDEYE_TF_SECS: Record<string, number> = {
+// BIRDEYE_TF_SECS was used for synthetic-candle bucket alignment (now removed).
+// Kept as dead code marker in case the feature is re-added with a separate
+// per-token price cache instead of a per-request overview call.
+const _BIRDEYE_TF_SECS_UNUSED: Record<string, number> = {
   "1m": 60, "5m": 300, "15m": 900,
   "1H": 3600, "4H": 14400, "1D": 86400, "1W": 604800,
 };
@@ -315,14 +333,14 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
       const now      = Math.floor(Date.now() / 1000);
       const timeFrom = now - (BIRDEYE_HISTORY_SECS[tf] ?? 86400);
 
-      const [birdeyeBars, overview] = await Promise.all([
-        fetchBirdeyeOHLCV(address, tf, timeFrom, now),
-        fetchBirdeyeTokenOverview(address),
-      ]);
+      // Single Birdeye call — only OHLCV bars (no token_overview).
+      // The overview was previously used only for a synthetic "live" candle and
+      // a non-blocking DB price update; both are handled by the enrichment loop
+      // (enrichLaunchLabPrices runs every 60 s).  Removing it halves the Birdeye
+      // compute-unit cost for every DEX chart load.
+      const birdeyeBars = await fetchBirdeyeOHLCV(address, tf, timeFrom, now);
 
       let bars: { time: number; open: number; high: number; low: number; close: number; volume: number }[] = [];
-      // Hoisted so the payload below can include live Birdeye MC regardless of whether bars were fetched.
-      let currentMcEth: string | undefined = undefined;
 
       if (birdeyeBars && birdeyeBars.length > 0) {
         const solPrice = await getSolPriceUsd();
@@ -342,54 +360,9 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
         bars = rawBars.filter(b =>
           !(b.volume === 0 && b.open === b.high && b.high === b.low && b.low === b.close)
         );
-
-        if (overview && overview.price > 0 && solPrice > 0) {
-          const currentSol    = overview.price / solPrice;
-          const candleSecs    = BIRDEYE_TF_SECS[tf] ?? 60;
-          const currentBucket = Math.floor(now / candleSecs) * candleSecs;
-          const lastBar       = bars[bars.length - 1];
-
-          if (lastBar && lastBar.time === currentBucket) {
-            lastBar.high  = Math.max(lastBar.high,  currentSol);
-            lastBar.low   = Math.min(lastBar.low,   currentSol);
-            lastBar.close = currentSol;
-          } else if (!lastBar || currentBucket > lastBar.time) {
-            bars.push({
-              time:   currentBucket,
-              open:   lastBar?.close ?? currentSol,
-              high:   currentSol,
-              low:    currentSol,
-              close:  currentSol,
-              volume: 0,
-            });
-          }
-
-          // Live MC from Birdeye overview — piggybacked on the response so the header
-          // can stay in sync with the chart's synthetic current candle without waiting
-          // for the async DB write to propagate back through the token REST endpoint.
-          if (overview.mc && overview.mc > 0) {
-            currentMcEth = String(Math.round(overview.mc / solPrice * 1e9));
-          }
-
-          // Keep DB price fresh without blocking the response
-          db.update(tokensTable)
-            .set({
-              priceEth:     currentSol.toFixed(15),
-              priceUsd:     overview.price,
-              // overview.mc is Birdeye's marketCap field (mapped in birdeye.ts via n("marketCap")??n("mc"))
-              // Store both the lamport-encoded form AND the raw USD value so effectiveMcEth
-              // can use the USD value as a sanity-checked fallback.
-              ...(overview.mc && overview.mc > 0 ? {
-                marketCapEth: currentMcEth,
-                marketCapUsd: overview.mc,
-              } : {}),
-            })
-            .where(eq(tokensTable.address, address))
-            .catch(() => { /* non-fatal */ });
-        }
       }
 
-      const payload = { bars, maxTradeId: 0, ...(currentMcEth ? { currentMcEth } : {}) };
+      const payload = { bars, maxTradeId: 0 };
       _ohlcvCacheSet(cacheKey, payload, tf);
       res.setHeader("X-Cache", "MISS");
       res.json(payload);
@@ -466,7 +439,8 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
   // If internal trade history is empty, check if this is a DEX token and proxy
   // OHLCV from Birdeye so the chart shows real price history.
   // Hoisted so the payload below can include live Birdeye MC from whichever DEX branch ran.
-  let currentMcEthFallback: string | undefined = undefined;
+  // currentMcEthFallback was populated from fetchBirdeyeTokenOverview (now removed).
+  // MC freshness is maintained by the enrichLaunchLabPrices enrichment loop instead.
 
   if (bars.length === 0) {
     const [tokenRow] = await db
@@ -479,11 +453,9 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
       const now      = Math.floor(Date.now() / 1000);
       const timeFrom = now - (BIRDEYE_HISTORY_SECS[tf] ?? 86400);
 
-      // Fetch OHLCV bars and current overview in parallel
-      const [birdeyeBars, overview] = await Promise.all([
-        fetchBirdeyeOHLCV(address, tf, timeFrom, now),
-        fetchBirdeyeTokenOverview(address),
-      ]);
+      // Single Birdeye call — OHLCV only (no token_overview).
+      // Removes the second expensive call that was fired on every chart load.
+      const birdeyeBars = await fetchBirdeyeOHLCV(address, tf, timeFrom, now);
 
       if (birdeyeBars && birdeyeBars.length > 0) {
         const solPrice = await getSolPriceUsd();
@@ -499,53 +471,11 @@ router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) =>
         bars = rawBars2.filter(b =>
           !(b.volume === 0 && b.open === b.high && b.high === b.low && b.low === b.close)
         );
-
-        // Append / update a synthetic "current" candle so the chart's last point
-        // matches the live Birdeye price — prevents stale-price vs chart mismatch.
-        if (overview && overview.price > 0 && solPrice > 0) {
-          const currentSol    = overview.price / solPrice;
-          const candleSecs    = BIRDEYE_TF_SECS[tf] ?? 60;
-          const currentBucket = Math.floor(now / candleSecs) * candleSecs;
-          const lastBar       = bars[bars.length - 1];
-
-          if (lastBar && lastBar.time === currentBucket) {
-            // Update existing open candle
-            lastBar.high  = Math.max(lastBar.high,  currentSol);
-            lastBar.low   = Math.min(lastBar.low,   currentSol);
-            lastBar.close = currentSol;
-          } else if (!lastBar || currentBucket > lastBar.time) {
-            // New candle bucket — open at previous close
-            bars.push({
-              time:   currentBucket,
-              open:   lastBar?.close ?? currentSol,
-              high:   currentSol,
-              low:    currentSol,
-              close:  currentSol,
-              volume: 0,
-            });
-          }
-
-          // Live MC piggybacked on response — keeps header in sync with chart candle.
-          if (overview.mc && overview.mc > 0) {
-            currentMcEthFallback = String(Math.round(overview.mc / solPrice * 1e9));
-          }
-
-          // Background: keep token.price_eth fresh in the DB so the info panel
-          // always reflects the current Birdeye price, not the stale backfill value.
-          db.update(tokensTable)
-            .set({
-              priceEth:     currentSol.toFixed(15),
-              priceUsd:     overview.price,            // doublePrecision column — store as number
-              marketCapEth: currentMcEthFallback ?? undefined,
-            })
-            .where(eq(tokensTable.address, address))
-            .catch(() => { /* non-fatal */ });
-        }
       }
     }
   }
 
-  const payload = { bars, maxTradeId, ...(currentMcEthFallback ? { currentMcEth: currentMcEthFallback } : {}) };
+  const payload = { bars, maxTradeId };
   _ohlcvCacheSet(cacheKey, payload, tf);
   res.setHeader("X-Cache", "MISS");
   res.json(payload);
