@@ -270,8 +270,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       // Validate initial buy amount before kicking off the flow
       const parsedBuy = parseFloat(initialBuySOL);
       // Fix #2 — isFinite guard: Infinity passes isNaN but BigInt(Infinity * 1e9) throws
-      if (!isFinite(parsedBuy) || isNaN(parsedBuy) || parsedBuy < 0.001) {
-        toast({ title: "Initial buy too low", description: "Minimum initial buy is 0.001 SOL (required by Raydium).", variant: "destructive" });
+      if (!isFinite(parsedBuy) || isNaN(parsedBuy) || parsedBuy < 0.05) {
+        toast({ title: "Initial buy too low", description: "Minimum initial buy for Raydium LaunchLab is 0.05 SOL.", variant: "destructive" });
         return;
       }
       await _launchRaydium();
@@ -934,7 +934,7 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                       <Input
                         type="number"
                         min="0.001"
-                        step="0.01"
+                        step="any"
                         placeholder="0.1"
                         value={pumpfunBuySOL}
                         onChange={e => setPumpfunBuySOL(e.target.value)}
@@ -992,13 +992,13 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
                   </span>
                 </div>
                 <p className="text-[12px] mb-3" style={{ color: "#b3b3b3" }}>
-                  Raydium LaunchLab requires buying a minimum amount of tokens at launch. This goes directly to your wallet.
+                  Raydium LaunchLab requires a minimum initial buy of <strong style={{ color: "#93c5fd" }}>0.05 SOL</strong>. Tokens go directly to your wallet at launch.
                 </p>
                 <div className="relative">
                   <Input
                     type="number"
-                    min="0.001"
-                    step="0.01"
+                    min="0.05"
+                    step="any"
                     placeholder="0.1"
                     value={initialBuySOL}
                     onChange={e => setInitialBuySOL(e.target.value)}
