@@ -4843,22 +4843,56 @@ function ExternalTokenLoader({ address, wallet }: { address: string | null; wall
     if (cached) { setExtToken(cached); return; }
 
     let cancelled = false;
-    ensureJupiterList().then(() => {
-      if (cancelled) return;
-      const found = getJupiterTokenByAddress(address);
-      if (found) {
-        setExternalToken(found);
-        setExtToken(found);
-      } else {
-        // Not in Jupiter strict list — might be a freshly-launched coin.
-        // Poll our own API: the indexer picks up new pump.fun tokens in ~10–30 s.
-        setIndexing(true);
+
+    // ── Step 1: Check our own DB first ──────────────────────────────────────────
+    // pump.fun / LaunchLab tokens are never in the Jupiter strict list, but they
+    // ARE in our DB once indexed. Checking our API first avoids the "Indexing…"
+    // spinner for tokens that are already there (e.g. navigating from the New tab).
+    const tryOwnApi = async (): Promise<boolean> => {
+      try {
+        const res = await fetch(`/api/tokens/${address}`, { signal: AbortSignal.timeout(5_000) });
+        if (!res.ok || cancelled) return false;
+        const data = await res.json() as { address: string; name: string; symbol: string; imageUrl?: string | null; decimals?: number };
+        const token: ExternalSolanaToken = {
+          address:  data.address,
+          name:     data.name,
+          symbol:   data.symbol,
+          logoURI:  data.imageUrl ?? null,
+          decimals: data.decimals ?? 6,
+        };
+        setExternalToken(token);
+        if (!cancelled) setExtToken(token);
+        return true;
+      } catch {
+        return false;
       }
+    };
+
+    tryOwnApi().then((found) => {
+      if (found || cancelled) return;
+
+      // ── Step 2: Fall back to Jupiter strict list ─────────────────────────────
+      // Covers graduated tokens and any Solana SPL token the user looks up directly.
+      ensureJupiterList().then(() => {
+        if (cancelled) return;
+        const jupFound = getJupiterTokenByAddress(address);
+        if (jupFound) {
+          setExternalToken(jupFound);
+          setExtToken(jupFound);
+        } else {
+          // Not in our DB yet and not in Jupiter — freshly-launched coin.
+          // The polling effect below will detect it once our indexer picks it up.
+          setIndexing(true);
+        }
+      });
     });
+
     return () => { cancelled = true; };
   }, [address]);
 
-  // Poll our API every 6 s while indexing (up to ~2 min before giving up)
+  // Poll our API every 6 s while indexing (up to ~2 min before giving up).
+  // When the token is found, set extToken directly — do NOT reload the page
+  // (reload would restart ExternalTokenLoader, re-enter indexing=true, and loop).
   useEffect(() => {
     if (!indexing || !address) return;
     const MAX_POLLS = 20;
@@ -4869,8 +4903,17 @@ function ExternalTokenLoader({ address, wallet }: { address: string | null; wall
         const res = await fetch(`/api/tokens/${address}`, { signal: AbortSignal.timeout(5_000) });
         if (cancelled) return;
         if (res.ok) {
-          // Token now in DB — reload the page so the main query picks it up
-          window.location.reload();
+          const data = await res.json() as { address: string; name: string; symbol: string; imageUrl?: string | null; decimals?: number };
+          const token: ExternalSolanaToken = {
+            address:  data.address,
+            name:     data.name,
+            symbol:   data.symbol,
+            logoURI:  data.imageUrl ?? null,
+            decimals: data.decimals ?? 6,
+          };
+          setExternalToken(token);
+          setExtToken(token);
+          setIndexing(false);
           return;
         }
       } catch { /* network error — keep polling */ }
