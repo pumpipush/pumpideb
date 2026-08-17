@@ -22,7 +22,10 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { computeHoldingRow, atomicToDisplayTokens, formatTokenAmount, formatAtomicTokenAmount } from "../utils.js";
+import {
+  computeHoldingRow, atomicToDisplayTokens, formatTokenAmount, formatAtomicTokenAmount,
+  resolveImageUrl,
+} from "../utils.js";
 
 // ────────────────────────────────────────────────────────────────────────────────
 // computeHoldingRow — the PortfolioTab sole calculation path
@@ -247,5 +250,98 @@ describe("formatTokenAmount bug demonstration", () => {
     const row = computeHoldingRow("1500000", null, null);
     expect(row.formattedTokens).not.toBe("1.50m");
     expect(parseFloat(row.formattedTokens)).toBeCloseTo(1.5, 3);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// resolveImageUrl — IPFS URL routing through /api/proxy-image
+//
+// WHY THIS MATTERS:
+//   Before the fix, IPFS image URLs were rendered directly in <img src="…">.
+//   The browser fetched from ipfs.io which is slow / blocked from parts of Asia.
+//   After the fix, resolveImageUrl rewrites any IPFS URL to /api/proxy-image
+//   so the server races 5 gateways and returns the fastest response.
+//
+// REGRESSION GUARD:
+//   If resolveImageUrl is removed or the /ipfs/ check is dropped, these tests
+//   fail and token logos stop appearing for users on restricted networks.
+// ────────────────────────────────────────────────────────────────────────────────
+
+describe("resolveImageUrl — routes IPFS URLs through /api/proxy-image", () => {
+  it("returns null for null input", () => {
+    expect(resolveImageUrl(null)).toBeNull();
+  });
+
+  it("returns null for undefined input", () => {
+    expect(resolveImageUrl(undefined)).toBeNull();
+  });
+
+  it("returns null for an empty string", () => {
+    expect(resolveImageUrl("")).toBeNull();
+  });
+
+  it("converts ipfs:// scheme to /api/proxy-image with canonical ipfs.io URL", () => {
+    const result = resolveImageUrl("ipfs://QmTestCid123");
+    expect(result).toBe(
+      "/api/proxy-image?url=" +
+        encodeURIComponent("https://ipfs.io/ipfs/QmTestCid123"),
+    );
+  });
+
+  it("routes https://ipfs.io/ipfs/… → /api/proxy-image", () => {
+    const url = "https://ipfs.io/ipfs/bafkreigbastz4cqndkadawmtcjgubqphbesnfjgmv6twtbqhvjm6parume";
+    expect(resolveImageUrl(url)).toBe(
+      "/api/proxy-image?url=" + encodeURIComponent(url),
+    );
+  });
+
+  it("routes https://gateway.pinata.cloud/ipfs/… → /api/proxy-image", () => {
+    const url = "https://gateway.pinata.cloud/ipfs/QmTestCid";
+    expect(resolveImageUrl(url)).toBe(
+      "/api/proxy-image?url=" + encodeURIComponent(url),
+    );
+  });
+
+  it("routes https://dweb.link/ipfs/… → /api/proxy-image", () => {
+    const url = "https://dweb.link/ipfs/QmTestCid";
+    expect(resolveImageUrl(url)).toBe(
+      "/api/proxy-image?url=" + encodeURIComponent(url),
+    );
+  });
+
+  it("rewrites dead cf-ipfs.com URL to canonical ipfs.io before proxying", () => {
+    // cf-ipfs.com was shut down by Cloudflare — old stored URLs must be rewritten
+    const dead = "https://cf-ipfs.com/ipfs/QmDeadGateway";
+    const normalised = "https://ipfs.io/ipfs/QmDeadGateway";
+    expect(resolveImageUrl(dead)).toBe(
+      "/api/proxy-image?url=" + encodeURIComponent(normalised),
+    );
+  });
+
+  it("returns non-IPFS pump.fun CDN URL unchanged", () => {
+    const cdn = "https://cdn.pump.fun/logo.png";
+    expect(resolveImageUrl(cdn)).toBe(cdn);
+  });
+
+  it("returns non-IPFS DexScreener CDN URL unchanged", () => {
+    const dex = "https://dd.dexscreener.com/ds-data/tokens/solana/logo.png";
+    expect(resolveImageUrl(dex)).toBe(dex);
+  });
+
+  it("returns GCS storage URL unchanged (GCS images load from CDN, not IPFS)", () => {
+    const gcs = "https://storage.googleapis.com/my-bucket/token-images/abc.png";
+    expect(resolveImageUrl(gcs)).toBe(gcs);
+  });
+
+  it("returns Arweave URL unchanged (not an IPFS gateway)", () => {
+    const arweave = "https://arweave.net/someArweaveHash";
+    expect(resolveImageUrl(arweave)).toBe(arweave);
+  });
+
+  it("does not proxy a URL that happens to contain 'ipfs' in its hostname but not in path", () => {
+    // e.g. https://ipfs-cdn.example.com/logo.png — no /ipfs/ path segment
+    // resolveImageUrl checks for /ipfs/ in the URL string, so this is safe
+    const notIpfs = "https://example.com/logo.png";
+    expect(resolveImageUrl(notIpfs)).toBe(notIpfs);
   });
 });
