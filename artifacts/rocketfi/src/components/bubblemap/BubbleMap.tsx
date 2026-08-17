@@ -76,13 +76,12 @@ interface TooltipState {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MIN_R      = 10;
+const MIN_R      = 9;
 // MAX_R is computed dynamically inside BubbleMap from the canvas width so
 // circles always fit the column — see dynamicMaxR below.
-const MAX_R_FALLBACK = 58; // used only when canvas width is unknown
-const GAP        = 5;
+const MAX_R_FALLBACK = 62; // used only when canvas width is unknown
+const GAP        = 6;
 // Top N tokens get full glass circles; the rest render as floating text labels.
-// 10 gives a clear visual cluster of "important" coins without over-crowding.
 const TOP_CIRCLES = 10;
 const SOL_PRICE_USD = 160;  // fallback if no solPrice prop
 
@@ -140,12 +139,16 @@ function toHex(n: number) { return Math.round(Math.max(0, Math.min(255, n))).toS
 // rank 0 = highest volume → MAX_R; rank n-1 = lowest → MIN_R.
 
 function calcRadius(rank: number, total: number, maxR: number = MAX_R_FALLBACK): number {
-  // Steep power-curve — top coins are dramatically larger, creating clear
-  // visual hierarchy. Power 0.40 makes top-5 stand out strongly while
-  // lower-ranked coins shrink quickly to small colored dots.
+  // Power-2.5 curve: top coins are visually dominant, smaller coins shrink
+  // quickly. This produces dramatic size variation (BirdEye style) even when
+  // only the top 10 get circles — each circle is clearly a different size.
+  //
+  // Example with maxR=62, n=30:
+  //   rank 0  → 62px   rank 4  → 44px   rank 9  → 28px
+  //   rank 14 → 17px   rank 20 → 11px   rank 29 →  9px
   const n = Math.max(total - 1, 1);
   const t = 1 - rank / n;                         // 1.0 → 0.0
-  return Math.round(MIN_R + (maxR - MIN_R) * Math.pow(t, 0.40));
+  return Math.round(MIN_R + (maxR - MIN_R) * Math.pow(t, 2.5));
 }
 
 // ─── Force layout — inflate-and-pack ─────────────────────────────────────────
@@ -163,54 +166,47 @@ function halton(idx: number, base: number): number {
 }
 
 // ─── Force layout — inflate-and-pack ─────────────────────────────────────────
-// 1. Init: place bubbles via Halton(2,3) — uniform rectangle coverage incl. corners
-// 2. Inflate radii 0→target over simulation
-// 3. Collision repulsion + hard boundary walls only (no gravity) → fills uniformly
+// Algorithm:
+//   1. Halton(2,3) places bubbles across the FULL canvas (no centre clustering).
+//   2. Radii inflate 0→target over the first 60% of steps (fast early, slow late).
+//   3. Strong elastic collision separates overlapping circles each step.
+//   4. Hard boundary walls keep everything inside the canvas.
+//   NO gravity — gravity was causing all bubbles to collapse into the centre
+//   and overlap. Wall repulsion alone keeps the layout spread.
 
-function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 180) {
+function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 260) {
   if (W <= 0 || H <= 0 || bubbles.length === 0) return;
   const n = bubbles.length;
   const targetR = bubbles.map(b => b.r);
 
-  // ── Halton initialization — start near center so bubbles don't fly in from corners
-  const cx0 = W / 2, cy0 = H / 2;
-  const spread = Math.min(W, H) * 0.15; // tight cluster at center
+  // ── Full-canvas Halton — uniform coverage, no corner clustering
   bubbles.forEach((b, i) => {
-    b.x  = cx0 + (halton(i + 1, 2) - 0.5) * spread * 2;
-    b.y  = cy0 + (halton(i + 1, 3) - 0.5) * spread * 2;
+    const margin = MIN_R + GAP;
+    b.x  = margin + halton(i + 1, 2) * (W - 2 * margin);
+    b.y  = margin + halton(i + 1, 3) * (H - 2 * margin);
     b.vx = 0;
     b.vy = 0;
-    b.r  = Math.max(2, targetR[i] * 0.12); // start bigger → less inflate travel
+    b.r  = 1; // start at radius 1 — inflate during simulation
   });
 
   for (let step = 0; step < steps; step++) {
     const progress = step / steps;
-    // Aggressive early inflate: bubbles reach near-final size quickly,
-    // then fine-tune collision in the last 30% of steps.
-    const inflate = Math.pow(progress, 0.28);
-    const damping = 0.72 + 0.14 * progress;  // energetic early, settled late
 
+    // Fast inflate in first 65% of steps, then hold at target for collision settling.
+    const inflatePct = Math.min(1, progress / 0.65);
+    const inflate    = Math.pow(inflatePct, 0.35);
     for (let i = 0; i < n; i++) {
       bubbles[i].r = Math.max(1, targetR[i] * inflate);
     }
 
-    // Center-of-mass gravity: larger bubbles pull harder toward center so the
-    // biggest coins cluster in the middle (BirdEye style). Strength ramps up
-    // during inflation so bubbles settle inward rather than at random corners.
-    const cx = W / 2, cy = H / 2;
-    const gravityStrength = 0.0008 * progress;
+    // Damping: loose early (bubbles can move freely), tight late (settle)
+    const damping = 0.75 + 0.10 * progress;
 
     for (let i = 0; i < n; i++) {
       const a   = bubbles[i];
       const pad = a.r + GAP;
 
-      // Center gravity — proportional to bubble rank weight (bigger = stronger pull)
-      const rankWeight = 1 - i / n; // rank 0 (biggest) = 1.0, last = ~0
-      const gK = gravityStrength * (0.4 + 0.6 * rankWeight);
-      a.vx += (cx - a.x) * gK;
-      a.vy += (cy - a.y) * gK;
-
-      // Collision repulsion — push apart when overlapping
+      // ── Elastic collision repulsion (no gravity) ─────────────────────────
       for (let j = i + 1; j < n; j++) {
         const b    = bubbles[j];
         const dx   = b.x - a.x;
@@ -218,18 +214,21 @@ function runLayout(bubbles: BubbleState[], W: number, H: number, steps = 180) {
         const d    = Math.sqrt(dx * dx + dy * dy) || 0.001;
         const minD = a.r + b.r + GAP;
         if (d < minD) {
-          const push  = (minD - d) / minD * 0.70;
-          const nx    = dx / d, ny = dy / d;
-          const total = a.r + b.r;
-          a.vx -= nx * push * (b.r / total);
-          a.vy -= ny * push * (b.r / total);
-          b.vx += nx * push * (a.r / total);
-          b.vy += ny * push * (a.r / total);
+          // Push proportional to penetration depth — harder push = less overlap
+          const overlap = (minD - d) / minD;
+          const push    = overlap * 0.92;
+          const nx = dx / d, ny = dy / d;
+          const wa = b.r / (a.r + b.r); // heavier (larger) bubble moves less
+          const wb = a.r / (a.r + b.r);
+          a.vx -= nx * push * wa;
+          a.vy -= ny * push * wa;
+          b.vx += nx * push * wb;
+          b.vy += ny * push * wb;
         }
       }
 
-      // Soft wall — gentle elastic boundary (gravity handles centering)
-      const wK = 0.40;
+      // ── Hard walls — strong bounce keeps bubbles inside canvas ───────────
+      const wK = 0.60;
       if (a.x < pad)      a.vx += (pad - a.x)      * wK;
       if (a.x > W - pad)  a.vx += (W - pad - a.x)  * wK;
       if (a.y < pad)      a.vy += (pad - a.y)       * wK;
@@ -477,9 +476,9 @@ function drawBubble(
   ctx.restore();
 
   // ── Content inside circle ─────────────────────────────────────────────────
-  const showLogo   = r >= 48 && b.img && b.imgLoaded && b.img.naturalWidth > 0;
-  const showSymbol = r >= 30;
-  const showPct    = r >= 16; // very small circles: just colored dot, no text
+  const showLogo   = r >= 36 && b.img && b.imgLoaded && b.img.naturalWidth > 0;
+  const showSymbol = r >= 20;
+  const showPct    = r >= 14; // very small circles: just a colored dot
   const pctText    = formatPct(b.pctChange);
   const pctFontSz  = Math.max(7, Math.min(10, r * 0.28));
   const symFontSz  = Math.max(8, Math.min(r * 0.17, 14));
@@ -592,9 +591,9 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
     const W = containerRef.current?.offsetWidth ?? 600;
     const H = height;
 
-    // Dynamic max radius: ~6 % of canvas width so the largest circle always
-    // fits the column. Clamped between 36 (readable) and 58 (not overwhelming).
-    const dynamicMaxR = Math.round(Math.min(58, Math.max(36, W * 0.060)));
+    // Dynamic max radius: ~7% of canvas width so the top coin is prominent
+    // but doesn't dominate. Clamped 38–70px so it works on any screen size.
+    const dynamicMaxR = Math.round(Math.min(70, Math.max(38, W * 0.072)));
 
     // tokens arrive pre-sorted by volume desc from the API
     const prevMap = new Map(bubblesRef.current.map(b => [b.address, b]));
