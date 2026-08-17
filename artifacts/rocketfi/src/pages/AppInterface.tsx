@@ -28,7 +28,7 @@ import { useTokenBalance } from "@/hooks/useTokenBalance";
 
 import { ethers } from "ethers";
 import { formatEth, formatAddress, parseEth, formatMC, formatMCUsd, formatUSD, formatTokenPrice, formatPct, cn, timeAgo } from "@/lib/utils";
-import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
+import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { ShareModal } from "@/components/shared/ShareModal";
 import { Search, ArrowRightLeft, Share2, Copy, Globe, Clock, Loader2, Users, ExternalLink, TrendingUp, CandlestickChart, Activity, FunctionSquare, Rocket, ShieldCheck, Zap, CheckCircle2, UploadCloud, Wallet, Eye, AlertCircle, Send, ChevronDown, ChevronUp } from "lucide-react";
 import { ReconnectingChip } from "@/components/shared/ReconnectingChip";

@@ -10,7 +10,7 @@ import {
 import { formatMC, formatMCUsd, formatTokenPrice, formatPct, cn, timeAgo, resolveImageUrl } from "@/lib/utils";
 import BubbleMap, { type TokenBubbleInput } from "@/components/bubblemap/BubbleMap";
 import { useSolPrice } from "@/hooks/useSolPrice";
-import { TokenAvatar, tokenCardBackground } from "@/components/shared/TokenAvatar";
+import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { PlatformBadge, PlatformDot, type PlatformId } from "@/components/shared/PlatformBadge";
 import { useFeedStream, type FeedToken, type FeedTradeStats } from "@/hooks/useFeedStream";
 import { ReconnectingChip } from "@/components/shared/ReconnectingChip";
