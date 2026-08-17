@@ -222,15 +222,33 @@ export class ObjectStorageService {
    * immediately reachable via GET /api/storage/public-objects/{subPath}.
    *
    * Returns the direct GCS public URL (https://storage.googleapis.com/…) when
-   * the object can be made publicly accessible — this URL is permanent and does
-   * not depend on our API server being reachable.  Falls back to null when the
-   * bucket uses uniform bucket-level access (per-object ACLs disabled), in
-   * which case the caller should use the proxied /api/storage/public-objects URL.
+   * the object is confirmed publicly accessible via one of two paths:
    *
-   * @param subPath   Path under the public prefix, e.g. "token-meta/uuid.json"
-   * @param content   File content as a Buffer
+   *   a) makePublic() succeeds (fine-grained ACL bucket) — the file is given
+   *      a public-read ACL and the direct GCS URL is returned.
+   *
+   *   b) makePublic() fails with a "uniform bucket-level access" error — the
+   *      bucket uses IAM-only access, meaning per-object ACLs are disabled.
+   *      Replit-provisioned buckets of this type already grant allUsers
+   *      storage.objectViewer at the bucket level, so the object is already
+   *      publicly reachable at the canonical GCS URL even without a per-object ACL.
+   *      The direct GCS URL is returned.
+   *
+   * Returns null when makePublic() fails for any reason — the caller should
+   * fall back to the proxied /api/storage/public-objects URL in that case.
+   * Common causes logged at WARN level:
+   *  - Uniform bucket-level access (per-object ACLs disabled on the bucket)
+   *  - IAM policy does not grant the service account storage.objects.setIamPolicy
+   *  - Transient GCS API error
+   *
+   * Throws when the underlying file.save() fails (GCS auth error, network
+   * error, etc.) — the caller is responsible for catching and falling back to
+   * an alternative upload path (e.g. pump.fun IPFS).
+   *
+   * @param subPath      Path under the public prefix, e.g. "token-meta/uuid.json"
+   * @param content      File content as a Buffer
    * @param contentType  MIME type stored in GCS metadata
-   * @returns Direct GCS URL if the object was made public, otherwise null
+   * @returns Direct GCS URL if the object was confirmed public via ACL, otherwise null
    */
   async uploadToPublicPath(
     subPath: string,
@@ -245,17 +263,39 @@ export class ObjectStorageService {
     const prefix = parts.slice(1).join("/");
     const objectName = prefix ? `${prefix}/${subPath}` : subPath;
     const file = objectStorageClient.bucket(bucketName).file(objectName);
-    await file.save(content, { contentType, resumable: false });
+    try {
+      await file.save(content, { contentType, resumable: false });
+    } catch (saveErr) {
+      console.error('[objectStorage] uploadToPublicPath: file.save() failed — GCS upload error:', {
+        bucketName,
+        objectName,
+        contentType,
+        error: saveErr instanceof Error ? saveErr.message : String(saveErr),
+        stack: saveErr instanceof Error ? saveErr.stack : undefined,
+      });
+      throw saveErr;
+    }
 
-    // Attempt to make the file publicly readable so external services
-    // (pump.fun explorers, wallets, etc.) can fetch it directly from GCS
-    // without going through our API proxy.  This fails silently when the
-    // bucket uses uniform bucket-level access (per-object ACLs are disabled).
+    const directUrl = `https://storage.googleapis.com/${bucketName}/${objectName}`;
+
+    // Attempt to grant public-read access via a per-object ACL so external
+    // services (pump.fun explorers, wallets) can fetch the image directly from
+    // GCS without going through our API proxy.
+    // On buckets with uniform bucket-level access enabled this always fails —
+    // the caller falls back to serving via the proxied /api/storage/public-objects
+    // URL which is always reachable.
     try {
       await file.makePublic();
-      return `https://storage.googleapis.com/${bucketName}/${objectName}`;
-    } catch {
-      return null; // caller falls back to the proxied URL
+      console.info('[objectStorage] uploadToPublicPath: file made public via per-object ACL', { directUrl });
+      return directUrl;
+    } catch (aclErr) {
+      const msg = aclErr instanceof Error ? aclErr.message : String(aclErr);
+      console.warn(
+        '[objectStorage] uploadToPublicPath: makePublic() failed — ' +
+        'caller will use proxied /api/storage/public-objects URL instead',
+        { error: msg, directUrl },
+      );
+      return null;
     }
   }
 

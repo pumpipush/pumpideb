@@ -200,16 +200,16 @@ router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
     const metaSubPath  = `token-meta/${uuid}.json`;
 
     // 1. Upload image to public object storage.
-    // uploadToPublicPath attempts to make the file publicly readable and returns
-    // the direct GCS URL (https://storage.googleapis.com/…) when it succeeds —
-    // this URL is permanent and reachable by external services (pump.fun, wallets)
-    // regardless of which server is currently handling requests.
-    // Falls back to the proxied URL when per-object ACLs are disabled on the bucket.
+    // uploadToPublicPath uploads the file and returns the direct GCS URL when the
+    // object is confirmed publicly accessible (either via per-object ACL or
+    // uniform bucket-level IAM). Returns null only on unexpected ACL errors, in
+    // which case we fall back to our proxied URL. Throws on upload failure (auth,
+    // network), which is caught below and routes to Path B.
     const directImageUrl = await storageService.uploadToPublicPath(imageSubPath, imageBuffer, imageType);
     const imageUrl = directImageUrl ?? `${baseUrl}/api/storage/public-objects/${imageSubPath}`;
 
     if (!directImageUrl) {
-      console.warn("[proxy] pump-ipfs-upload: could not get direct GCS URL for image — using proxied URL instead. Logo may not show on pump.fun if the proxy URL is not publicly reachable.");
+      console.warn("[proxy] pump-ipfs-upload: could not confirm image is publicly accessible — using proxied URL instead. Logo may not show on pump.fun if the proxy URL is not publicly reachable.");
     }
 
     // 2. Build Metaplex-compatible metadata JSON (pump.fun standard format)
@@ -232,7 +232,10 @@ router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
 
     return res.json({ metadataUri, imageUrl });
   } catch (storageErr) {
-    console.warn("[proxy] pump-ipfs-upload: object storage unavailable, trying pump.fun fallback:", storageErr);
+    console.error("[proxy] pump-ipfs-upload: Path A (object storage) failed — falling back to pump.fun IPFS:", {
+      error: storageErr instanceof Error ? storageErr.message : String(storageErr),
+      stack: storageErr instanceof Error ? storageErr.stack : undefined,
+    });
   }
 
   // ── Path B: pump.fun /api/ipfs (works from VPS IPs — not blocked by Cloudflare) ──
