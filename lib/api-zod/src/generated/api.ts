@@ -71,6 +71,14 @@ export const ListTokensResponseItem = zod.object({
   "pctChange24h": zod.number().nullish(),
   /** Trade count in the last 1 hour — populated by trending sort, null otherwise */
   "trades1h": zod.number().nullish(),
+  /** Buy-side trade count in the last 1h — trending sort only */
+  "buys1h": zod.number().nullish(),
+  /** Sell-side trade count in the last 1h — trending sort only */
+  "sells1h": zod.number().nullish(),
+  /** Unique trader wallets in the last 1h — trending sort only */
+  "traders1h": zod.number().nullish(),
+  /** Trade count in the last 5 minutes — trending sort only */
+  "trades5m": zod.number().nullish(),
 })
 export const ListTokensResponse = zod.array(ListTokensResponseItem)
 

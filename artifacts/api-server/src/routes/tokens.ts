@@ -193,6 +193,10 @@ router.get("/tokens", asyncWrap(async (req, res) => {
         where.push(`t.platform = $${params.length}`);
       }
     }
+    // Smart filter: only show tokens with recent trading activity.
+    // Tokens with zero trades in both 1h and 5m windows have no trending signal
+    // and should not appear, regardless of their all-time trade count.
+    where.push(`(r1h.token_address IS NOT NULL OR r5m.token_address IS NOT NULL)`);
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
     params.push(fetchLimit);
     const limitParamIdx = params.length;
@@ -209,14 +213,27 @@ router.get("/tokens", asyncWrap(async (req, res) => {
              COALESCE(r5m.trades,         0) AS trades_5m,
              -- Smart score: multi-signal trending rank
              (
-               COALESCE(r5m.trades, 0) * 20
-               + COALESCE(r1h.trades, 0) * 5
-               + COALESCE(r1h.buy_count, 0) * 8
-               - COALESCE(r1h.sell_count, 0) * 2
-               + COALESCE(r1h.unique_traders, 0) * 3
-               + LEAST(COALESCE(r1h.vol_sol, 0) / 1e9, 500) * 2
-               + CASE WHEN t.created_at > NOW() - INTERVAL '1 hour'  THEN 50 ELSE 0 END
-               + CASE WHEN t.created_at > NOW() - INTERVAL '6 hours' THEN 20 ELSE 0 END
+               -- 5-minute momentum (strongest real-time signal)
+               COALESCE(r5m.trades, 0) * 30
+               -- Sustained 1-hour activity
+               + COALESCE(r1h.trades, 0) * 4
+               -- Buy pressure ratio (0-25 pts): only counted once >=5 trades to avoid noise
+               + CASE WHEN (COALESCE(r1h.buy_count, 0) + COALESCE(r1h.sell_count, 0)) >= 5
+                      THEN ROUND(
+                             (COALESCE(r1h.buy_count, 0)::float
+                              / (COALESCE(r1h.buy_count, 0) + COALESCE(r1h.sell_count, 0))) * 25
+                           )
+                      ELSE 0 END
+               -- Organic wallets (capped at 100 to resist bot farms)
+               + LEAST(COALESCE(r1h.unique_traders, 0), 100) * 4
+               -- Volume in SOL (capped at 200 to limit whale distortion)
+               + LEAST(COALESCE(r1h.vol_sol, 0) / 1e9, 200) * 3
+               -- Holder distribution signal
+               + LEAST(COALESCE(t.holder_count, 0), 500) * 0.3
+               -- Recency bonus (smaller — activity signals dominate over age)
+               + CASE WHEN t.created_at > NOW() - INTERVAL '30 minutes' THEN 25 ELSE 0 END
+               + CASE WHEN t.created_at > NOW() - INTERVAL '2 hours'    THEN 12 ELSE 0 END
+               + CASE WHEN t.created_at > NOW() - INTERVAL '12 hours'   THEN  5 ELSE 0 END
                + CASE WHEN t.graduated THEN 10 ELSE 0 END
              ) AS smart_score
       FROM   tokens t
@@ -280,7 +297,11 @@ router.get("/tokens", asyncWrap(async (req, res) => {
       holderCount:          Number(r["holder_count"] ?? 0),
       createdAt:            r["created_at"] as string,
       updatedAt:            r["updated_at"] as string,
-      trades1h:             Number(r["trades_1h"] ?? 0),
+      trades1h:             Number(r["trades_1h"]   ?? 0),
+      buys1h:               Number(r["buys_1h"]     ?? 0),
+      sells1h:              Number(r["sells_1h"]    ?? 0),
+      traders1h:            Number(r["traders_1h"]  ?? 0),
+      trades5m:             Number(r["trades_5m"]   ?? 0),
     }));
     const pctChanges = await fetch24hPctChanges(mapped.map(r => r.address));
     const payload = ListTokensResponse.parse(mapped.map(r => formatToken(r, pctChanges.get(r.address), Number(r.trades1h ?? 0))));

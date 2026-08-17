@@ -66,6 +66,14 @@ export interface Token {
   decimals?: number;
   /** Trade count in the last 1 hour — populated by trending sort, null otherwise */
   trades1h?: number | null;
+  /** Buy-side trade count in the last 1h — trending sort only */
+  buys1h?: number | null;
+  /** Sell-side trade count in the last 1h — trending sort only */
+  sells1h?: number | null;
+  /** Unique trader wallets in the last 1h — trending sort only */
+  traders1h?: number | null;
+  /** Trade count in the last 5 minutes — trending sort only */
+  trades5m?: number | null;
 }
 
 export interface TokenInput {

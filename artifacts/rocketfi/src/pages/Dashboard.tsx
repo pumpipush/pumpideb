@@ -66,6 +66,14 @@ interface DisplayToken {
   tradeCount?: number;
   /** Trades in the last 1 hour — only populated on Trending sort */
   trades1h?: number | null;
+  /** Buy-side trades in last 1h — trending only */
+  buys1h?: number | null;
+  /** Sell-side trades in last 1h — trending only */
+  sells1h?: number | null;
+  /** Unique wallets active in last 1h — trending only */
+  traders1h?: number | null;
+  /** Trades in last 5 minutes — trending only */
+  trades5m?: number | null;
   /** 24-hour price change % — positive = green, negative = red */
   pctChange24h?: number | null;
 }
@@ -606,6 +614,17 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
   const fmtTrades = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${n}`;
   const vol = parseFloat(token.volumeEth ?? "0") || 0;
 
+  // ── Buy pressure signal (trending only) ──────────────────────────────────
+  const buys  = token.buys1h  ?? 0;
+  const sells = token.sells1h ?? 0;
+  const totalTrades1h = buys + sells;
+  // Only show buy bar when there are enough trades to be meaningful
+  const showBuyBar = isTrending && totalTrades1h >= 5;
+  const buyPct     = showBuyBar ? Math.round((buys / totalTrades1h) * 100) : 0;
+  const buyBarColor  = buyPct >= 60 ? "#4ade80" : buyPct >= 40 ? "#facc15" : "#f87171";
+  const trades5m     = token.trades5m ?? 0;
+  const traders1h    = token.traders1h ?? 0;
+
   // pctChange pill — show on Trending and Volume tabs
   const pctStr  = (isTrending || isVolume) ? fmtPct(token.pctChange24h) : null;
   const pctUp   = (token.pctChange24h ?? 0) >= 0;
@@ -683,13 +702,16 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
         {/* pct + MC row — full width, no symbol competing for space */}
         <div className="flex items-center justify-between gap-1 mt-0.5">
           <div className="flex items-center gap-1.5">
-            {/* pct change pill — Trending & Volume tabs */}
             {pctStr && (
-              <span
-                className="font-mono text-[12px] font-bold"
-                style={{ color: pctColor }}
-              >
+              <span className="font-mono text-[12px] font-bold" style={{ color: pctColor }}>
                 {pctStr}
+              </span>
+            )}
+            {/* 5-minute activity badge — shows when trending and token is very hot RIGHT NOW */}
+            {isTrending && trades5m > 0 && (
+              <span className="flex items-center gap-0.5 text-[10px] font-mono font-bold px-1 py-0.5 rounded"
+                style={{ background: "rgba(245,158,11,0.13)", color: "#f59e0b" }}>
+                ⚡{fmtTrades(trades5m)}<span className="font-normal opacity-70">/5m</span>
               </span>
             )}
           </div>
@@ -697,8 +719,26 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
             {formatMCUsd(token.marketCapEth, solPrice)} <span className="text-muted-foreground/60 font-normal text-[12px]">MC</span>
           </span>
         </div>
+
+        {/* Buy pressure bar — trending only, shown when ≥5 trades in last 1h */}
+        {showBuyBar && (
+          <div className="flex items-center gap-1.5 mt-1">
+            <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: "rgba(248,113,113,0.22)" }}>
+              <div className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${buyPct}%`, background: buyBarColor }} />
+            </div>
+            <span className="text-[10px] font-mono whitespace-nowrap" style={{ color: buyBarColor }}>
+              {buyPct}%
+            </span>
+            {traders1h > 0 && (
+              <span className="text-[10px] font-mono text-muted-foreground/60 whitespace-nowrap">
+                {fmtTrades(traders1h)}w
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center justify-between mt-0.5">
-          {/* Bottom-left: volume for Volume tab, age otherwise */}
           {isVolume ? (
             <span className="flex items-center gap-1 text-[13px] text-primary font-mono font-semibold">
               <BarChart2 className="w-3 h-3" />
@@ -711,7 +751,7 @@ function TokenCard({ token, rank, solPrice, activeTab }: { token: DisplayToken; 
               {timeAgo(token.createdAt)}
             </span>
           )}
-          {/* Bottom-right on Trending: trades/hr (amber) if hot, else all-time count */}
+          {/* Trending: trades/hr */}
           {isTrending && (() => {
             const t1h = token.trades1h ?? 0;
             const fallback = token.tradeCount ?? 0;
