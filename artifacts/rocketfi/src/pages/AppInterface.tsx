@@ -67,6 +67,7 @@ import {
 } from "@/lib/external-tokens";
 import { awaitConfirmAndRelease } from "@/lib/tradeOrchestrator";
 import { computeSellPresetAmount } from "@/lib/tradePresets";
+import { deriveEffectiveWallet, getLaunchButtonLabel, getTradeButtonLabel, resolveWalletAction } from "@/lib/walletActionGuards";
 import { getConnection, broadcastWithFanout } from "@/lib/solanaConnection";
 import { addFeeToVersionedTx, addFeeToLegacyTx } from "@/lib/platform-fee";
 import { SEO } from "@/components/seo/SEO";
@@ -96,16 +97,10 @@ export default function AppInterface({ tokenAddress: routeAddress }: AppInterfac
 
   const { wallet: adapterWallet } = useWallet();
   const { socialUser } = useAuth();
-  // Derive effective wallet: adapter first (needed for signing), then fall back
-  // to the wallet address stored in the JWT session.  This prevents "Connect
-  // Wallet" from showing when the user is authenticated but the adapter hasn't
-  // auto-reconnected yet (common after a page reload with Solflare).
-  // The connected check in each action handler ensures the adapter is actually
-  // live before attempting to sign — and opens the modal if it isn't.
-  const authWallet = socialUser?.authType === "wallet"
-    ? socialUser.address
-    : (socialUser?.linkedWallet ?? null);
-  const wallet = adapterWallet ?? authWallet;
+  // Derive effective wallet via the shared pure helper (also tested in
+  // walletActionGuards.test.ts). Adapter address takes priority; auth session
+  // address is the fallback while the adapter is still reconnecting on reload.
+  const wallet = deriveEffectiveWallet(adapterWallet, socialUser);
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(tokenParam);
 
   // Sync selectedTokenId to URL; scroll to top whenever a token is opened
@@ -235,10 +230,9 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
   const handleLaunch = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!wallet) { openWalletModal(); return; }
-    // Wallet address known from auth session but adapter not yet reconnected —
-    // open the modal so the user can reconnect (needed for signing).
-    if (!connected) { openWalletModal(); return; }
+    // resolveWalletAction: "open_wallet_modal" when wallet is null (not authenticated)
+    // OR when wallet is known from auth session but adapter not yet reconnected.
+    if (resolveWalletAction(wallet, connected) === "open_wallet_modal") { openWalletModal(); return; }
 
     // Fix #1 — mutex: prevent double-submit while a launch is already in-flight
     if (launchStep !== "idle" && launchStep !== "error") return;
@@ -2166,8 +2160,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   }, [chartBars, chartType, chartTf, indicators, indOpen, connected, token?.address, token?.graduated, token?.tradeCount, onCrosshairMove, solPrice, isSwitching, serverStats, isJustLaunched]);
 
   const handleTrade = async () => {
-    if (!wallet) { openWalletModal(); return; }
-    if (!walletConnected) { openWalletModal(); return; }
+    if (resolveWalletAction(wallet, walletConnected) === "open_wallet_modal") { openWalletModal(); return; }
     if (!token || !amount) return;
     // Prevent concurrent submissions: user must wait for signing + on-chain confirmation.
     if (isTradePending) return;
@@ -5083,8 +5076,7 @@ function ExternalTokenTrade({ token, wallet }: ExternalTokenTradeProps) {
   }, [token.address, token.decimals, amount, tradeMode]);
 
   const handleTrade = async () => {
-    if (!wallet) { openWalletModal(); return; }
-    if (!connected) { openWalletModal(); return; }
+    if (resolveWalletAction(wallet, connected) === "open_wallet_modal") { openWalletModal(); return; }
     if (!amount || parseFloat(amount) <= 0) return;
     if (isTradePending) return;
 
