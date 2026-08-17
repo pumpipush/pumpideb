@@ -145,32 +145,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return t ? { Authorization: `Bearer ${t}` } : {};
   }, []);
 
-  // Fix #5 — listen for wallet account changes dispatched by WalletContext.
+  // Listen for wallet account changes dispatched by WalletContext.
   // When the user switches accounts in their wallet extension, any wallet-based
   // JWT is now invalid for the new address. Clear the session so they re-auth.
   useEffect(() => {
     const handleWalletAccountChanged = () => {
       const token = getToken();
       if (!token) return;
-      // Re-validate the session against the server; a 401 will auto-clear it.
+
+      // Snapshot the token value at event time.  If the token changes before
+      // the response arrives (user logged in with a new account) we must not
+      // clear the new valid session — compare on response arrival.
+      const tokenAtEventTime = token;
+
       fetch(apiUrl("/auth/me"), { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => { if (r.status === 401) { clearToken(); setSocialUser(null); } })
-        .catch(() => {});
+        .then(r => {
+          // Bail out if a newer auth event has already replaced the token.
+          if (getToken() !== tokenAtEventTime) return;
+
+          if (r.status === 401) {
+            clearToken();
+            setSocialUser(null);
+          } else if (!r.ok) {
+            // Non-401 server or network failure — log a warning but leave the
+            // session intact; a transient 5xx should not silently sign the user out.
+            console.warn(`[AuthContext] wallet-change validation got ${r.status} — keeping session`);
+          }
+        })
+        .catch((err) => {
+          // Network failure: log but preserve session — do not silently swallow.
+          console.warn("[AuthContext] wallet-change validation failed (network):", err);
+        });
     };
     window.addEventListener("walletAccountChanged", handleWalletAccountChanged);
     return () => window.removeEventListener("walletAccountChanged", handleWalletAccountChanged);
   }, []);
 
-  // On mount: restore session from localStorage
+  // On mount: restore session from localStorage.
+  // An AbortController cancels the in-flight request if the component unmounts
+  // before it completes, preventing stale responses from updating auth state.
   useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
+
     const token = getToken();
     if (!token) { setIsLoading(false); return; }
 
     fetch(apiUrl("/auth/me"), {
       headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
     })
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((data) => {
+        if (cancelled) return; // superseded by unmount or a newer auth event
         const p = data.profile;
         setSocialUser({
           address:      p.address,
@@ -181,8 +208,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           linkedWallet: p.linkedWallet ?? null,
         });
       })
-      .catch(() => clearToken())
-      .finally(() => setIsLoading(false));
+      .catch((err) => {
+        if (cancelled || (err instanceof DOMException && err.name === "AbortError")) return;
+        clearToken();
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, []);
 
   const handleAuthResponse = (data: {
