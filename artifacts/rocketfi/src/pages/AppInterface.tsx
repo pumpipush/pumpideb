@@ -1810,8 +1810,13 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // trades have arrived yet.  Used to show a friendlier empty state than the
   // generic "No trades yet" text so the creator isn't confused by a blank chart.
   // Disappears automatically once the first trade lands via the live WebSocket.
+  // Only show the "You just launched this coin!" state when the CONNECTED wallet
+  // is the actual creator.  Without this check every visitor to a brand-new
+  // coin sees the creator message — even wallets that had nothing to do with it.
   const isJustLaunched =
     !!token?.createdAt &&
+    !!wallet &&
+    wallet === (token as any).creatorAddress &&
     (token.tradeCount ?? 0) === 0 &&
     liveTrades.length === 0 &&
     (!history || history.length === 0) &&
@@ -2818,7 +2823,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                         <th className="text-left px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#b3b3b3" }}>Time</th>
                         <th className="text-left px-2 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#b3b3b3" }}>Type</th>
                         <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#b3b3b3" }}>USD</th>
-                        <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#b3b3b3" }}>{token.symbol}</th>
+                        <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#b3b3b3" }}>{displaySymbol}</th>
                         <th className="hidden md:table-cell text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#b3b3b3" }}>SOL</th>
                         <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#b3b3b3" }}>Price</th>
                         <th className="text-right px-3 py-2.5 text-[13px] font-semibold uppercase tracking-wider" style={{ color: "#b3b3b3" }}>Maker</th>
