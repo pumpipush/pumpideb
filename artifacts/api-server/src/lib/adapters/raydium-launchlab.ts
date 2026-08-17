@@ -486,6 +486,10 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
     const realSupply = await fetchMintTotalSupply(mint) ?? LL_TOTAL_SUPPLY;
     const { totalSupply, initMcLamports, initPriceEth } = computeInitialTokenParams(realSupply);
 
+    // Use the on-chain block time as createdAt so the token age is accurate
+    // even for tokens discovered via backfill (adapter was down).
+    const tokenCreatedAt = tx.blockTime ? new Date(tx.blockTime * 1000) : new Date();
+
     await db.insert(tokensTable).values({
       address:              mint,
       name,
@@ -501,6 +505,7 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
       platform:             PLATFORM,
       chain:                CHAIN,
       metadataUri:          uri ?? null,
+      createdAt:            tokenCreatedAt,
     }).onConflictDoNothing();
 
     this.log.info({ mint, name, symbol, marketCapEth: initMcLamports, totalSupply },
@@ -519,7 +524,7 @@ export class RaydiumLaunchLabIndexer extends SolanaRpcIndexer {
           marketCapEth: initMcLamports,
           platform:     PLATFORM,
           chain:        CHAIN,
-          createdAt:    new Date().toISOString(),
+          createdAt:    tokenCreatedAt.toISOString(),
         },
       });
     };

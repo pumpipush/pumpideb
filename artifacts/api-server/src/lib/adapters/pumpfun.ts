@@ -312,6 +312,9 @@ export class PumpFunChainIndexer extends SolanaRpcIndexer {
     let symbol:         string;
     let uri:            string | null;
     let creatorAddress: string | null;
+    // Use on-chain blockTime when available; fast-path (Anchor log) uses wall-clock
+    // because no TX fetch is performed. Both are accurate to <5 s for real-time events.
+    let tokenCreatedAt = new Date();
 
     if (logEvent) {
       ({ mint, name, symbol, creatorAddress } = logEvent);
@@ -329,6 +332,7 @@ export class PumpFunChainIndexer extends SolanaRpcIndexer {
       name   = params?.name   ?? mint.slice(0, 8) + "…";
       symbol = params?.symbol ?? "???";
       uri    = params?.uri    ?? null;
+      if (tx.blockTime) tokenCreatedAt = new Date(tx.blockTime * 1000);
     }
 
     if (!mint) {
@@ -363,6 +367,7 @@ export class PumpFunChainIndexer extends SolanaRpcIndexer {
       priceEth:             PUMP_INIT_PRICE_ETH,
       platform:             PLATFORM,
       chain:                CHAIN,
+      createdAt:            tokenCreatedAt,
     }).onConflictDoUpdate({
       target: tokensTable.address,
       set: {
@@ -402,7 +407,7 @@ export class PumpFunChainIndexer extends SolanaRpcIndexer {
           marketCapEth: PUMP_INIT_MC_LAMPORTS,
           platform:     PLATFORM,
           chain:        CHAIN,
-          createdAt:    new Date().toISOString(),
+          createdAt:    tokenCreatedAt.toISOString(),
         },
       });
     };
@@ -1426,6 +1431,8 @@ export class PumpApiAdapter {
       ? BigInt(Math.round(msg.marketCapQuote * 1e9)).toString()
       : PUMP_INIT_MC_LAMPORTS;
 
+    const tokenCreatedAt = PumpApiAdapter._parseTs(msg.timestamp);
+
     await db.insert(tokensTable).values({
       address:              mint,
       name,
@@ -1440,6 +1447,7 @@ export class PumpApiAdapter {
       priceEth:             initPriceEth,
       platform:             PLATFORM,
       chain:                CHAIN,
+      createdAt:            tokenCreatedAt,
     }).onConflictDoNothing();
 
     // If the creator bought tokens at launch, emit an initial-buy trade.
@@ -1447,7 +1455,6 @@ export class PumpApiAdapter {
     if (msg.initialBuy && msg.initialBuy > 0 && msg.quoteAmount && msg.quoteAmount > 0) {
       const initSolLam  = PumpApiAdapter._solToLamports(msg.quoteAmount);
       const initTokBase = PumpApiAdapter._tokToBase(msg.initialBuy);
-      const initTs      = PumpApiAdapter._parseTs(msg.timestamp);
       const initTrader  = msg.breakdown?.[0]?.trader ?? creatorAddress ?? "unknown";
       await db.insert(tradesTable).values({
         tokenAddress:  mint,
@@ -1458,7 +1465,7 @@ export class PumpApiAdapter {
         priceEth:      initPriceEth,
         txHash:        msg.signature!,
         platform:      PLATFORM,
-        timestamp:     initTs,
+        timestamp:     tokenCreatedAt,
       }).onConflictDoNothing();
     }
 
@@ -1476,7 +1483,7 @@ export class PumpApiAdapter {
           marketCapEth: PUMP_INIT_MC_LAMPORTS,
           platform:     PLATFORM,
           chain:        CHAIN,
-          createdAt:    new Date().toISOString(),
+          createdAt:    tokenCreatedAt.toISOString(),
         },
       });
     };
@@ -1785,6 +1792,8 @@ export class PumpApiAdapter {
       ? BigInt(Math.round(msg.marketCapQuote * 1e9)).toString()
       : LL_INIT_MC_LAMPORTS;
 
+    const tokenCreatedAt = PumpApiAdapter._parseTs(msg.timestamp);
+
     await db.insert(tokensTable).values({
       address:              mint,
       name,
@@ -1799,6 +1808,7 @@ export class PumpApiAdapter {
       priceEth:             initPriceEth,
       platform:             LL_PLATFORM,
       chain:                CHAIN,
+      createdAt:            tokenCreatedAt,
     }).onConflictDoNothing();
 
     pumpApiLog.info({ mint, name, symbol }, "pumpapi: new raydium_launchlab token ingested");
@@ -1815,7 +1825,7 @@ export class PumpApiAdapter {
           marketCapEth: initMCStr,
           platform:     LL_PLATFORM,
           chain:        CHAIN,
-          createdAt:    new Date().toISOString(),
+          createdAt:    tokenCreatedAt.toISOString(),
         },
       });
     };
