@@ -204,6 +204,8 @@ export default function ProfilePage() {
   const [followModalOpen, setFollowModalOpen] = useState(false);
   const [followModalMode, setFollowModalMode] = useState<"followers" | "following">("followers");
   const [followLoading, setFollowLoading] = useState(false);
+  // True while waiting for the user to approve the follow signature in their wallet
+  const [followAwaitingWallet, setFollowAwaitingWallet] = useState(false);
   // Optimistic follow state — null means "not yet loaded"
   const [localIsFollowing, setLocalIsFollowing] = useState<boolean | null>(null);
   const [localFollowersCount, setLocalFollowersCount] = useState<number | null>(null);
@@ -432,6 +434,19 @@ export default function ProfilePage() {
     retry: 1,
   });
 
+  const { data: history, isLoading: historyLoading } = useQuery<ActivityTrade[]>({
+    queryKey: ["wallet-activity", address],
+    queryFn: async () => {
+      const res = await fetch(`/api/wallet/${address}/activity?limit=100`);
+      if (!res.ok) return [];
+      return res.json() as Promise<ActivityTrade[]>;
+    },
+    // Activity is the default tab — prefetch immediately so it's ready on first render
+    enabled: !!address,
+    staleTime: 20_000,
+    refetchInterval: activeTab === "activity" ? 30_000 : false,
+  });
+
   // ── Fast wallet stats (drives stat chips) ───────────────────────────────
   // Hits a lightweight SQL aggregate endpoint — no JOIN, no row payload.
   // Loads independently so chips appear quickly while the full activity list loads.
@@ -451,18 +466,6 @@ export default function ProfilePage() {
     refetchInterval: 60_000,
   });
 
-  const { data: history, isLoading: historyLoading } = useQuery<ActivityTrade[]>({
-    queryKey: ["wallet-activity", address],
-    queryFn: async () => {
-      const res = await fetch(`/api/wallet/${address}/activity?limit=100`);
-      if (!res.ok) return [];
-      return res.json() as Promise<ActivityTrade[]>;
-    },
-    // Activity is the default tab — prefetch immediately so it's ready on first render
-    enabled: !!address,
-    staleTime: 20_000,
-    refetchInterval: activeTab === "activity" ? 30_000 : false,
-  });
 
   // ── Creator fee balance (owner only) ─────────────────────────────────────
   const { data: claimableLamports = 0n, refetch: refetchFees } = useQuery<bigint>({
@@ -508,6 +511,9 @@ export default function ProfilePage() {
     }
   };
 
+  // True when the current viewer is a wallet-only user (no social login)
+  const isWalletOnlyUser = !socialUser && !!wallet;
+
   const handleFollow = async () => {
     if (!profileAddress || followLoading) return;
 
@@ -519,8 +525,14 @@ export default function ProfilePage() {
     );
     setFollowLoading(true);
 
+    // Wallet-only users must sign a challenge — show the "Approve in wallet" hint
+    if (isWalletOnlyUser) setFollowAwaitingWallet(true);
+
     try {
       const auth = await getFollowAuth();
+      // Signature obtained (or JWT resolved) — clear the wallet prompt
+      setFollowAwaitingWallet(false);
+
       if (!auth) throw new Error("Please connect a wallet or sign in to follow");
 
       const result = wasFollowing
@@ -536,13 +548,21 @@ export default function ProfilePage() {
       void qc.invalidateQueries({ queryKey: getGetFollowersQueryKey(profileAddress) });
       void qc.invalidateQueries({ queryKey: getGetFollowingQueryKey(profileAddress) });
     } catch (e) {
+      setFollowAwaitingWallet(false);
       // Revert optimistic update
       setLocalIsFollowing(wasFollowing);
       setLocalFollowersCount((prev) =>
         prev === null ? null : wasFollowing ? prev + 1 : Math.max(0, prev - 1),
       );
-      const msg = e instanceof Error ? e.message : "Failed";
-      toast({ title: wasFollowing ? "Unfollow failed" : "Follow failed", description: msg, variant: "destructive" });
+      const rawMsg = e instanceof Error ? e.message : "";
+      const isRejection = /rejected|cancelled|canceled|denied/i.test(rawMsg);
+      const title = isRejection
+        ? "Signature rejected"
+        : wasFollowing ? "Unfollow failed" : "Follow failed";
+      const description = isRejection
+        ? "You declined the wallet signature. Approve it in your wallet to follow."
+        : rawMsg || "Something went wrong. Please try again.";
+      toast({ title, description, variant: "destructive" });
     } finally {
       setFollowLoading(false);
     }
@@ -562,6 +582,7 @@ export default function ProfilePage() {
   };
 
   const historyArr = Array.isArray(history) ? history : [];
+
   // Stat chips come from the fast /stats endpoint; fall back to activity data when available
   const totalTrades        = walletStats?.tradeCount        ?? historyArr.length;
   const totalVolumeLamports = walletStats?.totalVolumeLamports
@@ -730,6 +751,7 @@ export default function ProfilePage() {
                   <button
                     onClick={() => void handleFollow()}
                     disabled={followLoading || (!wallet && !socialUser)}
+                    title={followAwaitingWallet ? "Check your wallet extension" : undefined}
                     className={cn(
                       "h-8 px-3 flex items-center gap-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-50",
                       localIsFollowing
@@ -737,11 +759,13 @@ export default function ProfilePage() {
                         : "bg-primary text-primary-foreground hover:bg-primary/90",
                     )}
                   >
-                    {followLoading
-                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      : localIsFollowing
-                        ? <><UserMinus className="w-3.5 h-3.5" /><span className="hidden sm:inline">Following</span></>
-                        : <><UserPlus className="w-3.5 h-3.5" /><span className="hidden sm:inline">Follow</span></>
+                    {followAwaitingWallet
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /><span className="hidden sm:inline">Approve in wallet</span></>
+                      : followLoading
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : localIsFollowing
+                          ? <><UserMinus className="w-3.5 h-3.5" /><span className="hidden sm:inline">Following</span></>
+                          : <><UserPlus className="w-3.5 h-3.5" /><span className="hidden sm:inline">Follow</span></>
                     }
                   </button>
                 )}
@@ -853,7 +877,7 @@ export default function ProfilePage() {
                   : undefined}
                 isLoading={statsLoading}
               />
-              {/* PNL — show skeleton while loading, then value once stats arrive */}
+              {/* PNL — show skeleton while loading, then value once stats arrive, then value once history arrives */}
               <div className="flex-1 flex flex-col items-center justify-center py-3 px-3 min-w-0">
                 <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60 mb-1.5 font-medium">
                   Realized PNL
@@ -1619,8 +1643,10 @@ export default function ProfilePage() {
           address={profile.address}
           viewerAddress={viewerAddress ?? undefined}
           getFollowAuth={getFollowAuth}
+          isWalletUser={isWalletOnlyUser}
         />
       )}
     </div>
   );
 }
+

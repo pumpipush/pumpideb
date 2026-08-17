@@ -9,6 +9,8 @@
  *   viewerAddress — optional; current user's address (for isFollowedByViewer)
  *   getFollowAuth — optional async callback that returns a FollowAuth token
  *                   (called on demand when a follow button is clicked)
+ *   isWalletUser  — optional; true when viewer is a wallet-only user (no social JWT)
+ *                   shows "Approve in wallet" hint while the sign flow is in-flight
  */
 
 import { createPortal } from "react-dom";
@@ -26,31 +28,45 @@ import { diceBearUrl, formatAddress } from "@/lib/utils";
 import { X, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 interface FollowListModalProps {
   open: boolean;
+
   onOpenChange: (open: boolean) => void;
+
   mode: "followers" | "following";
+
   address: string;
+
   viewerAddress?: string;
   /** Async callback that returns auth for follow/unfollow; called on demand. */
+
   getFollowAuth?: () => Promise<FollowAuth | null>;
+  /** True when the viewer is a wallet-only user (no social JWT) — shows "Approve in wallet" during sign. */
+
+  isWalletUser?: boolean;
 }
 
 function FollowListItem({
   item,
   viewerAddress,
   getFollowAuth,
+  isWalletUser,
   onClose,
 }: {
   item: FollowListItem;
   viewerAddress?: string;
   getFollowAuth?: () => Promise<FollowAuth | null>;
+  isWalletUser?: boolean;
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const [following, setFollowing] = useState(item.isFollowedByViewer);
   const [loading, setLoading] = useState(false);
+  // True while waiting for the user to approve the signature in their wallet extension
+  const [awaitingWallet, setAwaitingWallet] = useState(false);
 
   const isOwnProfile = viewerAddress && viewerAddress === item.address;
   const canFollow = !!getFollowAuth && !!viewerAddress && !isOwnProfile;
@@ -60,8 +76,14 @@ function FollowListItem({
     setLoading(true);
     const wasFollowing = following;
     setFollowing(!wasFollowing); // optimistic
+
+    // Wallet-only users need to sign — flag that before calling getFollowAuth
+    if (isWalletUser) setAwaitingWallet(true);
+
     try {
       const auth = await getFollowAuth();
+      setAwaitingWallet(false);
+
       if (!auth) throw new Error("Not authenticated");
       if (wasFollowing) {
         await unfollowProfile(item.address, auth);
@@ -70,12 +92,22 @@ function FollowListItem({
       }
       // Invalidate profile query so counts refresh
       void qc.invalidateQueries({ queryKey: [`/api/profiles/${item.address}`] });
-    } catch {
+    } catch (e) {
+      setAwaitingWallet(false);
       setFollowing(wasFollowing); // revert
+      const rawMsg = e instanceof Error ? e.message : "";
+      const isRejection = /rejected|cancelled|canceled|denied/i.test(rawMsg);
+      toast({
+        title: isRejection ? "Signature rejected" : wasFollowing ? "Unfollow failed" : "Follow failed",
+        description: isRejection
+          ? "You declined the wallet signature. Approve it in your wallet to follow."
+          : rawMsg || "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
-  }, [getFollowAuth, following, item.address, loading, qc]);
+  }, [getFollowAuth, following, item.address, isWalletUser, loading, qc, toast]);
 
   const displayUsername = item.username.startsWith("user_")
     ? formatAddress(item.address)
@@ -105,13 +137,25 @@ function FollowListItem({
         <button
           onClick={() => void handleToggle()}
           disabled={loading}
+          title={awaitingWallet ? "Check your wallet extension" : undefined}
           className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all disabled:opacity-50 ${
             following
               ? "border border-white/20 text-muted-foreground hover:border-red-500/40 hover:text-red-400"
               : "bg-primary text-primary-foreground hover:bg-primary/90"
           }`}
         >
-          {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : following ? "Following" : "Follow"}
+          {awaitingWallet ? (
+            <span className="flex items-center gap-1.5">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Approve in wallet
+            </span>
+          ) : loading ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : following ? (
+            "Following"
+          ) : (
+            "Follow"
+          )}
         </button>
       )}
     </div>
@@ -125,6 +169,7 @@ export function FollowListModal({
   address,
   viewerAddress,
   getFollowAuth,
+  isWalletUser,
 }: FollowListModalProps) {
   const [tab, setTab] = useState<"followers" | "following">(mode);
 
@@ -210,6 +255,7 @@ export function FollowListModal({
                   item={item}
                   viewerAddress={viewerAddress}
                   getFollowAuth={getFollowAuth}
+                  isWalletUser={isWalletUser}
                   onClose={() => onOpenChange(false)}
                 />
               ))}
