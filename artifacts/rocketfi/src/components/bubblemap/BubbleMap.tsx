@@ -546,8 +546,13 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
   const transformRef  = useRef<Transform>({ scale: 1, ox: 0, oy: 0 });
   const hoverIdxRef   = useRef<number>(-1);
   const rafRef        = useRef<number>(0);
-  const initPricesRef = useRef<Map<string, number>>(new Map());
-  const layoutTimeRef = useRef<number>(0); // perf.now() when last layout ran → drives fast-open lerp
+  const initPricesRef    = useRef<Map<string, number>>(new Map());
+  // Tracks the last Date.now() trade timestamp per token (from FeedTradeStats.lastTradeAt).
+  // Used ONLY to detect when a new trade has arrived — separate from b.lastTradeAt which
+  // stores performance.now() so the render loop can compute elapsed time correctly.
+  // (performance.now() and Date.now() live in different clock domains — mixing them breaks ripple.)
+  const lastTradeTsRef   = useRef<Map<string, number>>(new Map());
+  const layoutTimeRef    = useRef<number>(0); // perf.now() when last layout ran → drives fast-open lerp
   // drag + zoom intentionally disabled — map is static (no pan/zoom)
 
   const [tooltip, setTooltip] = useState<TooltipState>({ visible: false, x: 0, y: 0, token: null });
@@ -677,13 +682,20 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
   // ── Update colors + trade timestamp when live prices come in (no layout recalc)
   useEffect(() => {
     if (!liveUpdates) return;
+    const perfNow = performance.now(); // snapshot once — same clock as render loop
     bubblesRef.current.forEach(b => {
       const update = liveUpdates.get(b.address);
       if (!update) return;
 
-      // Mark trade time for ripple ring (even when priceEth is null)
-      if (update.lastTradeAt && update.lastTradeAt > b.lastTradeAt) {
-        b.lastTradeAt = update.lastTradeAt;
+      // Detect a genuinely new trade using Date.now() timestamps (from FeedTradeStats),
+      // but store performance.now() into b.lastTradeAt so the render loop can compute
+      // elapsed time with the same clock it uses for animation.
+      if (update.lastTradeAt) {
+        const prevTs = lastTradeTsRef.current.get(b.address) ?? 0;
+        if (update.lastTradeAt > prevTs) {
+          lastTradeTsRef.current.set(b.address, update.lastTradeAt);
+          b.lastTradeAt = perfNow; // perf.now() — same domain as render loop's `now`
+        }
       }
 
       if (!update.priceEth) return;
