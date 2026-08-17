@@ -53,12 +53,25 @@ router.post("/profiles/challenge", (req, res): void => {
   const action = body.action;
   const address = body.address;
 
-  if ((action !== "create" && action !== "update" && action !== "follow") || typeof address !== "string" || address.length < 32) {
-    res.status(400).json({ error: "Required: action ('create'|'update'|'follow') and address (string ≥ 32 chars)" });
+  // Validate address as a canonical Solana base58 public key (32–44 base58 chars).
+  // Strict validation prevents multi-MB strings from ever entering the nonce store.
+  const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+  if (
+    (action !== "create" && action !== "update" && action !== "follow") ||
+    typeof address !== "string" ||
+    !SOLANA_ADDRESS_RE.test(address)
+  ) {
+    res.status(400).json({
+      error: "Required: action ('create'|'update'|'follow') and a valid Solana base58 address (32–44 chars)",
+    });
     return;
   }
 
   const nonce = issueNonce(action as "create" | "update" | "follow", address);
+  if (!nonce) {
+    res.status(429).json({ error: "Challenge store is at capacity — please try again in a moment." });
+    return;
+  }
   res.json({ nonce });
 });
 

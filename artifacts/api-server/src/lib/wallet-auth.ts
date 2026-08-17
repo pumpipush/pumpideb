@@ -15,6 +15,7 @@
 
 import nacl from "tweetnacl";
 import { timingSafeEqual, randomUUID } from "crypto";
+import { logger } from "./logger.js";
 
 // ── Tolerance window for timestamp-based replay protection ─────────────────
 const MAX_AGE_SECONDS = 300; // 5 minutes
@@ -144,20 +145,81 @@ interface NonceEntry {
   expiresAt: number; // ms epoch
 }
 
+// Hard cap on total concurrent live nonces.  At 3 actions per wallet this fits
+// ~3,300 concurrent wallet challenge sessions — well above any legitimate load.
+const MAX_NONCE_STORE_SIZE = 10_000;
+
+// Primary store: nonce UUID → entry.
 const nonceStore = new Map<string, NonceEntry>();
 
-// Prune expired nonces periodically so the Map doesn't grow unboundedly.
+// Secondary index: "address:action" → active nonce UUID.
+// Used to replace a previous nonce when the same wallet re-requests the same
+// challenge (re-issue), so each wallet holds at most one nonce per action instead
+// of accumulating stale entries until TTL expiry.
+//
+// ⚠ Single-process only: this Map is not shared across Node.js worker threads or
+//   distributed replicas.  A challenge issued by one process can only be verified
+//   by the same process.  Migrating to a shared store (Redis / DB) is required
+//   before horizontal scaling.
+const nonceByWalletAction = new Map<string, string>();
+
+// Prune expired nonces periodically so the Maps don't grow unboundedly.
 setInterval(() => {
   const now = Date.now();
-  for (const [key, entry] of nonceStore) {
-    if (now > entry.expiresAt) nonceStore.delete(key);
+  for (const [nonce, entry] of nonceStore) {
+    if (now > entry.expiresAt) {
+      nonceStore.delete(nonce);
+      const walletActionKey = `${entry.address}:${entry.action}`;
+      // Only evict the secondary index if this nonce is still the current one —
+      // it may already have been replaced by a fresher re-issue.
+      if (nonceByWalletAction.get(walletActionKey) === nonce) {
+        nonceByWalletAction.delete(walletActionKey);
+      }
+    }
   }
 }, 60_000).unref();
 
-/** Issue a fresh single-use nonce tied to one action + wallet address. */
-export function issueNonce(action: "create" | "update" | "follow", address: string): string {
+/**
+ * Issue a single-use nonce tied to one action + wallet address.
+ *
+ * If a live (non-expired) nonce already exists for this wallet+action, the
+ * same nonce is returned without modification — callers cannot invalidate an
+ * in-progress challenge for a known wallet by repeatedly requesting one.
+ *
+ * Returns null when the global nonce store is at capacity (caller should 429).
+ */
+export function issueNonce(
+  action: "create" | "update" | "follow",
+  address: string,
+): string | null {
+  const walletActionKey = `${address}:${action}`;
+
+  // Return the existing live nonce if one is present and not yet expired.
+  // This prevents an unauthenticated caller from invalidating another user's
+  // in-progress challenge by simply re-requesting for the same address.
+  const existing = nonceByWalletAction.get(walletActionKey);
+  if (existing) {
+    const entry = nonceStore.get(existing);
+    if (entry && Date.now() <= entry.expiresAt) {
+      return existing; // idempotent: same nonce, same expiry
+    }
+    // Expired — evict the stale entry before issuing a fresh one.
+    nonceStore.delete(existing);
+    nonceByWalletAction.delete(walletActionKey);
+  }
+
+  // Enforce global cap after any eviction.
+  if (nonceStore.size >= MAX_NONCE_STORE_SIZE) {
+    logger.warn(
+      { storeSize: nonceStore.size },
+      "[wallet-auth] nonce store at capacity — rejecting challenge (possible flooding attack)",
+    );
+    return null;
+  }
+
   const nonce = randomUUID();
   nonceStore.set(nonce, { address, action, expiresAt: Date.now() + MAX_AGE_SECONDS * 1_000 });
+  nonceByWalletAction.set(walletActionKey, nonce);
   return nonce;
 }
 
@@ -174,6 +236,11 @@ export function consumeNonce(
   const entry = nonceStore.get(nonce);
   nonceStore.delete(nonce); // always remove — single-use guarantee
   if (!entry) return false;
+  // Clean up secondary index if this is still the current nonce for the wallet+action.
+  const walletActionKey = `${entry.address}:${entry.action}`;
+  if (nonceByWalletAction.get(walletActionKey) === nonce) {
+    nonceByWalletAction.delete(walletActionKey);
+  }
   if (Date.now() > entry.expiresAt) return false;
   return entry.address === address && entry.action === action;
 }
@@ -248,6 +315,11 @@ export function verifyWalletSignatureWithNonce(
   // 5. Atomically consume nonce only after successful verification.
   //    Single-threaded Node.js guarantees no TOCTOU race here.
   nonceStore.delete(nonce);
+  // Clean up secondary index so the slot is immediately available for re-issue.
+  const walletActionKey = `${expectedAddress}:${expectedAction}`;
+  if (nonceByWalletAction.get(walletActionKey) === nonce) {
+    nonceByWalletAction.delete(walletActionKey);
+  }
 }
 
 // ── Wallet auth field parser (shared by POST/PATCH routes) ────────────────
