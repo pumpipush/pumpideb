@@ -28,29 +28,76 @@ app.use(
 );
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
-// Configure via ALLOWED_ORIGINS env var (comma-separated list of allowed origins).
-// Example: ALLOWED_ORIGINS=https://myapp.com,https://www.myapp.com
+// Configure via ALLOWED_ORIGINS env var (comma-separated explicit origin list).
+// Example: ALLOWED_ORIGINS=https://pumpi.io,https://www.pumpi.io
 //
-// If ALLOWED_ORIGINS is not set:
-//   - In production: logs a warning and allows no cross-origin requests
-//   - In development: reflects the request origin (permissive, safe for local dev)
+// Origin resolution priority:
+//   1. ALLOWED_ORIGINS set → use that list exactly (production and staging)
+//   2. NODE_ENV === "production" → block all cross-origin (fail-safe: env var must be set)
+//   3. Otherwise (local dev / Replit preview) → allowlist of safe known patterns:
+//        - http(s)://localhost:<port>
+//        - http(s)://127.0.0.1:<port>
+//        - https://*.replit.dev  (Replit dev preview domains)
+//        - https://*.replit.app  (Replit published app domains)
+//        - https://*.repl.co     (older Replit domains)
+//      This is intentionally NOT `origin: true` (reflect-any) to prevent an
+//      attacker-controlled page from reading credentialed responses on staging.
 const rawAllowedOrigins = process.env.ALLOWED_ORIGINS;
 const allowedOriginList = rawAllowedOrigins
   ? rawAllowedOrigins.split(",").map((s) => s.trim()).filter(Boolean)
   : [];
 
-if (!rawAllowedOrigins && process.env.NODE_ENV === "production") {
+// Patterns that are safe for non-production without an explicit allowlist.
+const DEV_ORIGIN_PATTERNS: RegExp[] = [
+  /^https?:\/\/localhost(:\d+)?$/,
+  /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
+  /^https:\/\/[a-z0-9-]+\.replit\.dev$/,
+  /^https:\/\/[a-z0-9-]+\.replit\.app$/,
+  /^https:\/\/[a-z0-9-]+\.repl\.co$/,
+];
+
+type CorsOriginCallback = (err: Error | null, allow?: boolean) => void;
+
+function resolveOrigin(origin: string | undefined, callback: CorsOriginCallback): void {
+  if (!origin) {
+    // Non-browser request (curl, server-to-server) — no Origin header, allow.
+    callback(null, true);
+    return;
+  }
+
+  if (allowedOriginList.length > 0) {
+    // Explicit allowlist wins (production and configured staging).
+    callback(null, allowedOriginList.includes(origin));
+    return;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    // Production with no ALLOWED_ORIGINS configured: block everything cross-origin.
+    // This is a fail-safe — set ALLOWED_ORIGINS in production deployments.
+    callback(null, false);
+    return;
+  }
+
+  // Dev/preview: check against known-safe patterns only.
+  const allowed = DEV_ORIGIN_PATTERNS.some((re) => re.test(origin));
+  callback(null, allowed);
+}
+
+// Log resolved CORS config at startup for auditability.
+if (allowedOriginList.length > 0) {
+  logger.info({ origins: allowedOriginList }, "[cors] explicit allowlist");
+} else if (process.env.NODE_ENV === "production") {
   logger.warn(
-    "[cors] ALLOWED_ORIGINS is not set. Cross-origin requests will be blocked. " +
-    "Set ALLOWED_ORIGINS=https://yourdomain.com to enable frontend access."
+    "[cors] ALLOWED_ORIGINS is not set in production — all cross-origin requests will be blocked. " +
+    "Set ALLOWED_ORIGINS=https://pumpi.io to enable frontend access.",
   );
+} else {
+  logger.info("[cors] dev mode — allowing localhost and *.replit.dev/app origins");
 }
 
 app.use(
   cors({
-    // In dev (no ALLOWED_ORIGINS): reflect any origin so local dev works out of the box.
-    // In prod (ALLOWED_ORIGINS set): restrict to the declared list.
-    origin: allowedOriginList.length > 0 ? allowedOriginList : (process.env.NODE_ENV === "production" ? false : true),
+    origin: resolveOrigin,
     credentials: true,
   }),
 );
