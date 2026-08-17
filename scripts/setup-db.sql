@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS tokens (
 -- ── trades ───────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS trades (
   id             SERIAL PRIMARY KEY,
-  token_address  TEXT NOT NULL,
+  token_address  TEXT NOT NULL REFERENCES tokens(address) ON DELETE CASCADE,
   token_name     TEXT,
   token_symbol   TEXT,
   trader_address TEXT NOT NULL,
@@ -77,14 +77,23 @@ CREATE TABLE IF NOT EXISTS profiles (
 );
 
 -- ── indexes ──────────────────────────────────────────────────
+-- Note: Drizzle migrations (lib/db/migrations/) are the canonical source of
+-- truth for the schema. This file is a convenience bootstrap for fresh databases
+-- and must be kept in sync with the migration history.
+
 CREATE INDEX IF NOT EXISTS idx_tokens_pool_address        ON tokens (pool_address);
 CREATE INDEX IF NOT EXISTS idx_tokens_platform            ON tokens (platform);
 CREATE INDEX IF NOT EXISTS idx_tokens_graduated           ON tokens (graduated);
 CREATE INDEX IF NOT EXISTS idx_tokens_created_at          ON tokens (created_at DESC);
+-- Added in migration 0017: queried by creator profile pages and enrichment ORDER BY
+CREATE INDEX IF NOT EXISTS idx_tokens_creator_address     ON tokens (creator_address);
+CREATE INDEX IF NOT EXISTS idx_tokens_trade_count         ON tokens (trade_count DESC);
 
 CREATE INDEX IF NOT EXISTS idx_trades_token_address       ON trades (token_address);
 CREATE INDEX IF NOT EXISTS idx_trades_token_timestamp     ON trades (token_address, timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_trades_tx_hash             ON trades (tx_hash);
+-- Note: idx_trades_tx_hash is intentionally omitted — the UNIQUE constraint on
+-- tx_hash already creates an equivalent B-tree index (migration 0017 drops the duplicate).
+-- Added in migration 0011: speeds up trending time-range and 24h pct-change queries
 CREATE INDEX IF NOT EXISTS idx_trades_timestamp           ON trades (timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_trades_timestamp_token     ON trades (timestamp DESC, token_address);
 

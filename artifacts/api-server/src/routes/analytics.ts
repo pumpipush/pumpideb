@@ -95,17 +95,26 @@ router.post("/track", asyncWrap(async (req: Request, res: Response) => {
     const { path, referrer, userAddress } = req.body ?? {};
     if (!path || typeof path !== "string") return;
 
-    const ua   = req.headers["user-agent"] ?? "";
+    // ── Field length limits — prevent DB bloat from unbounded inputs ──────────
+    // path and referrer: 500 chars is enough for any real URL; truncate silently.
+    const safePath = path.slice(0, 500);
+    // referrer: same 500-char cap; null out empty/non-string values as before.
+    const rawRef = typeof referrer === "string" ? referrer.trim() : "";
+    const ref: string | null = rawRef.length > 0 ? rawRef.slice(0, 500) : null;
+    // userAddress: Solana base58 addresses are 32–44 chars; discard if too long.
+    const safeUserAddress: string | null =
+      typeof userAddress === "string" && userAddress.length <= 44
+        ? userAddress
+        : null;
+
+    const ua   = (req.headers["user-agent"] ?? "").slice(0, 500);
     const ip   = getClientIP(req);
     const sid  = makeSessionId(ip, ua);
     const { browser, os, device } = parseUA(ua);
 
-    // Normalise referrer — strip own-origin refs (they are navigations, not traffic sources).
-    const ref: string | null = (typeof referrer === "string" && referrer.trim() !== "") ? referrer.trim() : null;
-
     await db.execute(sql`
       INSERT INTO page_events (path, referrer, ip, user_agent, browser, os, device, session_id, user_address)
-      VALUES (${path}, ${ref}, ${ip}, ${ua}, ${browser}, ${os}, ${device}, ${sid}, ${userAddress ?? null})
+      VALUES (${safePath}, ${ref}, ${ip}, ${ua}, ${browser}, ${os}, ${device}, ${sid}, ${safeUserAddress})
     `);
   } catch {
     // Silently swallow — tracking failure must never surface to the user.
