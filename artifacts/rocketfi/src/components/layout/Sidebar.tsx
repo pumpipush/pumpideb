@@ -48,8 +48,11 @@ export function Sidebar() {
   return (
     <div className="hidden md:flex fixed left-0 top-0 h-full w-[220px] border-r border-border bg-background flex-col z-50">
       <div className="p-4 flex flex-col gap-4">
-        <Link href="/" className="flex items-center transition-all duration-150 cursor-pointer">
+        <Link href="/" className="flex items-center gap-2 transition-all duration-150 cursor-pointer">
           <img src="/pumpi-logo.png" alt="Pumpi" className="h-7 w-auto object-contain" />
+          <span className="text-[10px] font-semibold tracking-wide px-1.5 py-0.5 rounded-[4px] bg-primary/20 text-primary border border-primary/30 leading-none">
+            BETA
+          </span>
         </Link>
         <div className="h-px w-full bg-border/50" />
       </div>

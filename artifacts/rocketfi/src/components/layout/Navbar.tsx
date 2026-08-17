@@ -200,6 +200,9 @@ export function Navbar() {
       {/* Logo — mobile only (desktop logo lives in Sidebar) */}
       <Link href="/" className="md:hidden flex items-center gap-2 shrink-0 select-none">
         <img src="/pumpi-logo.png" alt="Pumpi" className="h-6 w-auto object-contain" />
+        <span className="text-[10px] font-semibold tracking-wide px-1.5 py-0.5 rounded-[4px] bg-primary/20 text-primary border border-primary/30 leading-none">
+          BETA
+        </span>
       </Link>
 
       {/* Desktop: full search bar */}
