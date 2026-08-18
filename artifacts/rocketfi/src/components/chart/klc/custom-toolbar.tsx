@@ -388,6 +388,14 @@ export function CustomToolbar({
 
         <div className="ctb-sep" />
 
+        {/* Indicators — moved to left side (TV style) */}
+        <button className="ctb-icon-btn" onClick={onIndicatorClick} title="Indicators">
+          <IconIndicators />
+          <span className="ctb-icon-label">Indicators</span>
+        </button>
+
+        <div className="ctb-sep" />
+
         {/* Price / MCap toggle */}
         <div className="ctb-toggle">
           <button
@@ -408,11 +416,6 @@ export function CustomToolbar({
 
       {/* ── Right: icon actions ── */}
       <div className="ctb-right">
-        <button className="ctb-icon-btn" onClick={onIndicatorClick} title="Indicators">
-          <IconIndicators />
-          <span className="ctb-icon-label">Indicators</span>
-        </button>
-        <div className="ctb-sep" />
         <button className="ctb-icon-btn" onClick={onSettingsClick} title="Settings">
           <IconSettings />
         </button>
