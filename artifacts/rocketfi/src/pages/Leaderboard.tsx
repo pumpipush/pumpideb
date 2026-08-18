@@ -168,7 +168,7 @@ export default function LeaderboardPage() {
                       style={{ borderBottom: i < volRows.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
                       <td className="py-3 px-4 w-12"><RankCell rank={i + 1} /></td>
                       <td className="py-3 px-4">
-                        <a href={`https://solscan.io/account/${row.address}`} target="_blank" rel="noopener noreferrer"
+                        <Link to={`/wallet/${row.address}`}
                           className="flex items-center gap-3 group/link">
                           <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-xs font-bold text-white"
                             style={{ background: walletGradient(row.address) }}>
@@ -177,7 +177,7 @@ export default function LeaderboardPage() {
                           <span className="font-mono text-sm text-slate-300 group-hover/link:text-white transition-colors">
                             {shortAddr(row.address)}
                           </span>
-                        </a>
+                        </Link>
                       </td>
                       <td className="py-3 px-4 text-right">
                         <span className="text-sm font-bold text-white">{usd ?? fmtSol(row.volume_lamports)}</span>
@@ -199,7 +199,7 @@ export default function LeaderboardPage() {
                       style={{ borderBottom: i < pnlRows.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
                       <td className="py-3 px-4 w-12"><RankCell rank={i + 1} /></td>
                       <td className="py-3 px-4">
-                        <a href={`https://solscan.io/account/${row.address}`} target="_blank" rel="noopener noreferrer"
+                        <Link to={`/wallet/${row.address}`}
                           className="flex items-center gap-3 group/link">
                           <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-xs font-bold text-white"
                             style={{ background: walletGradient(row.address) }}>
@@ -213,7 +213,7 @@ export default function LeaderboardPage() {
                               {row.trade_count.toLocaleString()} trades
                             </div>
                           </div>
-                        </a>
+                        </Link>
                       </td>
                       <td className="py-3 px-4 text-right">
                         <span className="text-sm font-bold" style={{ color }}>{sign}{usd ?? sol}</span>

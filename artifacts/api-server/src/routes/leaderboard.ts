@@ -14,10 +14,37 @@ const INTERVAL: Record<Period, string> = {
 };
 const REFRESH_MS = 4 * 60 * 1_000; // 4 min
 
-const _cache = new Map<Period, { data: unknown; computedAt: number }>();
+interface LeaderboardData {
+  period: string;
+  traders_volume: { rank: number; address: string; volume_lamports: string }[];
+  traders_pnl:    { rank: number; address: string; trade_count: number; pnl_lamports: string }[];
+  tokens:         { rank: number; address: string; name: string; symbol: string; imageUrl?: string | null; platform: string; trade_count: number; volume_lamports: string }[];
+}
+
+const _cache = new Map<Period, { data: LeaderboardData; computedAt: number }>();
 const _refreshing = new Set<Period>();
 
-async function computeLeaderboard(period: Period): Promise<unknown> {
+/** Look up a wallet's stats across all cached leaderboard periods. Returns null when cache is cold. */
+export function getWalletLeaderboardStats(walletAddress: string): {
+  pnl_24h: string | null;
+  pnl_7d:  string | null;
+  vol_24h: string | null;
+  total_trades_24h: number | null;
+} {
+  const c24 = _cache.get("24h")?.data;
+  const c7d  = _cache.get("7d")?.data;
+  const pnlRow24 = c24?.traders_pnl.find(r => r.address === walletAddress) ?? null;
+  const pnlRow7d = c7d?.traders_pnl.find(r => r.address === walletAddress) ?? null;
+  const volRow24 = c24?.traders_volume.find(r => r.address === walletAddress) ?? null;
+  return {
+    pnl_24h:          pnlRow24?.pnl_lamports    ?? null,
+    pnl_7d:           pnlRow7d?.pnl_lamports    ?? null,
+    vol_24h:          volRow24?.volume_lamports  ?? null,
+    total_trades_24h: pnlRow24?.trade_count      ?? null,
+  };
+}
+
+async function computeLeaderboard(period: Period): Promise<LeaderboardData> {
   const interval = INTERVAL[period];
   const client = await pool.connect();
   try {
@@ -27,14 +54,14 @@ async function computeLeaderboard(period: Period): Promise<unknown> {
       client.query<{ address: string; volume_lamports: string }>(`
         SELECT
           trader_address                                           AS address,
-          COALESCE(SUM(eth_amount::FLOAT8), 0)::text              AS volume_lamports
+          COALESCE(SUM(eth_amount::NUMERIC), 0)::text              AS volume_lamports
         FROM   trades
         WHERE  timestamp       > NOW() - INTERVAL '${interval}'
           AND  trader_address IS NOT NULL
           AND  trader_address != ''
           AND  eth_amount      ~ '^[0-9]+$'
         GROUP  BY trader_address
-        ORDER  BY SUM(eth_amount::FLOAT8) DESC
+        ORDER  BY SUM(eth_amount::NUMERIC) DESC
         LIMIT  100
       `),
       client.query<{ address: string; trade_count: string; pnl_lamports: string }>(`
@@ -42,8 +69,8 @@ async function computeLeaderboard(period: Period): Promise<unknown> {
           trader_address                                           AS address,
           COUNT(*)::text                                           AS trade_count,
           (
-            COALESCE(SUM(CASE WHEN NOT is_buy THEN eth_amount::FLOAT8 ELSE 0 END), 0)
-            - COALESCE(SUM(CASE WHEN is_buy   THEN eth_amount::FLOAT8 ELSE 0 END), 0)
+            COALESCE(SUM(CASE WHEN NOT is_buy THEN eth_amount::NUMERIC ELSE 0 END), 0)
+            - COALESCE(SUM(CASE WHEN is_buy   THEN eth_amount::NUMERIC ELSE 0 END), 0)
           )::text                                                  AS pnl_lamports
         FROM   trades
         WHERE  timestamp       > NOW() - INTERVAL '${interval}'
@@ -53,13 +80,12 @@ async function computeLeaderboard(period: Period): Promise<unknown> {
         GROUP  BY trader_address
         HAVING
           -- must have at least one buy AND one sell in the period
-          -- (prevents pure-sellers from appearing with phantom positive PnL)
           SUM(CASE WHEN is_buy     THEN 1 ELSE 0 END) >= 1
           AND SUM(CASE WHEN NOT is_buy THEN 1 ELSE 0 END) >= 1
           AND COUNT(*) >= 2
         ORDER  BY (
-            COALESCE(SUM(CASE WHEN NOT is_buy THEN eth_amount::FLOAT8 ELSE 0 END), 0)
-            - COALESCE(SUM(CASE WHEN is_buy   THEN eth_amount::FLOAT8 ELSE 0 END), 0)
+            COALESCE(SUM(CASE WHEN NOT is_buy THEN eth_amount::NUMERIC ELSE 0 END), 0)
+            - COALESCE(SUM(CASE WHEN is_buy   THEN eth_amount::NUMERIC ELSE 0 END), 0)
           ) DESC
         LIMIT  100
       `),
@@ -71,13 +97,13 @@ async function computeLeaderboard(period: Period): Promise<unknown> {
           t.image_url,
           COALESCE(t.platform, 'unknown')                         AS platform,
           COUNT(tr.*)::text                                        AS trade_count,
-          COALESCE(SUM(tr.eth_amount::FLOAT8), 0)::text           AS volume_lamports
+          COALESCE(SUM(tr.eth_amount::NUMERIC), 0)::text           AS volume_lamports
         FROM   trades   tr
         JOIN   tokens   t  ON t.address = tr.token_address
         WHERE  tr.timestamp > NOW() - INTERVAL '${interval}'
           AND  tr.eth_amount ~ '^[0-9]+$'
         GROUP  BY t.address, t.name, t.symbol, t.image_url, t.platform
-        ORDER  BY SUM(tr.eth_amount::FLOAT8) DESC
+        ORDER  BY SUM(tr.eth_amount::NUMERIC) DESC
         LIMIT  100
       `),
     ]);

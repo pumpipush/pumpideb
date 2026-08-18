@@ -25,6 +25,7 @@ import Dashboard from '@/pages/Dashboard';
 const AppInterface     = lazy(() => import('@/pages/AppInterface'));
 const ProfilePage      = lazy(() => import('@/pages/Profile'));
 const LeaderboardPage  = lazy(() => import('@/pages/Leaderboard'));
+const WalletProfile    = lazy(() => import('@/pages/WalletProfile'));
 const PrivacyPolicy  = lazy(() => import('@/pages/PrivacyPolicy'));
 const DisclaimerPage = lazy(() => import('@/pages/Disclaimer'));
 const TermsOfService = lazy(() => import('@/pages/TermsOfService'));
@@ -114,6 +115,7 @@ function AppShell() {
                   {/* Canonical SEO-friendly coin pages */}
                   <Route path="/coin/:address" component={TokenPage} />
                  <Route path="/leaderboard" component={LeaderboardPage} />
+                  <Route path="/wallet/:address" component={WalletProfile} />
                   <Route path="/profile/:slug" component={ProfilePage} />
                   {/* signin/signup show the explore page behind the auth modal */}
                   <Route path="/signin"><Dashboard /></Route>

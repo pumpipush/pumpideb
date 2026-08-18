@@ -14,6 +14,7 @@ import creatorFeesRouter from "./creator-fees";
 import adminRouter from "./admin";
 import analyticsRouter from "./analytics";
 import leaderboardRouter from "./leaderboard";
+import walletProfileRouter from "./walletProfile";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(creatorFeesRouter);
 router.use(adminRouter);
 router.use(analyticsRouter);
 router.use(leaderboardRouter);
+router.use(walletProfileRouter);
 
 export default router;

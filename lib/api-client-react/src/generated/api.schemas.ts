@@ -40,6 +40,60 @@ export interface LeaderboardResponse {
   tokens: LeaderboardToken[];
 }
 
+// ── Wallet Profile ────────────────────────────────────────────────────────────
+export interface WalletProfileSummary {
+  /**
+   * Net SOL flow = SUM(sell lamports) - SUM(buy lamports) in the window.
+   * NOT realized P&L / cost-basis accounting — aggregate SOL in vs out.
+   * has_both_sides_* must be true before displaying this value.
+   */
+  net_sol_flow_24h_lamports: string;
+  net_sol_flow_7d_lamports: string;
+  has_both_sides_24h: boolean;
+  has_both_sides_7d: boolean;
+  /** True whenever any period's data came from the leaderboard cache rather than a live DB query */
+  from_leaderboard_cache: boolean;
+  /** Counts derived from the most-recent 50 trades only — labelled accordingly in the UI */
+  recent_trade_count: number;
+  recent_volume_lamports: string;
+  recent_trades_label: string;
+  /** False when the DB connection pool was saturated; stats fall back to leaderboard cache */
+  db_available: boolean;
+}
+
+export interface WalletTopToken {
+  token_address: string;
+  token_name: string;
+  token_symbol: string;
+  /** @nullable */
+  token_image_url?: string | null;
+  platform: string;
+  trade_count: number;
+  volume_lamports: string;
+}
+
+export interface WalletTrade {
+  id: number;
+  token_address: string;
+  token_name: string;
+  token_symbol: string;
+  /** @nullable */
+  token_image_url?: string | null;
+  platform: string;
+  is_buy: boolean;
+  eth_amount: string;
+  token_amount: string;
+  tx_hash: string;
+  timestamp: string;
+}
+
+export interface WalletProfileResponse {
+  address: string;
+  summary: WalletProfileSummary;
+  top_tokens: WalletTopToken[];
+  recent_trades: WalletTrade[];
+}
+
 export interface HealthStatus {
   status: string;
 }

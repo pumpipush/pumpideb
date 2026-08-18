@@ -40,7 +40,8 @@ import type {
   Trade,
   TradeInput,
   UploadUrlRequest,
-  UploadUrlResponse
+  UploadUrlResponse,
+  WalletProfileResponse
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -1360,6 +1361,40 @@ export function useGetStorageObject<TData = Awaited<ReturnType<typeof getStorage
 
 
 
+
+// ── Wallet Profile ─────────────────────────────────────────────────────────────
+
+export const getGetWalletProfileUrl = (address: string) => `/api/wallet/${address}/profile`;
+
+export const getWalletProfile = async (address: string, options?: Parameters<typeof customFetch>[1]): Promise<WalletProfileResponse> => {
+  return customFetch<WalletProfileResponse>(getGetWalletProfileUrl(address), { ...options, method: 'GET' });
+};
+
+export const getGetWalletProfileQueryKey = (address: string) =>
+  [`/api/wallet/${address}/profile`] as const;
+
+export const getGetWalletProfileQueryOptions = <TData = Awaited<ReturnType<typeof getWalletProfile>>, TError = ErrorType<unknown>>(
+  address: string,
+  options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof getWalletProfile>>, TError, TData>; request?: SecondParameter<typeof customFetch> }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetWalletProfileQueryKey(address);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getWalletProfile>>> = ({ signal }) =>
+    getWalletProfile(address, { signal, ...requestOptions });
+  return { queryKey, queryFn, staleTime: 30_000, enabled: !!address, ...queryOptions } as UseQueryOptions<Awaited<ReturnType<typeof getWalletProfile>>, TError, TData> & { queryKey: QueryKey };
+};
+
+export type GetWalletProfileQueryResult = NonNullable<Awaited<ReturnType<typeof getWalletProfile>>>;
+export type GetWalletProfileQueryError = ErrorType<unknown>;
+
+export function useGetWalletProfile<TData = Awaited<ReturnType<typeof getWalletProfile>>, TError = ErrorType<unknown>>(
+  address: string,
+  options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof getWalletProfile>>, TError, TData>; request?: SecondParameter<typeof customFetch> }
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetWalletProfileQueryOptions(address, options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return withQueryKey(query, queryOptions.queryKey);
+}
 
 // ── Leaderboard ────────────────────────────────────────────────────────────────
 

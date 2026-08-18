@@ -114,30 +114,30 @@ export function LeaderboardWidget({ solPrice }: Props) {
           <div className="flex-1 flex items-center justify-center py-8 text-xs text-muted-foreground">No data yet</div>
         ) : tab === "volume" ? (
           volRows.slice(0, 10).map((row, i) => (
-            <a key={row.address} href={`https://solscan.io/account/${row.address}`} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-2.5 py-2 group"
+            <Link key={row.address} to={`/wallet/${row.address}`}
+              className="flex items-center gap-2.5 py-2 group cursor-pointer"
               style={{ borderBottom: i < 9 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
               <RankBadge rank={i + 1} />
               <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold text-white"
                 style={{ background: walletGradient(row.address) }}>{row.address.slice(0, 2).toUpperCase()}</div>
               <span className="flex-1 text-xs font-mono text-slate-200 group-hover:text-white transition-colors truncate">{shortAddr(row.address)}</span>
               <span className="text-xs font-bold text-white shrink-0">{fmtUsd(row.volume_lamports, solPrice) ?? fmtSol(row.volume_lamports)}</span>
-            </a>
+            </Link>
           ))
         ) : tab === "pnl" ? (
           pnlRows.slice(0, 10).map((row, i) => {
             const { sign, usd, sol, positive } = fmtPnl(row.pnl_lamports, solPrice);
             const color = positive ? "#34d399" : "#f87171";
             return (
-              <a key={row.address} href={`https://solscan.io/account/${row.address}`} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-2.5 py-2 group"
+              <Link key={row.address} to={`/wallet/${row.address}`}
+                className="flex items-center gap-2.5 py-2 group cursor-pointer"
                 style={{ borderBottom: i < 9 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
                 <RankBadge rank={i + 1} />
                 <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold text-white"
                   style={{ background: walletGradient(row.address) }}>{row.address.slice(0, 2).toUpperCase()}</div>
                 <span className="flex-1 text-xs font-mono text-slate-200 group-hover:text-white transition-colors truncate">{shortAddr(row.address)}</span>
                 <span className="text-xs font-bold shrink-0" style={{ color }}>{sign}{usd ?? sol}</span>
-              </a>
+              </Link>
             );
           })
         ) : (
