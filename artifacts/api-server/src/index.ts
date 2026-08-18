@@ -180,6 +180,31 @@ async function start(): Promise<void> {
 
       logger.info({ port }, "Server listening");
 
+      // ── Google OAuth domain reminder ──────────────────────────────────────
+      // The Google sign-in button only works when the app's origin is listed
+      // under Authorized JavaScript origins in Google Cloud Console
+      // (APIs & Services → Credentials → OAuth 2.0 Web Client).
+      // Log the current domain so it's easy to copy-paste into the Console.
+      if (process.env["GOOGLE_CLIENT_ID"]) {
+        const devDomain = process.env["REPLIT_DEV_DOMAIN"];
+        const prodDomains = (process.env["REPLIT_DOMAINS"] ?? "")
+          .split(",")
+          .map((d) => d.trim())
+          .filter(Boolean);
+        const allDomains = [
+          ...(devDomain ? [`https://${devDomain}`] : []),
+          ...prodDomains
+            .filter((d) => !devDomain || d !== devDomain)
+            .map((d) => `https://${d}`),
+        ];
+        if (allDomains.length > 0) {
+          logger.info(
+            { origins: allDomains },
+            "google-oauth: ensure these origins are listed under Authorized JavaScript origins in Google Cloud Console → OAuth 2.0 Credentials → Web Client",
+          );
+        }
+      }
+
       // Try to become the background-job primary via cross-process lock.
       // Safe across PM2 rolling-reload generations — see lock comment above.
       tryBecomeWorkerPrimary();

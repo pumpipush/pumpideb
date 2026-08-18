@@ -43,10 +43,34 @@ function GoogleSignInButton({
     },
     onError: (e) => {
       onLoading(false);
+      // Cast to string — @react-oauth/google's ErrorCode union is narrower than
+      // what Google Identity Services actually emits at runtime (e.g. origin_mismatch
+      // and idpiframe_initialization_failed are real codes not in the declared union).
+      const code = e.error as string | undefined;
+      // origin_mismatch means this domain isn't listed under Authorized JavaScript origins
+      // in Google Cloud Console → OAuth 2.0 Credentials → Web Client.
+      if (code === "origin_mismatch" || code === "redirect_uri_mismatch") {
+        onError(
+          "Google sign-in is not enabled for this domain. " +
+          "Add this origin to the OAuth 2.0 client in Google Cloud Console and try again.",
+        );
+        return;
+      }
+      // idpiframe_initialization_failed fires when third-party cookies are blocked
+      if (code === "idpiframe_initialization_failed") {
+        onError("Google sign-in requires third-party cookies. Enable them in your browser settings and try again.");
+        return;
+      }
       onError(e.error_description ?? e.error ?? "Google sign-in failed");
     },
-    onNonOAuthError: () => {
+    onNonOAuthError: (e) => {
       onLoading(false);
+      // popup_closed_by_user / popup_failed_to_open — user dismissed or browser blocked the popup
+      if (e.type === "popup_closed") return; // silent — user cancelled deliberately
+      if (e.type === "popup_failed_to_open") {
+        onError("Google sign-in popup was blocked. Allow popups for this site and try again.");
+        return;
+      }
     },
   });
 
