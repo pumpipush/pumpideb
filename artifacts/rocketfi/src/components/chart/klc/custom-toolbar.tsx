@@ -222,8 +222,11 @@ const IconIndicators = () => (
 )
 const IconSettings = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-    <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.3"/>
-    <path d="M8 1.5V3M8 13V14.5M14.5 8H13M3 8H1.5M13.2 2.8L12.1 3.9M3.9 12.1L2.8 13.2M13.2 13.2L12.1 12.1M3.9 3.9L2.8 2.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    <path
+      d="M6.5 1.8L6.1 3.3A5 5 0 0 0 4.8 4L3.3 3.4L1.8 6L2.9 7.1A5.1 5.1 0 0 0 2.9 8.9L1.8 10L3.3 12.6L4.8 12A5 5 0 0 0 6.1 12.7L6.5 14.2H9.5L9.9 12.7A5 5 0 0 0 11.2 12L12.7 12.6L14.2 10L13.1 8.9A5.1 5.1 0 0 0 13.1 7.1L14.2 6L12.7 3.4L11.2 4A5 5 0 0 0 9.9 3.3L9.5 1.8Z"
+      stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round"
+    />
+    <circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.25"/>
   </svg>
 )
 const IconScreenshot = () => (

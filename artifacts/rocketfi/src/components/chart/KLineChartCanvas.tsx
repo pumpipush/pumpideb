@@ -24,6 +24,11 @@ import {
 } from './klc/custom-toolbar'
 import { BottomBar, type YAxisMode, type RangeKey } from './klc/bottom-bar'
 import { PumpiDatafeed } from './klc/pumpi-datafeed'
+import {
+  ChartSettingsModal,
+  DEFAULT_CHART_SETTINGS,
+  type ChartSettings,
+} from './klc/chart-settings-modal'
 
 // ── Format helpers ────────────────────────────────────────────────────────────
 
@@ -213,6 +218,8 @@ export function KLineChartCanvas({
   const [autoScale,       setAutoScale]      = useState(true)
   const [activeRange,     setActiveRange]    = useState<RangeKey | null>(null)
   const [drawingBarVisible, setDrawingBarVisible] = useState(false)
+  const [showSettings,     setShowSettings]      = useState(false)
+  const [chartSettings,    setChartSettings]     = useState<ChartSettings>(DEFAULT_CHART_SETTINGS)
 
   // ── OHLC header data ──────────────────────────────────────────────────────
   const [ohlc,          setOhlc]          = useState<OhlcData | null>(null)
@@ -264,9 +271,34 @@ export function KLineChartCanvas({
 
   const handleDrawingBarToggle = useCallback(() => {
     const wasHidden = chartRef.current?.toggleDrawingBar()
-    // toggleDrawingBar returns true when the bar WAS hidden (now visible)
     if (wasHidden !== undefined) setDrawingBarVisible(wasHidden)
   }, [])
+
+  // Apply chart settings → KLC styles whenever settings change
+  const handleSettingsChange = useCallback((s: ChartSettings) => {
+    setChartSettings(s)
+    chartRef.current?.setStyles?.({
+      grid: {
+        horizontal: { show: s.gridShow },
+        vertical:   { show: s.gridShow },
+      },
+      candle: {
+        priceMark: {
+          high: { show: s.highPriceShow },
+          low:  { show: s.lowPriceShow  },
+          last: { show: s.lastPriceShow  },
+        },
+      },
+      yAxis: {
+        type:    s.priceAxisType,
+        reverse: s.reverseCoordinate,
+      },
+    } as any)
+  }, [])
+
+  const handleRestoreDefaults = useCallback(() => {
+    handleSettingsChange(DEFAULT_CHART_SETTINGS)
+  }, [handleSettingsChange])
 
   // ── Fullscreen support ────────────────────────────────────────────────────
   const containerRef = useRef<HTMLDivElement>(null)
@@ -318,7 +350,7 @@ export function KLineChartCanvas({
         candleType={candleType}
         onCandleTypeChange={handleCandleTypeChange}
         onIndicatorClick={() => chartRef.current?.clickIndicator()}
-        onSettingsClick={() => chartRef.current?.clickSettings()}
+        onSettingsClick={() => setShowSettings(true)}
         onScreenshotClick={() => chartRef.current?.clickScreenshot()}
         onFullscreenClick={handleFullscreen}
       />
@@ -376,6 +408,15 @@ export function KLineChartCanvas({
         onAutoScaleChange={setAutoScale}
         activeRange={activeRange}
         onRangeChange={setActiveRange}
+      />
+
+      {/* ── Custom settings modal ── */}
+      <ChartSettingsModal
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        settings={chartSettings}
+        onChange={handleSettingsChange}
+        onRestoreDefaults={handleRestoreDefaults}
       />
     </div>
   )
