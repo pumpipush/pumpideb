@@ -84,16 +84,6 @@ function RankBadge({ rank }: { rank: number }) {
   );
 }
 
-// Thin progress bar showing value relative to #1
-function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
-  const pct = max > 0 ? Math.max(4, (value / max) * 100) : 4;
-  return (
-    <div className="w-full h-[2px] rounded-full mt-1" style={{ background: "rgba(255,255,255,0.06)" }}>
-      <div className="h-full rounded-full transition-all duration-500"
-        style={{ width: `${pct}%`, background: color }} />
-    </div>
-  );
-}
 
 export function LeaderboardWidget({ solPrice }: Props) {
   const [tab, setTab] = useState<Tab>("pnl");
@@ -105,10 +95,6 @@ export function LeaderboardWidget({ solPrice }: Props) {
   const volumeRows = data?.traders_volume ?? [];
   const pnlRows    = data?.traders_pnl    ?? [];
   const tokenRows  = data?.tokens          ?? [];
-
-  const maxVol = volumeRows[0] ? Number(volumeRows[0].volume_lamports) : 1;
-  const maxPnl = pnlRows[0]    ? Math.abs(Number(pnlRows[0].pnl_lamports)) : 1;
-  const maxTok = tokenRows[0]  ? Number(tokenRows[0].volume_lamports) : 1;
 
   const isEmpty =
     !isLoading && (
@@ -197,15 +183,9 @@ export function LeaderboardWidget({ solPrice }: Props) {
                   {row.address.slice(0, 2).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs font-mono text-slate-200 group-hover:text-white transition-colors">
-                      {shortAddr(row.address)}
-                    </span>
-                  </div>
-                  <span className="text-[10px]" style={{ color: "rgba(148,163,184,0.5)" }}>
-                    {row.trade_count.toLocaleString()} trades
+                  <span className="text-xs font-mono text-slate-200 group-hover:text-white transition-colors">
+                    {shortAddr(row.address)}
                   </span>
-                  <ProgressBar value={Number(row.volume_lamports)} max={maxVol} color="#22d3ee" />
                 </div>
                 <div className="text-right shrink-0 pt-0.5">
                   <div className="text-xs font-bold text-white">{usd ?? fmtSol(row.volume_lamports)}</div>
@@ -232,15 +212,9 @@ export function LeaderboardWidget({ solPrice }: Props) {
                   {row.address.slice(0, 2).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs font-mono text-slate-200 group-hover:text-white transition-colors">
-                      {shortAddr(row.address)}
-                    </span>
-                  </div>
-                  <span className="text-[10px]" style={{ color: "rgba(148,163,184,0.5)" }}>
-                    {row.trade_count.toLocaleString()} trades
+                  <span className="text-xs font-mono text-slate-200 group-hover:text-white transition-colors">
+                    {shortAddr(row.address)}
                   </span>
-                  <ProgressBar value={Math.abs(Number(row.pnl_lamports))} max={maxPnl} color={barColor} />
                 </div>
                 <div className="text-right shrink-0 pt-0.5">
                   <div className="text-xs font-bold" style={{ color }}>{sign}{usd ?? sol}</div>
@@ -266,7 +240,6 @@ export function LeaderboardWidget({ solPrice }: Props) {
                   <span className="text-[10px] truncate" style={{ color: "rgba(148,163,184,0.5)" }}>
                     {token.name}
                   </span>
-                  <ProgressBar value={Number(token.volume_lamports)} max={maxTok} color="#22d3ee" />
                 </div>
                 <div className="text-right shrink-0 pt-0.5">
                   <div className="text-xs font-bold text-white">{usd ?? fmtSol(token.volume_lamports)}</div>
