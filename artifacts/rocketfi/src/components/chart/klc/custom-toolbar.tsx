@@ -1,3 +1,10 @@
+/**
+ * custom-toolbar.tsx — TradingView Advanced Charts style top toolbar
+ *
+ * Layout (matches TV exactly):
+ *   LEFT:  [TF pills: 1m 5m 15m 1H 4H D W  ▾more] | [candle▾] | [Price|MCap]
+ *   RIGHT: [Indicators] [Settings] [Camera] [Fullscreen]
+ */
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -21,20 +28,19 @@ function DropdownPortal({
     const r = triggerRef.current.getBoundingClientRect()
     const isMobile = window.innerWidth <= 640
     if (isMobile) {
-      setPanelStyle({ position: 'fixed', top: 49, left: 4, right: 4, zIndex: 99999 })
+      setPanelStyle({ position: 'fixed', top: 46, left: 4, right: 4, zIndex: 99999 })
     } else {
       setPanelStyle({
         position: 'fixed',
         top: Math.round(r.bottom) + 4,
         left: Math.round(r.left),
-        minWidth: r.width,
+        minWidth: 140,
         zIndex: 99999,
       })
     }
   }, [open])
 
   if (!open) return null
-
   return createPortal(
     <>
       <div style={{ position: 'fixed', inset: 0, zIndex: 99998 }} onPointerDown={onClose} />
@@ -54,18 +60,18 @@ export type CandleType =
   | 'ohlc'
   | 'area'
 
-export const CANDLE_TYPES: { type: CandleType; label: string; icon: React.FC }[] = [
+const CANDLE_TYPES: { type: CandleType; label: string; icon: React.FC }[] = [
   {
     type: 'candle_solid',
     label: 'Candles',
     icon: () => (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-        <line x1="5"  y1="1.5" x2="5"  y2="4"   stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <rect x="2.5" y="4"   width="5" height="7" fill="currentColor" rx="0.5"/>
-        <line x1="5"  y1="11" x2="5"  y2="14"  stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <line x1="13" y1="3"  x2="13" y2="5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <rect x="10.5" y="5.5" width="5" height="9" fill="currentColor" rx="0.5"/>
-        <line x1="13" y1="14.5" x2="13" y2="16.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <line x1="4"  y1="1" x2="4"  y2="3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <rect x="2" y="3.5" width="4" height="6" fill="currentColor" rx="0.4"/>
+        <line x1="4"  y1="9.5" x2="4"  y2="12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <line x1="12" y1="2"  x2="12" y2="5"   stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <rect x="10" y="5"   width="4" height="7" fill="currentColor" rx="0.4"/>
+        <line x1="12" y1="12" x2="12" y2="15" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
       </svg>
     ),
   },
@@ -73,41 +79,13 @@ export const CANDLE_TYPES: { type: CandleType; label: string; icon: React.FC }[]
     type: 'candle_stroke',
     label: 'Hollow candles',
     icon: () => (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-        <line x1="5"  y1="1.5" x2="5"  y2="4"   stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <rect x="2.5" y="4"   width="5" height="7" stroke="currentColor" strokeWidth="1.3" fill="none" rx="0.5"/>
-        <line x1="5"  y1="11" x2="5"  y2="14"  stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <line x1="13" y1="3"  x2="13" y2="5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <rect x="10.5" y="5.5" width="5" height="9" stroke="currentColor" strokeWidth="1.3" fill="none" rx="0.5"/>
-        <line x1="13" y1="14.5" x2="13" y2="16.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-      </svg>
-    ),
-  },
-  {
-    type: 'candle_up_stroke',
-    label: 'Hollow up / Filled down',
-    icon: () => (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-        <line x1="5"  y1="1.5" x2="5"  y2="4"   stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <rect x="2.5" y="4"   width="5" height="7" stroke="currentColor" strokeWidth="1.3" fill="none" rx="0.5"/>
-        <line x1="5"  y1="11" x2="5"  y2="14"  stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <line x1="13" y1="3"  x2="13" y2="5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <rect x="10.5" y="5.5" width="5" height="9" fill="currentColor" rx="0.5"/>
-        <line x1="13" y1="14.5" x2="13" y2="16.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-      </svg>
-    ),
-  },
-  {
-    type: 'candle_down_stroke',
-    label: 'Filled up / Hollow down',
-    icon: () => (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-        <line x1="5"  y1="1.5" x2="5"  y2="4"   stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <rect x="2.5" y="4"   width="5" height="7" fill="currentColor" rx="0.5"/>
-        <line x1="5"  y1="11" x2="5"  y2="14"  stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <line x1="13" y1="3"  x2="13" y2="5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <rect x="10.5" y="5.5" width="5" height="9" stroke="currentColor" strokeWidth="1.3" fill="none" rx="0.5"/>
-        <line x1="13" y1="14.5" x2="13" y2="16.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <line x1="4"  y1="1" x2="4"  y2="3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <rect x="2" y="3.5" width="4" height="6" stroke="currentColor" strokeWidth="1.2" fill="none" rx="0.4"/>
+        <line x1="4"  y1="9.5" x2="4"  y2="12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <line x1="12" y1="2"  x2="12" y2="5"   stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <rect x="10" y="5"   width="4" height="7" stroke="currentColor" strokeWidth="1.2" fill="none" rx="0.4"/>
+        <line x1="12" y1="12" x2="12" y2="15" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
       </svg>
     ),
   },
@@ -115,13 +93,13 @@ export const CANDLE_TYPES: { type: CandleType; label: string; icon: React.FC }[]
     type: 'ohlc',
     label: 'Bars',
     icon: () => (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-        <line x1="5"  y1="3"  x2="5"  y2="14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <line x1="2.5" y1="9"  x2="5"  y2="9"  stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <line x1="5"  y1="6"  x2="7.5" y2="6"  stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <line x1="13" y1="2"  x2="13" y2="15" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <line x1="10.5" y1="8" x2="13" y2="8"  stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-        <line x1="13" y1="11" x2="15.5" y2="11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <line x1="4"  y1="2"  x2="4"  y2="13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <line x1="1.5" y1="8" x2="4"  y2="8"  stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <line x1="4"   y1="5" x2="6.5" y2="5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <line x1="12" y1="1"  x2="12" y2="14" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <line x1="9.5"  y1="7" x2="12" y2="7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <line x1="12" y1="10" x2="14.5" y2="10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
       </svg>
     ),
   },
@@ -129,62 +107,43 @@ export const CANDLE_TYPES: { type: CandleType; label: string; icon: React.FC }[]
     type: 'area',
     label: 'Area',
     icon: () => (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-        <path d="M1 13 L4 8 L7 10 L11 5 L15 9 L17 7" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"/>
-        <path d="M1 13 L4 8 L7 10 L11 5 L15 9 L17 7 L17 15 L1 15Z" fill="currentColor" opacity="0.2"/>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M1 12 L3.5 7 L6.5 9.5 L10 4.5 L14 7.5 L15.5 6" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round"/>
+        <path d="M1 12 L3.5 7 L6.5 9.5 L10 4.5 L14 7.5 L15.5 6 L15.5 14 L1 14Z" fill="currentColor" opacity="0.18"/>
+      </svg>
+    ),
+  },
+  {
+    type: 'candle_up_stroke',
+    label: 'Hollow up / Filled down',
+    icon: () => (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <line x1="4"  y1="1" x2="4"  y2="3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <rect x="2" y="3.5" width="4" height="6" stroke="currentColor" strokeWidth="1.2" fill="none" rx="0.4"/>
+        <line x1="4"  y1="9.5" x2="4"  y2="12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <line x1="12" y1="2"  x2="12" y2="5"   stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <rect x="10" y="5"   width="4" height="7" fill="currentColor" rx="0.4"/>
+        <line x1="12" y1="12" x2="12" y2="15" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      </svg>
+    ),
+  },
+  {
+    type: 'candle_down_stroke',
+    label: 'Filled up / Hollow down',
+    icon: () => (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <line x1="4"  y1="1" x2="4"  y2="3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <rect x="2" y="3.5" width="4" height="6" fill="currentColor" rx="0.4"/>
+        <line x1="4"  y1="9.5" x2="4"  y2="12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <line x1="12" y1="2"  x2="12" y2="5"   stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        <rect x="10" y="5"   width="4" height="7" stroke="currentColor" strokeWidth="1.2" fill="none" rx="0.4"/>
+        <line x1="12" y1="12" x2="12" y2="15" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
       </svg>
     ),
   },
 ]
 
-// ── SVG Icons ────────────────────────────────────────────────────────────────
-
-const IconChevronDown = () => (
-  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-    <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-)
-const IconChevronUp = () => (
-  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-    <path d="M2 6.5L5 3.5L8 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-)
-const IconIndicators = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <rect x="2" y="10" width="2.5" height="6" rx="0.5" fill="currentColor"/>
-    <rect x="6" y="6" width="2.5" height="10" rx="0.5" fill="currentColor"/>
-    <rect x="10" y="3" width="2.5" height="13" rx="0.5" fill="currentColor"/>
-    <rect x="14" y="7" width="2.5" height="9" rx="0.5" fill="currentColor"/>
-    <line x1="1" y1="9" x2="17" y2="9" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2"/>
-  </svg>
-)
-const IconSettings = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <circle cx="9" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.4"/>
-    <path d="M9 1.5V3M9 15V16.5M16.5 9H15M3 9H1.5M14.7 3.3L13.6 4.4M4.4 13.6L3.3 14.7M14.7 14.7L13.6 13.6M4.4 4.4L3.3 3.3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-  </svg>
-)
-const IconScreenshot = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <rect x="2" y="4" width="14" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.4"/>
-    <circle cx="9" cy="9.5" r="2.5" stroke="currentColor" strokeWidth="1.4"/>
-    <path d="M6.5 4L7.5 2.5H10.5L11.5 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-    <rect x="13" y="6" width="1.5" height="1" rx="0.5" fill="currentColor"/>
-  </svg>
-)
-const IconFullscreen = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <path d="M2.5 6.5V3H6M12 3H15.5V6.5M15.5 11.5V15H12M6 15H2.5V11.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-)
-const IconDraw = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-    <path d="M3 13.5L5.5 11L12.5 4L14.5 6L7.5 13L3 14.5L3 13.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round"/>
-    <path d="M11 5.5L13 7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-  </svg>
-)
-
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Period definitions ────────────────────────────────────────────────────────
 
 export type PriceMode = 'price' | 'mcap'
 
@@ -195,7 +154,19 @@ export interface Period {
   label: string
 }
 
-const PERIOD_GROUPS = [
+// Periods shown as inline pills in the toolbar
+const INLINE_PERIODS: Period[] = [
+  { multiplier: 1,  timespan: 'minute', text: '1m',  label: '1 minute'   },
+  { multiplier: 5,  timespan: 'minute', text: '5m',  label: '5 minutes'  },
+  { multiplier: 15, timespan: 'minute', text: '15m', label: '15 minutes' },
+  { multiplier: 1,  timespan: 'hour',   text: '1H',  label: '1 hour'     },
+  { multiplier: 4,  timespan: 'hour',   text: '4H',  label: '4 hours'    },
+  { multiplier: 1,  timespan: 'day',    text: 'D',   label: '1 day'      },
+  { multiplier: 1,  timespan: 'week',   text: 'W',   label: '1 week'     },
+]
+
+// Extra periods shown in the "more" dropdown
+const MORE_PERIOD_GROUPS = [
   {
     key: 'seconds', label: 'SECONDS',
     periods: [
@@ -207,81 +178,73 @@ const PERIOD_GROUPS = [
   {
     key: 'minutes', label: 'MINUTES',
     periods: [
-      { multiplier: 1,  timespan: 'minute', text: '1m',  label: '1 minute'   },
-      { multiplier: 5,  timespan: 'minute', text: '5m',  label: '5 minutes'  },
-      { multiplier: 15, timespan: 'minute', text: '15m', label: '15 minutes' },
       { multiplier: 30, timespan: 'minute', text: '30m', label: '30 minutes' },
     ],
   },
   {
     key: 'hours', label: 'HOURS',
     periods: [
-      { multiplier: 1,  timespan: 'hour', text: '1H',  label: '1 hour'   },
-      { multiplier: 4,  timespan: 'hour', text: '4H',  label: '4 hours'  },
       { multiplier: 6,  timespan: 'hour', text: '6H',  label: '6 hours'  },
       { multiplier: 12, timespan: 'hour', text: '12H', label: '12 hours' },
     ],
   },
   {
-    key: 'days', label: 'DAYS',
+    key: 'days', label: 'DAYS / WEEKS / MONTHS',
     periods: [
-      { multiplier: 1, timespan: 'day',   text: 'D', label: '1 day'   },
-      { multiplier: 1, timespan: 'week',  text: 'W', label: '1 week'  },
       { multiplier: 1, timespan: 'month', text: 'M', label: '1 month' },
     ],
   },
 ]
 
-export const DEFAULT_PERIOD: Period = PERIOD_GROUPS[1].periods[0]  // 1 minute
-export const ALL_PERIODS: Period[]  = PERIOD_GROUPS.flatMap(g => g.periods)
+export const ALL_PERIODS: Period[] = [
+  ...INLINE_PERIODS,
+  ...MORE_PERIOD_GROUPS.flatMap(g => g.periods),
+]
 
-// ── Grouped Dropdown ──────────────────────────────────────────────────────────
+export const DEFAULT_PERIOD: Period = INLINE_PERIODS[0]   // 1m
 
-function TimeframeDropdown({
-  triggerRef, period, onPeriodChange, open, onClose,
-}: {
-  triggerRef: React.RefObject<HTMLElement | null>
-  period: Period
-  onPeriodChange: (p: Period) => void
-  open: boolean
-  onClose: () => void
-}) {
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
-  const toggleGroup = (key: string) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }))
+// ── SVG icons ─────────────────────────────────────────────────────────────────
 
-  return (
-    <DropdownPortal triggerRef={triggerRef} open={open} onClose={onClose}>
-      <div className="ctb-dd-panel" style={{ position: 'static', boxShadow: '0 6px 24px rgba(0,0,0,0.7)' }}>
-        {PERIOD_GROUPS.map(group => (
-          <div key={group.key} className="ctb-dd-group">
-            <button className="ctb-dd-group-hdr" onClick={() => toggleGroup(group.key)}>
-              <span>{group.label}</span>
-              {collapsed[group.key] ? <IconChevronDown /> : <IconChevronUp />}
-            </button>
-            {!collapsed[group.key] && group.periods.map(p => (
-              <button
-                key={p.text}
-                className={`ctb-dd-row${p.text === period.text ? ' active' : ''}`}
-                onClick={() => { onPeriodChange(p); onClose() }}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        ))}
-      </div>
-    </DropdownPortal>
-  )
-}
+const IconChevronDown = () => (
+  <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+    <path d="M1.5 3L4.5 6L7.5 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
 
-// ── Candle Type Selector ──────────────────────────────────────────────────────
+const IconIndicators = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <rect x="1.5" y="9"  width="2" height="5.5" rx="0.4" fill="currentColor"/>
+    <rect x="5"   y="5"  width="2" height="9.5" rx="0.4" fill="currentColor"/>
+    <rect x="8.5" y="2.5" width="2" height="12" rx="0.4" fill="currentColor"/>
+    <rect x="12"  y="6"  width="2" height="8.5" rx="0.4" fill="currentColor"/>
+    <line x1="1" y1="8" x2="15" y2="8" stroke="currentColor" strokeWidth="0.9" strokeDasharray="2 2"/>
+  </svg>
+)
+const IconSettings = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.3"/>
+    <path d="M8 1.5V3M8 13V14.5M14.5 8H13M3 8H1.5M13.2 2.8L12.1 3.9M3.9 12.1L2.8 13.2M13.2 13.2L12.1 12.1M3.9 3.9L2.8 2.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+  </svg>
+)
+const IconScreenshot = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <rect x="1.5" y="3.5" width="13" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+    <circle cx="8" cy="8.5" r="2.3" stroke="currentColor" strokeWidth="1.3"/>
+    <path d="M5.5 3.5L6.3 2H9.7L10.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+    <rect x="11.5" y="5.5" width="1.2" height="0.9" rx="0.4" fill="currentColor"/>
+  </svg>
+)
+const IconFullscreen = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <path d="M2 5.5V2.5H5M11 2.5H14V5.5M14 10.5V13.5H11M5 13.5H2V10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+)
+
+// ── Candle type selector ──────────────────────────────────────────────────────
 
 function CandleTypeSelector({
   candleType, onCandleTypeChange,
-}: {
-  candleType: CandleType
-  onCandleTypeChange: (t: CandleType) => void
-}) {
+}: { candleType: CandleType; onCandleTypeChange: (t: CandleType) => void }) {
   const [open, setOpen] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
   const current = CANDLE_TYPES.find(c => c.type === candleType) ?? CANDLE_TYPES[0]
@@ -290,7 +253,8 @@ function CandleTypeSelector({
     <>
       <button
         ref={btnRef}
-        className={`ctb-ct-btn${open ? ' open' : ''}`}
+        className="ctb-icon-btn"
+        style={{ width: 'auto', padding: '0 4px', gap: 3, display: 'flex', alignItems: 'center' }}
         onClick={() => setOpen(o => !o)}
         title="Chart type"
       >
@@ -315,6 +279,50 @@ function CandleTypeSelector({
   )
 }
 
+// ── "More periods" dropdown ───────────────────────────────────────────────────
+
+function MorePeriodsDropdown({
+  period, onPeriodChange,
+}: { period: Period; onPeriodChange: (p: Period) => void }) {
+  const [open, setOpen] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const isActivePeriodInMore = !INLINE_PERIODS.some(p => p.text === period.text)
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        className={`ctb-tf-pill${open ? ' open' : ''}${isActivePeriodInMore ? ' active-period' : ''}`}
+        onClick={() => setOpen(o => !o)}
+        title="More timeframes"
+      >
+        {isActivePeriodInMore ? period.text : '···'}
+        <IconChevronDown />
+      </button>
+      <DropdownPortal triggerRef={btnRef} open={open} onClose={() => setOpen(false)}>
+        <div className="ctb-dd-panel" style={{ position: 'static' }}>
+          {MORE_PERIOD_GROUPS.map(group => (
+            <div key={group.key}>
+              <div className="ctb-dd-group-hdr" style={{ cursor: 'default' }}>
+                {group.label}
+              </div>
+              {group.periods.map(p => (
+                <button
+                  key={p.text}
+                  className={`ctb-dd-row${p.text === period.text ? ' active' : ''}`}
+                  onClick={() => { onPeriodChange(p); setOpen(false) }}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      </DropdownPortal>
+    </>
+  )
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -324,49 +332,47 @@ interface Props {
   onPriceModeChange: (m: PriceMode) => void
   candleType: CandleType
   onCandleTypeChange: (t: CandleType) => void
-  drawingBarVisible: boolean
-  onDrawingBarClick: () => void
   onIndicatorClick: () => void
   onSettingsClick: () => void
   onScreenshotClick: () => void
   onFullscreenClick: () => void
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+// ── Main component ────────────────────────────────────────────────────────────
 
 export function CustomToolbar({
   period, onPeriodChange,
   priceMode, onPriceModeChange,
   candleType, onCandleTypeChange,
-  drawingBarVisible, onDrawingBarClick,
   onIndicatorClick, onSettingsClick, onScreenshotClick, onFullscreenClick,
 }: Props) {
-  const [dropdownOpen, setDropdownOpen] = useState(false)
-  const tfBtnRef = useRef<HTMLButtonElement>(null)
 
   return (
     <div className="ctb-root">
-      {/* ── Left ── */}
+      {/* ── Left: inline TF pills + candle type ── */}
       <div className="ctb-left">
-        <button
-          ref={tfBtnRef}
-          className={`ctb-tf-btn${dropdownOpen ? ' open' : ''}`}
-          onClick={() => setDropdownOpen(o => !o)}
-        >
-          <span className="ctb-tf-label">{period.text}</span>
-        </button>
 
-        <TimeframeDropdown
-          triggerRef={tfBtnRef}
-          period={period}
-          onPeriodChange={onPeriodChange}
-          open={dropdownOpen}
-          onClose={() => setDropdownOpen(false)}
-        />
+        {/* Inline timeframe pills */}
+        <div className="ctb-tf-group">
+          {INLINE_PERIODS.map(p => (
+            <button
+              key={p.text}
+              className={`ctb-tf-pill${p.text === period.text ? ' active-period' : ''}`}
+              onClick={() => onPeriodChange(p)}
+              title={p.label}
+            >
+              {p.text}
+            </button>
+          ))}
+          <MorePeriodsDropdown period={period} onPeriodChange={onPeriodChange} />
+        </div>
 
+        <div className="ctb-sep" />
+
+        {/* Candle type */}
         <CandleTypeSelector candleType={candleType} onCandleTypeChange={onCandleTypeChange} />
 
-        <div className="ctb-divider" />
+        <div className="ctb-sep" />
 
         {/* Price / MCap toggle */}
         <div className="ctb-toggle">
@@ -386,25 +392,20 @@ export function CustomToolbar({
         </div>
       </div>
 
-      {/* ── Right (icons) ── */}
+      {/* ── Right: icon actions ── */}
       <div className="ctb-right">
-        <button
-          className={`ctb-icon-btn${drawingBarVisible ? ' active' : ''}`}
-          onClick={onDrawingBarClick}
-          title="Drawing tools"
-        >
-          <IconDraw />
-        </button>
         <button className="ctb-icon-btn" onClick={onIndicatorClick} title="Indicators">
           <IconIndicators />
+          <span className="ctb-icon-label">Indicators</span>
         </button>
+        <div className="ctb-sep" />
         <button className="ctb-icon-btn" onClick={onSettingsClick} title="Settings">
           <IconSettings />
         </button>
         <button className="ctb-icon-btn" onClick={onScreenshotClick} title="Screenshot">
           <IconScreenshot />
         </button>
-        <button className="ctb-icon-btn" onClick={onFullscreenClick} title="Full Screen">
+        <button className="ctb-icon-btn" onClick={onFullscreenClick} title="Full screen">
           <IconFullscreen />
         </button>
       </div>

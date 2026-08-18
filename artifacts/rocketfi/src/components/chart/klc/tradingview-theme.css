@@ -1,22 +1,17 @@
 /*
  * TradingView Advanced Charts–style override for KLineChart Pro
- * pumpi-chart-kit
+ * Matches TV dark theme as closely as possible.
  */
 
-/* ── OHLC values: hidden on mobile, symbol+timeframe stays visible ── */
-@media (max-width: 640px) {
-  .chart-ohlc-values { display: none !important; }
-}
-
-/* ─── Root tokens ─────────────────────────────────────────────────────────── */
+/* ─── Root tokens — exact TV dark palette ──────────────────────────────────── */
 .klinecharts-pro[data-theme=dark] {
   --klinecharts-pro-primary-color:            #2962ff;
-  --klinecharts-pro-hover-background-color:   rgba(41, 98, 255, 0.12);
+  --klinecharts-pro-hover-background-color:   rgba(41, 98, 255, 0.10);
   --klinecharts-pro-selected-color:           rgba(41, 98, 255, 0.15);
   --klinecharts-pro-background-color:         #131722;
   --klinecharts-pro-popover-background-color: #1e222d;
-  --klinecharts-pro-text-color:               #d1d4dc;
-  --klinecharts-pro-text-second-color:        #787b86;
+  --klinecharts-pro-text-color:               #b2b5be;
+  --klinecharts-pro-text-second-color:        #5d606b;
   --klinecharts-pro-border-color:             #2a2e39;
 }
 
@@ -25,9 +20,10 @@
   height: 100% !important;
   border-radius: 0;
   font-family: 'Trebuchet MS', sans-serif;
+  background: #131722;
 }
 
-/* ─── Hide built-in period bar (replaced by custom toolbar) ───────────────── */
+/* ─── Hide built-in period bar (replaced by custom toolbar) ────────────────── */
 .klinecharts-pro-period-bar {
   position: fixed !important;
   left: -99999px !important;
@@ -40,6 +36,7 @@
 .klinecharts-pro-content {
   height: 100% !important;
 }
+
 /* Drawing bar hidden — controlled by .klc-bar-hidden class on container */
 .klc-bar-hidden .klinecharts-pro-drawing-bar {
   display: none !important;
@@ -48,96 +45,89 @@
   width: 100% !important;
 }
 
-/* ─── Drawing / left sidebar ──────────────────────────────────────────────── */
+/* ─── Drawing / left sidebar ─────────────────────────────────────────────── */
 .klinecharts-pro-drawing-bar {
   width: 45px !important;
-  background-color: var(--klinecharts-pro-background-color);
-  border-right: 1px solid var(--klinecharts-pro-border-color) !important;
-  padding-top: 4px;
+  background-color: #131722 !important;
+  border-right: 1px solid #2a2e39 !important;
+  padding-top: 6px;
 }
-.klinecharts-pro-drawing-bar .item {
-  margin-top: 4px !important;
-}
+.klinecharts-pro-drawing-bar .item { margin-top: 2px !important; }
 .klinecharts-pro-drawing-bar .item .icon-overlay {
-  width: 30px !important;
-  height: 30px !important;
+  width: 32px !important;
+  height: 32px !important;
   border-radius: 4px !important;
+  color: #787b86 !important;
 }
 .klinecharts-pro-drawing-bar .item .icon-overlay:hover {
-  background-color: var(--klinecharts-pro-hover-background-color) !important;
+  background-color: rgba(41,98,255,0.10) !important;
+  color: #b2b5be !important;
 }
 .klinecharts-pro-drawing-bar .item .icon-overlay.selected {
-  background-color: var(--klinecharts-pro-selected-color) !important;
+  background-color: rgba(41,98,255,0.15) !important;
+  color: #2962ff !important;
 }
 .klinecharts-pro-drawing-bar .split-line {
-  background-color: var(--klinecharts-pro-border-color) !important;
-  margin: 6px 8px !important;
+  background-color: #2a2e39 !important;
+  margin: 4px 8px !important;
   width: calc(100% - 16px) !important;
 }
 
-/* ─── Modals / popovers ───────────────────────────────────────────────────── */
+/* ─── Modals / popovers ─────────────────────────────────────────────────── */
 .klinecharts-pro-modal .inner {
-  border-radius: 6px !important;
-  border: 1px solid var(--klinecharts-pro-border-color);
+  border-radius: 4px !important;
+  border: 1px solid #2a2e39;
+  background: #1e222d !important;
 }
 .klinecharts-pro-modal .inner .title-container {
-  font-size: 16px !important;
+  font-size: 14px !important;
   font-weight: 600 !important;
-  border-bottom-color: var(--klinecharts-pro-border-color) !important;
+  border-bottom-color: #2a2e39 !important;
+  color: #b2b5be !important;
 }
 .klinecharts-pro-list li:hover {
-  background-color: var(--klinecharts-pro-hover-background-color) !important;
+  background-color: rgba(41,98,255,0.10) !important;
 }
-.klinecharts-pro-symbol-search-modal-input {
-  border-color: var(--klinecharts-pro-border-color) !important;
-}
-.klinecharts-pro-symbol-search-modal-input[data-status=focus] {
-  border-color: var(--klinecharts-pro-primary-color) !important;
-}
-.klinecharts-pro-loading {
-  color: var(--klinecharts-pro-primary-color) !important;
-}
+.klinecharts-pro-loading { color: #2962ff !important; }
 .klinecharts-pro-list::-webkit-scrollbar { width: 4px !important; }
 .klinecharts-pro-list::-webkit-scrollbar-thumb {
   border-radius: 2px !important;
-  background-color: var(--klinecharts-pro-border-color) !important;
+  background-color: #2a2e39 !important;
 }
 
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   Custom Toolbar  (class prefix: ctb-)
+   Custom Toolbar  (prefix: ctb-)  — TradingView Advanced Charts style
+   Height: 46px  Background: #1e222d
 ══════════════════════════════════════════════════════════════════════════════ */
 
 .ctb-root {
-  height: 49px;
+  height: 46px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px;
-  background: #131722;
+  padding: 0 6px;
+  background: #1e222d;
   border-bottom: 1px solid #2a2e39;
-  gap: 0;
   font-family: 'Trebuchet MS', sans-serif;
   user-select: none;
+  gap: 0;
 }
 
 .ctb-left,
 .ctb-right {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 0;
+  min-width: 0;
 }
 
-/* ── Mobile: left section scrolls horizontally, right stays fixed ── */
+/* Mobile: left scrolls horizontally */
 @media (max-width: 640px) {
-  .ctb-root {
-    padding: 0 4px;
-    gap: 0;
-  }
+  .ctb-root { padding: 0 4px; }
   .ctb-left {
     flex: 1 1 0;
-    min-width: 0;
     overflow-x: auto;
     overflow-y: visible;
     -webkit-overflow-scrolling: touch;
@@ -145,13 +135,12 @@
   }
   .ctb-left::-webkit-scrollbar { display: none; }
   .ctb-left > * { flex-shrink: 0; }
-  .ctb-right  { flex-shrink: 0; }
-
-  /* Panels are portalled to document.body — no mobile override needed */
+  .ctb-right { flex-shrink: 0; }
+  .ctb-icon-label { display: none !important; }
 }
 
-/* Divider */
-.ctb-divider {
+/* ── Separator ── */
+.ctb-sep {
   width: 1px;
   height: 20px;
   background: #2a2e39;
@@ -159,14 +148,11 @@
   flex-shrink: 0;
 }
 
-/* ── Touch targets: remove 300ms tap delay on mobile ── */
-.ctb-tf-btn,
-.ctb-ct-btn,
+/* ── Touch targets ── */
+.ctb-tf-pill,
 .ctb-icon-btn,
-.ctb-text-btn,
 .ctb-toggle-side,
 .ctb-dd-row,
-.ctb-dd-group-hdr,
 .ctb-ct-item,
 .bbar-range,
 .bbar-toggle,
@@ -174,278 +160,17 @@
   touch-action: manipulation;
 }
 
-/* ── Generic icon button ── */
-.ctb-icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 4px;
-  border: none;
-  background: transparent;
-  color: #787b86;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-  flex-shrink: 0;
-}
-.ctb-icon-btn:hover {
-  background: rgba(41, 98, 255, 0.12);
-  color: #d1d4dc;
-}
-.ctb-icon-btn.active {
-  color: #2962ff;
-  background: rgba(41, 98, 255, 0.15);
-}
-
-/* ── Timeframe dropdown ── */
-.ctb-dropdown-wrap {
-  position: relative;
-}
-.ctb-tf-btn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 8px;
-  border-radius: 4px;
-  border: none;
-  background: transparent;
-  color: #d1d4dc;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-  white-space: nowrap;
-}
-.ctb-tf-btn:hover,
-.ctb-tf-btn.open {
-  background: rgba(41, 98, 255, 0.12);
-}
-.ctb-tf-label {
-  min-width: 24px;
-  text-align: left;
-}
-
-/* Grouped panel */
-.ctb-dd-panel {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 9999;
-  background: #262626;
-  border: 1px solid #333333;
-  border-radius: 4px;
-  padding: 4px 0;
-  min-width: 148px;
-  max-height: 440px;
-  overflow-y: auto;
-  box-shadow: 0 6px 24px rgba(0,0,0,0.7);
-}
-.ctb-dd-panel::-webkit-scrollbar { width: 3px; }
-.ctb-dd-panel::-webkit-scrollbar-thumb { background: #2a2e39; border-radius: 2px; }
-
-/* Group header row */
-.ctb-dd-group-hdr {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 7px 10px 4px;
-  border: none;
-  background: transparent;
-  color: #42475a;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  cursor: pointer;
-  text-transform: uppercase;
-  transition: color 0.12s;
-}
-.ctb-dd-group-hdr:hover { color: #6b7080; }
-
-/* Period row */
-.ctb-dd-row {
-  display: block;
-  width: 100%;
-  padding: 6px 12px;
-  border: none;
-  background: transparent;
-  color: #dbdbdb;
-  font-size: 13px;
-  font-weight: 400;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.08s, color 0.08s;
-  white-space: nowrap;
-}
-.ctb-dd-row:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #f2f2f2;
-}
-.ctb-dd-row.active {
-  background: #f2f2f2;
-  color: #141414;
-  font-weight: 500;
-}
-
-/* ── Text buttons ── */
-.ctb-text-btn {
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 4px;
-  border: none;
-  background: transparent;
-  color: #787b86;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s, color 0.15s;
-}
-.ctb-text-btn:hover {
-  background: rgba(41, 98, 255, 0.12);
-  color: #d1d4dc;
-}
-
-/* ══════════════════════════════════════════════════════════════════════════════
-   Bottom Bar  (class prefix: bbar-)
-══════════════════════════════════════════════════════════════════════════════ */
-
-.bbar-root {
-  height: 36px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 10px;
-  background: #131722;
-  border-top: 1px solid #2a2e39;
-  font-family: 'Trebuchet MS', sans-serif;
-  user-select: none;
-}
-
-.bbar-left,
-.bbar-right {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.bbar-range {
-  height: 24px;
-  padding: 0 8px;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: #787b86;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s;
-}
-.bbar-range:hover {
-  background: rgba(255,255,255,0.05);
-  color: #d1d4dc;
-}
-.bbar-range.active {
-  background: rgba(41, 98, 255, 0.15);
-  color: #2962ff;
-  font-weight: 600;
-}
-
-.bbar-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 24px;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: #787b86;
-  cursor: pointer;
-  margin-left: 2px;
-  transition: background 0.12s, color 0.12s;
-}
-.bbar-icon:hover {
-  background: rgba(255,255,255,0.05);
-  color: #d1d4dc;
-}
-
-.bbar-clock {
-  color: #787b86;
-  font-size: 14px;
-  font-weight: 400;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-  margin-right: 8px;
-}
-
-.bbar-toggle {
-  height: 24px;
-  padding: 0 7px;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: #787b86;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s;
-}
-.bbar-toggle:hover {
-  background: rgba(255,255,255,0.05);
-  color: #d1d4dc;
-}
-.bbar-toggle.active {
-  background: rgba(41, 98, 255, 0.15);
-  color: #2962ff;
-  font-weight: 600;
-}
-
-/* ── Price / MCap toggle ── */
-.ctb-toggle {
+/* ── Timeframe pill group ── */
+.ctb-tf-group {
   display: flex;
   align-items: center;
   gap: 0;
-  height: 28px;
-  border: 1px solid #2a2e39;
-  border-radius: 4px;
-  overflow: hidden;
-  margin-left: 4px;
-}
-.ctb-toggle-sep {
-  color: #2a2e39;
-  font-size: 13px;
-  line-height: 28px;
-  padding: 0 1px;
-}
-.ctb-toggle-side {
-  height: 28px;
-  padding: 0 9px;
-  border: none;
-  background: transparent;
-  color: #787b86;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.ctb-toggle-side:hover {
-  background: rgba(41, 98, 255, 0.1);
-  color: #d1d4dc;
-}
-.ctb-toggle-side.active {
-  color: #2962ff;
-  font-weight: 700;
 }
 
-/* ── Candle type selector ─────────────────────────────────────────────────── */
-.ctb-ct-btn {
+/* ── Timeframe pill — TV style: plain text, active = blue, no bg ── */
+.ctb-tf-pill {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 3px;
   height: 28px;
   padding: 0 6px;
@@ -453,27 +178,157 @@
   border: none;
   background: transparent;
   color: #787b86;
+  font-size: 13px;
+  font-family: 'Trebuchet MS', sans-serif;
+  font-weight: 400;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
   flex-shrink: 0;
 }
-.ctb-ct-btn:hover,
-.ctb-ct-btn.open {
-  background: rgba(41, 98, 255, 0.12);
-  color: #d1d4dc;
+.ctb-tf-pill:hover {
+  background: rgba(255,255,255,0.06);
+  color: #b2b5be;
+}
+.ctb-tf-pill.open {
+  background: rgba(255,255,255,0.06);
+  color: #b2b5be;
+}
+/* Active period: blue text, subtle blue tint background */
+.ctb-tf-pill.active-period {
+  color: #2962ff;
+  background: rgba(41,98,255,0.12);
+  font-weight: 600;
+}
+.ctb-tf-pill.active-period:hover {
+  background: rgba(41,98,255,0.18);
 }
 
-.ctb-ct-panel {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 9999;
-  background: #262626;
-  border: 1px solid #333333;
+/* ── Generic icon button (settings, screenshot, fullscreen, candle-type) ── */
+.ctb-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: #787b86;
+  font-size: 12px;
+  font-family: 'Trebuchet MS', sans-serif;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.ctb-icon-btn:hover {
+  background: rgba(255,255,255,0.06);
+  color: #b2b5be;
+}
+.ctb-icon-btn.active {
+  color: #2962ff;
+  background: rgba(41,98,255,0.12);
+}
+.ctb-icon-label {
+  font-size: 12px;
+  font-weight: 400;
+  color: inherit;
+}
+
+/* ── Price / MCap toggle ── */
+.ctb-toggle {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.ctb-toggle-sep {
+  color: #2a2e39;
+  font-size: 12px;
+  line-height: 26px;
+  padding: 0 1px;
+}
+.ctb-toggle-side {
+  height: 26px;
+  padding: 0 8px;
+  border: none;
+  background: transparent;
+  color: #787b86;
+  font-size: 12px;
+  font-family: 'Trebuchet MS', sans-serif;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.ctb-toggle-side:hover {
+  background: rgba(41,98,255,0.08);
+  color: #b2b5be;
+}
+.ctb-toggle-side.active {
+  color: #2962ff;
+  font-weight: 600;
+}
+
+/* ── Timeframe grouped dropdown panel ── */
+.ctb-dd-panel {
+  background: #1e222d;
+  border: 1px solid #2a2e39;
   border-radius: 4px;
   padding: 4px 0;
-  min-width: 180px;
-  box-shadow: 0 6px 24px rgba(0,0,0,0.7);
+  min-width: 160px;
+  max-height: 420px;
+  overflow-y: auto;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.75);
+}
+.ctb-dd-panel::-webkit-scrollbar { width: 3px; }
+.ctb-dd-panel::-webkit-scrollbar-thumb { background: #2a2e39; border-radius: 2px; }
+
+.ctb-dd-group-hdr {
+  padding: 8px 12px 4px;
+  color: #5d606b;
+  font-size: 10px;
+  font-family: 'Trebuchet MS', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ctb-dd-row {
+  display: block;
+  width: 100%;
+  padding: 5px 12px;
+  border: none;
+  background: transparent;
+  color: #b2b5be;
+  font-size: 13px;
+  font-family: 'Trebuchet MS', sans-serif;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.08s, color 0.08s;
+  white-space: nowrap;
+}
+.ctb-dd-row:hover {
+  background: rgba(41,98,255,0.10);
+  color: #d1d4dc;
+}
+.ctb-dd-row.active {
+  color: #2962ff;
+  font-weight: 600;
+}
+
+/* ── Candle type panel ── */
+.ctb-ct-panel {
+  background: #1e222d;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  padding: 4px 0;
+  min-width: 190px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.75);
 }
 
 .ctb-ct-item {
@@ -484,23 +339,196 @@
   padding: 6px 12px;
   border: none;
   background: transparent;
-  color: #dbdbdb;
+  color: #b2b5be;
   font-size: 13px;
+  font-family: 'Trebuchet MS', sans-serif;
   text-align: left;
   cursor: pointer;
   transition: background 0.08s, color 0.08s;
   white-space: nowrap;
 }
 .ctb-ct-item:hover {
-  background: rgba(255,255,255,0.06);
-  color: #f2f2f2;
+  background: rgba(41,98,255,0.10);
+  color: #d1d4dc;
 }
 .ctb-ct-item.active {
-  background: rgba(41,98,255,0.15);
   color: #2962ff;
 }
 
-/* ── Drawing bar chevron toggle ─────────────────────────────────────────────── */
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   OHLC Overlay  (position: absolute inside chart canvas)
+   Matches TradingView's top-left OHLC readout exactly
+══════════════════════════════════════════════════════════════════════════════ */
+
+.klc-ohlc-overlay {
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  pointer-events: none;
+  font-family: 'Trebuchet MS', sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.klc-ohlc-row1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.klc-ohlc-symbol {
+  color: #d1d4dc;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+
+.klc-ohlc-period {
+  color: #5d606b;
+  font-size: 12px;
+}
+
+.klc-ohlc-values {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #787b86;
+  font-size: 11.5px;
+}
+
+.klc-ohlc-values span b {
+  font-weight: 500;
+  margin-left: 2px;
+}
+
+.klc-ohlc-vol {
+  color: #5d606b;
+  font-size: 11px;
+}
+
+/* Hide OHLC values on very small screens */
+@media (max-width: 500px) {
+  .klc-ohlc-values { display: none !important; }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Bottom Bar  (prefix: bbar-)  — TradingView style
+   Height: 28px  Background: #131722
+══════════════════════════════════════════════════════════════════════════════ */
+
+.bbar-root {
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  background: #131722;
+  border-top: 1px solid #2a2e39;
+  font-family: 'Trebuchet MS', sans-serif;
+  user-select: none;
+}
+
+.bbar-left,
+.bbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.bbar-range {
+  height: 22px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #5d606b;
+  font-size: 12px;
+  font-family: 'Trebuchet MS', sans-serif;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background 0.10s, color 0.10s;
+  white-space: nowrap;
+}
+.bbar-range:hover {
+  color: #b2b5be;
+  background: rgba(255,255,255,0.04);
+}
+.bbar-range.active {
+  color: #2962ff;
+  font-weight: 600;
+}
+
+.bbar-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #5d606b;
+  cursor: pointer;
+  margin-left: 2px;
+  transition: background 0.10s, color 0.10s;
+}
+.bbar-icon:hover {
+  background: rgba(255,255,255,0.04);
+  color: #b2b5be;
+}
+
+.bbar-clock {
+  color: #5d606b;
+  font-size: 11.5px;
+  font-family: 'Trebuchet MS', sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  margin: 0 8px;
+}
+
+.bbar-toggle {
+  height: 22px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #5d606b;
+  font-size: 12px;
+  font-family: 'Trebuchet MS', sans-serif;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background 0.10s, color 0.10s;
+}
+.bbar-toggle:hover {
+  background: rgba(255,255,255,0.04);
+  color: #b2b5be;
+}
+.bbar-toggle.active {
+  color: #2962ff;
+  font-weight: 600;
+}
+
+.bbar-sep {
+  width: 1px;
+  height: 14px;
+  background: #2a2e39;
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Drawing bar chevron toggle (left edge of chart canvas)
+══════════════════════════════════════════════════════════════════════════════ */
+
 .drawing-chevron {
   position: absolute;
   bottom: 12px;
@@ -508,20 +536,26 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 28px;
+  width: 18px;
+  height: 26px;
   background: #1e222d;
   border: 1px solid #2a2e39;
   border-left: none;
-  border-radius: 0 4px 4px 0;
-  color: #787b86;
-  font-size: 13px;
+  border-radius: 0 3px 3px 0;
+  color: #5d606b;
+  font-size: 12px;
   cursor: pointer;
-  transition: left 0.2s ease, background 0.15s, color 0.15s;
+  transition: left 0.2s ease, background 0.12s, color 0.12s;
   padding: 0;
   line-height: 1;
+  font-family: 'Trebuchet MS', sans-serif;
 }
 .drawing-chevron:hover {
   background: #2a2e39;
-  color: #d1d4dc;
+  color: #b2b5be;
+}
+
+/* ── Chart spinner animation ── */
+@keyframes chartSpinnerRotate {
+  to { transform: rotate(360deg); }
 }

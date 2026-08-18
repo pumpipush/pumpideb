@@ -1,17 +1,24 @@
+/**
+ * bottom-bar.tsx — TradingView-style bottom navigation bar
+ *
+ * Layout matches TV exactly:
+ *   LEFT:  [1D] [5D] [1M] [3M] [6M] [YTD] [1Y] [5Y] [All] [📅]
+ *   RIGHT: [%] [log] [auto] | [UTC clock]
+ */
 import { useEffect, useState } from 'react'
 
 const IconCalendar = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-    <rect x="1" y="2.5" width="12" height="10.5" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
-    <line x1="1" y1="5.5" x2="13" y2="5.5" stroke="currentColor" strokeWidth="1.3"/>
-    <line x1="4.5" y1="1" x2="4.5" y2="4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-    <line x1="9.5" y1="1" x2="9.5" y2="4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+    <rect x="0.65" y="1.95" width="11.7" height="10.4" rx="1.3" stroke="currentColor" strokeWidth="1.2"/>
+    <line x1="0.65" y1="5" x2="12.35" y2="5" stroke="currentColor" strokeWidth="1.2"/>
+    <line x1="3.9" y1="0.65" x2="3.9" y2="3.25" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    <line x1="9.1" y1="0.65" x2="9.1" y2="3.25" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
   </svg>
 )
 
 export type YAxisMode = 'normal' | 'percentage' | 'log'
 
-const RANGES = ['1D', '5D', '1M', '3M', '1Y'] as const
+const RANGES = ['1D', '5D', '1M', '3M', '6M', 'YTD', '1Y', '5Y', 'All'] as const
 export type RangeKey = typeof RANGES[number]
 
 interface Props {
@@ -45,6 +52,7 @@ export function BottomBar({
 
   return (
     <div className="bbar-root">
+      {/* ── Left: date range pills ── */}
       <div className="bbar-left">
         {RANGES.map(r => (
           <button
@@ -55,13 +63,13 @@ export function BottomBar({
             {r}
           </button>
         ))}
-        <button className="bbar-icon" title="Custom range">
+        <button className="bbar-icon" title="Go to date">
           <IconCalendar />
         </button>
       </div>
 
+      {/* ── Right: scale toggles + UTC clock ── */}
       <div className="bbar-right">
-        <span className="bbar-clock">{utcTime}</span>
         <button
           className={`bbar-toggle${yAxisMode === 'percentage' ? ' active' : ''}`}
           onClick={() => onYAxisModeChange(yAxisMode === 'percentage' ? 'normal' : 'percentage')}
@@ -83,6 +91,8 @@ export function BottomBar({
         >
           auto
         </button>
+        <div className="bbar-sep" />
+        <span className="bbar-clock">{utcTime}</span>
       </div>
     </div>
   )

@@ -44,32 +44,57 @@ function getKlcChart(container: HTMLElement) {
 // ── TV-style dark theme ───────────────────────────────────────────────────────
 
 const TV_STYLES = {
+  // ── Chart canvas background ───────────────────────────────────────────────
+  // KLineChart does not expose a direct `background` style key; the canvas bg
+  // is inherited from the container div which is set to #131722 in CSS.
+
+  // ── Grid ─────────────────────────────────────────────────────────────────
   grid: {
-    horizontal: { color: '#2a2e39', size: 1, style: 0, show: true },
-    vertical:   { color: '#2a2e39', size: 1, style: 0, show: true },
+    horizontal: { color: 'rgba(42,46,57,0.5)', size: 1, style: 0, show: true },
+    vertical:   { color: 'rgba(42,46,57,0.5)', size: 1, style: 0, show: true },
   },
+
+  // ── Candlesticks ─────────────────────────────────────────────────────────
   candle: {
     type: 'candle_solid',
     bar: {
-      upColor: '#26a69a', downColor: '#ef5350', noChangeColor: '#888888',
+      // TV green: #26a69a   TV red: #ef5350
+      upColor:   '#26a69a', downColor:   '#ef5350', noChangeColor: '#888888',
       upBorderColor: '#26a69a', downBorderColor: '#ef5350',
-      upWickColor: '#26a69a', downWickColor: '#ef5350',
+      upWickColor:   '#26a69a', downWickColor:   '#ef5350',
     },
     priceMark: {
       show: true,
-      high: { show: true, color: '#d1d4dc', textOffset: 5, textSize: 10 },
-      low:  { show: true, color: '#d1d4dc', textOffset: 5, textSize: 10 },
+      high: { show: false },
+      low:  { show: false },
       last: {
-        show: true, upColor: '#26a69a', downColor: '#ef5350', noChangeColor: '#888888',
+        show: true,
+        upColor: '#26a69a', downColor: '#ef5350', noChangeColor: '#888888',
         line: { show: true, style: 1, dashValue: [4, 4], size: 1 },
-        text: { show: true, size: 12, paddingLeft: 4, paddingTop: 2, paddingRight: 4, paddingBottom: 2, borderRadius: 2, color: '#ffffff' },
+        text: {
+          show: true, size: 11,
+          family: "'Trebuchet MS', sans-serif",
+          paddingLeft: 4, paddingTop: 2, paddingRight: 4, paddingBottom: 2,
+          borderRadius: 2, color: '#ffffff',
+        },
       },
     },
     tooltip: { showRule: 'none' },
   },
+
+  // ── Indicators ───────────────────────────────────────────────────────────
   indicator: {
-    ohlc: { upColor: 'rgba(38,166,154,0.65)', downColor: 'rgba(239,83,80,0.65)', noChangeColor: '#888888' },
-    bars: [{ border: false, upColor: 'rgba(38,166,154,0.65)', downColor: 'rgba(239,83,80,0.65)', noChangeColor: 'rgba(136,136,136,0.65)' }],
+    ohlc: {
+      upColor: 'rgba(38,166,154,0.70)',
+      downColor: 'rgba(239,83,80,0.70)',
+      noChangeColor: '#888888',
+    },
+    bars: [{
+      border: false,
+      upColor: 'rgba(38,166,154,0.50)',
+      downColor: 'rgba(239,83,80,0.50)',
+      noChangeColor: 'rgba(136,136,136,0.50)',
+    }],
     lines: [
       { size: 1, style: 0, smooth: false, color: '#2962ff' },
       { size: 1, style: 0, smooth: false, color: '#f5a623' },
@@ -78,44 +103,102 @@ const TV_STYLES = {
       { size: 1, style: 0, smooth: false, color: '#e91e63' },
     ],
     tooltip: {
-      offsetTop: 8,
-      text: { size: 12, family: "'Trebuchet MS', sans-serif", color: '#d1d4dc', marginLeft: 8, marginTop: 6, marginRight: 8, marginBottom: 0 },
-      rect: { position: 'fixed', paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: 6, borderRadius: 0, borderSize: 0, borderColor: 'transparent', color: 'transparent', offsetLeft: 10, offsetTop: 62, offsetRight: 10 },
+      offsetTop: 6,
+      text: {
+        size: 11,
+        family: "'Trebuchet MS', sans-serif",
+        color: '#b2b5be',
+        marginLeft: 8, marginTop: 6, marginRight: 8, marginBottom: 0,
+      },
+      rect: {
+        position: 'fixed',
+        paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: 4,
+        borderRadius: 0, borderSize: 0,
+        borderColor: 'transparent', color: 'transparent',
+        offsetLeft: 10, offsetTop: 56, offsetRight: 10,
+      },
     },
   },
+
+  // ── X axis (time) ────────────────────────────────────────────────────────
   xAxis: {
     show: true, size: 'auto',
     axisLine: { show: true, color: '#2a2e39', size: 1 },
-    tickText: { show: true, color: '#787b86', size: 11, family: "'Trebuchet MS', sans-serif" },
-    tickLine: { show: true, size: 1, length: 3, color: '#2a2e39' },
-  },
-  yAxis: {
-    show: true, size: 'auto',
-    axisLine: { show: false, color: '#2a2e39', size: 1 },
-    tickText: { show: true, color: '#787b86', size: 11, family: "'Trebuchet MS', sans-serif" },
+    tickText: {
+      show: true, color: '#5d606b', size: 11,
+      family: "'Trebuchet MS', sans-serif",
+    },
     tickLine: { show: false, size: 1, length: 3, color: '#2a2e39' },
   },
-  separator: { size: 1, color: '#2a2e39', fill: true, activeBackgroundColor: 'rgba(41,98,255,0.08)' },
+
+  // ── Y axis (price) ───────────────────────────────────────────────────────
+  yAxis: {
+    show: true, size: 'auto', position: 'right',
+    axisLine: { show: false },
+    tickText: {
+      show: true, color: '#787b86', size: 11,
+      family: "'Trebuchet MS', sans-serif",
+    },
+    tickLine: { show: false },
+  },
+
+  // ── Pane separator ───────────────────────────────────────────────────────
+  separator: {
+    size: 2,
+    color: '#2a2e39',
+    fill: true,
+    activeBackgroundColor: 'rgba(41,98,255,0.10)',
+  },
+
+  // ── Crosshair ────────────────────────────────────────────────────────────
   crosshair: {
     show: true,
     horizontal: {
       show: true,
-      line: { show: true, style: 1, dashValue: [4, 4], size: 1, color: '#9598a1' },
-      text: { show: true, size: 11, family: "'Trebuchet MS', sans-serif", color: '#fff', paddingLeft: 4, paddingRight: 4, paddingTop: 3, paddingBottom: 3, borderRadius: 2, borderSize: 1, borderColor: 'rgba(41,98,255,0.8)', backgroundColor: 'rgba(41,98,255,0.85)' },
+      line: { show: true, style: 1, dashValue: [4, 4], size: 1, color: 'rgba(149,152,161,0.6)' },
+      text: {
+        show: true, size: 11,
+        family: "'Trebuchet MS', sans-serif",
+        color: '#ffffff',
+        paddingLeft: 5, paddingRight: 5, paddingTop: 3, paddingBottom: 3,
+        borderRadius: 2, borderSize: 0,
+        borderColor: 'transparent',
+        backgroundColor: '#364156',
+      },
     },
     vertical: {
       show: true,
-      line: { show: true, style: 1, dashValue: [4, 4], size: 1, color: '#9598a1' },
-      text: { show: true, size: 11, family: "'Trebuchet MS', sans-serif", color: '#fff', paddingLeft: 4, paddingRight: 4, paddingTop: 3, paddingBottom: 3, borderRadius: 2, borderSize: 1, borderColor: 'rgba(41,98,255,0.8)', backgroundColor: 'rgba(41,98,255,0.85)' },
+      line: { show: true, style: 1, dashValue: [4, 4], size: 1, color: 'rgba(149,152,161,0.6)' },
+      text: {
+        show: true, size: 11,
+        family: "'Trebuchet MS', sans-serif",
+        color: '#ffffff',
+        paddingLeft: 5, paddingRight: 5, paddingTop: 3, paddingBottom: 3,
+        borderRadius: 2, borderSize: 0,
+        borderColor: 'transparent',
+        backgroundColor: '#364156',
+      },
     },
   },
+
+  // ── Drawing overlays ─────────────────────────────────────────────────────
   overlay: {
-    point:   { color: '#2962ff', borderColor: 'rgba(41,98,255,0.35)', borderSize: 1, radius: 5, activeColor: '#2962ff', activeRadius: 6, activeBorderSize: 2, activeBorderColor: 'rgba(41,98,255,0.55)' },
+    point: {
+      color: '#2962ff',
+      borderColor: 'rgba(41,98,255,0.30)',
+      borderSize: 1, radius: 4,
+      activeColor: '#2962ff', activeRadius: 5,
+      activeBorderSize: 2, activeBorderColor: 'rgba(41,98,255,0.50)',
+    },
     line:    { style: 0, smooth: false, color: '#2962ff', size: 1, dashValue: [4, 4] },
-    rect:    { color: 'rgba(41,98,255,0.1)', borderColor: '#2962ff', borderSize: 1, borderRadius: 0 },
+    rect:    { color: 'rgba(41,98,255,0.08)', borderColor: '#2962ff', borderSize: 1, borderRadius: 0 },
     arc:     { style: 0, color: '#2962ff', size: 1 },
-    polygon: { style: 0, color: '#2962ff', borderColor: '#2962ff', borderSize: 1 },
-    text:    { style: 0, color: '#d1d4dc', size: 12, borderRadius: 2, borderSize: 0, borderColor: 'transparent', paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: 0, backgroundColor: 'transparent' },
+    polygon: { style: 0, color: 'rgba(41,98,255,0.08)', borderColor: '#2962ff', borderSize: 1 },
+    text:    {
+      style: 0, color: '#b2b5be', size: 12, borderRadius: 2, borderSize: 0,
+      borderColor: 'transparent', paddingLeft: 0, paddingRight: 0,
+      paddingTop: 0, paddingBottom: 0, backgroundColor: 'transparent',
+    },
   },
 }
 
