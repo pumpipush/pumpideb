@@ -35,40 +35,51 @@
 /* Content fills full height since our custom toolbar is outside */
 .klinecharts-pro-content {
   height: 100% !important;
+  position: relative !important;  /* needed for absolute drawing bar */
 }
 
-/* Drawing bar hidden — controlled by .klc-bar-hidden class on container */
-.klc-bar-hidden .klinecharts-pro-drawing-bar {
-  display: none !important;
-}
-.klc-bar-hidden .klinecharts-pro-widget {
+/* Chart widget always occupies FULL width — drawing bar floats on top */
+.klinecharts-pro-widget {
   width: 100% !important;
+  flex: 1 1 100% !important;
 }
 
-/* ─── Drawing / left sidebar ─────────────────────────────────────────────── */
+/* ─── Drawing bar — absolutely overlaid on left edge ─────────────────────── */
+/* This means toggling it never changes chart canvas width → Y-axis stays put */
 .klinecharts-pro-drawing-bar {
+  position: absolute !important;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 8;
   width: 45px !important;
-  background-color: #080808 !important;
+  background-color: rgba(8,8,8,0.92) !important;
   border-right: 1px solid rgba(255,255,255,0.07) !important;
   padding-top: 6px;
+  backdrop-filter: blur(4px);
+}
+
+/* Drawing bar hidden */
+.klc-bar-hidden .klinecharts-pro-drawing-bar {
+  display: none !important;
 }
 .klinecharts-pro-drawing-bar .item { margin-top: 2px !important; }
 .klinecharts-pro-drawing-bar .item .icon-overlay {
   width: 32px !important;
   height: 32px !important;
   border-radius: 4px !important;
-  color: #787b86 !important;
+  color: #c4c9d4 !important;
 }
 .klinecharts-pro-drawing-bar .item .icon-overlay:hover {
-  background-color: rgba(41,98,255,0.10) !important;
-  color: #b2b5be !important;
+  background-color: rgba(255,255,255,0.08) !important;
+  color: #ffffff !important;
 }
 .klinecharts-pro-drawing-bar .item .icon-overlay.selected {
-  background-color: rgba(41,98,255,0.15) !important;
-  color: #2962ff !important;
+  background-color: rgba(41,98,255,0.18) !important;
+  color: #6b9eff !important;
 }
 .klinecharts-pro-drawing-bar .split-line {
-  background-color: #2a2e39 !important;
+  background-color: rgba(255,255,255,0.08) !important;
   margin: 4px 8px !important;
   width: calc(100% - 16px) !important;
 }

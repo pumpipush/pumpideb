@@ -66,6 +66,7 @@ function OhlcOverlay({
   crosshairOhlc,
   supply,
   solPrice,
+  leftOffset = 10,
 }: {
   ticker: string
   priceMode: PriceMode
@@ -74,15 +75,21 @@ function OhlcOverlay({
   crosshairOhlc: OhlcData | null
   supply: number
   solPrice: number | null
+  leftOffset?: number
 }) {
   const data = crosshairOhlc ?? ohlc
   const fmt = priceMode === 'mcap'
     ? (v: number) => fmtMcap(v, supply, solPrice)
     : (v: number) => fmtSolPrice(v)
 
+  const overlayStyle: React.CSSProperties = {
+    left: leftOffset,
+    transition: 'left 0.2s ease',
+  }
+
   if (!data) {
     return (
-      <div className="klc-ohlc-overlay">
+      <div className="klc-ohlc-overlay" style={overlayStyle}>
         <div className="klc-ohlc-row1">
           <span className="klc-ohlc-symbol">{ticker}</span>
           <span className="klc-ohlc-period">· {period.text}</span>
@@ -98,7 +105,7 @@ function OhlcOverlay({
     : '0.00'
 
   return (
-    <div className="klc-ohlc-overlay">
+    <div className="klc-ohlc-overlay" style={overlayStyle}>
       <div className="klc-ohlc-row1">
         <span className="klc-ohlc-symbol">{ticker}</span>
         <span className="klc-ohlc-period">· {period.text}</span>
@@ -319,7 +326,7 @@ export function KLineChartCanvas({
       {/* ── KLineChart Pro — fills remaining space ── */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative', background: '#080808' }}>
 
-        {/* OHLC overlay — positioned inside chart canvas, top-left (TV style) */}
+        {/* OHLC overlay — slides right when drawing bar is open */}
         <OhlcOverlay
           ticker={`${symbol}/SOL`}
           priceMode={priceMode}
@@ -328,6 +335,7 @@ export function KLineChartCanvas({
           crosshairOhlc={crosshairOhlc}
           supply={supply}
           solPrice={solPrice}
+          leftOffset={drawingBarVisible ? 55 : 10}
         />
 
         <KLineChartProWrapper
