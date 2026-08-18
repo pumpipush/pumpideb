@@ -56,29 +56,10 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "tokens", label: "Tokens", icon: <Zap        className="w-3 h-3" /> },
 ];
 
-// Rank badge — top 3 get styled gold/silver/bronze, rest get plain number
 function RankBadge({ rank }: { rank: number }) {
-  if (rank === 1) return (
-    <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[10px] font-black"
-      style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)", color: "#1a0f00", boxShadow: "0 0 8px rgba(245,158,11,0.4)" }}>
-      1
-    </div>
-  );
-  if (rank === 2) return (
-    <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[10px] font-black"
-      style={{ background: "linear-gradient(135deg,#94a3b8,#64748b)", color: "#0a0a0a" }}>
-      2
-    </div>
-  );
-  if (rank === 3) return (
-    <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[10px] font-black"
-      style={{ background: "linear-gradient(135deg,#cd7c4e,#92400e)", color: "#1a0800" }}>
-      3
-    </div>
-  );
   return (
-    <div className="w-6 h-6 flex items-center justify-center shrink-0 text-[10px] font-semibold"
-      style={{ color: "rgba(150,150,150,0.5)" }}>
+    <div className="w-5 flex items-center justify-center shrink-0 text-xs font-bold"
+      style={{ color: rank <= 3 ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.25)" }}>
       {rank}
     </div>
   );
