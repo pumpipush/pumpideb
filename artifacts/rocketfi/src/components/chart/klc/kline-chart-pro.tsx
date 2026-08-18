@@ -385,16 +385,25 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
     // Do NOT activate mcap axis here — data hasn't loaded yet.
     // onHistoryLoaded below will activate it once real bars arrive.
 
-    // After history loads: activate mcap formatter, scroll to latest, zoom if sparse
+    // After history loads: scroll to real-time first, then activate mcap axis
+    // on the NEXT animation frame so calcRange() sees the post-scroll visible
+    // bars (current price) instead of the beginning-of-history bars (which may
+    // have been at a much higher price and cause the Y-axis range to be wrong).
     datafeed.onHistoryLoaded = (count: number) => {
       const kChart = getKlcChart(containerRef.current)
       if (!kChart) return
+      // 1. Scroll first — positions chart at current price before axis builds.
+      kChart.scrollToRealTime()
       if (count > 0) {
         _dataIsLoaded = true
-        // Now that real price data defines the Y-axis range, apply mcap formatting
-        if (yAxisFormatterRef.current) applyMcapAxis(yAxisFormatterRef.current)
+        // 2. Apply mcap axis after one frame so KLC has rendered at the correct
+        //    scroll position before calcRange() fires for the mcap axis switch.
+        requestAnimationFrame(() => {
+          if (containerRef.current && yAxisFormatterRef.current) {
+            applyMcapAxis(yAxisFormatterRef.current)
+          }
+        })
       }
-      kChart.scrollToRealTime()
     }
 
     const klcChart = getKlcChart(containerRef.current)

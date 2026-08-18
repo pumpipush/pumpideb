@@ -22,7 +22,7 @@
  */
 
 import { Router, type IRouter, type Request, type Response } from "express";
-import { desc, gte, gt, and } from "drizzle-orm";
+import { desc, gte } from "drizzle-orm";
 import { db, tokensTable } from "@workspace/db";
 import {
   tradeEmitter,
@@ -69,7 +69,7 @@ router.get("/feed/stream", (req: Request, res: Response) => {
           tradeCount:   tokensTable.tradeCount,
         })
         .from(tokensTable)
-        .where(and(gte(tokensTable.createdAt, SERVER_START_TIME), gt(tokensTable.tradeCount, "0")))
+        .where(gte(tokensTable.createdAt, SERVER_START_TIME))
         .orderBy(desc(tokensTable.createdAt))
         .limit(REPLAY_LIMIT);
 

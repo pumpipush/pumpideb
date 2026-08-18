@@ -99,12 +99,12 @@ export function TokenAvatar({ symbol, imageUrl, size = 40, className, shape = "s
     );
   }
 
-  // Dark "?" fallback — clean, universal, no colour distraction
+  // Gradient placeholder — unique per symbol, shows first letter
   const rx =
     shape === "circle"  ? size / 2 :
     shape === "rounded" ? size * 0.2 :
     size * 0.1;
-  const fontSize = size * 0.46;
+  const fontSize = size * 0.42;
 
   return (
     <svg
@@ -115,19 +115,29 @@ export function TokenAvatar({ symbol, imageUrl, size = 40, className, shape = "s
       style={{ display: "block" }}
       aria-label={symbol}
     >
-      <rect width={size} height={size} rx={rx} ry={rx} fill="#0d0d0d" />
+      <defs>
+        <radialGradient id={gradId} cx="35%" cy="30%" r="70%">
+          <stop offset="0%" stopColor={c1} stopOpacity="0.9" />
+          <stop offset="100%" stopColor={c2} stopOpacity="0.7" />
+        </radialGradient>
+      </defs>
+      {/* Background base colour */}
+      <rect width={size} height={size} rx={rx} ry={rx} fill={bg} />
+      {/* Gradient overlay */}
+      <rect width={size} height={size} rx={rx} ry={rx} fill={`url(#${gradId})`} />
+      {/* First letter of symbol */}
       <text
         x="50%"
         y="50%"
         dominantBaseline="central"
         textAnchor="middle"
         fontSize={fontSize}
-        fontWeight="700"
-        fontFamily="'Plus Jakarta Sans', sans-serif"
+        fontWeight="800"
+        fontFamily="'Plus Jakarta Sans', system-ui, sans-serif"
         fill="white"
-        opacity="0.20"
+        opacity="0.90"
       >
-        ?
+        {letter}
       </text>
     </svg>
   );
