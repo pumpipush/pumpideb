@@ -218,12 +218,13 @@ export function KLineChartCanvas({
   const chartRef = useRef<KLineChartRef>(null)
 
   // ── Toolbar state ─────────────────────────────────────────────────────────
-  const [period,     setPeriod]     = useState<Period>(DEFAULT_PERIOD)
-  const [priceMode,  setPriceMode]  = useState<PriceMode>('price')
-  const [candleType, setCandleType] = useState<CandleType>('candle_solid')
-  const [yAxisMode,  setYAxisMode]  = useState<YAxisMode>('normal')
-  const [autoScale,  setAutoScale]  = useState(true)
-  const [activeRange, setActiveRange] = useState<RangeKey | null>(null)
+  const [period,          setPeriod]         = useState<Period>(DEFAULT_PERIOD)
+  const [priceMode,       setPriceMode]      = useState<PriceMode>('price')
+  const [candleType,      setCandleType]     = useState<CandleType>('candle_solid')
+  const [yAxisMode,       setYAxisMode]      = useState<YAxisMode>('normal')
+  const [autoScale,       setAutoScale]      = useState(true)
+  const [activeRange,     setActiveRange]    = useState<RangeKey | null>(null)
+  const [drawingBarVisible, setDrawingBarVisible] = useState(false)
 
   // ── OHLC header data ──────────────────────────────────────────────────────
   const [ohlc,          setOhlc]          = useState<OhlcData | null>(null)
@@ -271,6 +272,12 @@ export function KLineChartCanvas({
   const handleYAxisModeChange = useCallback((mode: YAxisMode) => {
     setYAxisMode(mode)
     chartRef.current?.setYAxisMode(mode)
+  }, [])
+
+  const handleDrawingBarToggle = useCallback(() => {
+    const wasHidden = chartRef.current?.toggleDrawingBar()
+    // toggleDrawingBar returns true when the bar WAS hidden (now visible)
+    if (wasHidden !== undefined) setDrawingBarVisible(wasHidden)
   }, [])
 
   // ── Fullscreen support ────────────────────────────────────────────────────
@@ -322,6 +329,8 @@ export function KLineChartCanvas({
         onPriceModeChange={handlePriceModeChange}
         candleType={candleType}
         onCandleTypeChange={handleCandleTypeChange}
+        drawingBarVisible={drawingBarVisible}
+        onDrawingBarClick={handleDrawingBarToggle}
         onIndicatorClick={() => chartRef.current?.clickIndicator()}
         onSettingsClick={() => chartRef.current?.clickSettings()}
         onScreenshotClick={() => chartRef.current?.clickScreenshot()}

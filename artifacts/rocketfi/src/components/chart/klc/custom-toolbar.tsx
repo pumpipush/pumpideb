@@ -177,6 +177,12 @@ const IconFullscreen = () => (
     <path d="M2.5 6.5V3H6M12 3H15.5V6.5M15.5 11.5V15H12M6 15H2.5V11.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 )
+const IconDraw = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <path d="M3 13.5L5.5 11L12.5 4L14.5 6L7.5 13L3 14.5L3 13.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round"/>
+    <path d="M11 5.5L13 7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+  </svg>
+)
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -318,6 +324,8 @@ interface Props {
   onPriceModeChange: (m: PriceMode) => void
   candleType: CandleType
   onCandleTypeChange: (t: CandleType) => void
+  drawingBarVisible: boolean
+  onDrawingBarClick: () => void
   onIndicatorClick: () => void
   onSettingsClick: () => void
   onScreenshotClick: () => void
@@ -330,6 +338,7 @@ export function CustomToolbar({
   period, onPeriodChange,
   priceMode, onPriceModeChange,
   candleType, onCandleTypeChange,
+  drawingBarVisible, onDrawingBarClick,
   onIndicatorClick, onSettingsClick, onScreenshotClick, onFullscreenClick,
 }: Props) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -379,6 +388,13 @@ export function CustomToolbar({
 
       {/* ── Right (icons) ── */}
       <div className="ctb-right">
+        <button
+          className={`ctb-icon-btn${drawingBarVisible ? ' active' : ''}`}
+          onClick={onDrawingBarClick}
+          title="Drawing tools"
+        >
+          <IconDraw />
+        </button>
         <button className="ctb-icon-btn" onClick={onIndicatorClick} title="Indicators">
           <IconIndicators />
         </button>
