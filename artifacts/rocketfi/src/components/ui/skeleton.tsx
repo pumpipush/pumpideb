@@ -11,15 +11,15 @@ function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>)
   return (
     <div
       className={cn(
-        // Base: slightly more visible than pure transparent
-        'relative overflow-hidden rounded-md bg-zinc-800/70',
+        // Base: visible mid-gray so skeletons read clearly on dark backgrounds
+        'relative overflow-hidden rounded-md bg-zinc-700/60',
         // Shimmer sweep via ::before
         'before:absolute before:inset-0',
         'before:-translate-x-full',
-        'before:animate-[shimmer_1.6s_ease-in-out_infinite]',
+        'before:animate-[shimmer_1.4s_ease-in-out_infinite]',
         'before:bg-gradient-to-r',
         'before:from-transparent',
-        'before:via-white/[0.07]',
+        'before:via-white/[0.18]',
         'before:to-transparent',
         className,
       )}
