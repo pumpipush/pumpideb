@@ -130,7 +130,7 @@ function OhlcOverlay({
         <div className="klc-ohlc-row2">
           <span className="klc-ohlc-vol-label">Volume</span>
           <span className="klc-ohlc-vol-value">
-            {data ? fmtVol(data.volume) : '—'}
+            {data && solPrice ? fmtUSD(data.volume * solPrice) : '—'}
           </span>
         </div>
       )}
@@ -249,11 +249,11 @@ export function KLineChartCanvas({
   const symbolInfo = useMemo(() => ({
     ticker:          address,
     name:            name || symbol,
-    shortName:       `${symbol}/SOL`,
+    shortName:       `${symbol}/${priceMode === 'mcap' ? 'USD' : 'SOL'}`,
     market:          platform ?? 'pumpi',
     pricePrecision:  8,
     volumePrecision: 2,
-  }), [address, name, symbol, platform])
+  }), [address, name, symbol, platform, priceMode])
 
   // ── Stable refs so Y-axis formatter always reads latest values ──────────────
   // (avoids stale closures when solPrice or supply update after formatter set)
@@ -393,7 +393,7 @@ export function KLineChartCanvas({
 
         {/* OHLC overlay — slides right when drawing bar is open */}
         <OhlcOverlay
-          ticker={`${symbol}/SOL`}
+          ticker={`${symbol}/${priceMode === 'mcap' ? 'USD' : 'SOL'}`}
           priceMode={priceMode}
           period={period}
           ohlc={ohlc}

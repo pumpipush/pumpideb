@@ -360,7 +360,16 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  // Merge a 15 s hard timeout with any cancellation signal React Query provides.
+  // Without this, a hung server response keeps `isLoading` true forever since
+  // React Query only retries *rejected* promises — a hanging fetch never rejects.
+  const timeoutSignal = AbortSignal.timeout(15_000);
+  const providedSignal = (init as RequestInit | undefined)?.signal ?? null;
+  const signal = providedSignal
+    ? AbortSignal.any([timeoutSignal, providedSignal as AbortSignal])
+    : timeoutSignal;
+
+  const response = await fetch(input, { ...init, method, headers, signal });
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

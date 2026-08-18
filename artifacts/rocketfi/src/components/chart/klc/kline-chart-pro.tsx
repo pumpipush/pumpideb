@@ -26,7 +26,14 @@ registerYAxis({
   name: 'mcap',
   createTicks: ({ defaultTicks }) => {
     const fmt = _activeMcapFmt
-    if (!fmt || !_dataIsLoaded) return defaultTicks
+    if (!fmt) return defaultTicks
+    if (!_dataIsLoaded) {
+      // Data not yet loaded: keep axis lines but blank the labels.
+      // KLC's placeholder tick values (0–10) would produce nonsensical mcap
+      // numbers ("$0 – $769B") if formatted, so we suppress text until real
+      // OHLCV bars arrive and define the true Y range.
+      return defaultTicks.map(tick => ({ ...tick, text: '' }))
+    }
     return defaultTicks.map(tick => ({ ...tick, text: fmt(Number(tick.value)) }))
   },
 })
@@ -324,7 +331,7 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
     const defaultSymbol = symbol ?? {
       ticker: 'TOKEN',
       name: 'Token',
-      shortName: 'TOKEN/SOL',
+      shortName: 'TOKEN/USD',
       market: 'pumpi',
       pricePrecision: 8,
       volumePrecision: 2,

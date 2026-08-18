@@ -188,7 +188,12 @@ export class PumpiDatafeed implements Datafeed {
   // ── internal: fetch from API and store ────────────────────────────────────
   private async _fetchAndStore(address: string, tf: string): Promise<void> {
     try {
-      const res  = await fetch(apiUrl(`/tokens/${encodeURIComponent(address)}/ohlcv?tf=${tf}`))
+      // 15 s timeout prevents a hung server response from freezing the chart
+      // spinner indefinitely (getHistoryKLineData awaits this method).
+      const res  = await fetch(
+        apiUrl(`/tokens/${encodeURIComponent(address)}/ohlcv?tf=${tf}`),
+        { signal: AbortSignal.timeout(15_000) },
+      )
       if (!res.ok) {
         console.warn(`[PumpiDatafeed] OHLCV fetch failed: ${res.status} ${res.statusText} (${address} ${tf})`)
         return
@@ -197,8 +202,11 @@ export class PumpiDatafeed implements Datafeed {
       if (Array.isArray(data?.bars) && data.bars.length > 0) {
         this._bars = data.bars.sort((a, b) => a.time - b.time)
       }
-    } catch {
-      // Network error — keep existing bars
+    } catch (err) {
+      // Network error or timeout — keep existing bars, log for visibility
+      if (err instanceof Error && err.name !== 'AbortError') {
+        console.warn(`[PumpiDatafeed] OHLCV fetch error: ${err.message} (${address} ${tf})`)
+      }
     }
   }
 

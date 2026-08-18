@@ -1481,7 +1481,7 @@ export class PumpApiAdapter {
       const initSolLam  = PumpApiAdapter._solToLamports(msg.quoteAmount);
       const initTokBase = PumpApiAdapter._tokToBase(msg.initialBuy);
       const initTrader  = msg.breakdown?.[0]?.trader ?? creatorAddress ?? "unknown";
-      await db.insert(tradesTable).values({
+      const [initTrade] = await db.insert(tradesTable).values({
         tokenAddress:  mint,
         traderAddress: initTrader ?? "unknown",
         isBuy:         true,
@@ -1491,10 +1491,20 @@ export class PumpApiAdapter {
         txHash:        msg.signature!,
         platform:      PLATFORM,
         timestamp:     tokenCreatedAt,
-      }).onConflictDoNothing();
+      }).onConflictDoNothing().returning();
+
+      // Count the initial buy in the token's aggregates so the explore page
+      // shows correct trade counts for freshly launched tokens (previously they
+      // showed 0 trades until a separate buy event arrived).
+      if (initTrade) {
+        await db.update(tokensTable).set({
+          tradeCount: sql`${tokensTable.tradeCount} + 1`,
+          volumeEth:  sql`CAST(CAST(${tokensTable.volumeEth} AS NUMERIC) + ${initSolLam} AS TEXT)`,
+        }).where(eq(tokensTable.address, mint));
+      }
     }
 
-    pumpApiLog.info({ mint, name, symbol }, "pumpapi: new pump_fun token ingested");
+    pumpApiLog.info({ mint, name, symbol, marketCapEth: initMCStr }, "pumpapi: new pump_fun token ingested");
 
     const broadcastToken = (imageUrl: string | null) => {
       emitNewToken({
@@ -1504,8 +1514,10 @@ export class PumpApiAdapter {
           name,
           symbol,
           imageUrl,
-          priceEth:     PUMP_INIT_PRICE_ETH,
-          marketCapEth: PUMP_INIT_MC_LAMPORTS,
+          // Use the actual event values — not the protocol-default constants —
+          // so the Explore "New" feed shows the real price/mcap at launch time.
+          priceEth:     initPriceEth,
+          marketCapEth: initMCStr,
           platform:     PLATFORM,
           chain:        CHAIN,
           createdAt:    tokenCreatedAt.toISOString(),
@@ -1581,6 +1593,21 @@ export class PumpApiAdapter {
 
     // Use the stream's event timestamp so chart data stays accurate.
     const eventTs = PumpApiAdapter._parseTs(msg.timestamp);
+
+    // ── FK guard ────────────────────────────────────────────────────────────
+    // fk_trades_token rejects inserts when token_address has no matching row.
+    // Trade events can arrive before (or without) the corresponding create
+    // event when create+buy land in the same block and are dispatched as
+    // independent fire-and-forget promises.  Upsert a minimal placeholder so
+    // the FK is satisfied; onConflictDoNothing leaves existing rows untouched.
+    await db.insert(tokensTable).values({
+      address:        mint,
+      name:           mint.slice(0, 8),
+      symbol:         "???",
+      creatorAddress: "unknown",
+      platform:       PLATFORM,
+      chain:          CHAIN,
+    }).onConflictDoNothing();
 
     const [trade] = await db.insert(tradesTable).values({
       tokenAddress:  mint,
