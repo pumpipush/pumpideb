@@ -15,7 +15,8 @@ const INTERVAL: Record<Period, string> = {
 const REFRESH_MS = 4 * 60 * 1_000; // 4 min
 
 interface LeaderboardData {
-  period: string;
+  period:      string;
+  computedAt:  number;
   traders_volume: { rank: number; address: string; volume_lamports: string }[];
   traders_pnl:    { rank: number; address: string; trade_count: number; pnl_lamports: string }[];
   tokens:         { rank: number; address: string; name: string; symbol: string; imageUrl?: string | null; platform: string; trade_count: number; volume_lamports: string }[];

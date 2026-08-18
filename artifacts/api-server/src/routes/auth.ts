@@ -325,6 +325,70 @@ router.post("/auth/google", asyncWrap(async (req, res) => {
   return void res.json({ token, profile, isNewAccount, wasLinked });
 }));
 
+// ── POST /api/auth/email/send ─────────────────────────────────────────────
+// Public — no auth required. Send a 6-digit OTP to the given email address
+// so the user can sign in or create an account without a wallet.
+
+router.post("/auth/email/send", authLimiter, asyncWrap(async (req, res) => {
+  const { email } = req.body as { email?: string };
+  if (!email || !email.includes("@")) {
+    return void res.status(400).json({ error: "valid email required" });
+  }
+  const norm = email.toLowerCase().trim();
+
+  // Max 3 sends per email per 15 minutes
+  if (!checkRateLimit(otpSendLimiter, `login:${norm}`, 3, 15 * 60_000)) {
+    return void res.status(429).json({ error: "Too many attempts. Please wait 15 minutes before requesting another code." });
+  }
+
+  const code = generateOTP(norm);
+  await sendOTPEmail(norm, code);
+  return void res.json({ ok: true });
+}));
+
+// ── POST /api/auth/email/verify ───────────────────────────────────────────
+// Public — no auth required. Verify the OTP, then find-or-create a profile
+// and return a JWT. Creates an email-auth profile if this is a new address.
+
+router.post("/auth/email/verify", authLimiter, asyncWrap(async (req, res) => {
+  const { email, code } = req.body as { email?: string; code?: string };
+  if (!email || !code) return void res.status(400).json({ error: "email and code required" });
+  const norm = email.toLowerCase().trim();
+
+  // Brute-force guard: max 10 attempts per email per 15 minutes
+  if (!checkRateLimit(otpVerifyLimiter, `login:${norm}`, 10, 15 * 60_000)) {
+    return void res.status(429).json({ error: "Too many verification attempts. Please request a new code." });
+  }
+
+  const ok = verifyOTP(norm, code);
+  if (!ok) return void res.status(401).json({ error: "Invalid or expired code" });
+
+  // Find existing profile by email, or create a new one
+  const existing = await db
+    .select()
+    .from(profilesTable)
+    .where(eq(profilesTable.email, norm))
+    .limit(1);
+
+  let profile = existing[0];
+  let isNewAccount = false;
+
+  if (!profile) {
+    isNewAccount   = true;
+    const address  = randomUUID();
+    const username = await uniqueUsername(norm.split("@")[0]);
+    profile = (
+      await db
+        .insert(profilesTable)
+        .values({ address, username, email: norm, authType: "email" })
+        .returning()
+    )[0];
+  }
+
+  const token = signToken({ sub: profile.address, authType: "email" });
+  return void res.json({ token, profile, isNewAccount });
+}));
+
 // ── POST /api/auth/link/email/send ────────────────────────────────────────
 // Wallet-only users can add an email address by sending an OTP.
 // Requires: Authorization: Bearer <wallet-auth JWT>

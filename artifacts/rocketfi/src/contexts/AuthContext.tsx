@@ -91,6 +91,15 @@ interface AuthContextValue {
    */
   linkGoogle: (accessToken: string) => Promise<void>;
   /**
+   * Send a 6-digit OTP to the given email for sign-in / sign-up (no wallet needed).
+   */
+  loginWithEmailSend: (email: string) => Promise<void>;
+  /**
+   * Verify the OTP from loginWithEmailSend. On success, stores JWT and sets socialUser.
+   * Returns { isNewAccount } so callers can surface welcome messaging.
+   */
+  loginWithEmailVerify: (email: string, code: string) => Promise<{ isNewAccount: boolean }>;
+  /**
    * Smart wallet connect — call this after the wallet extension approves
    * the connection.  Automatically decides:
    *   • Already signed in (Google JWT present) → links the wallet to the
@@ -124,6 +133,8 @@ const AuthContext = createContext<AuthContextValue>({
   linkEmailSend: async () => {},
   linkEmailVerify: async () => {},
   linkGoogle: async () => {},
+  loginWithEmailSend: async () => {},
+  loginWithEmailVerify: async () => ({ isNewAccount: false }),
 });
 
 const STORAGE_KEY = "pumpi_auth_token";
@@ -387,6 +398,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSocialUser((u) => u ? { ...u, linkedWallet: null } : u);
   }, [authHeaders]);
 
+  // ── Email OTP login (no wallet required) ─────────────────────────────────
+
+  const loginWithEmailSend = useCallback(async (email: string) => {
+    const r = await fetch(apiUrl("/auth/email/send"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({})) as { error?: string };
+      throw new Error(err.error ?? "Failed to send verification code");
+    }
+  }, []);
+
+  const loginWithEmailVerify = useCallback(async (email: string, code: string): Promise<{ isNewAccount: boolean }> => {
+    const r = await fetch(apiUrl("/auth/email/verify"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, code }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({})) as { error?: string };
+      throw new Error(err.error ?? "Invalid or expired code");
+    }
+    const data = await r.json() as {
+      token: string;
+      profile: { address: string; username: string; avatarUrl?: string | null; email?: string | null; linkedWallet?: string | null };
+      isNewAccount?: boolean;
+    };
+    handleAuthResponse({ ...data, authType: "email" });
+    return { isNewAccount: data.isNewAccount ?? false };
+  }, []);
+
   // ── Wallet → email/Google linking ────────────────────────────────────────
 
   const linkEmailSend = useCallback(async (email: string) => {
@@ -555,6 +599,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         linkEmailSend,
         linkEmailVerify,
         linkGoogle,
+        loginWithEmailSend,
+        loginWithEmailVerify,
       }}
     >
       {children}

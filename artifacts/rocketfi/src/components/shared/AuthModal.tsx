@@ -7,7 +7,7 @@
  */
 
 import { useState } from "react";
-import { X, Loader2, Wallet } from "lucide-react";
+import { X, Loader2, Wallet, Mail, ArrowLeft } from "lucide-react";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWallet } from "@/contexts/WalletContext";
@@ -82,7 +82,7 @@ interface AuthModalProps {
 /* ── component ───────────────────────────────────────────────────────────── */
 
 export function AuthModal({ open, onOpenChange }: AuthModalProps) {
-  const { handleGoogleToken, loginOrLinkWallet, linkGoogle, mergeWallet, socialUser } = useAuth();
+  const { handleGoogleToken, loginOrLinkWallet, linkGoogle, mergeWallet, socialUser, loginWithEmailSend, loginWithEmailVerify } = useAuth();
   const { connectWallet, signMessage } = useWallet();
   const { toast } = useToast();
 
@@ -92,10 +92,50 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
   const [merging, setMerging]       = useState(false);
   const mobile = isMobile();
 
+  // ── Email OTP state ────────────────────────────────────────────────────────
+  const [emailView, setEmailView]   = useState<"input" | "otp">("input");
+  const [emailVal, setEmailVal]     = useState("");
+  const [otpVal, setOtpVal]         = useState("");
+
   const recentWallet = localStorage.getItem(LAST_WALLET_KEY);
 
   function close() { onOpenChange(false); }
-  function reset() { setError(null); setLoading(null); setMergeNonce(null); }
+  function reset() {
+    setError(null); setLoading(null); setMergeNonce(null);
+    setEmailView("input"); setEmailVal(""); setOtpVal("");
+  }
+
+  // ── Email flow handlers ────────────────────────────────────────────────────
+  const handleEmailSend = async () => {
+    if (!emailVal.trim() || loading) return;
+    setLoading("email"); setError(null);
+    try {
+      await loginWithEmailSend(emailVal.trim());
+      setEmailView("otp");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to send code");
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleEmailVerify = async () => {
+    if (!otpVal.trim() || loading) return;
+    setLoading("email_verify"); setError(null);
+    try {
+      const { isNewAccount } = await loginWithEmailVerify(emailVal.trim(), otpVal.trim());
+      reset(); close();
+      toast({
+        title: isNewAccount ? "Welcome to Pumpi! 🚀" : "Signed in",
+        description: isNewAccount ? "Account created. Set a username in your profile." : `Signed in as ${emailVal}`,
+        variant: "success" as never,
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Invalid code");
+    } finally {
+      setLoading(null);
+    }
+  };
 
   // ── Google ─────────────────────────────────────────────────────────────────
   const handleGoogleSuccess = async (accessToken: string) => {
@@ -228,6 +268,63 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                   onSuccess={handleGoogleSuccess}
                   onError={(msg) => setError(msg)}
                 />
+              )}
+
+              {/* Email — send step */}
+              {emailView === "input" && (
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none" />
+                    <input
+                      type="email"
+                      placeholder="Email address"
+                      value={emailVal}
+                      onChange={(e) => setEmailVal(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleEmailSend()}
+                      disabled={!!loading}
+                      className="w-full h-11 rounded-xl bg-white/[0.06] border border-white/[0.08] pl-9 pr-3 text-[13.5px] text-white placeholder-white/30 focus:outline-none focus:border-white/20 transition-colors disabled:opacity-50"
+                    />
+                  </div>
+                  <button
+                    onClick={handleEmailSend}
+                    disabled={!emailVal.trim() || !!loading}
+                    className="h-11 px-4 rounded-xl text-[13px] font-semibold bg-white/[0.08] hover:bg-white/[0.13] active:bg-white/[0.16] disabled:opacity-40 transition-all text-white whitespace-nowrap flex items-center gap-1.5"
+                  >
+                    {loading === "email" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Send code"}
+                  </button>
+                </div>
+              )}
+
+              {/* Email — OTP step */}
+              {emailView === "otp" && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-[12px] text-white/50">
+                    <button onClick={() => { setEmailView("input"); setOtpVal(""); setError(null); }} className="hover:text-white/80 transition-colors">
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                    </button>
+                    Code sent to <span className="text-white/70">{emailVal}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="6-digit code"
+                      value={otpVal}
+                      onChange={(e) => setOtpVal(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      onKeyDown={(e) => e.key === "Enter" && handleEmailVerify()}
+                      disabled={!!loading}
+                      className="flex-1 h-11 rounded-xl bg-white/[0.06] border border-white/[0.08] px-3.5 text-[15px] text-white font-mono tracking-[0.2em] placeholder-white/30 focus:outline-none focus:border-white/20 transition-colors disabled:opacity-50"
+                    />
+                    <button
+                      onClick={handleEmailVerify}
+                      disabled={otpVal.length < 6 || !!loading}
+                      className="h-11 px-4 rounded-xl text-[13px] font-semibold disabled:opacity-40 transition-all whitespace-nowrap flex items-center gap-1.5"
+                      style={{ background: "#9aed2c", color: "#000" }}
+                    >
+                      {loading === "email_verify" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Verify"}
+                    </button>
+                  </div>
+                </div>
               )}
 
               {/* Divider */}
