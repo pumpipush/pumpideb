@@ -25,15 +25,12 @@ let _dataIsLoaded = false
 registerYAxis({
   name: 'mcap',
   createTicks: ({ defaultTicks }) => {
+    // Always blank ticks until real OHLCV data has landed.
+    // KLC starts with a placeholder 0–10 range; at precision=9 those labels
+    // become "10.00000000" etc., which looks broken for any display mode.
+    if (!_dataIsLoaded) return defaultTicks.map(tick => ({ ...tick, text: '' }))
     const fmt = _activeMcapFmt
     if (!fmt) return defaultTicks
-    if (!_dataIsLoaded) {
-      // Data not yet loaded: keep axis lines but blank the labels.
-      // KLC's placeholder tick values (0–10) would produce nonsensical mcap
-      // numbers ("$0 – $769B") if formatted, so we suppress text until real
-      // OHLCV bars arrive and define the true Y range.
-      return defaultTicks.map(tick => ({ ...tick, text: '' }))
-    }
     return defaultTicks.map(tick => {
       const v = Number(tick.value)
       // KLC sometimes generates negative tick values for internal padding.
@@ -392,6 +389,13 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
     datafeed.onHistoryLoaded = (count: number) => {
       const kChart = getKlcChart(containerRef.current)
       if (!kChart) return
+      // Fix: pump.fun token prices are ~2–30 × 10⁻⁸ SOL/token.  KLC defaults to
+      // precision=4 → dif=0.0001, which is thousands of times larger than any
+      // real bar range.  When |max−min| < dif KLC expands the axis to ±4×dif
+      // (≈±0.0004 SOL/token) which in mcap terms is ±$30 M — making the Y-axis
+      // impossibly wide.  Setting precision=9 → dif=1e-9 keeps dif smaller than
+      // the actual bar range (~3–10×10⁻⁹) so the axis stays tight.
+      kChart.setPriceVolumePrecision(9, 4)
       // 1. Scroll first — positions chart at current price before axis builds.
       kChart.scrollToRealTime()
       if (count > 0) {

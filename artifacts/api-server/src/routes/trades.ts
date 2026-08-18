@@ -360,7 +360,9 @@ router.get("/tokens/:address/ohlcv", chartLimiter, asyncWrap(async (req, res) =>
           high:   solPrice > 0 ? b.high  / solPrice : b.high,
           low:    solPrice > 0 ? b.low   / solPrice : b.low,
           close:  solPrice > 0 ? b.close / solPrice : b.close,
-          volume: b.volume,
+          // Birdeye volume is in USD; convert to lamports so the frontend
+          // datafeed (which always divides by 1e9) yields SOL correctly.
+          volume: solPrice > 0 ? Math.round(b.volume / solPrice * 1e9) : 0,
         }));
 
         // Drop Birdeye fill-forward bars: volume=0 AND all OHLC values identical.
@@ -372,18 +374,25 @@ router.get("/tokens/:address/ohlcv", chartLimiter, asyncWrap(async (req, res) =>
         );
       }
 
-      // Derive currentMcEth from the last bar so the header MC always matches
-      // the chart without a separate Birdeye token_overview call.
-      // bar.close is SOL/token; lamports = bar.close × 1e9 lam/SOL × 1e9 supply = × 1e18
-      const lastBar = bars[bars.length - 1];
-      const currentMcEth = lastBar && lastBar.close > 0
-        ? String(Math.round(lastBar.close * 1e18))
-        : undefined;
-      const payload = { bars, maxTradeId: 0, currentMcEth };
-      _ohlcvCacheSet(cacheKey, payload, tf);
-      res.setHeader("X-Cache", "MISS");
-      res.json(payload);
-      return;
+      // Only return immediately when Birdeye gave us real bars.
+      // If Birdeye failed (key expired, network error, etc.) fall through to the
+      // DB SQL path below — even sparse internal trades are better than an
+      // empty chart, especially for PumpSwap tokens that have a few sampled rows.
+      if (bars.length > 0) {
+        // Derive currentMcEth from the last bar so the header MC always matches
+        // the chart without a separate Birdeye token_overview call.
+        // bar.close is SOL/token; lamports = bar.close × 1e9 lam/SOL × 1e9 supply = × 1e18
+        const lastBar = bars[bars.length - 1];
+        const currentMcEth = lastBar && lastBar.close > 0
+          ? String(Math.round(lastBar.close * 1e18))
+          : undefined;
+        const payload = { bars, maxTradeId: 0, currentMcEth };
+        _ohlcvCacheSet(cacheKey, payload, tf);
+        res.setHeader("X-Cache", "MISS");
+        res.json(payload);
+        return;
+      }
+      // Birdeye returned nothing — fall through to DB SQL path.
     }
   }
 
@@ -482,7 +491,9 @@ router.get("/tokens/:address/ohlcv", chartLimiter, asyncWrap(async (req, res) =>
           high:   solPrice > 0 ? b.high  / solPrice : b.high,
           low:    solPrice > 0 ? b.low   / solPrice : b.low,
           close:  solPrice > 0 ? b.close / solPrice : b.close,
-          volume: b.volume,
+          // Birdeye volume is in USD; convert to lamports so the frontend
+          // datafeed (which always divides by 1e9) yields SOL correctly.
+          volume: solPrice > 0 ? Math.round(b.volume / solPrice * 1e9) : 0,
         }));
         // Drop fill-forward bars (see primary DEX path above for explanation)
         bars = rawBars2.filter(b =>
