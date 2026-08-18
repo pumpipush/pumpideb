@@ -393,12 +393,6 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
         _dataIsLoaded = true
         // Now that real price data defines the Y-axis range, apply mcap formatting
         if (yAxisFormatterRef.current) applyMcapAxis(yAxisFormatterRef.current)
-        // Zoom in so sparse charts are readable (avoid 1-candle thin-line look)
-        if (count < 50) {
-          const pxWide = containerRef.current?.clientWidth ?? 900
-          const barSpace = Math.min(32, Math.max(8, Math.floor(pxWide / (count + 10))))
-          kChart.setBarSpace(barSpace)
-        }
       }
       kChart.scrollToRealTime()
     }
