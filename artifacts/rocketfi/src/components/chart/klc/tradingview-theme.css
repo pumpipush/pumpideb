@@ -218,7 +218,7 @@
   border-radius: 4px;
   border: none;
   background: transparent;
-  color: #787b86;
+  color: #9ca3af;
   font-size: 13px;
   font-family: 'Trebuchet MS', sans-serif;
   font-weight: 400;
@@ -229,11 +229,11 @@
 }
 .ctb-tf-pill:hover {
   background: rgba(255,255,255,0.06);
-  color: #b2b5be;
+  color: #d1d4dc;
 }
 .ctb-tf-pill.open {
   background: rgba(255,255,255,0.06);
-  color: #b2b5be;
+  color: #d1d4dc;
 }
 /* Active period: blue text, subtle blue tint background */
 .ctb-tf-pill.active-period {
@@ -257,7 +257,7 @@
   border-radius: 4px;
   border: none;
   background: transparent;
-  color: #787b86;
+  color: #9ca3af;
   font-size: 12px;
   font-family: 'Trebuchet MS', sans-serif;
   cursor: pointer;
@@ -267,7 +267,7 @@
 }
 .ctb-icon-btn:hover {
   background: rgba(255,255,255,0.06);
-  color: #b2b5be;
+  color: #d1d4dc;
 }
 .ctb-icon-btn.active {
   color: #2962ff;
@@ -500,7 +500,7 @@
   border: none;
   border-radius: 3px;
   background: transparent;
-  color: #5d606b;
+  color: #9ca3af;
   font-size: 12px;
   font-family: 'Trebuchet MS', sans-serif;
   font-weight: 400;
@@ -509,7 +509,7 @@
   white-space: nowrap;
 }
 .bbar-range:hover {
-  color: #b2b5be;
+  color: #d1d4dc;
   background: rgba(255,255,255,0.04);
 }
 .bbar-range.active {
@@ -592,19 +592,19 @@
   border: none;
   border-radius: 3px;
   background: transparent;
-  color: #5d606b;
+  color: #9ca3af;
   cursor: pointer;
   margin-left: 2px;
   transition: background 0.10s, color 0.10s;
 }
 .bbar-icon:hover {
   background: rgba(255,255,255,0.04);
-  color: #b2b5be;
+  color: #d1d4dc;
 }
 
 .bbar-clock {
-  color: #5d606b;
-  font-size: 11.5px;
+  color: #9ca3af;
+  font-size: 12px;
   font-family: 'Trebuchet MS', sans-serif;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
@@ -617,7 +617,7 @@
   border: none;
   border-radius: 3px;
   background: transparent;
-  color: #5d606b;
+  color: #9ca3af;
   font-size: 12px;
   font-family: 'Trebuchet MS', sans-serif;
   font-weight: 400;
@@ -626,7 +626,7 @@
 }
 .bbar-toggle:hover {
   background: rgba(255,255,255,0.04);
-  color: #b2b5be;
+  color: #d1d4dc;
 }
 .bbar-toggle.active {
   color: #2962ff;
@@ -695,8 +695,8 @@
 @keyframes csBackdropIn { from { opacity: 0 } to { opacity: 1 } }
 
 .cs-panel {
-  background: #111111;
-  border: 1px solid rgba(255,255,255,0.08);
+  background: #161616;
+  border: 1px solid rgba(255,255,255,0.11);
   border-radius: 12px;
   width: 100%;
   max-width: 440px;
@@ -774,7 +774,7 @@
   font-family: 'Trebuchet MS', sans-serif;
   font-size: 10px;
   font-weight: 600;
-  color: #4a4e5a;
+  color: #6b7280;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 10px 20px 4px;
@@ -794,12 +794,12 @@
 .cs-label {
   font-family: 'Trebuchet MS', sans-serif;
   font-size: 13px;
-  color: #c4c9d4;
+  color: #d1d4dc;
 }
 .cs-desc {
   font-family: 'Trebuchet MS', sans-serif;
   font-size: 11px;
-  color: #4a4e5a;
+  color: #787b86;
   line-height: 1.3;
 }
 .cs-row-control { flex-shrink: 0; }
