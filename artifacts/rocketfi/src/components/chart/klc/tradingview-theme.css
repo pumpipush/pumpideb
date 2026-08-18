@@ -484,6 +484,16 @@
   gap: 0;
 }
 
+/* Desktop pills — hidden on mobile */
+.bbar-pills-desktop {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+@media (max-width: 640px) {
+  .bbar-pills-desktop { display: none !important; }
+}
+
 .bbar-range {
   height: 22px;
   padding: 0 6px;
@@ -503,6 +513,72 @@
   background: rgba(255,255,255,0.04);
 }
 .bbar-range.active {
+  color: #2962ff;
+  font-weight: 600;
+}
+
+/* Mobile "Date Range ▾" trigger — hidden on desktop */
+.bbar-range-btn {
+  display: none;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 4px;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 12px;
+  font-family: 'Trebuchet MS', sans-serif;
+  cursor: pointer;
+  transition: background 0.10s, color 0.10s, border-color 0.10s;
+  white-space: nowrap;
+}
+.bbar-range-btn.open,
+.bbar-range-btn:hover {
+  background: rgba(255,255,255,0.05);
+  color: #d1d4dc;
+  border-color: rgba(255,255,255,0.18);
+}
+.bbar-range-btn.has-selection {
+  color: #2962ff;
+  border-color: rgba(41,98,255,0.40);
+}
+@media (max-width: 640px) {
+  .bbar-range-btn { display: flex !important; }
+}
+
+/* Mobile range dropdown panel */
+.bbar-range-dropdown {
+  background: #111111;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 6px;
+  padding: 4px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  min-width: 150px;
+  box-shadow: 0 -8px 24px rgba(0,0,0,0.80);
+}
+
+.bbar-range-dd-item {
+  height: 32px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 13px;
+  font-family: 'Trebuchet MS', sans-serif;
+  cursor: pointer;
+  transition: background 0.08s, color 0.08s;
+  white-space: nowrap;
+}
+.bbar-range-dd-item:hover {
+  background: rgba(255,255,255,0.06);
+  color: #d1d4dc;
+}
+.bbar-range-dd-item.active {
+  background: rgba(41,98,255,0.15);
   color: #2962ff;
   font-weight: 600;
 }
