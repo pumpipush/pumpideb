@@ -235,14 +235,14 @@
   background: rgba(255,255,255,0.06);
   color: #d1d4dc;
 }
-/* Active period: blue text, subtle blue tint background */
+/* Active period: white text, subtle bg */
 .ctb-tf-pill.active-period {
-  color: #2962ff;
-  background: rgba(41,98,255,0.12);
+  color: #d1d4dc;
+  background: rgba(255,255,255,0.07);
   font-weight: 600;
 }
 .ctb-tf-pill.active-period:hover {
-  background: rgba(41,98,255,0.18);
+  background: rgba(255,255,255,0.11);
 }
 
 /* ── Generic icon button (settings, screenshot, fullscreen, candle-type) ── */

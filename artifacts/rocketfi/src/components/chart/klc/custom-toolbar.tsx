@@ -309,7 +309,6 @@ function TimeframeDropdown({
         title="Timeframe"
       >
         {period.text}
-        <IconChevronDown />
       </button>
       <DropdownPortal triggerRef={btnRef} open={open} onClose={() => setOpen(false)}>
         <div className="ctb-dd-panel" style={{ position: 'static' }}>
