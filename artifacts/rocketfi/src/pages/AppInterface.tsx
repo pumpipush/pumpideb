@@ -1894,8 +1894,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     // shape remains honest.
     // DEX tokens already use serverOhlcv.currentMcEth for their header (which
     // is derived from the same OHLCV bars), so they don't need this override.
+    // NOTE: isDexToken is declared later in the component (after this useMemo),
+    // so compute it inline here to avoid a TDZ ReferenceError.
+    const _isNonDexForChart = !["pumpswap", "raydium_launchlab"].includes(token?.platform ?? "");
     const livePriceOverride =
-      !isDexToken && liveToken?.priceEth
+      _isNonDexForChart && liveToken?.priceEth
         ? parseFloat(liveToken.priceEth)
         : null;
     if (livePriceOverride && livePriceOverride > 0 && result.length > 0) {
@@ -1910,7 +1913,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
     return result;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverOhlcv, liveTrades, history, chartTf, token?.address, isDexToken, liveToken?.priceEth]);
+  }, [serverOhlcv, liveTrades, history, chartTf, token?.address, token?.platform, liveToken?.priceEth]);
 
   // ── "Just launched" detection ─────────────────────────────────────────────
   // True when: token was created < 60 s ago, has 0 DB trades, and no live SSE
