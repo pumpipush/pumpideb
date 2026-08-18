@@ -1,5 +1,5 @@
 import { Link, useLocation, useSearch } from "wouter";
-import { Rocket, LayoutGrid, ArrowRightLeft, Plus, UserCircle2, Wallet } from "lucide-react";
+import { Rocket, LayoutGrid, ArrowRightLeft, Plus, UserCircle2, Wallet, Trophy } from "lucide-react";
 import { cn, diceBearUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useWallet } from "@/contexts/WalletContext";
@@ -70,6 +70,19 @@ export function Sidebar() {
           <LayoutGrid className={cn("w-4 h-4 transition-transform duration-200", location === "/" ? "text-primary" : "group-hover:scale-110")} />
           Explore
         </Link>
+        <Link
+          href="/leaderboard"
+          className={cn(
+            "flex items-center gap-3 px-3 py-2.5 text-sm font-normal transition-all duration-200 rounded-sm group",
+            location === "/leaderboard"
+              ? "bg-primary/15 text-foreground nav-active-bar"
+              : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+          )}
+        >
+          <Trophy className={cn("w-4 h-4 transition-transform duration-200", location === "/leaderboard" ? "text-primary" : "group-hover:scale-110")} />
+          Leaderboard
+        </Link>
+
         <Link
           href="/launch"
           className={cn(
@@ -156,6 +169,17 @@ export function BottomNav() {
         >
           <LayoutGrid className={cn("w-5 h-5 transition-transform duration-200", location === "/" ? "text-primary scale-110" : "")} />
           Explore
+        </Link>
+
+        <Link
+          href="/leaderboard"
+          className={cn(
+            "flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-normal tracking-wide transition-all duration-200",
+            location === "/leaderboard" ? "text-primary" : "text-muted-foreground"
+          )}
+        >
+          <Trophy className={cn("w-5 h-5 transition-transform duration-200", location === "/leaderboard" ? "text-primary scale-110" : "")} />
+          Ranks
         </Link>
 
         <Link
