@@ -34,7 +34,13 @@ registerYAxis({
       // OHLCV bars arrive and define the true Y range.
       return defaultTicks.map(tick => ({ ...tick, text: '' }))
     }
-    return defaultTicks.map(tick => ({ ...tick, text: fmt(Number(tick.value)) }))
+    return defaultTicks.map(tick => {
+      const v = Number(tick.value)
+      // KLC sometimes generates negative tick values for internal padding.
+      // Market cap is always ≥ 0, so suppress negative labels entirely.
+      if (v <= 0) return { ...tick, text: '' }
+      return { ...tick, text: fmt(v) }
+    })
   },
 })
 
