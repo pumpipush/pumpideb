@@ -129,11 +129,11 @@ export function LeaderboardWidget({ solPrice }: Props) {
       <div className="shrink-0 px-4 pt-3 pb-0">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-1.5 h-4 rounded-full" style={{ background: "linear-gradient(180deg,#a78bfa,#6d28d9)" }} />
+            <div className="w-1.5 h-4 rounded-full" style={{ background: "linear-gradient(180deg,#22d3ee,#0e7490)" }} />
             <span className="text-sm font-bold tracking-tight text-white">Leaderboard</span>
           </div>
           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
-            style={{ background: "rgba(167,139,250,0.12)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.2)" }}>
+            style={{ background: "rgba(167,139,250,0.12)", color: "#22d3ee", border: "1px solid rgba(167,139,250,0.2)" }}>
             24h
           </span>
         </div>
@@ -149,11 +149,11 @@ export function LeaderboardWidget({ solPrice }: Props) {
                 className="relative flex items-center gap-1.5 px-3 py-2 text-xs font-semibold transition-all duration-150"
                 style={{ color: active ? "#e2e8f0" : "rgba(148,163,184,0.5)" }}
               >
-                <span style={{ color: active ? "#a78bfa" : "inherit" }}>{icon}</span>
+                <span style={{ color: active ? "#22d3ee" : "inherit" }}>{icon}</span>
                 {label}
                 {active && (
                   <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-t-full"
-                    style={{ background: "linear-gradient(90deg,#a78bfa,#7c3aed)" }} />
+                    style={{ background: "linear-gradient(90deg,#22d3ee,#0891b2)" }} />
                 )}
               </button>
             );
@@ -205,7 +205,7 @@ export function LeaderboardWidget({ solPrice }: Props) {
                   <span className="text-[10px]" style={{ color: "rgba(148,163,184,0.5)" }}>
                     {row.trade_count.toLocaleString()} trades
                   </span>
-                  <ProgressBar value={Number(row.volume_lamports)} max={maxVol} color="#a78bfa" />
+                  <ProgressBar value={Number(row.volume_lamports)} max={maxVol} color="#22d3ee" />
                 </div>
                 <div className="text-right shrink-0 pt-0.5">
                   <div className="text-xs font-bold text-white">{usd ?? fmtSol(row.volume_lamports)}</div>
@@ -266,7 +266,7 @@ export function LeaderboardWidget({ solPrice }: Props) {
                   <span className="text-[10px] truncate" style={{ color: "rgba(148,163,184,0.5)" }}>
                     {token.name}
                   </span>
-                  <ProgressBar value={Number(token.volume_lamports)} max={maxTok} color="#a78bfa" />
+                  <ProgressBar value={Number(token.volume_lamports)} max={maxTok} color="#22d3ee" />
                 </div>
                 <div className="text-right shrink-0 pt-0.5">
                   <div className="text-xs font-bold text-white">{usd ?? fmtSol(token.volume_lamports)}</div>
