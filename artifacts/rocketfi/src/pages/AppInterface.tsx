@@ -1884,9 +1884,33 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         merged.set(lb.time, lb);
       }
     }
-    return Array.from(merged.values()).sort((a, b) => a.time - b.time);
+    const result = Array.from(merged.values()).sort((a, b) => a.time - b.time);
+
+    // ── Live price sync for pump.fun tokens ────────────────────────────────
+    // The OHLCV cache can be up to 8s stale; the SSE snapshot (liveToken) is
+    // instant. For pump.fun (non-DEX) tokens, force-override the last bar's
+    // close with the live SSE price so the chart C value always matches what
+    // the header shows. High/low are extended (never shrunk) so the candle
+    // shape remains honest.
+    // DEX tokens already use serverOhlcv.currentMcEth for their header (which
+    // is derived from the same OHLCV bars), so they don't need this override.
+    const livePriceOverride =
+      !isDexToken && liveToken?.priceEth
+        ? parseFloat(liveToken.priceEth)
+        : null;
+    if (livePriceOverride && livePriceOverride > 0 && result.length > 0) {
+      const last = result[result.length - 1]!;
+      result[result.length - 1] = {
+        ...last,
+        close: livePriceOverride,
+        high:  Math.max(last.high, livePriceOverride),
+        low:   Math.min(last.low,  livePriceOverride),
+      };
+    }
+
+    return result;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverOhlcv, liveTrades, history, chartTf, token?.address]);
+  }, [serverOhlcv, liveTrades, history, chartTf, token?.address, isDexToken, liveToken?.priceEth]);
 
   // ── "Just launched" detection ─────────────────────────────────────────────
   // True when: token was created < 60 s ago, has 0 DB trades, and no live SSE
