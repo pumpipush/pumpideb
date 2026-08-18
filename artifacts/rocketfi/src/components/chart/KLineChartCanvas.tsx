@@ -93,22 +93,11 @@ function OhlcOverlay({
     transition: 'left 0.2s ease',
   }
 
-  if (!data) {
-    return (
-      <div className="klc-ohlc-overlay" style={overlayStyle}>
-        <div className="klc-ohlc-row1">
-          <span className="klc-ohlc-symbol">{ticker}</span>
-          <span className="klc-ohlc-period">· {period.text}</span>
-        </div>
-      </div>
-    )
-  }
-
-  const isBull = data.close >= data.open
+  const isBull = data ? data.close >= data.open : true
   const changeColor = isBull ? '#26a69a' : '#ef5350'
-  const pct = ohlc && ohlc.open > 0
+  const pct = data && ohlc && ohlc.open > 0
     ? ((data.close - ohlc.open) / ohlc.open * 100).toFixed(2)
-    : '0.00'
+    : null
 
   return (
     <div className="klc-ohlc-overlay" style={overlayStyle}>
@@ -116,26 +105,32 @@ function OhlcOverlay({
       <div className="klc-ohlc-row1">
         <span className="klc-ohlc-symbol">{ticker}</span>
         <span className="klc-ohlc-period">· {period.text}</span>
-        <span className="klc-ohlc-values">
-          <span className="klc-ohlc-lbl">O</span>
-          <b className="klc-ohlc-val">{fmt(data.open)}</b>
-          <span className="klc-ohlc-lbl">H</span>
-          <b className="klc-ohlc-val" style={{ color: '#26a69a' }}>{fmt(data.high)}</b>
-          <span className="klc-ohlc-lbl">L</span>
-          <b className="klc-ohlc-val" style={{ color: '#ef5350' }}>{fmt(data.low)}</b>
-          <span className="klc-ohlc-lbl">C</span>
-          <b className="klc-ohlc-val" style={{ color: changeColor }}>{fmt(data.close)}</b>
-          <b className="klc-ohlc-change" style={{ color: changeColor }}>
-            {isBull ? '▲' : '▼'} {pct}%
-          </b>
-        </span>
+        {data && (
+          <span className="klc-ohlc-values">
+            <span className="klc-ohlc-lbl">O</span>
+            <b className="klc-ohlc-val">{fmt(data.open)}</b>
+            <span className="klc-ohlc-lbl">H</span>
+            <b className="klc-ohlc-val" style={{ color: '#26a69a' }}>{fmt(data.high)}</b>
+            <span className="klc-ohlc-lbl">L</span>
+            <b className="klc-ohlc-val" style={{ color: '#ef5350' }}>{fmt(data.low)}</b>
+            <span className="klc-ohlc-lbl">C</span>
+            <b className="klc-ohlc-val" style={{ color: changeColor }}>{fmt(data.close)}</b>
+            {pct !== null && (
+              <b className="klc-ohlc-change" style={{ color: changeColor }}>
+                {isBull ? '▲' : '▼'} {pct}%
+              </b>
+            )}
+          </span>
+        )}
       </div>
 
-      {/* Row 2: Volume — hides when chevron clicked */}
+      {/* Row 2: Volume — always rendered, hides via chevron */}
       {volVisible && (
         <div className="klc-ohlc-row2">
           <span className="klc-ohlc-vol-label">Volume</span>
-          <span className="klc-ohlc-vol-value">{fmtVol(data.volume)}</span>
+          <span className="klc-ohlc-vol-value">
+            {data ? fmtVol(data.volume) : '—'}
+          </span>
         </div>
       )}
 
