@@ -22,8 +22,9 @@ import Dashboard from '@/pages/Dashboard';
 
 // All other pages are lazy-loaded: they are not needed on first visit and
 // each carries heavy dependencies (Solana SDK, wallet adapters, etc.).
-const AppInterface   = lazy(() => import('@/pages/AppInterface'));
-const ProfilePage    = lazy(() => import('@/pages/Profile'));
+const AppInterface     = lazy(() => import('@/pages/AppInterface'));
+const ProfilePage      = lazy(() => import('@/pages/Profile'));
+const LeaderboardPage  = lazy(() => import('@/pages/Leaderboard'));
 const PrivacyPolicy  = lazy(() => import('@/pages/PrivacyPolicy'));
 const DisclaimerPage = lazy(() => import('@/pages/Disclaimer'));
 const TermsOfService = lazy(() => import('@/pages/TermsOfService'));
@@ -112,6 +113,7 @@ function AppShell() {
                   <Route path="/token/:address" component={LegacyTokenRedirect} />
                   {/* Canonical SEO-friendly coin pages */}
                   <Route path="/coin/:address" component={TokenPage} />
+                 <Route path="/leaderboard" component={LeaderboardPage} />
                   <Route path="/profile/:slug" component={ProfilePage} />
                   {/* signin/signup show the explore page behind the auth modal */}
                   <Route path="/signin"><Dashboard /></Route>

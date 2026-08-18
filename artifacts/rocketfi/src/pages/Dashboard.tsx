@@ -1181,8 +1181,8 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* ── Right: Leaderboard ── */}
-              <div className="w-full md:w-[300px] xl:w-[340px] shrink-0 flex flex-col" style={{ height: isMobile ? "auto" : 416 }}>
+              {/* ── Right: Leaderboard — hidden on mobile ── */}
+              <div className="hidden md:flex md:w-[300px] xl:w-[340px] shrink-0 flex-col" style={{ height: 416 }}>
                 {/* Header — mirrors Bubble Map header so both rows align */}
                 <div className="flex items-center justify-between mb-2 gap-2">
                   <h2 className="whitespace-nowrap text-lg md:text-[22px] font-extrabold text-foreground tracking-tight">

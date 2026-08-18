@@ -6,19 +6,23 @@
  * OpenAPI spec version: 0.1.0
  */
 // ── Leaderboard ───────────────────────────────────────────────────────────────
+export type LeaderboardPeriod = "24h" | "7d" | "30d";
+
 export interface LeaderboardTraderVolume {
+  rank: number;
   address: string;
-  trade_count: number;
   volume_lamports: string;
 }
 
 export interface LeaderboardTraderPnL {
+  rank: number;
   address: string;
   trade_count: number;
   pnl_lamports: string;
 }
 
 export interface LeaderboardToken {
+  rank: number;
   address: string;
   name: string;
   symbol: string;
@@ -30,6 +34,7 @@ export interface LeaderboardToken {
 }
 
 export interface LeaderboardResponse {
+  period: LeaderboardPeriod;
   traders_volume: LeaderboardTraderVolume[];
   traders_pnl: LeaderboardTraderPnL[];
   tokens: LeaderboardToken[];

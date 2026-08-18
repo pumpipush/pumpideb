@@ -5,104 +5,93 @@ import { logger } from "../lib/logger.js";
 
 const router = Router();
 
-const TTL = 4 * 60 * 1_000; // 4 minutes in ms
+type Period = "24h" | "7d" | "30d";
+const PERIODS: Period[] = ["24h", "7d", "30d"];
+const INTERVAL: Record<Period, string> = {
+  "24h": "24 hours",
+  "7d":  "7 days",
+  "30d": "30 days",
+};
+const REFRESH_MS = 4 * 60 * 1_000; // 4 min
 
-let _cache: { data: unknown; computedAt: number } | null = null;
-let _refreshing = false;
+const _cache = new Map<Period, { data: unknown; computedAt: number }>();
+const _refreshing = new Set<Period>();
 
-// ── Core computation (runs in background or on first request) ─────────────────
-async function computeLeaderboard(): Promise<unknown> {
+async function computeLeaderboard(period: Period): Promise<unknown> {
+  const interval = INTERVAL[period];
   const client = await pool.connect();
   try {
-    // Prevent disk spill for the HashAggregate over 100k+ trader groups
     await client.query("SET work_mem = '128MB'");
 
-    // ── Top traders by total SOL volume (24h) ─────────────────────────────────
-    const volResult = await client.query<{
-      address: string;
-      trade_count: string;
-      volume_lamports: string;
-    }>(`
-      SELECT
-        trader_address                                               AS address,
-        COUNT(*)::text                                               AS trade_count,
-        COALESCE(SUM(eth_amount::FLOAT8), 0)::text                   AS volume_lamports
-      FROM   trades
-      WHERE  timestamp       > NOW() - INTERVAL '24 hours'
-        AND  trader_address IS NOT NULL
-        AND  trader_address != ''
-        AND  eth_amount      ~ '^[0-9]+$'
-      GROUP  BY trader_address
-      ORDER  BY SUM(eth_amount::FLOAT8) DESC
-      LIMIT  10
-    `);
-
-    // ── Top traders by estimated PnL (24h): sell proceeds − buy cost ──────────
-    const pnlResult = await client.query<{
-      address: string;
-      trade_count: string;
-      pnl_lamports: string;
-    }>(`
-      SELECT
-        trader_address                                               AS address,
-        COUNT(*)::text                                               AS trade_count,
-        (
-          COALESCE(SUM(CASE WHEN NOT is_buy THEN eth_amount::FLOAT8 ELSE 0 END), 0)
-          - COALESCE(SUM(CASE WHEN is_buy     THEN eth_amount::FLOAT8 ELSE 0 END), 0)
-        )::text                                                      AS pnl_lamports
-      FROM   trades
-      WHERE  timestamp       > NOW() - INTERVAL '24 hours'
-        AND  trader_address IS NOT NULL
-        AND  trader_address != ''
-        AND  eth_amount      ~ '^[0-9]+$'
-      GROUP  BY trader_address
-      HAVING COUNT(*) >= 2
-      ORDER  BY (
-          COALESCE(SUM(CASE WHEN NOT is_buy THEN eth_amount::FLOAT8 ELSE 0 END), 0)
-          - COALESCE(SUM(CASE WHEN is_buy     THEN eth_amount::FLOAT8 ELSE 0 END), 0)
-        ) DESC
-      LIMIT  10
-    `);
-
-    // ── Top tokens by total SOL volume (24h) ──────────────────────────────────
-    const tokResult = await client.query<{
-      address: string;
-      name: string;
-      symbol: string;
-      image_url: string | null;
-      platform: string;
-      trade_count: string;
-      volume_lamports: string;
-    }>(`
-      SELECT
-        t.address,
-        t.name,
-        t.symbol,
-        t.image_url,
-        COALESCE(t.platform, 'unknown')                             AS platform,
-        COUNT(tr.*)::text                                            AS trade_count,
-        COALESCE(SUM(tr.eth_amount::FLOAT8), 0)::text               AS volume_lamports
-      FROM   trades   tr
-      JOIN   tokens   t  ON t.address = tr.token_address
-      WHERE  tr.timestamp > NOW() - INTERVAL '24 hours'
-        AND  tr.eth_amount ~ '^[0-9]+$'
-      GROUP  BY t.address, t.name, t.symbol, t.image_url, t.platform
-      ORDER  BY SUM(tr.eth_amount::FLOAT8) DESC
-      LIMIT  10
-    `);
+    const [volResult, pnlResult, tokResult] = await Promise.all([
+      client.query<{ address: string; volume_lamports: string }>(`
+        SELECT
+          trader_address                                           AS address,
+          COALESCE(SUM(eth_amount::FLOAT8), 0)::text              AS volume_lamports
+        FROM   trades
+        WHERE  timestamp       > NOW() - INTERVAL '${interval}'
+          AND  trader_address IS NOT NULL
+          AND  trader_address != ''
+          AND  eth_amount      ~ '^[0-9]+$'
+        GROUP  BY trader_address
+        ORDER  BY SUM(eth_amount::FLOAT8) DESC
+        LIMIT  100
+      `),
+      client.query<{ address: string; trade_count: string; pnl_lamports: string }>(`
+        SELECT
+          trader_address                                           AS address,
+          COUNT(*)::text                                           AS trade_count,
+          (
+            COALESCE(SUM(CASE WHEN NOT is_buy THEN eth_amount::FLOAT8 ELSE 0 END), 0)
+            - COALESCE(SUM(CASE WHEN is_buy   THEN eth_amount::FLOAT8 ELSE 0 END), 0)
+          )::text                                                  AS pnl_lamports
+        FROM   trades
+        WHERE  timestamp       > NOW() - INTERVAL '${interval}'
+          AND  trader_address IS NOT NULL
+          AND  trader_address != ''
+          AND  eth_amount      ~ '^[0-9]+$'
+        GROUP  BY trader_address
+        HAVING COUNT(*) >= 2
+        ORDER  BY (
+            COALESCE(SUM(CASE WHEN NOT is_buy THEN eth_amount::FLOAT8 ELSE 0 END), 0)
+            - COALESCE(SUM(CASE WHEN is_buy   THEN eth_amount::FLOAT8 ELSE 0 END), 0)
+          ) DESC
+        LIMIT  100
+      `),
+      client.query<{ address: string; name: string; symbol: string; image_url: string | null; platform: string; trade_count: string; volume_lamports: string }>(`
+        SELECT
+          t.address,
+          t.name,
+          t.symbol,
+          t.image_url,
+          COALESCE(t.platform, 'unknown')                         AS platform,
+          COUNT(tr.*)::text                                        AS trade_count,
+          COALESCE(SUM(tr.eth_amount::FLOAT8), 0)::text           AS volume_lamports
+        FROM   trades   tr
+        JOIN   tokens   t  ON t.address = tr.token_address
+        WHERE  tr.timestamp > NOW() - INTERVAL '${interval}'
+          AND  tr.eth_amount ~ '^[0-9]+$'
+        GROUP  BY t.address, t.name, t.symbol, t.image_url, t.platform
+        ORDER  BY SUM(tr.eth_amount::FLOAT8) DESC
+        LIMIT  100
+      `),
+    ]);
 
     return {
-      traders_volume: volResult.rows.map((r) => ({
+      period,
+      traders_volume: volResult.rows.map((r, i) => ({
+        rank:            i + 1,
         address:         r.address,
-        trade_count:     Number(r.trade_count),
         volume_lamports: r.volume_lamports,
       })),
-      traders_pnl: pnlResult.rows.map((r) => ({
+      traders_pnl: pnlResult.rows.map((r, i) => ({
+        rank:          i + 1,
         address:       r.address,
         trade_count:   Number(r.trade_count),
         pnl_lamports:  r.pnl_lamports,
       })),
-      tokens: tokResult.rows.map((r) => ({
+      tokens: tokResult.rows.map((r, i) => ({
+        rank:            i + 1,
         address:         r.address,
         name:            r.name,
         symbol:          r.symbol,
@@ -117,48 +106,45 @@ async function computeLeaderboard(): Promise<unknown> {
   }
 }
 
-// ── Background refresh ─────────────────────────────────────────────────────────
-// Runs immediately on import (warm cache before first request) and then every
-// 4 minutes so users always get a cached response (no waiting for heavy queries).
-async function refreshCache() {
-  if (_refreshing) return; // prevent overlapping runs
-  _refreshing = true;
+async function refreshCache(period: Period) {
+  if (_refreshing.has(period)) return;
+  _refreshing.add(period);
   const t0 = Date.now();
   try {
-    const data = await computeLeaderboard();
-    _cache = { data, computedAt: Date.now() };
-    logger.info({ ms: Date.now() - t0 }, "leaderboard: cache refreshed");
+    const data = await computeLeaderboard(period);
+    _cache.set(period, { data, computedAt: Date.now() });
+    logger.info({ ms: Date.now() - t0, period }, "leaderboard: cache refreshed");
   } catch (err) {
-    logger.warn({ err }, "leaderboard: background refresh failed — stale cache kept");
+    logger.warn({ err, period }, "leaderboard: background refresh failed — stale cache kept");
   } finally {
-    _refreshing = false;
+    _refreshing.delete(period);
   }
 }
 
-// Warm immediately, then every 4 minutes
-refreshCache();
-setInterval(refreshCache, TTL);
+// Warm all periods on startup, refresh every 4 min
+for (const p of PERIODS) refreshCache(p);
+setInterval(() => { for (const p of PERIODS) refreshCache(p); }, REFRESH_MS);
 
-// ── Route ─────────────────────────────────────────────────────────────────────
 router.get(
   "/leaderboard",
-  asyncWrap(async (_req, res) => {
-    if (_cache) {
-      const ageMs = Date.now() - _cache.computedAt;
+  asyncWrap(async (req, res) => {
+    const raw = (req.query["period"] as string | undefined) ?? "24h";
+    const period: Period = PERIODS.includes(raw as Period) ? (raw as Period) : "24h";
+
+    const cached = _cache.get(period);
+    if (cached) {
       res.setHeader("Cache-Control", "public, max-age=240, stale-while-revalidate=240");
       res.setHeader("X-Cache", "HIT");
-      res.setHeader("X-Cache-Age", String(Math.floor(ageMs / 1000)));
-      res.json(_cache.data);
+      res.setHeader("X-Cache-Age", String(Math.floor((Date.now() - cached.computedAt) / 1000)));
+      res.json(cached.data);
       return;
     }
 
-    // Cold start — cache not ready yet (first few seconds after server boot).
-    // Block and compute synchronously for this one request.
-    logger.info("leaderboard: cold-cache request — computing synchronously");
+    logger.info({ period }, "leaderboard: cold-cache request — computing synchronously");
     const t0 = Date.now();
-    const data = await computeLeaderboard();
-    _cache = { data, computedAt: Date.now() };
-    logger.info({ ms: Date.now() - t0 }, "leaderboard: cold-cache computed");
+    const data = await computeLeaderboard(period);
+    _cache.set(period, { data, computedAt: Date.now() });
+    logger.info({ ms: Date.now() - t0, period }, "leaderboard: cold-cache computed");
 
     res.setHeader("Cache-Control", "public, max-age=240, stale-while-revalidate=240");
     res.setHeader("X-Cache", "MISS");

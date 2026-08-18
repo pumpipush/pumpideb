@@ -1363,21 +1363,24 @@ export function useGetStorageObject<TData = Awaited<ReturnType<typeof getStorage
 
 // ── Leaderboard ────────────────────────────────────────────────────────────────
 
-export const getGetLeaderboardUrl = () => `/api/leaderboard`;
+export const getGetLeaderboardUrl = (period?: string) =>
+  period ? `/api/leaderboard?period=${period}` : `/api/leaderboard`;
 
-export const getLeaderboard = async (options?: Parameters<typeof customFetch>[1]): Promise<LeaderboardResponse> => {
-  return customFetch<LeaderboardResponse>(getGetLeaderboardUrl(), { ...options, method: 'GET' });
+export const getLeaderboard = async (period?: string, options?: Parameters<typeof customFetch>[1]): Promise<LeaderboardResponse> => {
+  return customFetch<LeaderboardResponse>(getGetLeaderboardUrl(period), { ...options, method: 'GET' });
 };
 
-export const getGetLeaderboardQueryKey = () => [`/api/leaderboard`] as const;
+export const getGetLeaderboardQueryKey = (period?: string) =>
+  [`/api/leaderboard`, period ?? "24h"] as const;
 
 export const getGetLeaderboardQueryOptions = <TData = Awaited<ReturnType<typeof getLeaderboard>>, TError = ErrorType<unknown>>(
+  period?: string,
   options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof getLeaderboard>>, TError, TData>; request?: SecondParameter<typeof customFetch> }
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {};
-  const queryKey = queryOptions?.queryKey ?? getGetLeaderboardQueryKey();
+  const queryKey = queryOptions?.queryKey ?? getGetLeaderboardQueryKey(period);
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getLeaderboard>>> = ({ signal }) =>
-    getLeaderboard({ signal, ...requestOptions });
+    getLeaderboard(period, { signal, ...requestOptions });
   return { queryKey, queryFn, staleTime: 60_000, ...queryOptions } as UseQueryOptions<Awaited<ReturnType<typeof getLeaderboard>>, TError, TData> & { queryKey: QueryKey };
 };
 
@@ -1385,9 +1388,10 @@ export type GetLeaderboardQueryResult = NonNullable<Awaited<ReturnType<typeof ge
 export type GetLeaderboardQueryError = ErrorType<unknown>;
 
 export function useGetLeaderboard<TData = Awaited<ReturnType<typeof getLeaderboard>>, TError = ErrorType<unknown>>(
+  period?: string,
   options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof getLeaderboard>>, TError, TData>; request?: SecondParameter<typeof customFetch> }
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetLeaderboardQueryOptions(options);
+  const queryOptions = getGetLeaderboardQueryOptions(period, options);
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
   return withQueryKey(query, queryOptions.queryKey);
 }
