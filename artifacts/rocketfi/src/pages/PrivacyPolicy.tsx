@@ -93,7 +93,6 @@ export default function PrivacyPolicy() {
                   rows={[
                     ["Wallet Address", "Your Solana public key", "When you connect a wallet"],
                     ["Profile Information", "Username, bio, avatar image, Twitter/X handle, website URL", "When you create or edit a profile"],
-                    ["Email Address", "Your email address", "When you sign up or sign in via email OTP"],
                     ["Google Account", "Name, email, and profile photo from Google", "When you use \"Sign in with Google\""],
                   ]}
                 />
@@ -130,7 +129,7 @@ export default function PrivacyPolicy() {
                 <li><strong>Profile display</strong> — showing your username, bio, and trading activity to other users (consistent with the public nature of blockchain data).</li>
                 <li><strong>Security &amp; fraud prevention</strong> — detecting and investigating abuse, fraud, and unauthorized access.</li>
                 <li><strong>Analytics</strong> — understanding how the Platform is used to improve performance and features.</li>
-                <li><strong>Communications</strong> — sending security notices, authentication codes, and material policy updates. We do <strong>not</strong> send marketing emails without your explicit consent.</li>
+                <li><strong>Communications</strong> — sending security notices and material policy updates. We do <strong>not</strong> send marketing emails without your explicit consent.</li>
                 <li><strong>Legal compliance</strong> — fulfilling obligations under applicable laws and regulations.</li>
               </ul>
             </Section>
@@ -143,7 +142,6 @@ export default function PrivacyPolicy() {
                   rows={[
                     ["Other Platform users (public)", "Wallet address / username, profile details, on-chain trade history", "Public nature of blockchain data; your profile is visible by default"],
                     ["Infrastructure providers", "Data necessary to host, store, and operate the Platform", "Data processing agreements; processors act on our instructions only"],
-                    ["Email delivery (Resend)", "Your email address and OTP codes", "Required for authentication"],
                     ["Law enforcement / courts", "Data required by valid legal process", "Legal obligation; we notify you where permitted by law"],
                     ["Acquirer / successor entity", "All data in the event of a merger or acquisition", "Legitimate interest; you will be notified of any change in controller"],
                   ]}
@@ -158,7 +156,6 @@ export default function PrivacyPolicy() {
                   headers={["Data Type", "Retention Period", "Notes"]}
                   rows={[
                     ["Profile data (username, bio, avatar)", "Until you request deletion", "Deletable via email request"],
-                    ["Email address", "Until account deletion", "Retained for auth purposes"],
                     ["Google login data", "Until account deletion", "Retained for auth purposes"],
                     ["Usage & analytics logs", "90 days rolling", "Aggregated after 90 days"],
                     ["Security & fraud logs", "12 months", "May be retained longer if an incident is open"],
@@ -184,7 +181,6 @@ export default function PrivacyPolicy() {
                     ["Birdeye", "Token market data API", "Token contract addresses", "birdeye.so/privacy"],
                     ["DexScreener", "DEX price & liquidity data", "Token contract addresses", "dexscreener.com/privacy"],
                     ["Google (GSI)", "OAuth 2.0 sign-in", "Your Google account email, name, photo", "policies.google.com/privacy"],
-                    ["Resend", "Transactional email delivery", "Your email address and OTP message content", "resend.com/legal/privacy-policy"],
                   ]}
                 />
               </div>
@@ -231,7 +227,7 @@ export default function PrivacyPolicy() {
                 <LegalTable
                   headers={["Storage Type", "What Is Stored", "Deletable"]}
                   rows={[
-                    ["localStorage – Authentication", "JWT token for social sign-in (email / Google)", "Yes — clear browser storage or sign out"],
+                    ["localStorage – Authentication", "JWT token for social sign-in (Google)", "Yes — clear browser storage or sign out"],
                     ["localStorage – Preferences", "Dismissed banners, UI preferences, risk acknowledgment", "Yes — clear browser storage"],
                     ["localStorage – Wallet", "Last connected wallet adapter preference", "Yes — clear browser storage"],
                     ["sessionStorage", "Temporary page state during your browsing session", "Yes — cleared automatically on tab close"],
