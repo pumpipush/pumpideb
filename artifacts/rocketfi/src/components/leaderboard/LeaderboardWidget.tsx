@@ -68,7 +68,7 @@ export function LeaderboardWidget({ solPrice }: Props) {
       <div className="flex items-center justify-between px-3 py-2 shrink-0"
         style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "#0d0d0d" }}>
         <span className="text-sm font-bold text-foreground tracking-tight">Leaderboard</span>
-        <span className="text-[10px] text-muted-foreground font-mono">7d</span>
+        <span className="text-[10px] text-muted-foreground font-mono">24h</span>
       </div>
 
       {/* Tabs */}
