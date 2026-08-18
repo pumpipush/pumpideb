@@ -82,6 +82,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@klinecharts/pro": "0.1.1",
     "@raydium-io/raydium-sdk-v2": "0.2.60-alpha",
     "@react-oauth/google": "^0.13.5",
     "@solana/web3.js": "^1.98.4",
@@ -89,6 +90,7 @@
     "bn.js": "^5.2.5",
     "ethers": "^6.17.0",
     "html2canvas": "^1.4.1",
+    "klinecharts": "^9.8.12",
     "lightweight-charts": "^5.2.0",
     "react-helmet-async": "^3.0.0",
     "react-qr-code": "^2.2.0",

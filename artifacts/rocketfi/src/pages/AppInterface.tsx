@@ -18,9 +18,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { ChartCanvas, type ChartType, type Indicator, type OHLCSnapshot } from "@/components/chart/ChartCanvas";
-import { IndicatorModal } from "@/components/chart/IndicatorModal";
-import { tradesFromLocalBars, syntheticBars, type ChartTimeframe } from "@/lib/ohlcv";
+import { KLineChartCanvas } from "@/components/chart/KLineChartCanvas";
+import { syntheticBars, type ChartTimeframe } from "@/lib/ohlcv";
 import { tradesFromLocal, syntheticCandles, Timeframe } from "@/lib/ohlcv";
 import { useTokenStream } from "@/hooks/useTokenStream";
 import { useSolBalance } from "@/hooks/useSolBalance";
@@ -1660,12 +1659,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token?.graduated, token?.platform, token?.address, token?.decimals, amount, tradeMode]);
 
-  // New chart state
-  const [chartTf, setChartTf] = useState<ChartTimeframe>("1m");
-  const [chartType, setChartType] = useState<ChartType>("candle");
-  const [indicators, setIndicators] = useState<Indicator[]>([]);
-  const [indOpen, setIndOpen] = useState(false);
-  const [chartTypeOpen, setChartTypeOpen] = useState(false);
+  // Timeframe for server OHLCV query — fixed at 1m for the freshest DEX price.
+  // (Chart timeframe is now owned internally by KLineChartCanvas.)
+  const chartTf: ChartTimeframe = "1m";
 
   // Server-side OHLCV: pre-aggregated over the full trade history (no 100-row limit).
   // Adaptive refetch: short timeframes need faster bar updates (a new 1-minute bar
@@ -1687,12 +1683,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     }
   );
 
-  const CHART_TIMEFRAMES: ChartTimeframe[] = ["1m", "5m", "15m", "1H", "4H", "1D", "1W"];
-  const toggleIndicator = useCallback((ind: Indicator) => {
-    setIndicators(prev => prev.includes(ind) ? prev.filter(i => i !== ind) : [...prev, ind]);
-  }, []);
-
-  // Keep a ref so the crosshair callback always reads the latest solPrice without re-creating
+  // Keep a ref so downstream callbacks always read the latest solPrice
   const solPriceRef = useRef<number | null>(solPrice);
   solPriceRef.current = solPrice;
 
@@ -1793,127 +1784,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     if (p > 0) prevPriceRef.current = p;
   }, [priceStats.currentPrice]);
 
-  // OHLC crosshair display — written directly to DOM so mouse moves never trigger re-renders
-  const ohlcDisplayRef = useRef<HTMLDivElement>(null);
-  const onCrosshairMove = useCallback((bar: OHLCSnapshot | null) => {
-    const el = ohlcDisplayRef.current;
-    if (!el) return;
-    if (!bar) { el.style.opacity = "0"; return; }
-    el.style.opacity = "1";
-    const sp = solPriceRef.current;
-    // Show Market Cap (SOL/token × solPrice × 1B supply) — same convention as pump.fun
-    const fmt = (n: number): string => {
-      if (sp && n > 0) return formatUSD(n * sp * 1_000_000_000);
-      return n < 0.00001 ? n.toExponential(3) : n.toPrecision(4);
-    };
-    // Build child nodes without innerHTML to avoid an unnecessary HTML sink.
-    const mkOhlc = (label: string, value: string, valueColor: string) => {
-      const wrap = document.createElement("span"); wrap.style.color = "#b3b3b3";
-      wrap.appendChild(document.createTextNode(`${label} `));
-      const val = document.createElement("span"); val.textContent = value; val.style.color = valueColor;
-      wrap.appendChild(val);
-      return wrap;
-    };
-    el.replaceChildren(
-      mkOhlc("O", fmt(bar.open),  "#bbbbbb"), document.createTextNode(" "),
-      mkOhlc("H", fmt(bar.high),  "#4ade80"), document.createTextNode(" "),
-      mkOhlc("L", fmt(bar.low),   "#f87171"), document.createTextNode(" "),
-      mkOhlc("C", fmt(bar.close), "#e0e0e0"),
-    );
-  }, []);
+  // NOTE: chartBars removed — KLineChartCanvas fetches its own OHLCV via PumpiDatafeed.
+  // serverOhlcv is still queried above for priceStats / effectiveMcEth.
 
-  // Memoized bars — reference is stable until trades or timeframe actually change.
-  // Uses server-side OHLCV (full history, no 100-row cap) merged with:
-  //   1. DB trade history from useTradeHistory (for tokens too new for Birdeye)
-  //   2. Real-time SSE trade ticks so the last candle stays live.
-  const chartBars = useMemo(() => {
-    if (!token) return [];
+  // ── Dummy reference to keep the linting happy (serverOhlcv used below) ────
+  const _unusedMaxId = serverOhlcv?.maxTradeId ?? 0; void _unusedMaxId;
 
-    // serverOhlcv now returns { bars, maxTradeId }.
-    // maxTradeId is the highest trade ID the server aggregate already includes.
-    const base  = (serverOhlcv?.bars ?? []) as import("@/lib/ohlcv").OHLCVBar[];
-    const maxId = serverOhlcv?.maxTradeId ?? 0;
-
-    // DB historical trades (polled every 5 s — shows trades for tokens too new for Birdeye)
-    // Trade from api-client-react: id: number, priceEth?: string|null|undefined, timestamp: string
-    const historyRows = (history ?? []).map(t => ({
-      id:            t.id,
-      tokenAddress:  t.tokenAddress,
-      traderAddress: t.traderAddress,
-      isBuy:         t.isBuy,
-      ethAmount:     t.ethAmount,
-      tokenAmount:   t.tokenAmount,
-      priceEth:      t.priceEth ?? null,
-      txHash:        t.txHash,
-      platform:      t.platform ?? "unknown",
-      timestamp:     t.timestamp,
-    }));
-    // Live SSE ticks — LiveTrade already matches Trade shape
-    const liveRows = liveTrades as import("@workspace/api-client-react").Trade[];
-
-    // ── Anti-double-count: ID-based cursor ───────────────────────────────────
-    // Trades with id <= maxId are already baked into serverOhlcv bars; skip them.
-    // Dedup by txHash across both sources so a trade that arrived via SSE AND is
-    // already in history doesn't get counted twice.
-    const seen = new Set<string>();
-    const freshRows = [...historyRows, ...liveRows].filter(t => {
-      if (maxId > 0 && (t.id ?? 0) <= maxId && (t.id ?? 0) > 0) return false;
-      if (seen.has(t.txHash)) return false;
-      seen.add(t.txHash);
-      return true;
-    });
-
-    const freshBars = freshRows.length > 0
-      ? tradesFromLocalBars(freshRows, chartTf)
-      : [];
-
-    if (freshBars.length === 0) return base;
-    if (base.length === 0) return freshBars;
-
-    // Merge: fresh bars update the matching server bar (or append new ones).
-    const merged = new Map<number, import("@/lib/ohlcv").OHLCVBar>();
-    for (const b of base) merged.set(b.time, { ...b });
-    for (const lb of freshBars) {
-      const existing = merged.get(lb.time);
-      if (existing) {
-        existing.high   = Math.max(existing.high, lb.high);
-        existing.low    = Math.min(existing.low,  lb.low);
-        existing.close  = lb.close;
-        existing.volume += lb.volume;
-      } else {
-        merged.set(lb.time, lb);
-      }
-    }
-    const result = Array.from(merged.values()).sort((a, b) => a.time - b.time);
-
-    // ── Live price sync for pump.fun tokens ────────────────────────────────
-    // The OHLCV cache can be up to 8s stale; the SSE snapshot (liveToken) is
-    // instant. For pump.fun (non-DEX) tokens, force-override the last bar's
-    // close with the live SSE price so the chart C value always matches what
-    // the header shows. High/low are extended (never shrunk) so the candle
-    // shape remains honest.
-    // DEX tokens already use serverOhlcv.currentMcEth for their header (which
-    // is derived from the same OHLCV bars), so they don't need this override.
-    // NOTE: isDexToken is declared later in the component (after this useMemo),
-    // so compute it inline here to avoid a TDZ ReferenceError.
-    const _isNonDexForChart = !["pumpswap", "raydium_launchlab"].includes(token?.platform ?? "");
-    const livePriceOverride =
-      _isNonDexForChart && liveToken?.priceEth
-        ? parseFloat(liveToken.priceEth)
-        : null;
-    if (livePriceOverride && livePriceOverride > 0 && result.length > 0) {
-      const last = result[result.length - 1]!;
-      result[result.length - 1] = {
-        ...last,
-        close: livePriceOverride,
-        high:  Math.max(last.high, livePriceOverride),
-        low:   Math.min(last.low,  livePriceOverride),
-      };
-    }
-
-    return result;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverOhlcv, liveTrades, history, chartTf, token?.address, token?.platform, liveToken?.priceEth]);
 
   // ── "Just launched" detection ─────────────────────────────────────────────
   // True when: token was created < 60 s ago, has 0 DB trades, and no live SSE
@@ -1974,217 +1850,19 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       liveToken?.virtualTokenReserves, token?.virtualTokenReserves,
       solPrice]);
 
-  // Memoized chart JSX — only re-renders when chart config state changes, not on crosshair moves
-  const ChartSection = useMemo(() => {
-    if (!token) return null;
-
-    // Shared wrapper — matches real chart dimensions exactly to prevent layout jump.
-    // Toolbar spacer (36px) + same responsive canvas height as the real ChartCanvas container.
-    const ChartPlaceholder = ({ children }: { children: React.ReactNode }) => (
-      <div className="border border-border/20 rounded-sm overflow-hidden mb-0" style={{ background: "#111111" }}>
-        <div style={{ height: 36, background: "#0a0a0a", borderBottom: "1px solid rgba(255,255,255,0.08)" }} />
-        <div className="h-[260px] sm:h-[340px] lg:h-[400px] xl:h-[440px] flex items-center justify-center">
-          {children}
-        </div>
-      </div>
-    );
-
-    // Professional spinner — same SVG as ChartCanvas's internal ChartSkeleton.
-    const ChartSpinner = () => (
-      <svg width="36" height="36" viewBox="0 0 36 36"
-        style={{ animation: "chartSpinnerRotate 0.9s linear infinite", flexShrink: 0 }}>
-        <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3" />
-        <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(59,130,246,0.75)" strokeWidth="3"
-          strokeLinecap="round" strokeDasharray="30 65" />
-      </svg>
-    );
-
-    // OHLCV still in flight — spinner only, no text.
-    if (chartBars.length === 0 && ohlcvLoading) {
-      return <ChartPlaceholder><ChartSpinner /></ChartPlaceholder>;
-    }
-
-    // Empty state — only show after server has responded with zero bars.
-    if (chartBars.length === 0) {
-      // Stats endpoint confirmed trades exist (via DexScreener/Birdeye fallback)
-      // but OHLCV candles haven't been indexed yet — show syncing state.
-      const statsTradeCount = (serverStats?.txns24hBuy ?? 0) + (serverStats?.txns24hSell ?? 0);
-      const hasKnownTrades  = statsTradeCount > 0 || (token.tradeCount ?? 0) > 0;
-
-      return (
-        <ChartPlaceholder>
-          <div className="flex flex-col items-center gap-2 text-center px-8">
-            {isJustLaunched ? (
-              <>
-                <span style={{ fontSize: 32, lineHeight: 1 }}>🚀</span>
-                <p className="text-sm font-medium" style={{ color: "#e0e0e0" }}>You just launched this coin!</p>
-                <p className="text-xs" style={{ color: "#b3b3b3" }}>Trades will appear here shortly.</p>
-              </>
-            ) : hasKnownTrades ? (
-              <>
-                <ChartSpinner />
-                <p className="text-sm font-medium text-zinc-400 mt-2">Syncing chart data…</p>
-                <p className="text-xs text-zinc-600">Chart will appear shortly</p>
-              </>
-            ) : (
-              <>
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#3f3f46" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                </svg>
-                <p className="text-sm font-medium text-zinc-400">No trades yet — be the first</p>
-                <p className="text-xs text-zinc-600">Chart updates in real time as trades arrive</p>
-              </>
-            )}
-          </div>
-        </ChartPlaceholder>
-      );
-    }
-
-    return (
-      <div className="border border-border/20 rounded-sm overflow-hidden mb-0" style={{ background: "#111111" }}>
-        {/* Toolbar */}
-        <div className="flex items-stretch overflow-x-auto" style={{ background: "#0a0a0a", borderBottom: "1px solid rgba(255,255,255,0.08)", scrollbarWidth: "none" }}>
-          {/* Candle / Line / Indicators — tab style */}
-          <div className="flex items-center gap-1.5 px-2 shrink-0" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
-
-            {/* Mobile: icon-only chart type picker — native select overlaid for reliability */}
-            <div className="relative sm:hidden flex items-center justify-center w-9 h-9 cursor-pointer"
-              style={{ color: "#e0e0e0" }}>
-              {chartType === "candle"
-                ? <svg width="18" height="18" viewBox="0 0 14 14" fill="none" style={{ pointerEvents: "none" }}>
-                    <line x1="3" y1="1" x2="3" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                    <rect x="1.5" y="3.5" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
-                    <line x1="10" y1="1" x2="10" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                    <rect x="8.5" y="6" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
-                  </svg>
-                : <svg width="18" height="18" viewBox="0 0 14 14" fill="none" style={{ pointerEvents: "none" }}>
-                    <polyline points="1,11 4,6 7,8 10,3 13,5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                    <polygon points="1,11 4,6 7,8 10,3 13,5 13,12 1,12" fill="currentColor" fillOpacity="0.18"/>
-                  </svg>
-              }
-              <select
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                value={chartType}
-                onChange={e => setChartType(e.target.value as ChartType)}
-              >
-                <option value="candle">Candle</option>
-                <option value="line">Line</option>
-              </select>
-            </div>
-
-            {/* Desktop: separate Candle + Line buttons */}
-            {(["candle", "line"] as ChartType[]).map((type) => (
-              <button key={type} onClick={() => setChartType(type)}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold transition-all"
-                style={{
-                  background: chartType === type ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
-                  color: chartType === type ? "#e0e0e0" : "#b3b3b3",
-                  border: "1px solid " + (chartType === type ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
-                }}>
-                {type === "candle" ? <>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <line x1="3" y1="1" x2="3" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                    <rect x="1.5" y="3.5" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
-                    <line x1="10" y1="1" x2="10" y2="13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                    <rect x="8.5" y="6" width="3" height="5" rx="0.4" stroke="currentColor" strokeWidth="1.2"/>
-                  </svg>
-                  Candle
-                </> : <>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <polyline points="1,11 4,6 7,8 10,3 13,5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                    <polygon points="1,11 4,6 7,8 10,3 13,5 13,12 1,12" fill="currentColor" fillOpacity="0.18"/>
-                  </svg>
-                  Line
-                </>}
-              </button>
-            ))}
-
-            {/* Indicators — icon+text on desktop, icon-only bare on mobile */}
-            <button onClick={() => setIndOpen(true)} className="flex items-center gap-1.5 transition-all"
-              style={{ color: indicators.length ? "#e0e0e0" : "#b3b3b3" }}>
-              {/* desktop: full tab button */}
-              <span className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[14px] font-semibold"
-                style={{
-                  background: indicators.length ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
-                  border: "1px solid " + (indicators.length ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.06)"),
-                }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 19a2 2 0 0 0 2 2c2 0 2 -4 3 -9s1 -9 3 -9a2 2 0 0 1 2 2"/><path d="M5 12h6"/><path d="M15 12l6 6"/><path d="M15 18l6 -6"/>
-                </svg>
-                Indicators
-                {indicators.length > 0 && (
-                  <span className="h-4 w-4 rounded-full text-[9px] font-bold flex items-center justify-center"
-                    style={{ background: "#3b82f6", color: "#fff" }}>{indicators.length}</span>
-                )}
-              </span>
-              {/* mobile: bare icon only */}
-              <span className="sm:hidden flex items-center justify-center w-8 h-8 relative">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 19a2 2 0 0 0 2 2c2 0 2 -4 3 -9s1 -9 3 -9a2 2 0 0 1 2 2"/><path d="M5 12h6"/><path d="M15 12l6 6"/><path d="M15 18l6 -6"/>
-                </svg>
-                {indicators.length > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full text-[8px] font-bold flex items-center justify-center"
-                    style={{ background: "#3b82f6", color: "#fff" }}>{indicators.length}</span>
-                )}
-              </span>
-            </button>
-          </div>
-
-
-          {/* Timeframe — horizontal pills on mobile (no 1W), pills on desktop */}
-          <div className="flex items-center ml-auto shrink-0" style={{ borderLeft: "1px solid rgba(255,255,255,0.08)" }}>
-            {/* Mobile: horizontal scrollable, hide 1W */}
-            <div className="sm:hidden flex items-center overflow-x-auto px-1.5 snap-x snap-mandatory" style={{ gap: 2, scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
-              {CHART_TIMEFRAMES.filter(t => t !== "1W").map(t => (
-                <button key={t} onClick={() => setChartTf(t)}
-                  className="px-2 text-[13px] font-semibold transition-all shrink-0 whitespace-nowrap flex items-center"
-                  style={{
-                    height: 28,
-                    ...(chartTf === t
-                      ? { background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 20, color: "#e0e0e0" }
-                      : { borderRadius: 20, border: "1px solid transparent", color: "#b3b3b3" })
-                  }}>
-                  {t}
-                </button>
-              ))}
-            </div>
-            {/* Desktop pills */}
-            <div className="hidden sm:flex px-2" style={{ background: "rgba(255,255,255,0.03)", borderRadius: 24, padding: 3, gap: 2 }}>
-              {CHART_TIMEFRAMES.map(t => (
-                <button key={t} onClick={() => setChartTf(t)}
-                  className="px-2.5 text-[14px] font-semibold transition-all shrink-0 whitespace-nowrap flex items-center"
-                  style={{
-                    height: 28,
-                    ...(chartTf === t
-                      ? { background: "rgba(255,255,255,0.10)", border: "1px solid transparent", borderRadius: 20, color: "#e0e0e0" }
-                      : { borderRadius: 20, border: "1px solid transparent", color: "#b3b3b3" })
-                  }}>
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Canvas */}
-        <div className="h-[260px] sm:h-[340px] lg:h-[400px] xl:h-[440px]">
-          <ChartCanvas
-            bars={chartBars}
-            address={token.address}
-            loading={false}
-            chartType={chartType}
-            indicators={indicators}
-            solPrice={solPrice}
-            symbol={token.symbol}
-            graduated={token.graduated}
-            graduatedAt={token.graduatedAt ?? null}
-            onCrosshairMove={onCrosshairMove}
-          />
-        </div>
-      </div>
-    );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartBars, chartType, chartTf, indicators, indOpen, connected, token?.address, token?.graduated, token?.tradeCount, onCrosshairMove, solPrice, isSwitching, serverStats, isJustLaunched]);
+  // KLineChart Pro — self-contained (fetches its own OHLCV via PumpiDatafeed)
+  const ChartSection = token ? (
+    <div className="rounded-sm overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+      <KLineChartCanvas
+        address={token.address}
+        symbol={token.symbol}
+        name={token.name}
+        platform={token.platform ?? undefined}
+        solPrice={solPrice}
+        livePrice={liveToken?.priceEth ? parseFloat(liveToken.priceEth) : undefined}
+      />
+    </div>
+  ) : null;
 
   const handleTrade = async () => {
     if (resolveWalletAction(wallet, walletConnected) === "open_wallet_modal") { openWalletModal(); return; }
@@ -2865,13 +2543,6 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
           </div>
         </div>
 
-        {/* Indicator picker modal */}
-        <IndicatorModal
-          open={indOpen}
-          onClose={() => setIndOpen(false)}
-          active={indicators}
-          onToggle={toggleIndicator}
-        />
 
 
         {/* Transactions + Holders tabs */}

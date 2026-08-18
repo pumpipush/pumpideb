@@ -1,0 +1,527 @@
+/*
+ * TradingView Advanced Charts–style override for KLineChart Pro
+ * pumpi-chart-kit
+ */
+
+/* ── OHLC values: hidden on mobile, symbol+timeframe stays visible ── */
+@media (max-width: 640px) {
+  .chart-ohlc-values { display: none !important; }
+}
+
+/* ─── Root tokens ─────────────────────────────────────────────────────────── */
+.klinecharts-pro[data-theme=dark] {
+  --klinecharts-pro-primary-color:            #2962ff;
+  --klinecharts-pro-hover-background-color:   rgba(41, 98, 255, 0.12);
+  --klinecharts-pro-selected-color:           rgba(41, 98, 255, 0.15);
+  --klinecharts-pro-background-color:         #131722;
+  --klinecharts-pro-popover-background-color: #1e222d;
+  --klinecharts-pro-text-color:               #d1d4dc;
+  --klinecharts-pro-text-second-color:        #787b86;
+  --klinecharts-pro-border-color:             #2a2e39;
+}
+
+/* Fill container */
+.klinecharts-pro {
+  height: 100% !important;
+  border-radius: 0;
+  font-family: 'Trebuchet MS', sans-serif;
+}
+
+/* ─── Hide built-in period bar (replaced by custom toolbar) ───────────────── */
+.klinecharts-pro-period-bar {
+  position: fixed !important;
+  left: -99999px !important;
+  top: -99999px !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Content fills full height since our custom toolbar is outside */
+.klinecharts-pro-content {
+  height: 100% !important;
+}
+/* Drawing bar hidden — controlled by .klc-bar-hidden class on container */
+.klc-bar-hidden .klinecharts-pro-drawing-bar {
+  display: none !important;
+}
+.klc-bar-hidden .klinecharts-pro-widget {
+  width: 100% !important;
+}
+
+/* ─── Drawing / left sidebar ──────────────────────────────────────────────── */
+.klinecharts-pro-drawing-bar {
+  width: 45px !important;
+  background-color: var(--klinecharts-pro-background-color);
+  border-right: 1px solid var(--klinecharts-pro-border-color) !important;
+  padding-top: 4px;
+}
+.klinecharts-pro-drawing-bar .item {
+  margin-top: 4px !important;
+}
+.klinecharts-pro-drawing-bar .item .icon-overlay {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 4px !important;
+}
+.klinecharts-pro-drawing-bar .item .icon-overlay:hover {
+  background-color: var(--klinecharts-pro-hover-background-color) !important;
+}
+.klinecharts-pro-drawing-bar .item .icon-overlay.selected {
+  background-color: var(--klinecharts-pro-selected-color) !important;
+}
+.klinecharts-pro-drawing-bar .split-line {
+  background-color: var(--klinecharts-pro-border-color) !important;
+  margin: 6px 8px !important;
+  width: calc(100% - 16px) !important;
+}
+
+/* ─── Modals / popovers ───────────────────────────────────────────────────── */
+.klinecharts-pro-modal .inner {
+  border-radius: 6px !important;
+  border: 1px solid var(--klinecharts-pro-border-color);
+}
+.klinecharts-pro-modal .inner .title-container {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  border-bottom-color: var(--klinecharts-pro-border-color) !important;
+}
+.klinecharts-pro-list li:hover {
+  background-color: var(--klinecharts-pro-hover-background-color) !important;
+}
+.klinecharts-pro-symbol-search-modal-input {
+  border-color: var(--klinecharts-pro-border-color) !important;
+}
+.klinecharts-pro-symbol-search-modal-input[data-status=focus] {
+  border-color: var(--klinecharts-pro-primary-color) !important;
+}
+.klinecharts-pro-loading {
+  color: var(--klinecharts-pro-primary-color) !important;
+}
+.klinecharts-pro-list::-webkit-scrollbar { width: 4px !important; }
+.klinecharts-pro-list::-webkit-scrollbar-thumb {
+  border-radius: 2px !important;
+  background-color: var(--klinecharts-pro-border-color) !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Custom Toolbar  (class prefix: ctb-)
+══════════════════════════════════════════════════════════════════════════════ */
+
+.ctb-root {
+  height: 49px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  background: #131722;
+  border-bottom: 1px solid #2a2e39;
+  gap: 0;
+  font-family: 'Trebuchet MS', sans-serif;
+  user-select: none;
+}
+
+.ctb-left,
+.ctb-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ── Mobile: left section scrolls horizontally, right stays fixed ── */
+@media (max-width: 640px) {
+  .ctb-root {
+    padding: 0 4px;
+    gap: 0;
+  }
+  .ctb-left {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .ctb-left::-webkit-scrollbar { display: none; }
+  .ctb-left > * { flex-shrink: 0; }
+  .ctb-right  { flex-shrink: 0; }
+
+  /* Panels are portalled to document.body — no mobile override needed */
+}
+
+/* Divider */
+.ctb-divider {
+  width: 1px;
+  height: 20px;
+  background: #2a2e39;
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+
+/* ── Touch targets: remove 300ms tap delay on mobile ── */
+.ctb-tf-btn,
+.ctb-ct-btn,
+.ctb-icon-btn,
+.ctb-text-btn,
+.ctb-toggle-side,
+.ctb-dd-row,
+.ctb-dd-group-hdr,
+.ctb-ct-item,
+.bbar-range,
+.bbar-toggle,
+.bbar-icon {
+  touch-action: manipulation;
+}
+
+/* ── Generic icon button ── */
+.ctb-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: #787b86;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.ctb-icon-btn:hover {
+  background: rgba(41, 98, 255, 0.12);
+  color: #d1d4dc;
+}
+.ctb-icon-btn.active {
+  color: #2962ff;
+  background: rgba(41, 98, 255, 0.15);
+}
+
+/* ── Timeframe dropdown ── */
+.ctb-dropdown-wrap {
+  position: relative;
+}
+.ctb-tf-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: #d1d4dc;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.ctb-tf-btn:hover,
+.ctb-tf-btn.open {
+  background: rgba(41, 98, 255, 0.12);
+}
+.ctb-tf-label {
+  min-width: 24px;
+  text-align: left;
+}
+
+/* Grouped panel */
+.ctb-dd-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 9999;
+  background: #262626;
+  border: 1px solid #333333;
+  border-radius: 4px;
+  padding: 4px 0;
+  min-width: 148px;
+  max-height: 440px;
+  overflow-y: auto;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.7);
+}
+.ctb-dd-panel::-webkit-scrollbar { width: 3px; }
+.ctb-dd-panel::-webkit-scrollbar-thumb { background: #2a2e39; border-radius: 2px; }
+
+/* Group header row */
+.ctb-dd-group-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 10px 4px;
+  border: none;
+  background: transparent;
+  color: #42475a;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: color 0.12s;
+}
+.ctb-dd-group-hdr:hover { color: #6b7080; }
+
+/* Period row */
+.ctb-dd-row {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: #dbdbdb;
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.08s, color 0.08s;
+  white-space: nowrap;
+}
+.ctb-dd-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f2f2f2;
+}
+.ctb-dd-row.active {
+  background: #f2f2f2;
+  color: #141414;
+  font-weight: 500;
+}
+
+/* ── Text buttons ── */
+.ctb-text-btn {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: #787b86;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.ctb-text-btn:hover {
+  background: rgba(41, 98, 255, 0.12);
+  color: #d1d4dc;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Bottom Bar  (class prefix: bbar-)
+══════════════════════════════════════════════════════════════════════════════ */
+
+.bbar-root {
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  background: #131722;
+  border-top: 1px solid #2a2e39;
+  font-family: 'Trebuchet MS', sans-serif;
+  user-select: none;
+}
+
+.bbar-left,
+.bbar-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.bbar-range {
+  height: 24px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #787b86;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.bbar-range:hover {
+  background: rgba(255,255,255,0.05);
+  color: #d1d4dc;
+}
+.bbar-range.active {
+  background: rgba(41, 98, 255, 0.15);
+  color: #2962ff;
+  font-weight: 600;
+}
+
+.bbar-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #787b86;
+  cursor: pointer;
+  margin-left: 2px;
+  transition: background 0.12s, color 0.12s;
+}
+.bbar-icon:hover {
+  background: rgba(255,255,255,0.05);
+  color: #d1d4dc;
+}
+
+.bbar-clock {
+  color: #787b86;
+  font-size: 14px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  margin-right: 8px;
+}
+
+.bbar-toggle {
+  height: 24px;
+  padding: 0 7px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: #787b86;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.bbar-toggle:hover {
+  background: rgba(255,255,255,0.05);
+  color: #d1d4dc;
+}
+.bbar-toggle.active {
+  background: rgba(41, 98, 255, 0.15);
+  color: #2962ff;
+  font-weight: 600;
+}
+
+/* ── Price / MCap toggle ── */
+.ctb-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 28px;
+  border: 1px solid #2a2e39;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-left: 4px;
+}
+.ctb-toggle-sep {
+  color: #2a2e39;
+  font-size: 13px;
+  line-height: 28px;
+  padding: 0 1px;
+}
+.ctb-toggle-side {
+  height: 28px;
+  padding: 0 9px;
+  border: none;
+  background: transparent;
+  color: #787b86;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.ctb-toggle-side:hover {
+  background: rgba(41, 98, 255, 0.1);
+  color: #d1d4dc;
+}
+.ctb-toggle-side.active {
+  color: #2962ff;
+  font-weight: 700;
+}
+
+/* ── Candle type selector ─────────────────────────────────────────────────── */
+.ctb-ct-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: #787b86;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.ctb-ct-btn:hover,
+.ctb-ct-btn.open {
+  background: rgba(41, 98, 255, 0.12);
+  color: #d1d4dc;
+}
+
+.ctb-ct-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 9999;
+  background: #262626;
+  border: 1px solid #333333;
+  border-radius: 4px;
+  padding: 4px 0;
+  min-width: 180px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.7);
+}
+
+.ctb-ct-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: #dbdbdb;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.08s, color 0.08s;
+  white-space: nowrap;
+}
+.ctb-ct-item:hover {
+  background: rgba(255,255,255,0.06);
+  color: #f2f2f2;
+}
+.ctb-ct-item.active {
+  background: rgba(41,98,255,0.15);
+  color: #2962ff;
+}
+
+/* ── Drawing bar chevron toggle ─────────────────────────────────────────────── */
+.drawing-chevron {
+  position: absolute;
+  bottom: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 28px;
+  background: #1e222d;
+  border: 1px solid #2a2e39;
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+  color: #787b86;
+  font-size: 13px;
+  cursor: pointer;
+  transition: left 0.2s ease, background 0.15s, color 0.15s;
+  padding: 0;
+  line-height: 1;
+}
+.drawing-chevron:hover {
+  background: #2a2e39;
+  color: #d1d4dc;
+}
