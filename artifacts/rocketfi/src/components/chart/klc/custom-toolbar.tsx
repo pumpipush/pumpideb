@@ -159,13 +159,9 @@ const INLINE_PERIODS: Period[] = [
   { multiplier: 1,  timespan: 'minute', text: '1m',  label: '1 minute'   },
   { multiplier: 5,  timespan: 'minute', text: '5m',  label: '5 minutes'  },
   { multiplier: 15, timespan: 'minute', text: '15m', label: '15 minutes' },
-  { multiplier: 1,  timespan: 'hour',   text: '1H',  label: '1 hour'     },
-  { multiplier: 4,  timespan: 'hour',   text: '4H',  label: '4 hours'    },
-  { multiplier: 1,  timespan: 'day',    text: 'D',   label: '1 day'      },
-  { multiplier: 1,  timespan: 'week',   text: 'W',   label: '1 week'     },
 ]
 
-// Extra periods shown in the "more" dropdown
+// All other periods live in the dropdown
 const MORE_PERIOD_GROUPS = [
   {
     key: 'seconds', label: 'SECONDS',
@@ -184,6 +180,8 @@ const MORE_PERIOD_GROUPS = [
   {
     key: 'hours', label: 'HOURS',
     periods: [
+      { multiplier: 1,  timespan: 'hour', text: '1H',  label: '1 hour'   },
+      { multiplier: 4,  timespan: 'hour', text: '4H',  label: '4 hours'  },
       { multiplier: 6,  timespan: 'hour', text: '6H',  label: '6 hours'  },
       { multiplier: 12, timespan: 'hour', text: '12H', label: '12 hours' },
     ],
@@ -191,6 +189,8 @@ const MORE_PERIOD_GROUPS = [
   {
     key: 'days', label: 'DAYS / WEEKS / MONTHS',
     periods: [
+      { multiplier: 1, timespan: 'day',   text: 'D', label: '1 day'   },
+      { multiplier: 1, timespan: 'week',  text: 'W', label: '1 week'  },
       { multiplier: 1, timespan: 'month', text: 'M', label: '1 month' },
     ],
   },

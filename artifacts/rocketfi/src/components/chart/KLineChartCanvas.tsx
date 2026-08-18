@@ -135,7 +135,7 @@ function ChartSkeleton({ loading }: { loading: boolean }) {
         justifyContent: 'center',
         height: '100%',
         gap: 12,
-        background: '#131722',
+        background: '#080808',
       }}
     >
       {loading ? (
@@ -296,7 +296,7 @@ export function KLineChartCanvas({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        background: '#131722',
+        background: '#080808',
         // Responsive height: chart area + toolbars
         height: 'clamp(460px, 55vh, 620px)',
         minHeight: 460,
@@ -317,7 +317,7 @@ export function KLineChartCanvas({
       />
 
       {/* ── KLineChart Pro — fills remaining space ── */}
-      <div style={{ flex: 1, minHeight: 0, position: 'relative', background: '#131722' }}>
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', background: '#080808' }}>
 
         {/* OHLC overlay — positioned inside chart canvas, top-left (TV style) */}
         <OhlcOverlay
@@ -348,7 +348,15 @@ export function KLineChartCanvas({
           onClick={handleDrawingBarToggle}
           title={drawingBarVisible ? 'Hide drawing tools' : 'Show drawing tools'}
         >
-          {drawingBarVisible ? '‹' : '›'}
+          {drawingBarVisible ? (
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M6.5 2L3.5 5L6.5 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          ) : (
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M3.5 2L6.5 5L3.5 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
         </button>
       </div>
 

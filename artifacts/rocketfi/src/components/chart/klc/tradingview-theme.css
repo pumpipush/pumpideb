@@ -3,16 +3,16 @@
  * Matches TV dark theme as closely as possible.
  */
 
-/* ─── Root tokens — exact TV dark palette ──────────────────────────────────── */
+/* ─── Root tokens — tuned to match site's pure-black background ────────────── */
 .klinecharts-pro[data-theme=dark] {
   --klinecharts-pro-primary-color:            #2962ff;
   --klinecharts-pro-hover-background-color:   rgba(41, 98, 255, 0.10);
   --klinecharts-pro-selected-color:           rgba(41, 98, 255, 0.15);
-  --klinecharts-pro-background-color:         #131722;
-  --klinecharts-pro-popover-background-color: #1e222d;
-  --klinecharts-pro-text-color:               #b2b5be;
-  --klinecharts-pro-text-second-color:        #5d606b;
-  --klinecharts-pro-border-color:             #2a2e39;
+  --klinecharts-pro-background-color:         #080808;
+  --klinecharts-pro-popover-background-color: #111111;
+  --klinecharts-pro-text-color:               #9ca3af;
+  --klinecharts-pro-text-second-color:        #4b5563;
+  --klinecharts-pro-border-color:             rgba(255,255,255,0.07);
 }
 
 /* Fill container */
@@ -20,7 +20,7 @@
   height: 100% !important;
   border-radius: 0;
   font-family: 'Trebuchet MS', sans-serif;
-  background: #131722;
+  background: #080808;
 }
 
 /* ─── Hide built-in period bar (replaced by custom toolbar) ────────────────── */
@@ -48,8 +48,8 @@
 /* ─── Drawing / left sidebar ─────────────────────────────────────────────── */
 .klinecharts-pro-drawing-bar {
   width: 45px !important;
-  background-color: #131722 !important;
-  border-right: 1px solid #2a2e39 !important;
+  background-color: #080808 !important;
+  border-right: 1px solid rgba(255,255,255,0.07) !important;
   padding-top: 6px;
 }
 .klinecharts-pro-drawing-bar .item { margin-top: 2px !important; }
@@ -98,7 +98,7 @@
 
 /* ══════════════════════════════════════════════════════════════════════════════
    Custom Toolbar  (prefix: ctb-)  — TradingView Advanced Charts style
-   Height: 46px  Background: #1e222d
+   Height: 46px  Background: site-matched near-black
 ══════════════════════════════════════════════════════════════════════════════ */
 
 .ctb-root {
@@ -108,8 +108,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 6px;
-  background: #1e222d;
-  border-bottom: 1px solid #2a2e39;
+  background: #0d0d0d;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
   font-family: 'Trebuchet MS', sans-serif;
   user-select: none;
   gap: 0;
@@ -143,7 +143,7 @@
 .ctb-sep {
   width: 1px;
   height: 20px;
-  background: #2a2e39;
+  background: rgba(255,255,255,0.07);
   margin: 0 6px;
   flex-shrink: 0;
 }
@@ -243,12 +243,12 @@
   display: flex;
   align-items: center;
   height: 26px;
-  border: 1px solid #2a2e39;
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 4px;
   overflow: hidden;
 }
 .ctb-toggle-sep {
-  color: #2a2e39;
+  color: rgba(255,255,255,0.08);
   font-size: 12px;
   line-height: 26px;
   padding: 0 1px;
@@ -276,17 +276,17 @@
 
 /* ── Timeframe grouped dropdown panel ── */
 .ctb-dd-panel {
-  background: #1e222d;
-  border: 1px solid #2a2e39;
+  background: #111111;
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 4px;
   padding: 4px 0;
   min-width: 160px;
   max-height: 420px;
   overflow-y: auto;
-  box-shadow: 0 8px 28px rgba(0,0,0,0.75);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.88);
 }
 .ctb-dd-panel::-webkit-scrollbar { width: 3px; }
-.ctb-dd-panel::-webkit-scrollbar-thumb { background: #2a2e39; border-radius: 2px; }
+.ctb-dd-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 2px; }
 
 .ctb-dd-group-hdr {
   padding: 8px 12px 4px;
@@ -323,12 +323,12 @@
 
 /* ── Candle type panel ── */
 .ctb-ct-panel {
-  background: #1e222d;
-  border: 1px solid #2a2e39;
+  background: #111111;
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 4px;
   padding: 4px 0;
   min-width: 190px;
-  box-shadow: 0 8px 28px rgba(0,0,0,0.75);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.88);
 }
 
 .ctb-ct-item {
@@ -420,7 +420,7 @@
 
 /* ══════════════════════════════════════════════════════════════════════════════
    Bottom Bar  (prefix: bbar-)  — TradingView style
-   Height: 28px  Background: #131722
+   Height: 28px  Background: site-matched near-black
 ══════════════════════════════════════════════════════════════════════════════ */
 
 .bbar-root {
@@ -430,8 +430,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 8px;
-  background: #131722;
-  border-top: 1px solid #2a2e39;
+  background: #080808;
+  border-top: 1px solid rgba(255,255,255,0.07);
   font-family: 'Trebuchet MS', sans-serif;
   user-select: none;
 }
@@ -519,7 +519,7 @@
 .bbar-sep {
   width: 1px;
   height: 14px;
-  background: #2a2e39;
+  background: rgba(255,255,255,0.07);
   margin: 0 6px;
   flex-shrink: 0;
 }
@@ -531,28 +531,27 @@
 
 .drawing-chevron {
   position: absolute;
-  bottom: 12px;
-  z-index: 10;
+  bottom: 16px;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 26px;
-  background: #1e222d;
-  border: 1px solid #2a2e39;
+  width: 20px;
+  height: 32px;
+  background: #1c1c1c;
+  border: 1px solid rgba(255,255,255,0.18);
   border-left: none;
-  border-radius: 0 3px 3px 0;
-  color: #5d606b;
-  font-size: 12px;
+  border-radius: 0 4px 4px 0;
+  color: #9ca3af;
   cursor: pointer;
   transition: left 0.2s ease, background 0.12s, color 0.12s;
   padding: 0;
-  line-height: 1;
-  font-family: 'Trebuchet MS', sans-serif;
+  box-shadow: 2px 0 6px rgba(0,0,0,0.5);
 }
 .drawing-chevron:hover {
-  background: #2a2e39;
-  color: #b2b5be;
+  background: #2a2a2a;
+  color: #e5e7eb;
+  border-color: rgba(255,255,255,0.30);
 }
 
 /* ── Chart spinner animation ── */

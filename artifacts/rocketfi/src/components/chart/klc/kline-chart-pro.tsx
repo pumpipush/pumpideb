@@ -50,8 +50,8 @@ const TV_STYLES = {
 
   // ── Grid ─────────────────────────────────────────────────────────────────
   grid: {
-    horizontal: { color: 'rgba(42,46,57,0.5)', size: 1, style: 0, show: true },
-    vertical:   { color: 'rgba(42,46,57,0.5)', size: 1, style: 0, show: true },
+    horizontal: { color: 'rgba(255,255,255,0.04)', size: 1, style: 0, show: true },
+    vertical:   { color: 'rgba(255,255,255,0.04)', size: 1, style: 0, show: true },
   },
 
   // ── Candlesticks ─────────────────────────────────────────────────────────
@@ -123,12 +123,12 @@ const TV_STYLES = {
   // ── X axis (time) ────────────────────────────────────────────────────────
   xAxis: {
     show: true, size: 'auto',
-    axisLine: { show: true, color: '#2a2e39', size: 1 },
+    axisLine: { show: true, color: 'rgba(255,255,255,0.06)', size: 1 },
     tickText: {
-      show: true, color: '#5d606b', size: 11,
+      show: true, color: '#4b5563', size: 11,
       family: "'Trebuchet MS', sans-serif",
     },
-    tickLine: { show: false, size: 1, length: 3, color: '#2a2e39' },
+    tickLine: { show: false },
   },
 
   // ── Y axis (price) ───────────────────────────────────────────────────────
@@ -136,7 +136,7 @@ const TV_STYLES = {
     show: true, size: 'auto', position: 'right',
     axisLine: { show: false },
     tickText: {
-      show: true, color: '#787b86', size: 11,
+      show: true, color: '#6b7280', size: 11,
       family: "'Trebuchet MS', sans-serif",
     },
     tickLine: { show: false },
@@ -145,7 +145,7 @@ const TV_STYLES = {
   // ── Pane separator ───────────────────────────────────────────────────────
   separator: {
     size: 2,
-    color: '#2a2e39',
+    color: 'rgba(255,255,255,0.06)',
     fill: true,
     activeBackgroundColor: 'rgba(41,98,255,0.10)',
   },
