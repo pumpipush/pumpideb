@@ -888,9 +888,11 @@ export default function Dashboard() {
   useEffect(() => { setPage(1); }, [activeTab, platformFilter, search, minMcap, onlyGraduated, onlyWithImage]);
 
   const isNewTab = activeTab === "New";
-  // PumpSwap trending always uses 50 so the full filtered set is visible even on mobile
-  const isPumpswapTrending = activeTab === "Trending" && platformFilter === "pumpswap";
-  const activePageSize = isNewTab ? NEW_PAGE_SIZE : isPumpswapTrending ? 50 : PAGE_SIZE;
+  // PumpSwap and LaunchLab trending always use 50 so the full filtered set is
+  // visible even on mobile (both platforms have their own server-side activity filters).
+  const isDexPlatformTrending = activeTab === "Trending" &&
+    (platformFilter === "pumpswap" || platformFilter === "raydium_launchlab");
+  const activePageSize = isNewTab ? NEW_PAGE_SIZE : isDexPlatformTrending ? 50 : PAGE_SIZE;
   const listParams = {
     sort: sortMap[activeTab],
     // Graduated tab uses client-side mcap threshold — no server-side flag needed

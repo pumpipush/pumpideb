@@ -183,6 +183,18 @@ router.get("/tokens", asyncWrap(async (req, res) => {
     if (platform) {
       if (platform === "raydium_launchlab") {
         where.push(`t.platform = 'raydium_launchlab'`);
+        // LaunchLab-specific smart filter: only show tokens that have traded
+        // in the last hour/5m OR were created in the last 24h (so brand-new
+        // tokens still appear before they accumulate activity).
+        // LaunchLab has a large catalogue — without this gate, dead coins flood
+        // all 50 slots before any real activity. PumpSwap is intentionally
+        // excluded from this filter because its token density is lower and the
+        // filter would hide too many valid coins there.
+        where.push(`(
+          r1h.token_address IS NOT NULL
+          OR r5m.token_address IS NOT NULL
+          OR t.created_at > NOW() - INTERVAL '24 hours'
+        )`);
       } else if (platform === "pumpswap") {
         // Only show tokens natively indexed on PumpSwap.
         // Graduated pump.fun tokens are re-platformed to 'pumpswap' at migration time
@@ -193,9 +205,8 @@ router.get("/tokens", asyncWrap(async (req, res) => {
         where.push(`t.platform = $${params.length}`);
       }
     }
-    // No hard activity filter — smart_score already pushes inactive tokens to the
-    // bottom (score 0). Filtering by recent trades was too aggressive for smaller
-    // platforms (PumpSwap) where activity density is lower.
+    // No hard global activity filter — smart_score already pushes inactive tokens
+    // to the bottom (score 0). Per-platform filters are applied above where needed.
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
     params.push(fetchLimit);
     const limitParamIdx = params.length;
