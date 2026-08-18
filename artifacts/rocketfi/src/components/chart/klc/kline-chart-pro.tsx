@@ -359,6 +359,19 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
 
     if (yAxisFormatterRef.current) applyMcapAxis(yAxisFormatterRef.current)
 
+    // After history loads: scroll to latest candle and zoom in when data is sparse
+    datafeed.onHistoryLoaded = (count: number) => {
+      const kChart = getKlcChart(containerRef.current)
+      if (!kChart) return
+      if (count > 0 && count < 50) {
+        // Fewer than 50 bars — widen each candle so they're clearly visible
+        const pxWide = containerRef.current?.clientWidth ?? 900
+        const barSpace = Math.min(32, Math.max(8, Math.floor(pxWide / (count + 10))))
+        kChart.setBarSpace(barSpace)
+      }
+      kChart.scrollToRealTime()
+    }
+
     const klcChart = getKlcChart(containerRef.current)
     let unsubscribeCrosshair: (() => void) | undefined
     if (klcChart) {
@@ -379,7 +392,8 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
 
     return () => {
       unsubscribeCrosshair?.()
-      datafeed.onLiveCandle = undefined
+      datafeed.onLiveCandle    = undefined
+      datafeed.onHistoryLoaded = undefined
       if (containerRef.current) containerRef.current.innerHTML = ''
       chartRef.current = null
     }

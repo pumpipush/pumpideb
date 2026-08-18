@@ -72,6 +72,8 @@ function barToKLine(b: OHLCVBar): KLineData {
 export class PumpiDatafeed implements Datafeed {
   /** Called by KLineChartProWrapper to update the OHLC header on every new candle */
   onLiveCandle?: (candle: KLineData) => void
+  /** Called after initial history load with the number of bars returned */
+  onHistoryLoaded?: (count: number) => void
 
   private _address: string = ''
   private _tf: string = '1m'
@@ -104,13 +106,18 @@ export class PumpiDatafeed implements Datafeed {
     }
 
     const bars = this._bars
-    if (!bars.length) return []
+    if (!bars.length) {
+      this.onHistoryLoaded?.(0)
+      return []
+    }
 
     // Emit latest candle to OHLC header
     const last = bars[bars.length - 1]
     this._emitLive(last)
 
-    return bars.map(barToKLine)
+    const result = bars.map(barToKLine)
+    this.onHistoryLoaded?.(result.length)
+    return result
   }
 
   // ── subscribe (live updates via polling) ──────────────────────────────────
