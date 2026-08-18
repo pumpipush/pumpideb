@@ -161,8 +161,8 @@ const INLINE_PERIODS: Period[] = [
   { multiplier: 15, timespan: 'minute', text: '15m', label: '15 minutes' },
 ]
 
-// All other periods live in the dropdown
-const MORE_PERIOD_GROUPS = [
+// All periods grouped for the unified dropdown
+const ALL_PERIOD_GROUPS = [
   {
     key: 'seconds', label: 'SECONDS',
     periods: [
@@ -174,6 +174,9 @@ const MORE_PERIOD_GROUPS = [
   {
     key: 'minutes', label: 'MINUTES',
     periods: [
+      { multiplier: 1,  timespan: 'minute', text: '1m',  label: '1 minute'   },
+      { multiplier: 5,  timespan: 'minute', text: '5m',  label: '5 minutes'  },
+      { multiplier: 15, timespan: 'minute', text: '15m', label: '15 minutes' },
       { multiplier: 30, timespan: 'minute', text: '30m', label: '30 minutes' },
     ],
   },
@@ -196,10 +199,7 @@ const MORE_PERIOD_GROUPS = [
   },
 ]
 
-export const ALL_PERIODS: Period[] = [
-  ...INLINE_PERIODS,
-  ...MORE_PERIOD_GROUPS.flatMap(g => g.periods),
-]
+export const ALL_PERIODS: Period[] = ALL_PERIOD_GROUPS.flatMap(g => g.periods)
 
 export const DEFAULT_PERIOD: Period = INLINE_PERIODS[0]   // 1m
 
@@ -294,31 +294,28 @@ function CandleTypeSelector({
 
 // ── "More periods" dropdown ───────────────────────────────────────────────────
 
-function MorePeriodsDropdown({
+function TimeframeDropdown({
   period, onPeriodChange,
 }: { period: Period; onPeriodChange: (p: Period) => void }) {
   const [open, setOpen] = useState(false)
   const btnRef = useRef<HTMLButtonElement>(null)
-  const isActivePeriodInMore = !INLINE_PERIODS.some(p => p.text === period.text)
 
   return (
     <>
       <button
         ref={btnRef}
-        className={`ctb-tf-pill${open ? ' open' : ''}${isActivePeriodInMore ? ' active-period' : ''}`}
+        className={`ctb-tf-pill active-period${open ? ' open' : ''}`}
         onClick={() => setOpen(o => !o)}
-        title="More timeframes"
+        title="Timeframe"
       >
-        {isActivePeriodInMore ? period.text : '···'}
+        {period.text}
         <IconChevronDown />
       </button>
       <DropdownPortal triggerRef={btnRef} open={open} onClose={() => setOpen(false)}>
         <div className="ctb-dd-panel" style={{ position: 'static' }}>
-          {MORE_PERIOD_GROUPS.map(group => (
+          {ALL_PERIOD_GROUPS.map(group => (
             <div key={group.key}>
-              <div className="ctb-dd-group-hdr" style={{ cursor: 'default' }}>
-                {group.label}
-              </div>
+              <div className="ctb-dd-group-hdr">{group.label}</div>
               {group.periods.map(p => (
                 <button
                   key={p.text}
@@ -362,23 +359,11 @@ export function CustomToolbar({
 
   return (
     <div className="ctb-root">
-      {/* ── Left: inline TF pills + candle type ── */}
+      {/* ── Left: timeframe dropdown + candle type ── */}
       <div className="ctb-left">
 
-        {/* Inline timeframe pills */}
-        <div className="ctb-tf-group">
-          {INLINE_PERIODS.map(p => (
-            <button
-              key={p.text}
-              className={`ctb-tf-pill${p.text === period.text ? ' active-period' : ''}`}
-              onClick={() => onPeriodChange(p)}
-              title={p.label}
-            >
-              {p.text}
-            </button>
-          ))}
-          <MorePeriodsDropdown period={period} onPeriodChange={onPeriodChange} />
-        </div>
+        {/* Single timeframe dropdown */}
+        <TimeframeDropdown period={period} onPeriodChange={onPeriodChange} />
 
         <div className="ctb-sep" />
 
