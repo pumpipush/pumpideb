@@ -36,7 +36,6 @@ import {
   BarChart2,
   ChevronLeft,
   ChevronRight,
-  Info,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -866,7 +865,6 @@ export default function Dashboard() {
   const { liveTokens, liveTradeStats, connected } = useFeedStream();
   // Track which live token addresses have been seen since last platform switch
   const [seenLiveAddresses, setSeenLiveAddresses] = useState<Set<string>>(new Set());
-  const [bubbleInfoOpen, setBubbleInfoOpen] = useState(false);
 
   useEffect(() => {
     if (liveTokens.length === 0) return;
@@ -1131,30 +1129,6 @@ export default function Dashboard() {
                     Bubble Map
                   </h2>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {/* Info icon + tooltip */}
-                    <div className="relative group">
-                      <Info
-                        className="w-4 h-4 cursor-pointer transition-colors duration-150"
-                        style={{ color: bubbleInfoOpen ? "#b3b3b3" : "rgba(136,136,136,0.75)" }}
-                        onClick={() => setBubbleInfoOpen(v => !v)}
-                      />
-                      <div className={[
-                        "absolute right-0 top-full mt-2 z-50 transition-opacity duration-150 w-64",
-                        bubbleInfoOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
-                      ].join(" ")}>
-                        <div className="absolute right-3 -top-1.5 w-0 h-0"
-                          style={{ borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: "6px solid #141414" }} />
-                        <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
-                          style={{ background: "#141414", border: "1px solid rgba(255,255,255,0.1)", color: "#bbbbbb", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
-                          {bubbleView === "newest"
-                            ? "Shows the 50 most recently launched tokens. Bubble size reflects launch order. Green = price up, red = price down in the last 24h."
-                            : "Shows the hottest tokens right now — ranked by volume. Bubble size reflects rank. Green = price up, red = price down in the last 24h."}
-                        </div>
-                      </div>
-                      {bubbleInfoOpen && (
-                        <div className="fixed inset-0 z-40 md:hidden" onClick={() => setBubbleInfoOpen(false)} />
-                      )}
-                    </div>
                     {/* View toggle */}
                     <div className="flex items-center rounded-full p-0.5" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
                       <button
