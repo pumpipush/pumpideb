@@ -72,7 +72,7 @@ const TV_STYLES = {
         upColor: '#26a69a', downColor: '#ef5350', noChangeColor: '#888888',
         line: { show: true, style: 1, dashValue: [4, 4], size: 1 },
         text: {
-          show: true, size: 11,
+          show: true, size: 12,
           family: "'Trebuchet MS', sans-serif",
           paddingLeft: 4, paddingTop: 2, paddingRight: 4, paddingBottom: 2,
           borderRadius: 2, color: '#ffffff',
@@ -105,9 +105,9 @@ const TV_STYLES = {
     tooltip: {
       offsetTop: 6,
       text: {
-        size: 11,
+        size: 12,
         family: "'Trebuchet MS', sans-serif",
-        color: '#b2b5be',
+        color: '#c4c9d4',
         marginLeft: 8, marginTop: 6, marginRight: 8, marginBottom: 0,
       },
       rect: {
@@ -125,7 +125,7 @@ const TV_STYLES = {
     show: true, size: 'auto',
     axisLine: { show: true, color: 'rgba(255,255,255,0.06)', size: 1 },
     tickText: {
-      show: true, color: '#4b5563', size: 11,
+      show: true, color: '#787b86', size: 12,
       family: "'Trebuchet MS', sans-serif",
     },
     tickLine: { show: false },
@@ -136,7 +136,7 @@ const TV_STYLES = {
     show: true, size: 'auto', position: 'right',
     axisLine: { show: false },
     tickText: {
-      show: true, color: '#6b7280', size: 11,
+      show: true, color: '#9ca3af', size: 12,
       family: "'Trebuchet MS', sans-serif",
     },
     tickLine: { show: false },
@@ -157,7 +157,7 @@ const TV_STYLES = {
       show: true,
       line: { show: true, style: 1, dashValue: [4, 4], size: 1, color: 'rgba(149,152,161,0.6)' },
       text: {
-        show: true, size: 11,
+        show: true, size: 12,
         family: "'Trebuchet MS', sans-serif",
         color: '#ffffff',
         paddingLeft: 5, paddingRight: 5, paddingTop: 3, paddingBottom: 3,
@@ -170,7 +170,7 @@ const TV_STYLES = {
       show: true,
       line: { show: true, style: 1, dashValue: [4, 4], size: 1, color: 'rgba(149,152,161,0.6)' },
       text: {
-        show: true, size: 11,
+        show: true, size: 12,
         family: "'Trebuchet MS', sans-serif",
         color: '#ffffff',
         paddingLeft: 5, paddingRight: 5, paddingTop: 3, paddingBottom: 3,
