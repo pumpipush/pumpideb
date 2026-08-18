@@ -189,7 +189,6 @@ export function LeaderboardWidget({ solPrice }: Props) {
                 </div>
                 <div className="text-right shrink-0 pt-0.5">
                   <div className="text-xs font-bold text-white">{usd ?? fmtSol(row.volume_lamports)}</div>
-                  {usd && <div className="text-[10px] font-mono" style={{ color: "rgba(148,163,184,0.45)" }}>{fmtSol(row.volume_lamports)}</div>}
                 </div>
               </a>
             );
@@ -218,7 +217,6 @@ export function LeaderboardWidget({ solPrice }: Props) {
                 </div>
                 <div className="text-right shrink-0 pt-0.5">
                   <div className="text-xs font-bold" style={{ color }}>{sign}{usd ?? sol}</div>
-                  {usd && <div className="text-[10px] font-mono" style={{ color: "rgba(148,163,184,0.45)" }}>{sign}{sol}</div>}
                 </div>
               </a>
             );
@@ -243,7 +241,6 @@ export function LeaderboardWidget({ solPrice }: Props) {
                 </div>
                 <div className="text-right shrink-0 pt-0.5">
                   <div className="text-xs font-bold text-white">{usd ?? fmtSol(token.volume_lamports)}</div>
-                  {usd && <div className="text-[10px] font-mono" style={{ color: "rgba(148,163,184,0.45)" }}>{fmtSol(token.volume_lamports)}</div>}
                 </div>
               </Link>
             );
