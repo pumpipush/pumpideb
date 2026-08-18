@@ -56,10 +56,31 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "tokens", label: "Tokens", icon: <Zap        className="w-3 h-3" /> },
 ];
 
+const MEDAL_STYLES: Record<number, { bg: string; color: string; shadow: string }> = {
+  1: { bg: "linear-gradient(145deg,#fde68a,#f59e0b,#b45309)", color: "#fff8e1", shadow: "0 2px 8px rgba(245,158,11,0.5)" },
+  2: { bg: "linear-gradient(145deg,#e2e8f0,#94a3b8,#475569)", color: "#f8fafc",  shadow: "0 2px 6px rgba(148,163,184,0.4)" },
+  3: { bg: "linear-gradient(145deg,#fcd9b6,#cd7c4e,#7c2d12)", color: "#fff1e6",  shadow: "0 2px 6px rgba(205,124,78,0.4)" },
+};
+
 function RankBadge({ rank }: { rank: number }) {
+  const medal = MEDAL_STYLES[rank];
+  if (medal) {
+    return (
+      <div className="relative shrink-0" style={{ width: 26, height: 28 }}>
+        {/* coin */}
+        <div className="absolute top-0 left-0 w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] font-black"
+          style={{ background: medal.bg, color: medal.color, boxShadow: medal.shadow, border: "1.5px solid rgba(255,255,255,0.15)" }}>
+          {rank}
+        </div>
+        {/* ribbon nub */}
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[6px] h-[4px] rounded-sm"
+          style={{ background: medal.bg }} />
+      </div>
+    );
+  }
   return (
     <div className="w-5 flex items-center justify-center shrink-0 text-xs font-bold"
-      style={{ color: rank <= 3 ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.25)" }}>
+      style={{ color: "rgba(255,255,255,0.5)" }}>
       {rank}
     </div>
   );
