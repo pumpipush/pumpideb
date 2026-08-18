@@ -1677,17 +1677,20 @@ async function reconcileLabTradeStats(): Promise<void> {
 
 export function startEnrichmentLoop(): void {
   log.info({ intervalMs: POLL_INTERVAL_MS }, "enrichment: background loop started");
+  const swallow = (label: string) => (err: unknown) =>
+    log.error({ err }, `enrichment: ${label} failed — continuing`);
+
   // Run bonding-curve backfill immediately so existing tokens get real MC values
-  void backfillBondingCurves();
+  void backfillBondingCurves().catch(swallow("backfillBondingCurves"));
   // Correct existing LaunchLab rows that were stored with the hardcoded 1B supply
   // before per-token supply fetching was added (e.g. USD1, other non-standard tokens).
-  void backfillLaunchLabSupply();
+  void backfillLaunchLabSupply().catch(swallow("backfillLaunchLabSupply"));
   // Detect tokens that graduated while the indexer was offline (missed migration events)
-  void detectGraduations();
-  setInterval(() => void detectGraduations(), GRADUATION_DETECT_INTERVAL_MS);
+  void detectGraduations().catch(swallow("detectGraduations"));
+  setInterval(() => void detectGraduations().catch(swallow("detectGraduations")), GRADUATION_DETECT_INTERVAL_MS);
   // Refresh PumpSwap token prices from DexScreener
-  void enrichPumpSwapPrices();
-  setInterval(() => void enrichPumpSwapPrices(), PUMPSWAP_ENRICH_INTERVAL_MS);
+  void enrichPumpSwapPrices().catch(swallow("enrichPumpSwapPrices"));
+  setInterval(() => void enrichPumpSwapPrices().catch(swallow("enrichPumpSwapPrices")), PUMPSWAP_ENRICH_INTERVAL_MS);
   // Resolve LaunchLab tokens that still have '???' identity by re-reading the
   // creation transaction directly from the Solana RPC with an expanded offset set.
   // Runs 10 s after startup (adapters need a moment to settle) then every 60 s.

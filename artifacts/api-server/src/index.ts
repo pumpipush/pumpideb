@@ -232,6 +232,13 @@ async function start(): Promise<void> {
   process.once("SIGINT",  () => shutdown("SIGINT"));
 }
 
+// Prevent disk-full or transient DB errors in background enrichment jobs
+// from crashing the server process. These jobs use `void fn()` so unhandled
+// rejections would otherwise bubble up and kill Node.js.
+process.on("unhandledRejection", (err) => {
+  logger.error({ err }, "Unhandled promise rejection — ignoring to keep server alive");
+});
+
 start().catch((err) => {
   logger.error({ err }, "Fatal startup error");
   process.exit(1);
