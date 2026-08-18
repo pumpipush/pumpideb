@@ -1209,8 +1209,6 @@ export default function Dashboard() {
 
               {/* ── Right: Leaderboard ── */}
               <div className="w-full md:w-[300px] xl:w-[340px] shrink-0 flex flex-col" style={{ height: isMobile ? "auto" : 416 }}>
-                {/* Spacer matching the bubble map header height so both columns align */}
-                <div className="hidden md:block mb-2" style={{ height: 34 }} />
                 <LeaderboardWidget solPrice={solPrice} />
               </div>
 
