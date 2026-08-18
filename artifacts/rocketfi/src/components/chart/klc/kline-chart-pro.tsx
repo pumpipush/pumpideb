@@ -292,11 +292,17 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
     if (fmt) {
       _activeMcapFmt = fmt
       klcChart.setPaneOptions({ id: 'candle_pane', axisOptions: { name: 'mcap' } } as any)
-      klcChart.setStyles({ crosshair: { horizontal: { text: { show: false } } } } as any)
+      klcChart.setStyles({
+        crosshair: { horizontal: { text: { show: false } } },
+        candle: { priceMark: { last: { text: { show: false } } } },
+      } as any)
     } else {
       _activeMcapFmt = null
       klcChart.setPaneOptions({ id: 'candle_pane', axisOptions: { name: 'default' } } as any)
-      klcChart.setStyles({ crosshair: { horizontal: { text: { show: true } } } } as any)
+      klcChart.setStyles({
+        crosshair: { horizontal: { text: { show: true } } },
+        candle: { priceMark: { last: { text: { show: true } } } },
+      } as any)
     }
   }
 
