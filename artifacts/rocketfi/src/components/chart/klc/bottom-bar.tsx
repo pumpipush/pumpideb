@@ -153,8 +153,10 @@ export function BottomBar({
         />
       </div>
 
-      {/* ── Right: scale toggles + UTC clock ── */}
+      {/* ── Right: UTC clock → scale toggles ── */}
       <div className="bbar-right">
+        <span className="bbar-clock">{utcTime}</span>
+        <div className="bbar-sep" />
         <button
           className={`bbar-toggle${yAxisMode === 'percentage' ? ' active' : ''}`}
           onClick={() => onYAxisModeChange(yAxisMode === 'percentage' ? 'normal' : 'percentage')}
@@ -170,8 +172,6 @@ export function BottomBar({
           onClick={() => onAutoScaleChange(!autoScale)}
           title="Auto scale"
         >auto</button>
-        <div className="bbar-sep" />
-        <span className="bbar-clock">{utcTime}</span>
       </div>
     </div>
   )
