@@ -115,11 +115,11 @@ export function LeaderboardWidget({ solPrice }: Props) {
       <div className="shrink-0 px-4 pt-3 pb-0">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-1.5 h-4 rounded-full" style={{ background: "linear-gradient(180deg,#22d3ee,#0e7490)" }} />
+            <div className="w-1.5 h-4 rounded-full" style={{ background: "rgba(255,255,255,0.25)" }} />
             <span className="text-sm font-bold tracking-tight text-white">Leaderboard</span>
           </div>
           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
-            style={{ background: "rgba(167,139,250,0.12)", color: "#22d3ee", border: "1px solid rgba(167,139,250,0.2)" }}>
+            style={{ background: "rgba(255,255,255,0.07)", color: "rgba(200,200,200,0.7)", border: "1px solid rgba(255,255,255,0.1)" }}>
             24h
           </span>
         </div>
@@ -135,11 +135,11 @@ export function LeaderboardWidget({ solPrice }: Props) {
                 className="relative flex items-center gap-1.5 px-3 py-2 text-xs font-semibold transition-all duration-150"
                 style={{ color: active ? "#e2e8f0" : "rgba(148,163,184,0.5)" }}
               >
-                <span style={{ color: active ? "#22d3ee" : "inherit" }}>{icon}</span>
+                <span>{icon}</span>
                 {label}
                 {active && (
                   <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-t-full"
-                    style={{ background: "linear-gradient(90deg,#22d3ee,#0891b2)" }} />
+                    style={{ background: "rgba(255,255,255,0.5)" }} />
                 )}
               </button>
             );
