@@ -51,7 +51,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 const MEDAL = ["🥇", "🥈", "🥉"];
 
 export function LeaderboardWidget({ solPrice }: Props) {
-  const [tab, setTab] = useState<Tab>("volume");
+  const [tab, setTab] = useState<Tab>("pnl");
 
   const { data, isLoading } = useGetLeaderboard({
     query: {
