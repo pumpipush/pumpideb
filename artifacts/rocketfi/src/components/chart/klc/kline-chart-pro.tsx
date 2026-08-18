@@ -17,12 +17,16 @@ import type { Period } from './custom-toolbar'
 // ── MCap Y-axis registration (module-level, runs once) ───────────────────────
 
 let _activeMcapFmt: ((rawPrice: number) => string) | null = null
+// Guard: only apply mcap labels after real OHLCV data is loaded.
+// KLC initialises the Y-axis with placeholder tick values (~1–5 SOL/token);
+// formatting those as market-cap produces nonsensical "$150 B" labels.
+let _dataIsLoaded = false
 
 registerYAxis({
   name: 'mcap',
   createTicks: ({ defaultTicks }) => {
     const fmt = _activeMcapFmt
-    if (!fmt) return defaultTicks
+    if (!fmt || !_dataIsLoaded) return defaultTicks
     return defaultTicks.map(tick => ({ ...tick, text: fmt(Number(tick.value)) }))
   },
 })
@@ -273,7 +277,15 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
     },
     setYAxisFormatter: (fmt) => {
       yAxisFormatterRef.current = fmt
-      applyMcapAxis(fmt)
+      if (fmt === null) {
+        // Always clear immediately — reset data-loaded guard too
+        _dataIsLoaded = false
+        applyMcapAxis(null)
+      } else if (_dataIsLoaded) {
+        // Data already present (e.g. user toggling Price ↔ Mcap) — apply now
+        applyMcapAxis(fmt)
+      }
+      // else: chart not yet loaded — onHistoryLoaded will activate it
     },
     setStyles: (styles) => {
       chartRef.current?.setStyles?.(styles)
@@ -357,17 +369,23 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
       })
     }
 
-    if (yAxisFormatterRef.current) applyMcapAxis(yAxisFormatterRef.current)
+    // Do NOT activate mcap axis here — data hasn't loaded yet.
+    // onHistoryLoaded below will activate it once real bars arrive.
 
-    // After history loads: scroll to latest candle and zoom in when data is sparse
+    // After history loads: activate mcap formatter, scroll to latest, zoom if sparse
     datafeed.onHistoryLoaded = (count: number) => {
       const kChart = getKlcChart(containerRef.current)
       if (!kChart) return
-      if (count > 0 && count < 50) {
-        // Fewer than 50 bars — widen each candle so they're clearly visible
-        const pxWide = containerRef.current?.clientWidth ?? 900
-        const barSpace = Math.min(32, Math.max(8, Math.floor(pxWide / (count + 10))))
-        kChart.setBarSpace(barSpace)
+      if (count > 0) {
+        _dataIsLoaded = true
+        // Now that real price data defines the Y-axis range, apply mcap formatting
+        if (yAxisFormatterRef.current) applyMcapAxis(yAxisFormatterRef.current)
+        // Zoom in so sparse charts are readable (avoid 1-candle thin-line look)
+        if (count < 50) {
+          const pxWide = containerRef.current?.clientWidth ?? 900
+          const barSpace = Math.min(32, Math.max(8, Math.floor(pxWide / (count + 10))))
+          kChart.setBarSpace(barSpace)
+        }
       }
       kChart.scrollToRealTime()
     }
@@ -394,6 +412,9 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
       unsubscribeCrosshair?.()
       datafeed.onLiveCandle    = undefined
       datafeed.onHistoryLoaded = undefined
+      // Reset module-level flags so next mount starts clean (no stale mcap labels)
+      _dataIsLoaded  = false
+      _activeMcapFmt = null
       if (containerRef.current) containerRef.current.innerHTML = ''
       chartRef.current = null
     }

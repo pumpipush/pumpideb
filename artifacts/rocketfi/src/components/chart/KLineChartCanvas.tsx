@@ -272,7 +272,10 @@ export function KLineChartCanvas({
     } else {
       chartRef.current?.setYAxisFormatter(null)
     }
-  }, [priceMode])
+  // address dep: KLineChartProWrapper remounts on token switch (key={address}),
+  // resetting its internal yAxisFormatterRef — re-registering here ensures the
+  // new wrapper instance gets the formatter on its first onHistoryLoaded call.
+  }, [priceMode, address])
 
   // ── Push live SSE price into the datafeed for instant candle updates ───────
   const prevLivePrice = useRef<number | null>(null)

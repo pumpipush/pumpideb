@@ -57,12 +57,12 @@ interface OHLCVBar {
 
 function barToKLine(b: OHLCVBar): KLineData {
   return {
-    timestamp: b.time * 1000,   // KLineChart Pro needs milliseconds
+    timestamp: b.time * 1000,         // KLineChart Pro needs milliseconds
     open:      b.open,
     high:      b.high,
     low:       b.low,
     close:     b.close,
-    volume:    b.volume,
+    volume:    b.volume / 1e9,        // eth_amount is stored in lamports → convert to SOL
     turnover:  0,
   }
 }
@@ -189,7 +189,10 @@ export class PumpiDatafeed implements Datafeed {
   private async _fetchAndStore(address: string, tf: string): Promise<void> {
     try {
       const res  = await fetch(apiUrl(`/tokens/${encodeURIComponent(address)}/ohlcv?tf=${tf}`))
-      if (!res.ok) return
+      if (!res.ok) {
+        console.warn(`[PumpiDatafeed] OHLCV fetch failed: ${res.status} ${res.statusText} (${address} ${tf})`)
+        return
+      }
       const data = await res.json() as { bars?: OHLCVBar[] }
       if (Array.isArray(data?.bars) && data.bars.length > 0) {
         this._bars = data.bars.sort((a, b) => a.time - b.time)

@@ -74,6 +74,23 @@ export const uploadLimiter = rateLimit({
 });
 
 /**
+ * Chart OHLCV endpoint.
+ *
+ * 120 req / min / IP — OHLCV responses are cached server-side (8–30 s TTL)
+ * so each hit is essentially a cache lookup. A generous limit prevents chart
+ * loading from being throttled by concurrent ancillary requests (holders,
+ * snipers, etc.) which share the heavyLimiter pool.
+ */
+export const chartLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 120,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: MESSAGE_SLOW_DOWN,
+  skip: () => IS_TEST,
+});
+
+/**
  * Launch-registration endpoint (POST /tokens/register-launch).
  *
  * 10 req / min / IP — each request triggers a Solana getTransaction RPC call,

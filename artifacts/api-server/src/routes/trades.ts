@@ -15,7 +15,7 @@ import { fetchBirdeyeOHLCV, fetchBirdeyeTokenTrades, getSolPriceUsd, type Birdey
 import { fetchDexScreenerTokens, bestSolanaPair, pairToSolPrice, pairToPriceHistory } from "../lib/dexscreener.js";
 import { fetchAndParseTrade } from "../lib/tradeVerifier.js";
 import { asyncWrap } from "../lib/asyncHandler.js";
-import { heavyLimiter } from "../lib/rateLimiters.js";
+import { heavyLimiter, chartLimiter } from "../lib/rateLimiters.js";
 
 // Platforms that use Birdeye for OHLCV + price-history (no internal trade stream in prod yet)
 const DEX_PLATFORMS = new Set(["pumpswap", "raydium_launchlab"]);
@@ -299,7 +299,7 @@ const OHLCV_BUCKET_SECONDS: Record<string, number> = {
 // DEX tokens (pumpswap, raydium_launchlab) always proxy to Birdeye — our
 // indexer intentionally captures only a sample of trades (30s throttle on
 // PumpSwap) so the internal DB does not represent full price history.
-router.get("/tokens/:address/ohlcv", heavyLimiter, asyncWrap(async (req, res) => {
+router.get("/tokens/:address/ohlcv", chartLimiter, asyncWrap(async (req, res) => {
   const address = req.params.address as string;
   if (!address) { res.status(400).json({ error: "address required" }); return; }
 
