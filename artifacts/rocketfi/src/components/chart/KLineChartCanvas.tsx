@@ -105,6 +105,7 @@ function OhlcOverlay({
       <div className="klc-ohlc-row1">
         <span className="klc-ohlc-symbol">{ticker}</span>
         <span className="klc-ohlc-period">· {period.text}</span>
+        <span className="klc-ohlc-brand">· Pumpi.io</span>
         {data && (
           <span className="klc-ohlc-values">
             <span className="klc-ohlc-lbl">O</span>

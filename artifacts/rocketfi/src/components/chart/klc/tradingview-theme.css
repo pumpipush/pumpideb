@@ -460,6 +460,13 @@
   font-size: 12px;
 }
 
+.klc-ohlc-brand {
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
 .klc-ohlc-values {
   display: flex;
   align-items: center;
