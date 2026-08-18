@@ -65,7 +65,7 @@ const CANDLE_TYPES: { type: CandleType; label: string; icon: React.FC }[] = [
     type: 'candle_solid',
     label: 'Candles',
     icon: () => (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
         <line x1="4"  y1="1" x2="4"  y2="3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
         <rect x="2" y="3.5" width="4" height="6" fill="currentColor" rx="0.4"/>
         <line x1="4"  y1="9.5" x2="4"  y2="12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
@@ -79,7 +79,7 @@ const CANDLE_TYPES: { type: CandleType; label: string; icon: React.FC }[] = [
     type: 'candle_stroke',
     label: 'Hollow candles',
     icon: () => (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
         <line x1="4"  y1="1" x2="4"  y2="3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
         <rect x="2" y="3.5" width="4" height="6" stroke="currentColor" strokeWidth="1.2" fill="none" rx="0.4"/>
         <line x1="4"  y1="9.5" x2="4"  y2="12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
@@ -93,7 +93,7 @@ const CANDLE_TYPES: { type: CandleType; label: string; icon: React.FC }[] = [
     type: 'ohlc',
     label: 'Bars',
     icon: () => (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
         <line x1="4"  y1="2"  x2="4"  y2="13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
         <line x1="1.5" y1="8" x2="4"  y2="8"  stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
         <line x1="4"   y1="5" x2="6.5" y2="5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
@@ -107,7 +107,7 @@ const CANDLE_TYPES: { type: CandleType; label: string; icon: React.FC }[] = [
     type: 'area',
     label: 'Area',
     icon: () => (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
         <path d="M1 12 L3.5 7 L6.5 9.5 L10 4.5 L14 7.5 L15.5 6" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round"/>
         <path d="M1 12 L3.5 7 L6.5 9.5 L10 4.5 L14 7.5 L15.5 6 L15.5 14 L1 14Z" fill="currentColor" opacity="0.18"/>
       </svg>
@@ -117,7 +117,7 @@ const CANDLE_TYPES: { type: CandleType; label: string; icon: React.FC }[] = [
     type: 'candle_up_stroke',
     label: 'Hollow up / Filled down',
     icon: () => (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
         <line x1="4"  y1="1" x2="4"  y2="3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
         <rect x="2" y="3.5" width="4" height="6" stroke="currentColor" strokeWidth="1.2" fill="none" rx="0.4"/>
         <line x1="4"  y1="9.5" x2="4"  y2="12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
@@ -131,7 +131,7 @@ const CANDLE_TYPES: { type: CandleType; label: string; icon: React.FC }[] = [
     type: 'candle_down_stroke',
     label: 'Filled up / Hollow down',
     icon: () => (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
         <line x1="4"  y1="1" x2="4"  y2="3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
         <rect x="2" y="3.5" width="4" height="6" fill="currentColor" rx="0.4"/>
         <line x1="4"  y1="9.5" x2="4"  y2="12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
@@ -206,33 +206,33 @@ export const DEFAULT_PERIOD: Period = INLINE_PERIODS[0]   // 1m
 // ── SVG icons ─────────────────────────────────────────────────────────────────
 
 const IconChevronDown = () => (
-  <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+  <svg width="11" height="11" viewBox="0 0 9 9" fill="none">
     <path d="M1.5 3L4.5 6L7.5 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 )
 
 const IconIndicators = () => (
-  <svg width="22" height="14" viewBox="0 0 22 14" fill="none">
+  <svg width="26" height="16" viewBox="0 0 26 16" fill="none">
     <text
-      x="1" y="11"
+      x="1" y="13"
       fontFamily="Georgia, 'Times New Roman', serif"
-      fontSize="12"
+      fontSize="14"
       fontStyle="italic"
       fontWeight="700"
       fill="currentColor"
       letterSpacing="-0.5"
     >f</text>
     <text
-      x="8" y="11"
+      x="10" y="13"
       fontFamily="'Trebuchet MS', Arial, sans-serif"
-      fontSize="11"
+      fontSize="13"
       fontWeight="700"
       fill="currentColor"
     >x</text>
   </svg>
 )
 const IconSettings = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+  <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
     <path
       d="M6.5 1.8L6.1 3.3A5 5 0 0 0 4.8 4L3.3 3.4L1.8 6L2.9 7.1A5.1 5.1 0 0 0 2.9 8.9L1.8 10L3.3 12.6L4.8 12A5 5 0 0 0 6.1 12.7L6.5 14.2H9.5L9.9 12.7A5 5 0 0 0 11.2 12L12.7 12.6L14.2 10L13.1 8.9A5.1 5.1 0 0 0 13.1 7.1L14.2 6L12.7 3.4L11.2 4A5 5 0 0 0 9.9 3.3L9.5 1.8Z"
       stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round"
@@ -241,7 +241,7 @@ const IconSettings = () => (
   </svg>
 )
 const IconScreenshot = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+  <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
     <rect x="1.5" y="3.5" width="13" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
     <circle cx="8" cy="8.5" r="2.3" stroke="currentColor" strokeWidth="1.3"/>
     <path d="M5.5 3.5L6.3 2H9.7L10.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
@@ -249,7 +249,7 @@ const IconScreenshot = () => (
   </svg>
 )
 const IconFullscreen = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+  <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
     <path d="M2 5.5V2.5H5M11 2.5H14V5.5M14 10.5V13.5H11M5 13.5H2V10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 )
