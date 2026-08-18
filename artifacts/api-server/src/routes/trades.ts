@@ -285,6 +285,7 @@ const OHLCV_BUCKET_SECONDS: Record<string, number> = {
   "1m":  60,
   "5m":  5   * 60,
   "15m": 15  * 60,
+  "30m": 30  * 60,
   "1H":  60  * 60,
   "4H":  4   * 60 * 60,
   "1D":  24  * 60 * 60,

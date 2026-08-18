@@ -23,7 +23,8 @@ export function periodToTf(period: Period): string {
     if (m <= 1)  return '1m'
     if (m <= 5)  return '5m'
     if (m <= 15) return '15m'
-    return '15m'
+    if (m <= 30) return '30m'
+    return '30m'
   }
   if (ts === 'hour') {
     if (m <= 1)  return '1H'
@@ -39,9 +40,10 @@ export function periodToTf(period: Period): string {
 // ── Poll interval per timeframe ───────────────────────────────────────────────
 
 function pollIntervalMs(tf: string): number {
-  if (tf === '1m' || tf === '5m')   return 8_000
-  if (tf === '15m' || tf === '1H')  return 15_000
-  return 30_000
+  if (tf === '1m' || tf === '5m')          return 8_000
+  if (tf === '15m' || tf === '30m')        return 15_000
+  if (tf === '1H')                         return 30_000
+  return 60_000
 }
 
 // ── OHLCV bar → KLineData ─────────────────────────────────────────────────────
