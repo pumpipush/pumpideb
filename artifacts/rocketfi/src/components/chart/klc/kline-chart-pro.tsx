@@ -239,7 +239,7 @@ export interface KLineChartRef {
 }
 
 interface Props {
-  datafeed: Datafeed & { onLiveCandle?: (candle: any) => void }
+  datafeed: Datafeed & { onLiveCandle?: (candle: any) => void; onHistoryLoaded?: (count: number) => void }
   period: Period
   symbol?: {
     ticker: string
@@ -252,12 +252,13 @@ interface Props {
   timezone?: string
   onOhlcChange?:          (data: OhlcData) => void
   onCrosshairOhlcChange?: (data: OhlcData | null) => void
+  onHistoryLoaded?:       (count: number) => void
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChartProWrapper(
-  { datafeed, period, symbol, timezone = 'UTC', onOhlcChange, onCrosshairOhlcChange }, ref
+  { datafeed, period, symbol, timezone = 'UTC', onOhlcChange, onCrosshairOhlcChange, onHistoryLoaded }, ref
 ) {
   const containerRef      = useRef<HTMLDivElement>(null)
   const chartRef          = useRef<KLineChartPro | null>(null)
@@ -408,6 +409,8 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
           }
         })
       }
+      // Notify parent so it can track empty-data state.
+      onHistoryLoaded?.(count)
     }
 
     const klcChart = getKlcChart(containerRef.current)

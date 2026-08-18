@@ -128,6 +128,8 @@ export class PumpiDatafeed implements Datafeed {
     this._address     = symbol.ticker
     this._tf          = periodToTf(period)
     this._historyLoaded = false   // reset for next getHistoryKLineData call
+    this._bars        = []        // clear stale bars from the previous timeframe so
+                                  // an empty/failed fetch correctly reports count=0
     this._lastPushedTs    = 0
     this._lastPushedClose = 0
 

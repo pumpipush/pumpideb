@@ -192,6 +192,67 @@ function ChartSkeleton({ loading }: { loading: boolean }) {
   )
 }
 
+// ── Chart unavailable overlay ─────────────────────────────────────────────────
+
+function ChartUnavailable({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#080808',
+        zIndex: 10,
+        gap: 14,
+      }}
+    >
+      {/* Bar-chart icon with a cross to indicate unavailability */}
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none"
+        stroke="#3f3f46" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="18" y1="20" x2="18" y2="10" />
+        <line x1="12" y1="20" x2="12" y2="4"  />
+        <line x1="6"  y1="20" x2="6"  y2="14" />
+        <line x1="2"  y1="2"  x2="22" y2="22" stroke="#ef5350" strokeWidth="1.6" />
+      </svg>
+      <p style={{ fontSize: 14, color: '#71717a', margin: 0, textAlign: 'center', lineHeight: 1.5 }}>
+        Chart data unavailable
+      </p>
+      <p style={{ fontSize: 12, color: '#52525b', margin: 0, textAlign: 'center', lineHeight: 1.5 }}>
+        No OHLCV data found for this token yet
+      </p>
+      <button
+        onClick={onRetry}
+        style={{
+          marginTop: 4,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '6px 14px',
+          background: 'rgba(255,255,255,0.05)',
+          border: '1px solid rgba(255,255,255,0.10)',
+          borderRadius: 6,
+          color: '#a1a1aa',
+          fontSize: 12,
+          cursor: 'pointer',
+        }}
+        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.09)')}
+        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
+      >
+        {/* Refresh icon */}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="23 4 23 10 17 10" />
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+        </svg>
+        Try again
+      </button>
+    </div>
+  )
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -242,8 +303,13 @@ export function KLineChartCanvas({
   const [ohlc,          setOhlc]          = useState<OhlcData | null>(null)
   const [crosshairOhlc, setCrosshairOhlc] = useState<OhlcData | null>(null)
 
-  // ── Datafeed — recreated when address changes ──────────────────────────────
-  const datafeed = useMemo(() => new PumpiDatafeed(), [address])
+  // ── Chart status — tracks whether OHLCV data arrived ─────────────────────
+  const [chartStatus, setChartStatus] = useState<'loading' | 'loaded' | 'unavailable'>('loading')
+  const [retryKey,    setRetryKey]    = useState(0)
+  const emptyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Datafeed — recreated when address or retryKey changes ────────────────
+  const datafeed = useMemo(() => new PumpiDatafeed(), [address, retryKey])
 
   // ── Symbol descriptor for the chart ───────────────────────────────────────
   const symbolInfo = useMemo(() => ({
@@ -276,6 +342,66 @@ export function KLineChartCanvas({
   // resetting its internal yAxisFormatterRef — re-registering here ensures the
   // new wrapper instance gets the formatter on its first onHistoryLoaded call.
   }, [priceMode, address])
+
+  // ── Reset chart status when address or retry changes ─────────────────────
+  useEffect(() => {
+    setChartStatus('loading')
+    setOhlc(null)
+    setCrosshairOhlc(null)
+    if (emptyTimerRef.current) {
+      clearTimeout(emptyTimerRef.current)
+      emptyTimerRef.current = null
+    }
+  }, [address, retryKey])
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (emptyTimerRef.current) {
+        clearTimeout(emptyTimerRef.current)
+        emptyTimerRef.current = null
+      }
+    }
+  }, [])
+
+  // ── Called by KLineChartProWrapper after history fetch resolves ──────────
+  const handleHistoryLoaded = useCallback((count: number) => {
+    // Always clear any pending timer first — handles both initial load and
+    // mid-session period switches where the previous period had data.
+    if (emptyTimerRef.current) {
+      clearTimeout(emptyTimerRef.current)
+      emptyTimerRef.current = null
+    }
+    if (count > 0) {
+      setChartStatus('loaded')
+    } else {
+      // Reset to 'loading' so the delayed transition works regardless of prior
+      // status (e.g. user was on a working period, switched to one with 0 bars).
+      setChartStatus('loading')
+      emptyTimerRef.current = setTimeout(() => {
+        setChartStatus(prev => prev === 'loading' ? 'unavailable' : prev)
+      }, 5_000)
+    }
+  }, [])
+
+  // ── OHLC update — always recovers from any non-loaded state ─────────────
+  // The datafeed polls even after the 'unavailable' overlay appears, so a
+  // candle arriving *after* the 5-second timeout (e.g. Birdeye came back up)
+  // must also dismiss the overlay.  We unconditionally set 'loaded' here and
+  // clear any pending timer so both pre-timeout and post-timeout paths work.
+  const handleOhlcChange = useCallback((data: OhlcData) => {
+    setOhlc(data)
+    if (emptyTimerRef.current) {
+      clearTimeout(emptyTimerRef.current)
+      emptyTimerRef.current = null
+    }
+    setChartStatus('loaded')
+  }, [])
+
+  // ── Retry — bumps retryKey which recreates the datafeed + remounts chart ──
+  const handleRetry = useCallback(() => {
+    setRetryKey(k => k + 1)
+  }, [])
 
   // ── Push live SSE price into the datafeed for instant candle updates ───────
   const prevLivePrice = useRef<number | null>(null)
@@ -403,15 +529,21 @@ export function KLineChartCanvas({
           leftOffset={drawingBarVisible ? 55 : 10}
         />
 
+        {/* Chart unavailable overlay — shown when 0 bars and no live tick for 5s */}
+        {chartStatus === 'unavailable' && (
+          <ChartUnavailable onRetry={handleRetry} />
+        )}
+
         <KLineChartProWrapper
-          key={address}           // remount on token switch
+          key={`${address}-${retryKey}`} // remount on token switch or retry
           ref={chartRef}
           datafeed={datafeed}
           period={period}
           symbol={symbolInfo}
           timezone="Asia/Bangkok"
-          onOhlcChange={setOhlc}
+          onOhlcChange={handleOhlcChange}
           onCrosshairOhlcChange={setCrosshairOhlc}
+          onHistoryLoaded={handleHistoryLoaded}
         />
 
         {/* Drawing bar chevron — TradingView-style left-edge toggle */}
