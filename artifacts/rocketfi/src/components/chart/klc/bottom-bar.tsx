@@ -100,13 +100,12 @@ export function BottomBar({
   const dropdownTriggerRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
-    const tick = () => {
-      const now = new Date()
-      const h = String(now.getUTCHours()).padStart(2, '0')
-      const m = String(now.getUTCMinutes()).padStart(2, '0')
-      const s = String(now.getUTCSeconds()).padStart(2, '0')
-      setUtcTime(`${h}:${m}:${s} UTC`)
-    }
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const fmt = new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false, timeZone: tz, timeZoneName: 'short',
+    })
+    const tick = () => setUtcTime(fmt.format(new Date()).replace('GMT', 'UTC'))
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
