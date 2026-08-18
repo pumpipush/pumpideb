@@ -114,10 +114,7 @@ export function LeaderboardWidget({ solPrice }: Props) {
       {/* ── Header ─────────────────────────────────────────────────── */}
       <div className="shrink-0 px-4 pt-3 pb-0">
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-4 rounded-full" style={{ background: "rgba(255,255,255,0.25)" }} />
-            <span className="text-sm font-bold tracking-tight text-white">Leaderboard</span>
-          </div>
+          <span className="text-sm font-bold tracking-tight text-white">Leaderboard</span>
           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
             style={{ background: "rgba(255,255,255,0.07)", color: "rgba(200,200,200,0.7)", border: "1px solid rgba(255,255,255,0.1)" }}>
             24h
