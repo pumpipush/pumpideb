@@ -9,6 +9,7 @@ import {
 
 import { formatMC, formatMCUsd, formatTokenPrice, formatPct, cn, timeAgo, resolveImageUrl } from "@/lib/utils";
 import BubbleMap, { type TokenBubbleInput } from "@/components/bubblemap/BubbleMap";
+import { LeaderboardWidget } from "@/components/leaderboard/LeaderboardWidget";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { PlatformBadge, PlatformDot, type PlatformId } from "@/components/shared/PlatformBadge";
@@ -1118,90 +1119,101 @@ export default function Dashboard() {
       <div className="w-full max-w-[1400px] mx-auto pt-2 md:pt-4 px-3 md:px-5 flex-1">
         <div className="flex flex-col min-w-0">
 
-          {/* ── Bubble Map — full width ── */}
+          {/* ── Bubble Map + Leaderboard — 2-column on desktop ── */}
           <section className="mb-3 md:mb-5">
-            {/* ── Bubble Map header: title left, controls right — never wraps ── */}
-            <div className="flex items-center justify-between mb-2 gap-2">
-              {/* Title — whitespace-nowrap prevents "Bubble\nMap" wrap on mobile */}
-              <h2 className="whitespace-nowrap text-lg md:text-[22px] font-extrabold text-foreground tracking-tight">
-                Bubble Map
-              </h2>
+            <div className="flex flex-col md:flex-row gap-3 md:gap-4">
 
-              {/* Right side: info icon + view toggle — shrink-0 keeps them on one row */}
-              <div className="flex items-center gap-1.5 shrink-0">
-                {/* Info icon + tooltip */}
-                <div className="relative group">
-                  <Info
-                    className="w-4 h-4 cursor-pointer transition-colors duration-150"
-                    style={{ color: bubbleInfoOpen ? "#b3b3b3" : "rgba(136,136,136,0.75)" }}
-                    onClick={() => setBubbleInfoOpen(v => !v)}
-                  />
-                  <div className={[
-                    "absolute right-0 top-full mt-2 z-50 transition-opacity duration-150 w-64",
-                    bubbleInfoOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
-                  ].join(" ")}>
-                    <div className="absolute right-3 -top-1.5 w-0 h-0"
-                      style={{ borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: "6px solid #141414" }} />
-                    <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
-                      style={{ background: "#141414", border: "1px solid rgba(255,255,255,0.1)", color: "#bbbbbb", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
-                      {bubbleView === "newest"
-                        ? "Shows the 50 most recently launched tokens. Bubble size reflects launch order. Green = price up, red = price down in the last 24h."
-                        : "Shows the hottest tokens right now — ranked by volume. Bubble size reflects rank. Green = price up, red = price down in the last 24h."}
+              {/* ── Left: Bubble Map ── */}
+              <div className="flex-1 min-w-0">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-2 gap-2">
+                  <h2 className="whitespace-nowrap text-lg md:text-[22px] font-extrabold text-foreground tracking-tight">
+                    Bubble Map
+                  </h2>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Info icon + tooltip */}
+                    <div className="relative group">
+                      <Info
+                        className="w-4 h-4 cursor-pointer transition-colors duration-150"
+                        style={{ color: bubbleInfoOpen ? "#b3b3b3" : "rgba(136,136,136,0.75)" }}
+                        onClick={() => setBubbleInfoOpen(v => !v)}
+                      />
+                      <div className={[
+                        "absolute right-0 top-full mt-2 z-50 transition-opacity duration-150 w-64",
+                        bubbleInfoOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
+                      ].join(" ")}>
+                        <div className="absolute right-3 -top-1.5 w-0 h-0"
+                          style={{ borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderBottom: "6px solid #141414" }} />
+                        <div className="rounded-lg px-3 py-2.5 text-xs leading-relaxed"
+                          style={{ background: "#141414", border: "1px solid rgba(255,255,255,0.1)", color: "#bbbbbb", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
+                          {bubbleView === "newest"
+                            ? "Shows the 50 most recently launched tokens. Bubble size reflects launch order. Green = price up, red = price down in the last 24h."
+                            : "Shows the hottest tokens right now — ranked by volume. Bubble size reflects rank. Green = price up, red = price down in the last 24h."}
+                        </div>
+                      </div>
+                      {bubbleInfoOpen && (
+                        <div className="fixed inset-0 z-40 md:hidden" onClick={() => setBubbleInfoOpen(false)} />
+                      )}
+                    </div>
+                    {/* View toggle */}
+                    <div className="flex items-center rounded-full p-0.5" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                      <button
+                        onClick={() => setBubbleView("volume")}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all duration-150"
+                        style={bubbleView === "volume"
+                          ? { background: "rgba(255,255,255,0.12)", color: "#f2f2f2" }
+                          : { color: "rgba(180,180,180,0.6)" }}
+                      >
+                        <BarChart2 className="w-3 h-3 shrink-0" />
+                        <span className="hidden md:inline">Top </span>
+                        <span>Volume</span>
+                      </button>
+                      <button
+                        onClick={() => setBubbleView("newest")}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all duration-150"
+                        style={bubbleView === "newest"
+                          ? { background: "rgba(255,255,255,0.12)", color: "#f2f2f2" }
+                          : { color: "rgba(180,180,180,0.6)" }}
+                      >
+                        <Clock className="w-3 h-3 shrink-0" />
+                        <span className="md:hidden">New</span>
+                        <span className="hidden md:inline">New Launches</span>
+                      </button>
                     </div>
                   </div>
-                  {bubbleInfoOpen && (
-                    <div className="fixed inset-0 z-40 md:hidden" onClick={() => setBubbleInfoOpen(false)} />
-                  )}
                 </div>
-
-                {/* View toggle — compact labels on mobile, full on desktop */}
-                <div className="flex items-center rounded-full p-0.5" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  <button
-                    onClick={() => setBubbleView("volume")}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all duration-150"
-                    style={bubbleView === "volume"
-                      ? { background: "rgba(255,255,255,0.12)", color: "#f2f2f2" }
-                      : { color: "rgba(180,180,180,0.6)" }}
-                  >
-                    <BarChart2 className="w-3 h-3 shrink-0" />
-                    <span className="hidden md:inline">Top </span>
-                    <span>Volume</span>
-                  </button>
-                  <button
-                    onClick={() => setBubbleView("newest")}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all duration-150"
-                    style={bubbleView === "newest"
-                      ? { background: "rgba(255,255,255,0.12)", color: "#f2f2f2" }
-                      : { color: "rgba(180,180,180,0.6)" }}
-                  >
-                    <Clock className="w-3 h-3 shrink-0" />
-                    <span className="md:hidden">New</span>
-                    <span className="hidden md:inline">New Launches</span>
-                  </button>
+                {/* Map canvas */}
+                <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
+                  {bubbleTokens.length === 0 ? (
+                    <div className="flex items-center justify-center" style={{ height: 360, background: "#000000" }}>
+                      {bubbleError ? (
+                        <p className="text-sm text-muted-foreground">Failed to load bubble map — retrying…</p>
+                      ) : (
+                        <div className="flex gap-2.5 items-center">
+                          <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:0ms]" />
+                          <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:150ms]" />
+                          <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:300ms]" />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <BubbleMap
+                      tokens={isMobile ? bubbleTokens.slice(0, 22) : bubbleTokens}
+                      liveUpdates={liveTradeStats}
+                      solPrice={solPrice}
+                      height={isMobile ? 340 : 380}
+                    />
+                  )}
                 </div>
               </div>
-            </div>
-            <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.07)" }}>
-              {bubbleTokens.length === 0 ? (
-                <div className="flex items-center justify-center" style={{ height: 360, background: "#000000" }}>
-                  {bubbleError ? (
-                    <p className="text-sm text-muted-foreground">Failed to load bubble map — retrying…</p>
-                  ) : (
-                    <div className="flex gap-2.5 items-center">
-                      <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:0ms]" />
-                      <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:150ms]" />
-                      <span className="w-2.5 h-2.5 rounded-full bg-primary/50 animate-bounce [animation-delay:300ms]" />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <BubbleMap
-                  tokens={isMobile ? bubbleTokens.slice(0, 22) : bubbleTokens}
-                  liveUpdates={liveTradeStats}
-                  solPrice={solPrice}
-                  height={isMobile ? 340 : 380}
-                />
-              )}
+
+              {/* ── Right: Leaderboard ── */}
+              <div className="w-full md:w-[300px] xl:w-[340px] shrink-0 flex flex-col" style={{ height: isMobile ? "auto" : 416 }}>
+                {/* Spacer matching the bubble map header height so both columns align */}
+                <div className="hidden md:block mb-2" style={{ height: 34 }} />
+                <LeaderboardWidget solPrice={solPrice} />
+              </div>
+
             </div>
           </section>
 

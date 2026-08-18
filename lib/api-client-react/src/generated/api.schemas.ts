@@ -5,6 +5,36 @@
  * RocketFi API — Token Launchpad Backend
  * OpenAPI spec version: 0.1.0
  */
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+export interface LeaderboardTraderVolume {
+  address: string;
+  trade_count: number;
+  volume_lamports: string;
+}
+
+export interface LeaderboardTraderPnL {
+  address: string;
+  trade_count: number;
+  pnl_lamports: string;
+}
+
+export interface LeaderboardToken {
+  address: string;
+  name: string;
+  symbol: string;
+  /** @nullable */
+  imageUrl?: string | null;
+  platform: string;
+  trade_count: number;
+  volume_lamports: string;
+}
+
+export interface LeaderboardResponse {
+  traders_volume: LeaderboardTraderVolume[];
+  traders_pnl: LeaderboardTraderPnL[];
+  tokens: LeaderboardToken[];
+}
+
 export interface HealthStatus {
   status: string;
 }

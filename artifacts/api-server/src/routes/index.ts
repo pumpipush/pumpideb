@@ -13,6 +13,7 @@ import blockhashRouter from "./blockhash";
 import creatorFeesRouter from "./creator-fees";
 import adminRouter from "./admin";
 import analyticsRouter from "./analytics";
+import leaderboardRouter from "./leaderboard";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(authRouter);
 router.use(creatorFeesRouter);
 router.use(adminRouter);
 router.use(analyticsRouter);
+router.use(leaderboardRouter);
 
 export default router;
