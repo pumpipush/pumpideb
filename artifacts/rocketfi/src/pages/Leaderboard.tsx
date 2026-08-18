@@ -55,7 +55,7 @@ const PERIODS: { id: Period; label: string }[] = [
   { id: "30d", label: "30D" },
 ];
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: "pnl",    label: "Top PnL",    icon: <TrendingUp className="w-4 h-4" /> },
+  { id: "pnl",    label: "Top Realized P&L", icon: <TrendingUp className="w-4 h-4" /> },
   { id: "volume", label: "Top Volume", icon: <BarChart2  className="w-4 h-4" /> },
   { id: "tokens", label: "Top Tokens", icon: <Zap        className="w-4 h-4" /> },
 ];
@@ -147,11 +147,11 @@ export default function LeaderboardPage() {
                 </th>
                 <th className="text-right py-3 px-4 text-[11px] font-semibold uppercase tracking-wider"
                   style={{ color: "rgba(148,163,184,0.5)" }}>
-                  {tab === "pnl" ? "PnL" : "Volume"}
+                  {tab === "pnl" ? "Realized P&L" : "Volume"}
                 </th>
                 <th className="text-right py-3 px-4 text-[11px] font-semibold uppercase tracking-wider hidden md:table-cell"
                   style={{ color: "rgba(148,163,184,0.5)" }}>
-                  {tab === "tokens" ? "Platform" : "SOL"}
+                  {tab === "tokens" ? "Platform" : tab === "pnl" ? "In SOL" : "In SOL"}
                 </th>
               </tr>
             </thead>

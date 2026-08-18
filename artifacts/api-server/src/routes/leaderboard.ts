@@ -51,7 +51,12 @@ async function computeLeaderboard(period: Period): Promise<unknown> {
           AND  trader_address != ''
           AND  eth_amount      ~ '^[0-9]+$'
         GROUP  BY trader_address
-        HAVING COUNT(*) >= 2
+        HAVING
+          -- must have at least one buy AND one sell in the period
+          -- (prevents pure-sellers from appearing with phantom positive PnL)
+          SUM(CASE WHEN is_buy     THEN 1 ELSE 0 END) >= 1
+          AND SUM(CASE WHEN NOT is_buy THEN 1 ELSE 0 END) >= 1
+          AND COUNT(*) >= 2
         ORDER  BY (
             COALESCE(SUM(CASE WHEN NOT is_buy THEN eth_amount::FLOAT8 ELSE 0 END), 0)
             - COALESCE(SUM(CASE WHEN is_buy   THEN eth_amount::FLOAT8 ELSE 0 END), 0)

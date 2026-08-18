@@ -12,7 +12,7 @@ interface Props {
 }
 
 function shortAddr(addr: string) {
-  return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 function lamportsToSol(v: string | number) { return Number(v) / 1e9; }
 function fmtSol(v: string | number) {
@@ -26,8 +26,8 @@ function fmtUsd(v: string | number, sol: number | null) {
   if (!sol) return null;
   const u = lamportsToSol(v) * sol;
   if (u >= 1_000_000) return `$${(u / 1_000_000).toFixed(2)}M`;
-  if (u >= 1_000)     return `$${(u / 1_000).toFixed(1)}K`;
-  return `$${u.toFixed(0)}`;
+  if (u >= 1_000)     return `$${(u / 1_000).toFixed(2)}K`;
+  return `$${u.toFixed(2)}`;
 }
 function fmtPnl(v: string | number, sol: number | null) {
   const n = Number(v);
@@ -78,20 +78,24 @@ export function LeaderboardWidget({ solPrice }: Props) {
     <div className="flex flex-col h-full overflow-hidden"
       style={{ borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)", background: "linear-gradient(180deg,#0e0e0e 0%,#0a0a0a 100%)" }}>
 
-      {/* Tabs */}
+      {/* Tabs + 24H badge */}
       <div className="shrink-0 px-4 pt-2 pb-0">
-        <div className="flex gap-0 border-b" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
-          {TABS.map(({ id, label, icon }) => {
-            const active = tab === id;
-            return (
-              <button key={id} onClick={() => setTab(id)}
-                className="relative flex items-center gap-1.5 px-3 py-2 text-xs font-semibold transition-all duration-150"
-                style={{ color: active ? "#e2e8f0" : "rgba(148,163,184,0.5)" }}>
-                <span>{icon}</span>{label}
-                {active && <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-t-full" style={{ background: "rgba(255,255,255,0.5)" }} />}
-              </button>
-            );
-          })}
+        <div className="flex items-center border-b" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+          <div className="flex flex-1 gap-0">
+            {TABS.map(({ id, label, icon }) => {
+              const active = tab === id;
+              return (
+                <button key={id} onClick={() => setTab(id)}
+                  className="relative flex items-center gap-1.5 px-3 py-2 text-xs font-semibold transition-all duration-150"
+                  style={{ color: active ? "#e2e8f0" : "rgba(148,163,184,0.5)" }}>
+                  <span>{icon}</span>{label}
+                  {active && <span className="absolute bottom-0 left-0 right-0 h-[2px] rounded-t-full" style={{ background: "rgba(255,255,255,0.5)" }} />}
+                </button>
+              );
+            })}
+          </div>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full ml-auto mb-1.5 shrink-0"
+            style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.4)" }}>24H</span>
         </div>
       </div>
 
