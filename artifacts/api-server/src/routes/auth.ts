@@ -248,7 +248,7 @@ router.post("/auth/google", asyncWrap(async (req, res) => {
   let profile = existing[0];
   // Track outcome so the client can surface appropriate messaging:
   //   isNewAccount — brand-new profile was created
-  //   wasLinked    — an existing email-OTP profile was merged with this Google account
+  //   wasLinked    — an existing profile was merged with this Google account
   //                  for the first time (won't fire on subsequent Google sign-ins)
   let isNewAccount = false;
   let wasLinked    = false;
