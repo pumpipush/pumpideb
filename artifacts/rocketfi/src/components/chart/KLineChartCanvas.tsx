@@ -229,7 +229,7 @@ export function KLineChartCanvas({
 
   // ── Toolbar state ─────────────────────────────────────────────────────────
   const [period,          setPeriod]         = useState<Period>(DEFAULT_PERIOD)
-  const [priceMode,       setPriceMode]      = useState<PriceMode>('price')
+  const [priceMode,       setPriceMode]      = useState<PriceMode>('mcap')
   const [candleType,      setCandleType]     = useState<CandleType>('candle_solid')
   const [yAxisMode,       setYAxisMode]      = useState<YAxisMode>('normal')
   const [autoScale,       setAutoScale]      = useState(true)

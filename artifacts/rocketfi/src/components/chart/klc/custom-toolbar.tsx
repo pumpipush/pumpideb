@@ -392,7 +392,7 @@ export function CustomToolbar({
             className={`ctb-toggle-side${priceMode === 'mcap' ? ' active' : ''}`}
             onClick={() => onPriceModeChange('mcap')}
           >
-            MCap
+            Mcap
           </button>
         </div>
       </div>
