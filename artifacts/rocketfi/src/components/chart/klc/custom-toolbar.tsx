@@ -273,7 +273,6 @@ function CandleTypeSelector({
         title="Chart type"
       >
         <current.icon />
-        <IconChevronDown />
       </button>
       <DropdownPortal triggerRef={btnRef} open={open} onClose={() => setOpen(false)}>
         <div className="ctb-ct-panel" style={{ position: 'static' }}>
