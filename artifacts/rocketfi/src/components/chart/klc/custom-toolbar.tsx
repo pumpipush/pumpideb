@@ -212,12 +212,23 @@ const IconChevronDown = () => (
 )
 
 const IconIndicators = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-    <rect x="1.5" y="9"  width="2" height="5.5" rx="0.4" fill="currentColor"/>
-    <rect x="5"   y="5"  width="2" height="9.5" rx="0.4" fill="currentColor"/>
-    <rect x="8.5" y="2.5" width="2" height="12" rx="0.4" fill="currentColor"/>
-    <rect x="12"  y="6"  width="2" height="8.5" rx="0.4" fill="currentColor"/>
-    <line x1="1" y1="8" x2="15" y2="8" stroke="currentColor" strokeWidth="0.9" strokeDasharray="2 2"/>
+  <svg width="22" height="14" viewBox="0 0 22 14" fill="none">
+    <text
+      x="1" y="11"
+      fontFamily="Georgia, 'Times New Roman', serif"
+      fontSize="12"
+      fontStyle="italic"
+      fontWeight="700"
+      fill="currentColor"
+      letterSpacing="-0.5"
+    >f</text>
+    <text
+      x="8" y="11"
+      fontFamily="'Trebuchet MS', Arial, sans-serif"
+      fontSize="11"
+      fontWeight="700"
+      fill="currentColor"
+    >x</text>
   </svg>
 )
 const IconSettings = () => (
