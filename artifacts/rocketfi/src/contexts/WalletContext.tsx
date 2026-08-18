@@ -253,6 +253,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     // BUT: Solflare injects its publicKey asynchronously after page load even
     // when the wallet is already unlocked and the site is trusted.  Poll for
     // up to 1.5 s so we pick up the address without any user interaction.
+    let cancelled = false;
+
     if (savedName === "Solflare") {
       let attempts = 0;
       const INTERVALS = [100, 200, 400, 800]; // 100ms, 200ms, 400ms, 800ms
@@ -274,7 +276,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     // Phantom / Backpack: onlyIfTrusted silently rejects when locked — safe.
     // Guard against stale resolution: if the user disconnects/switches wallet
     // before connect() resolves, ignore the result.
-    let cancelled = false;
     provider.connect({ onlyIfTrusted: true })
       .then(result => {
         if (cancelled) return;
