@@ -221,6 +221,7 @@ export interface KLineChartRef {
   setYAxisMode:      (mode: 'normal' | 'percentage' | 'log') => void
   setCandleType:     (type: string) => void
   setYAxisFormatter: (fmt: ((val: number) => string) | null) => void
+  setStyles:         (styles: any) => void
 }
 
 interface Props {
@@ -273,6 +274,9 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
     setYAxisFormatter: (fmt) => {
       yAxisFormatterRef.current = fmt
       applyMcapAxis(fmt)
+    },
+    setStyles: (styles) => {
+      chartRef.current?.setStyles?.(styles)
     },
   }))
 
