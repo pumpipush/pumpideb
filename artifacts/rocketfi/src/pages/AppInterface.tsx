@@ -2426,8 +2426,21 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   if (loadingToken && !token) {
     return (
       <div className="flex flex-col md:flex-row w-full min-w-[320px] md:min-w-[680px]">
-        {/* Left column — spinner only in the chart area */}
+        {/* Left column skeleton */}
         <div className="flex-1 min-w-0 border-r border-border/20 px-3 pt-3 md:px-5 md:pt-4 pb-6 flex flex-col gap-4">
+          {/* Token header skeleton */}
+          <div className="flex items-center gap-3 pb-2">
+            <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+            <div className="flex flex-col gap-1.5">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+            <div className="ml-auto flex gap-2">
+              <Skeleton className="h-6 w-16 rounded-full" />
+              <Skeleton className="h-6 w-16 rounded-full" />
+            </div>
+          </div>
+          {/* Chart skeleton */}
           <div className="border border-border/20 rounded-sm overflow-hidden" style={{ background: "#111111" }}>
             <div style={{ height: 36, background: "#0a0a0a", borderBottom: "1px solid rgba(255,255,255,0.08)" }} />
             <div className="h-[260px] sm:h-[340px] lg:h-[400px] xl:h-[440px] flex items-center justify-center">
@@ -2439,9 +2452,60 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               </svg>
             </div>
           </div>
+          {/* Tabs skeleton */}
+          <div className="flex gap-2 border-b border-border/20 pb-2">
+            {[80, 64, 72, 68, 48].map((w, i) => (
+              <Skeleton key={i} className="h-7 rounded-sm" style={{ width: w }} />
+            ))}
+          </div>
+          {/* Trade rows skeleton */}
+          <div className="flex flex-col gap-2">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="h-3 w-12" />
+                <Skeleton className="h-3 w-10" />
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-3 w-14" />
+                <Skeleton className="h-3 flex-1" />
+              </div>
+            ))}
+          </div>
         </div>
-        {/* Right column — empty while token loads */}
-        <div className="w-full md:w-[320px] xl:w-[360px] shrink-0" />
+
+        {/* Right column skeleton */}
+        <div className="w-full md:w-[320px] xl:w-[360px] shrink-0 px-3 pt-3 md:px-4 md:pt-4 flex flex-col gap-4">
+          {/* Price block */}
+          <div className="flex flex-col gap-2 pb-3 border-b border-border/20">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-7 w-28" />
+            <div className="flex gap-4">
+              <div className="flex flex-col gap-1"><Skeleton className="h-2.5 w-14" /><Skeleton className="h-4 w-20" /></div>
+              <div className="flex flex-col gap-1"><Skeleton className="h-2.5 w-14" /><Skeleton className="h-4 w-20" /></div>
+            </div>
+          </div>
+          {/* Buy/Sell toggle */}
+          <div className="flex gap-2">
+            <Skeleton className="h-9 flex-1 rounded-sm" />
+            <Skeleton className="h-9 flex-1 rounded-sm" />
+          </div>
+          {/* Amount input */}
+          <Skeleton className="h-12 w-full rounded-sm" />
+          {/* Quick amounts */}
+          <div className="flex gap-2">
+            {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-7 flex-1 rounded-sm" />)}
+          </div>
+          {/* Action button */}
+          <Skeleton className="h-11 w-full rounded-sm" />
+          {/* Stats */}
+          <div className="flex flex-col gap-2 pt-2 border-t border-border/20">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="flex justify-between">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
