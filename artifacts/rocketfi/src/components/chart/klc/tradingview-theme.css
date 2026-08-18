@@ -68,15 +68,45 @@
   width: 32px !important;
   height: 32px !important;
   border-radius: 4px !important;
-  color: #c4c9d4 !important;
+  color: #d1d4dc !important;
 }
+/* SVG paths — KLC uses hardcoded fills, override them directly */
+.klinecharts-pro-drawing-bar .item .icon-overlay svg path,
+.klinecharts-pro-drawing-bar .item .icon-overlay svg rect,
+.klinecharts-pro-drawing-bar .item .icon-overlay svg circle,
+.klinecharts-pro-drawing-bar .item .icon-overlay svg line,
+.klinecharts-pro-drawing-bar .item .icon-overlay svg polyline,
+.klinecharts-pro-drawing-bar .item .icon-overlay svg polygon {
+  fill: #d1d4dc !important;
+  stroke: #d1d4dc !important;
+}
+/* Hover */
 .klinecharts-pro-drawing-bar .item .icon-overlay:hover {
   background-color: rgba(255,255,255,0.08) !important;
   color: #ffffff !important;
 }
+.klinecharts-pro-drawing-bar .item .icon-overlay:hover svg path,
+.klinecharts-pro-drawing-bar .item .icon-overlay:hover svg rect,
+.klinecharts-pro-drawing-bar .item .icon-overlay:hover svg circle,
+.klinecharts-pro-drawing-bar .item .icon-overlay:hover svg line,
+.klinecharts-pro-drawing-bar .item .icon-overlay:hover svg polyline,
+.klinecharts-pro-drawing-bar .item .icon-overlay:hover svg polygon {
+  fill: #ffffff !important;
+  stroke: #ffffff !important;
+}
+/* Selected/active */
 .klinecharts-pro-drawing-bar .item .icon-overlay.selected {
   background-color: rgba(41,98,255,0.18) !important;
   color: #6b9eff !important;
+}
+.klinecharts-pro-drawing-bar .item .icon-overlay.selected svg path,
+.klinecharts-pro-drawing-bar .item .icon-overlay.selected svg rect,
+.klinecharts-pro-drawing-bar .item .icon-overlay.selected svg circle,
+.klinecharts-pro-drawing-bar .item .icon-overlay.selected svg line,
+.klinecharts-pro-drawing-bar .item .icon-overlay.selected svg polyline,
+.klinecharts-pro-drawing-bar .item .icon-overlay.selected svg polygon {
+  fill: #6b9eff !important;
+  stroke: #6b9eff !important;
 }
 .klinecharts-pro-drawing-bar .split-line {
   background-color: rgba(255,255,255,0.08) !important;
