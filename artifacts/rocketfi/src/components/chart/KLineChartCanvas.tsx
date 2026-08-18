@@ -82,6 +82,7 @@ function OhlcOverlay({
   solPrice: number | null
   leftOffset?: number
 }) {
+  const [volVisible, setVolVisible] = useState(true)
   const data = crosshairOhlc ?? ohlc
   const fmt = priceMode === 'mcap'
     ? (v: number) => fmtMcap(v, supply, solPrice)
@@ -111,26 +112,46 @@ function OhlcOverlay({
 
   return (
     <div className="klc-ohlc-overlay" style={overlayStyle}>
+      {/* Row 1: ticker · period · O H L C % */}
       <div className="klc-ohlc-row1">
         <span className="klc-ohlc-symbol">{ticker}</span>
         <span className="klc-ohlc-period">· {period.text}</span>
         <span className="klc-ohlc-values">
-          <span style={{ color: '#787b86' }}>O</span>
-          <b style={{ color: '#d1d4dc', fontWeight: 500 }}>{fmt(data.open)}</b>
-          <span style={{ color: '#787b86', marginLeft: 4 }}>H</span>
-          <b style={{ color: '#26a69a', fontWeight: 500 }}>{fmt(data.high)}</b>
-          <span style={{ color: '#787b86', marginLeft: 4 }}>L</span>
-          <b style={{ color: '#ef5350', fontWeight: 500 }}>{fmt(data.low)}</b>
-          <span style={{ color: '#787b86', marginLeft: 4 }}>C</span>
-          <b style={{ color: changeColor, fontWeight: 500 }}>{fmt(data.close)}</b>
-          <b style={{ color: changeColor, marginLeft: 4, fontWeight: 500 }}>
+          <span className="klc-ohlc-lbl">O</span>
+          <b className="klc-ohlc-val">{fmt(data.open)}</b>
+          <span className="klc-ohlc-lbl">H</span>
+          <b className="klc-ohlc-val" style={{ color: '#26a69a' }}>{fmt(data.high)}</b>
+          <span className="klc-ohlc-lbl">L</span>
+          <b className="klc-ohlc-val" style={{ color: '#ef5350' }}>{fmt(data.low)}</b>
+          <span className="klc-ohlc-lbl">C</span>
+          <b className="klc-ohlc-val" style={{ color: changeColor }}>{fmt(data.close)}</b>
+          <b className="klc-ohlc-change" style={{ color: changeColor }}>
             {isBull ? '▲' : '▼'} {pct}%
           </b>
         </span>
-        <span className="klc-ohlc-vol">
-          Vol <b style={{ color: '#787b86', fontWeight: 500 }}>{fmtVol(data.volume)}</b>
-        </span>
       </div>
+
+      {/* Row 2: Volume — hides when chevron clicked */}
+      {volVisible && (
+        <div className="klc-ohlc-row2">
+          <span className="klc-ohlc-vol-label">Volume</span>
+          <span className="klc-ohlc-vol-value">{fmtVol(data.volume)}</span>
+        </div>
+      )}
+
+      {/* Row 3: Chevron card — always visible, toggles row 2 */}
+      <button
+        className={`klc-ohlc-chevron-card${volVisible ? ' open' : ''}`}
+        onClick={() => setVolVisible(v => !v)}
+        title={volVisible ? 'Hide volume' : 'Show volume'}
+      >
+        <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+          {volVisible
+            ? <path d="M1.5 5.5L4.5 2.5L7.5 5.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            : <path d="M1.5 3.5L4.5 6.5L7.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+          }
+        </svg>
+      </button>
     </div>
   )
 }

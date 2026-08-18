@@ -409,17 +409,42 @@
   z-index: 10;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   pointer-events: none;
   font-family: 'Trebuchet MS', sans-serif;
   font-size: 12px;
   line-height: 1.4;
 }
 
+/* Chevron card — row 3, always visible, toggles volume row */
+.klc-ohlc-chevron-card {
+  pointer-events: all;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 14px;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 3px;
+  background: rgba(255,255,255,0.04);
+  color: #9ca3af;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  padding: 0;
+  margin-top: 1px;
+}
+.klc-ohlc-chevron-card:hover {
+  background: rgba(255,255,255,0.09);
+  border-color: rgba(255,255,255,0.26);
+  color: #d1d4dc;
+}
+
+/* Row 1: chevron · symbol · period · OHLC values */
 .klc-ohlc-row1 {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex-wrap: nowrap;
 }
 
@@ -431,26 +456,52 @@
 }
 
 .klc-ohlc-period {
-  color: #5d606b;
+  color: #787b86;
   font-size: 12px;
 }
 
 .klc-ohlc-values {
   display: flex;
   align-items: center;
-  gap: 5px;
-  color: #787b86;
-  font-size: 11.5px;
+  gap: 4px;
+  font-size: 12px;
 }
 
-.klc-ohlc-values span b {
+/* O H L C letter labels */
+.klc-ohlc-lbl {
+  color: #787b86;
+  font-weight: 400;
+}
+
+/* OHLC numeric values */
+.klc-ohlc-val {
+  color: #d1d4dc;
   font-weight: 500;
+}
+
+/* ▲/▼ change % */
+.klc-ohlc-change {
+  font-weight: 600;
   margin-left: 2px;
 }
 
-.klc-ohlc-vol {
-  color: #5d606b;
-  font-size: 11px;
+/* Row 2: Volume — collapsible */
+.klc-ohlc-row2 {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  font-size: 11.5px;
+}
+
+.klc-ohlc-vol-label {
+  color: #787b86;
+  font-weight: 400;
+}
+
+.klc-ohlc-vol-value {
+  color: #9ca3af;
+  font-weight: 500;
 }
 
 /* Hide OHLC values on very small screens */
