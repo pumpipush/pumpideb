@@ -255,6 +255,25 @@ export function KLineChartCanvas({
     volumePrecision: 2,
   }), [address, name, symbol, platform])
 
+  // ── Stable refs so Y-axis formatter always reads latest values ──────────────
+  // (avoids stale closures when solPrice or supply update after formatter set)
+  const solPriceRef = useRef<number | null>(solPrice)
+  const supplyRef   = useRef<number>(supply)
+  solPriceRef.current = solPrice
+  supplyRef.current   = supply
+
+  // ── Apply / remove Y-axis formatter on mount and on mode switch ───────────
+  // Runs after child effects (chart init), so chartRef is ready on first run.
+  useEffect(() => {
+    if (priceMode === 'mcap') {
+      chartRef.current?.setYAxisFormatter(
+        (price: number) => fmtMcap(price, supplyRef.current, solPriceRef.current),
+      )
+    } else {
+      chartRef.current?.setYAxisFormatter(null)
+    }
+  }, [priceMode])
+
   // ── Push live SSE price into the datafeed for instant candle updates ───────
   const prevLivePrice = useRef<number | null>(null)
   useEffect(() => {
@@ -267,14 +286,8 @@ export function KLineChartCanvas({
   // ── Toolbar handlers ──────────────────────────────────────────────────────
   const handlePriceModeChange = useCallback((mode: PriceMode) => {
     setPriceMode(mode)
-    if (mode === 'mcap') {
-      chartRef.current?.setYAxisFormatter(
-        (price) => fmtMcap(price, supply, solPrice),
-      )
-    } else {
-      chartRef.current?.setYAxisFormatter(null)
-    }
-  }, [supply, solPrice])
+    // priceMode state change triggers the useEffect above which applies formatter
+  }, [])
 
   const handleCandleTypeChange = useCallback((type: CandleType) => {
     setCandleType(type)

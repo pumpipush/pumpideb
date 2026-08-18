@@ -1860,6 +1860,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
         platform={token.platform ?? undefined}
         solPrice={solPrice}
         livePrice={liveToken?.priceEth ? parseFloat(liveToken.priceEth) : undefined}
+        liveSolAmount={liveTrades[0]?.ethAmount ? parseFloat(liveTrades[0].ethAmount) / 1e9 : 0}
       />
     </div>
   ) : null;
