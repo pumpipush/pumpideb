@@ -27,7 +27,7 @@ function cacheSet(data: unknown) {
  * All eth_amount values are stored as lamport strings in the DB.
  */
 router.get(
-  "/api/leaderboard",
+  "/leaderboard",
   asyncWrap(async (_req, res) => {
     const cached = cacheGet();
     if (cached) {
@@ -57,7 +57,7 @@ router.get(
           AND  eth_amount      != ''
           AND  eth_amount      IS NOT NULL
         GROUP  BY trader_address
-        ORDER  BY volume_lamports::NUMERIC DESC
+        ORDER  BY COALESCE(SUM(CAST(NULLIF(eth_amount, '') AS NUMERIC)), 0) DESC
         LIMIT  10
       `),
 
@@ -84,7 +84,12 @@ router.get(
           AND  eth_amount      IS NOT NULL
         GROUP  BY trader_address
         HAVING COUNT(*) >= 2
-        ORDER  BY pnl_lamports::NUMERIC DESC
+        ORDER  BY (
+            COALESCE(SUM(CASE WHEN NOT is_buy
+              THEN CAST(NULLIF(eth_amount, '') AS NUMERIC) ELSE 0 END), 0)
+            - COALESCE(SUM(CASE WHEN is_buy
+              THEN CAST(NULLIF(eth_amount, '') AS NUMERIC) ELSE 0 END), 0)
+          ) DESC
         LIMIT  10
       `),
 
@@ -114,7 +119,7 @@ router.get(
           AND  tr.eth_amount != ''
           AND  tr.eth_amount IS NOT NULL
         GROUP  BY t.address, t.name, t.symbol, t.image_url, t.platform
-        ORDER  BY volume_lamports::NUMERIC DESC
+        ORDER  BY COALESCE(SUM(CAST(NULLIF(tr.eth_amount, '') AS NUMERIC)), 0) DESC
         LIMIT  10
       `),
     ]);
