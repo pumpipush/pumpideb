@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, BarChart2, Zap, ChevronRight } from "lucide-react";
+import { useCacheAge } from "@/hooks/useCacheAge";
 
 type Tab = "pnl" | "volume" | "tokens";
 
@@ -64,6 +65,8 @@ export function LeaderboardWidget({ solPrice }: Props) {
     query: { refetchInterval: 60_000, staleTime: 60_000, queryKey: getGetLeaderboardQueryKey("24h") },
   });
 
+  const cacheAge = useCacheAge(data?.computedAt);
+
   const volRows = data?.traders_volume ?? [];
   const pnlRows = data?.traders_pnl    ?? [];
   const tokRows = data?.tokens          ?? [];
@@ -94,8 +97,15 @@ export function LeaderboardWidget({ solPrice }: Props) {
               );
             })}
           </div>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full ml-auto mb-1.5 shrink-0"
-            style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.4)" }}>24H</span>
+          <div className="flex flex-col items-end gap-0.5 ml-auto mb-1.5 shrink-0">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+              style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.4)" }}>24H</span>
+            {cacheAge && (
+              <span className="text-[9px] px-1" style={{ color: "rgba(148,163,184,0.4)" }}>
+                {cacheAge}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

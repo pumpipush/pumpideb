@@ -110,6 +110,7 @@ async function computeLeaderboard(period: Period): Promise<LeaderboardData> {
 
     return {
       period,
+      computedAt: Date.now(),
       traders_volume: volResult.rows.map((r, i) => ({
         rank:            i + 1,
         address:         r.address,

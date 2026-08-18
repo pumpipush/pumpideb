@@ -5,6 +5,7 @@ import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, BarChart2, Zap } from "lucide-react";
 import { useSolPrice } from "@/hooks/useSolPrice";
+import { useCacheAge } from "@/hooks/useCacheAge";
 import { SEO } from "@/components/seo/SEO";
 
 type Period = "24h" | "7d" | "30d";
@@ -89,6 +90,8 @@ export default function LeaderboardPage() {
     query: { refetchInterval: 60_000, staleTime: 60_000, queryKey: getGetLeaderboardQueryKey(period) },
   });
 
+  const cacheAge = useCacheAge(data?.computedAt);
+
   const volRows = data?.traders_volume ?? [];
   const pnlRows = data?.traders_pnl    ?? [];
   const tokRows = data?.tokens          ?? [];
@@ -106,18 +109,25 @@ export default function LeaderboardPage() {
             <p className="text-sm text-muted-foreground mt-1">Top traders and tokens on Pumpi</p>
           </div>
 
-          {/* Period selector */}
-          <div className="flex items-center rounded-full p-0.5 shrink-0"
-            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
-            {PERIODS.map(({ id, label }) => (
-              <button key={id} onClick={() => setPeriod(id)}
-                className="px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-150"
-                style={period === id
-                  ? { background: "rgba(255,255,255,0.14)", color: "#f2f2f2" }
-                  : { color: "rgba(180,180,180,0.55)" }}>
-                {label}
-              </button>
-            ))}
+          {/* Period selector + cache age */}
+          <div className="flex flex-col items-end gap-1.5 shrink-0">
+            <div className="flex items-center rounded-full p-0.5"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              {PERIODS.map(({ id, label }) => (
+                <button key={id} onClick={() => setPeriod(id)}
+                  className="px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-150"
+                  style={period === id
+                    ? { background: "rgba(255,255,255,0.14)", color: "#f2f2f2" }
+                    : { color: "rgba(180,180,180,0.55)" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {cacheAge && (
+              <span className="text-[11px]" style={{ color: "rgba(148,163,184,0.45)" }}>
+                {cacheAge}
+              </span>
+            )}
           </div>
         </div>
 

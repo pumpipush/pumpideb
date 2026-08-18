@@ -35,6 +35,8 @@ export interface LeaderboardToken {
 
 export interface LeaderboardResponse {
   period: LeaderboardPeriod;
+  /** Unix timestamp (ms) when this cache entry was computed */
+  computedAt?: number;
   traders_volume: LeaderboardTraderVolume[];
   traders_pnl: LeaderboardTraderPnL[];
   tokens: LeaderboardToken[];
