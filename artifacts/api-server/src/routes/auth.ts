@@ -1,14 +1,16 @@
 /**
- * auth.ts — social & email authentication endpoints.
+ * auth.ts — Google & wallet authentication endpoints.
  *
- * POST /api/auth/google               Verify Google ID token → create/find profile → return JWT
- * POST /api/auth/email/send           Send 6-digit OTP to email
- * POST /api/auth/email/verify         Verify OTP → create/find profile → return JWT
- * POST /api/auth/link/email/send      (wallet-auth only) Send OTP to email to link it
- * POST /api/auth/link/email/verify    (wallet-auth only) Verify OTP and save email to profile
+ * POST /api/auth/google               Verify Google access_token → create/find profile → return JWT
  * POST /api/auth/link/google          (wallet-auth only) Link Google account to wallet profile
+ * GET  /api/auth/wallet/login/challenge  Issue one-time challenge for wallet login
+ * POST /api/auth/wallet/login         Verify Ed25519 wallet signature → create/find profile → return JWT
+ * GET  /api/auth/wallet/link/challenge  Issue one-time challenge for wallet linking
+ * POST /api/auth/wallet/link          Link a Solana wallet to the authenticated social profile
+ * POST /api/auth/wallet/merge         Merge a wallet-primary account into a social profile
+ * DELETE /api/auth/wallet/link        Remove linked wallet from social profile
  * GET  /api/auth/me                   Return profile from JWT (Authorization: Bearer <token>)
- * POST /api/auth/logout               Client-side logout hint (clears server-side nonce if any)
+ * POST /api/auth/logout               Client-side logout hint
  */
 
 import { Router } from "express";
@@ -19,7 +21,6 @@ import { eq, or } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { profilesTable } from "@workspace/db/schema";
 import { signToken, verifyToken, extractBearer } from "../lib/auth-jwt";
-import { generateOTP, verifyOTP, sendOTPEmail } from "../lib/email-otp";
 import nacl from "tweetnacl";
 import { asyncWrap } from "../lib/asyncHandler.js";
 
@@ -135,35 +136,6 @@ setInterval(() => {
     if (now > entry.expiresAt) walletMergeNonces.delete(key);
   }
 }, 60_000).unref();
-
-// ── OTP rate limiting ─────────────────────────────────────────────────────
-// Prevents email-send spam and brute-force attempts against the 6-digit code.
-const otpSendLimiter   = new Map<string, { count: number; resetAt: number }>();
-const otpVerifyLimiter = new Map<string, { count: number; resetAt: number }>();
-
-function checkRateLimit(
-  store: Map<string, { count: number; resetAt: number }>,
-  key: string,
-  max: number,
-  windowMs: number,
-): boolean {
-  const now   = Date.now();
-  const entry = store.get(key);
-  if (!entry || now > entry.resetAt) {
-    store.set(key, { count: 1, resetAt: now + windowMs });
-    return true;
-  }
-  if (entry.count >= max) return false;
-  entry.count++;
-  return true;
-}
-
-// Prune limiter maps every 30 min so they don't grow unboundedly.
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of otpSendLimiter)   { if (now > v.resetAt) otpSendLimiter.delete(k);   }
-  for (const [k, v] of otpVerifyLimiter) { if (now > v.resetAt) otpVerifyLimiter.delete(k); }
-}, 30 * 60_000).unref();
 
 const router = Router();
 
@@ -323,163 +295,6 @@ router.post("/auth/google", asyncWrap(async (req, res) => {
 
   const token = signToken({ sub: profile.address, authType: "google" });
   return void res.json({ token, profile, isNewAccount, wasLinked });
-}));
-
-// ── POST /api/auth/email/send ─────────────────────────────────────────────
-// Public — no auth required. Send a 6-digit OTP to the given email address
-// so the user can sign in or create an account without a wallet.
-
-router.post("/auth/email/send", authLimiter, asyncWrap(async (req, res) => {
-  const { email } = req.body as { email?: string };
-  if (!email || !email.includes("@")) {
-    return void res.status(400).json({ error: "valid email required" });
-  }
-  const norm = email.toLowerCase().trim();
-
-  // Max 3 sends per email per 15 minutes
-  if (!checkRateLimit(otpSendLimiter, `login:${norm}`, 3, 15 * 60_000)) {
-    return void res.status(429).json({ error: "Too many attempts. Please wait 15 minutes before requesting another code." });
-  }
-
-  const code = generateOTP(norm);
-  await sendOTPEmail(norm, code);
-  return void res.json({ ok: true });
-}));
-
-// ── POST /api/auth/email/verify ───────────────────────────────────────────
-// Public — no auth required. Verify the OTP, then find-or-create a profile
-// and return a JWT. Creates an email-auth profile if this is a new address.
-
-router.post("/auth/email/verify", authLimiter, asyncWrap(async (req, res) => {
-  const { email, code } = req.body as { email?: string; code?: string };
-  if (!email || !code) return void res.status(400).json({ error: "email and code required" });
-  const norm = email.toLowerCase().trim();
-
-  // Brute-force guard: max 10 attempts per email per 15 minutes
-  if (!checkRateLimit(otpVerifyLimiter, `login:${norm}`, 10, 15 * 60_000)) {
-    return void res.status(429).json({ error: "Too many verification attempts. Please request a new code." });
-  }
-
-  const ok = verifyOTP(norm, code);
-  if (!ok) return void res.status(401).json({ error: "Invalid or expired code" });
-
-  // Find existing profile by email, or create a new one
-  const existing = await db
-    .select()
-    .from(profilesTable)
-    .where(eq(profilesTable.email, norm))
-    .limit(1);
-
-  let profile = existing[0];
-  let isNewAccount = false;
-
-  if (!profile) {
-    isNewAccount   = true;
-    const address  = randomUUID();
-    const username = await uniqueUsername(norm.split("@")[0]);
-    profile = (
-      await db
-        .insert(profilesTable)
-        .values({ address, username, email: norm, authType: "email" })
-        .returning()
-    )[0];
-  }
-
-  const token = signToken({ sub: profile.address, authType: "email" });
-  return void res.json({ token, profile, isNewAccount });
-}));
-
-// ── POST /api/auth/link/email/send ────────────────────────────────────────
-// Wallet-only users can add an email address by sending an OTP.
-// Requires: Authorization: Bearer <wallet-auth JWT>
-
-router.post("/auth/link/email/send", authLimiter, asyncWrap(async (req, res) => {
-  const token = extractBearer(req.headers.authorization);
-  if (!token) return void res.status(401).json({ error: "No token" });
-
-  const payload = verifyToken(token);
-  if (!payload) return void res.status(401).json({ error: "Invalid or expired token" });
-  if (payload.authType !== "wallet") {
-    return void res.status(400).json({ error: "Only wallet-auth accounts can link an email this way" });
-  }
-
-  const { email } = req.body as { email?: string };
-  if (!email || !email.includes("@")) {
-    return void res.status(400).json({ error: "valid email required" });
-  }
-
-  // Check email isn't already registered to another profile
-  const taken = await db
-    .select({ address: profilesTable.address })
-    .from(profilesTable)
-    .where(eq(profilesTable.email, email.toLowerCase()))
-    .limit(1);
-  if (taken.length > 0 && taken[0].address !== payload.sub) {
-    return void res.status(409).json({ error: "That email is already associated with another account" });
-  }
-
-  // Max 3 sends per email per 15 minutes (reuse same limiter as registration flow)
-  if (!checkRateLimit(otpSendLimiter, `link:${email.toLowerCase()}`, 3, 15 * 60_000)) {
-    return void res.status(429).json({ error: "Too many attempts. Please wait 15 minutes before requesting another code." });
-  }
-
-  const code = generateOTP(email.toLowerCase());
-  await sendOTPEmail(email.toLowerCase(), code);
-  return void res.json({ ok: true });
-}));
-
-// ── POST /api/auth/link/email/verify ──────────────────────────────────────
-// Verify OTP and save the email to the authenticated wallet user's profile.
-// Requires: Authorization: Bearer <wallet-auth JWT>
-
-router.post("/auth/link/email/verify", authLimiter, asyncWrap(async (req, res) => {
-  const token = extractBearer(req.headers.authorization);
-  if (!token) return void res.status(401).json({ error: "No token" });
-
-  const payload = verifyToken(token);
-  if (!payload) return void res.status(401).json({ error: "Invalid or expired token" });
-  if (payload.authType !== "wallet") {
-    return void res.status(400).json({ error: "Only wallet-auth accounts can link an email this way" });
-  }
-
-  const { email, code } = req.body as { email?: string; code?: string };
-  if (!email || !code) return void res.status(400).json({ error: "email and code required" });
-
-  // Brute-force guard: max 10 attempts per email per 15 minutes
-  if (!checkRateLimit(otpVerifyLimiter, `link:${email.toLowerCase()}`, 10, 15 * 60_000)) {
-    return void res.status(429).json({ error: "Too many verification attempts. Please request a new code." });
-  }
-
-  const ok = verifyOTP(email.toLowerCase(), code);
-  if (!ok) return void res.status(401).json({ error: "Invalid or expired code" });
-
-  // Re-check uniqueness at verify time (race-condition safety)
-  const taken = await db
-    .select({ address: profilesTable.address })
-    .from(profilesTable)
-    .where(eq(profilesTable.email, email.toLowerCase()))
-    .limit(1);
-  if (taken.length > 0 && taken[0].address !== payload.sub) {
-    return void res.status(409).json({ error: "That email is already associated with another account" });
-  }
-
-  let updated;
-  try {
-    updated = await db
-      .update(profilesTable)
-      .set({ email: email.toLowerCase(), updatedAt: new Date() })
-      .where(eq(profilesTable.address, payload.sub))
-      .returning();
-  } catch (err: unknown) {
-    const msg = String(err);
-    if (msg.includes("unique") || msg.includes("duplicate")) {
-      return void res.status(409).json({ error: "That email is already associated with another account" });
-    }
-    throw err;
-  }
-
-  if (!updated[0]) return void res.status(404).json({ error: "Profile not found" });
-  return void res.json({ ok: true, profile: updated[0] });
 }));
 
 // ── POST /api/auth/link/google ─────────────────────────────────────────────

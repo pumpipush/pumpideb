@@ -75,30 +75,11 @@ interface AuthContextValue {
     signMessage: (msg: Uint8Array) => Promise<Uint8Array>,
   ) => Promise<void>;
   /**
-   * (Wallet-auth only) Send an OTP to the given email address so the user can
-   * link it to their wallet profile. Throws if the email is already taken.
-   */
-  linkEmailSend: (email: string) => Promise<void>;
-  /**
-   * (Wallet-auth only) Verify the OTP sent by linkEmailSend and save the email
-   * to the profile. Resolves on success, throws on wrong/expired code.
-   */
-  linkEmailVerify: (email: string, code: string) => Promise<void>;
-  /**
    * (Wallet-auth only) Exchange a Google access_token for a linked Google
    * identity on the current wallet profile. Throws if the Google account is
    * already claimed by another profile.
    */
   linkGoogle: (accessToken: string) => Promise<void>;
-  /**
-   * Send a 6-digit OTP to the given email for sign-in / sign-up (no wallet needed).
-   */
-  loginWithEmailSend: (email: string) => Promise<void>;
-  /**
-   * Verify the OTP from loginWithEmailSend. On success, stores JWT and sets socialUser.
-   * Returns { isNewAccount } so callers can surface welcome messaging.
-   */
-  loginWithEmailVerify: (email: string, code: string) => Promise<{ isNewAccount: boolean }>;
   /**
    * Smart wallet connect — call this after the wallet extension approves
    * the connection.  Automatically decides:
@@ -130,11 +111,7 @@ const AuthContext = createContext<AuthContextValue>({
   mergeWallet: async () => {},
   loginWithWallet: async () => {},
   loginOrLinkWallet: async () => undefined,
-  linkEmailSend: async () => {},
-  linkEmailVerify: async () => {},
   linkGoogle: async () => {},
-  loginWithEmailSend: async () => {},
-  loginWithEmailVerify: async () => ({ isNewAccount: false }),
 });
 
 const STORAGE_KEY = "pumpi_auth_token";
@@ -398,70 +375,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSocialUser((u) => u ? { ...u, linkedWallet: null } : u);
   }, [authHeaders]);
 
-  // ── Email OTP login (no wallet required) ─────────────────────────────────
-
-  const loginWithEmailSend = useCallback(async (email: string) => {
-    const r = await fetch(apiUrl("/auth/email/send"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({})) as { error?: string };
-      throw new Error(err.error ?? "Failed to send verification code");
-    }
-  }, []);
-
-  const loginWithEmailVerify = useCallback(async (email: string, code: string): Promise<{ isNewAccount: boolean }> => {
-    const r = await fetch(apiUrl("/auth/email/verify"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, code }),
-    });
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({})) as { error?: string };
-      throw new Error(err.error ?? "Invalid or expired code");
-    }
-    const data = await r.json() as {
-      token: string;
-      profile: { address: string; username: string; avatarUrl?: string | null; email?: string | null; linkedWallet?: string | null };
-      isNewAccount?: boolean;
-    };
-    handleAuthResponse({ ...data, authType: "email" });
-    return { isNewAccount: data.isNewAccount ?? false };
-  }, []);
-
-  // ── Wallet → email/Google linking ────────────────────────────────────────
-
-  const linkEmailSend = useCallback(async (email: string) => {
-    const headers = authHeaders();
-    if (!headers.Authorization) throw new Error("Not signed in");
-    const r = await fetch(apiUrl("/auth/link/email/send"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({ email }),
-    });
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({})) as { error?: string };
-      throw new Error(err.error ?? "Failed to send verification code");
-    }
-  }, [authHeaders]);
-
-  const linkEmailVerify = useCallback(async (email: string, code: string) => {
-    const headers = authHeaders();
-    if (!headers.Authorization) throw new Error("Not signed in");
-    const r = await fetch(apiUrl("/auth/link/email/verify"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({ email, code }),
-    });
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({})) as { error?: string };
-      throw new Error(err.error ?? "Invalid or expired code");
-    }
-    // Sync the new email into local state so the UI updates immediately
-    setSocialUser((u) => u ? { ...u, email: email.toLowerCase() } : u);
-  }, [authHeaders]);
+  // ── Wallet → Google linking ───────────────────────────────────────────────
 
   const linkGoogle = useCallback(async (accessToken: string) => {
     const headers = authHeaders();
@@ -596,11 +510,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         mergeWallet,
         loginWithWallet,
         loginOrLinkWallet,
-        linkEmailSend,
-        linkEmailVerify,
         linkGoogle,
-        loginWithEmailSend,
-        loginWithEmailVerify,
       }}
     >
       {children}

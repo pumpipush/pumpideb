@@ -13,7 +13,6 @@ import {
 } from "@workspace/api-client-react";
 import type { FollowAuth } from "@workspace/api-client-react";
 import { ProfileEditModal } from "@/components/shared/ProfileEditModal";
-import { AddEmailModal } from "@/components/shared/AddEmailModal";
 import { FollowListModal } from "@/components/shared/FollowListModal";
 import { generateUsername } from "@/lib/username";
 import { Button } from "@/components/ui/button";
@@ -195,7 +194,6 @@ export default function ProfilePage() {
 
   const [activeTab, setActiveTab] = useState<Tab>("activity");
   const [editOpen, setEditOpen] = useState(false);
-  const [addEmailOpen, setAddEmailOpen] = useState(false);
   const [claimLoading, setClaimLoading] = useState(false);
   const [unlinkLoading, setUnlinkLoading] = useState(false);
   const [linkingWallet, setLinkingWallet] = useState(false);
@@ -1570,8 +1568,6 @@ export default function ProfilePage() {
           </div>
         </>
       )}
-
-      <AddEmailModal open={addEmailOpen} onClose={() => setAddEmailOpen(false)} />
 
       {/* ── Merge accounts confirmation dialog ── */}
       {mergeNonce && (
