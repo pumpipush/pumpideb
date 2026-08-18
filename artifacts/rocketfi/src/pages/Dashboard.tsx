@@ -1209,7 +1209,19 @@ export default function Dashboard() {
 
               {/* ── Right: Leaderboard ── */}
               <div className="w-full md:w-[300px] xl:w-[340px] shrink-0 flex flex-col" style={{ height: isMobile ? "auto" : 416 }}>
-                <LeaderboardWidget solPrice={solPrice} />
+                {/* Header — mirrors Bubble Map header so both rows align */}
+                <div className="flex items-center justify-between mb-2 gap-2">
+                  <h2 className="whitespace-nowrap text-lg md:text-[22px] font-extrabold text-foreground tracking-tight">
+                    Leaderboard
+                  </h2>
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
+                    style={{ background: "rgba(255,255,255,0.07)", color: "rgba(200,200,200,0.7)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                    24h
+                  </span>
+                </div>
+                <div className="flex-1 min-h-0">
+                  <LeaderboardWidget solPrice={solPrice} />
+                </div>
               </div>
 
             </div>
