@@ -1347,11 +1347,29 @@ router.post("/tokens/:address/trades", heavyLimiter, asyncWrap(async (req, res) 
   res.status(201).json(RecordTradeResponse.parse(trade));
 }));
 
+// In-memory cache for top-wallets responses (60 s TTL).
+// The query itself takes <1 ms once the index is warm, but under cold-start
+// conditions (all coin-page tabs loading simultaneously) DB pool contention
+// can push latency to 10+ s.  The cache eliminates repeat hits within the
+// same 60-second window regardless of load, so every tab after the first
+// is served instantly.
+const _topWalletsCache = new Map<string, { data: unknown; ts: number }>();
+const TOP_WALLETS_TTL = 60_000; // 60 s
+
 // GET /tokens/:address/top-wallets — per-wallet P&L and trade stats across ALL trades in DB.
 // Returns top 50 wallets by net token balance with SOL in/out, avg entry, and trade counts.
 router.get("/tokens/:address/top-wallets", heavyLimiter, asyncWrap(async (req, res) => {
   const address = req.params.address as string;
   if (!address) { res.status(400).json({ error: "address required" }); return; }
+
+  // Serve from cache if fresh
+  const cached = _topWalletsCache.get(address);
+  if (cached && Date.now() - cached.ts < TOP_WALLETS_TTL) {
+    res.setHeader("Cache-Control", `public, max-age=${Math.floor(TOP_WALLETS_TTL / 1_000)}, stale-while-revalidate=60`);
+    res.setHeader("X-Cache", "HIT");
+    res.json(cached.data);
+    return;
+  }
 
   // For DEX tokens (graduated pump.fun → pumpswap, raydium_launchlab), pull the
   // latest Birdeye trades into the DB before computing wallet stats. This captures
@@ -1423,7 +1441,11 @@ router.get("/tokens/:address/top-wallets", heavyLimiter, asyncWrap(async (req, r
     avgEntryLamportsPerToken:   r.avg_entry_lamports_per_token ?? null,
   }));
 
-  res.json({ wallets, count: wallets.length });
+  const payload = { wallets, count: wallets.length };
+  _topWalletsCache.set(address, { data: payload, ts: Date.now() });
+  res.setHeader("Cache-Control", `public, max-age=${Math.floor(TOP_WALLETS_TTL / 1_000)}, stale-while-revalidate=60`);
+  res.setHeader("X-Cache", "MISS");
+  res.json(payload);
 }));
 
 export default router;

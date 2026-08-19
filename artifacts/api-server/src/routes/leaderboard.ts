@@ -103,6 +103,9 @@ async function computeLeaderboard(period: Period): Promise<LeaderboardData> {
         JOIN   tokens   t  ON t.address = tr.token_address
         WHERE  tr.timestamp > NOW() - INTERVAL '${interval}'
           AND  tr.eth_amount ~ '^[0-9]+$'
+          AND  t.symbol IS NOT NULL
+          AND  t.symbol != '???'
+          AND  t.name   IS NOT NULL
         GROUP  BY t.address, t.name, t.symbol, t.image_url, t.platform
         ORDER  BY SUM(tr.eth_amount::NUMERIC) DESC
         LIMIT  100
@@ -170,6 +173,18 @@ router.get(
       res.setHeader("X-Cache", "HIT");
       res.setHeader("X-Cache-Age", String(Math.floor((Date.now() - cached.computedAt) / 1000)));
       res.json(cached.data);
+      return;
+    }
+
+    // If the background warmup is already in flight (triggered at startup), don't
+    // run a second competing computation — that would saturate the DB connection pool
+    // with duplicate 5-second aggregate queries on server restart.  Instead return
+    // 503 with Retry-After so the client retries in a few seconds once the warmup
+    // finishes and the cache is populated.
+    if (_refreshing.has(period)) {
+      logger.info({ period }, "leaderboard: warmup in flight — returning 503 Retry-After");
+      res.setHeader("Retry-After", "10");
+      res.status(503).json({ error: "Leaderboard is warming up — retry in a moment." });
       return;
     }
 

@@ -3,10 +3,15 @@ import { useGetLeaderboard, getGetLeaderboardQueryKey } from "@workspace/api-cli
 import { Link } from "wouter";
 import { TokenAvatar } from "@/components/shared/TokenAvatar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, BarChart2, Zap } from "lucide-react";
+import { TrendingUp, BarChart2, Zap, Loader2 } from "lucide-react";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { useCacheAge } from "@/hooks/useCacheAge";
 import { SEO } from "@/components/seo/SEO";
+
+/** True when the server is still warming up its cache for this period (HTTP 503). */
+function isWarmingUp(error: unknown): boolean {
+  return (error as { status?: number } | null)?.status === 503;
+}
 
 type Period = "24h" | "7d" | "30d";
 type Tab    = "pnl" | "volume" | "tokens";
@@ -38,9 +43,10 @@ function walletGradient(addr: string) {
   return `linear-gradient(135deg,hsl(${h1},70%,45%),hsl(${h2},65%,35%))`;
 }
 function platformLabel(p: string) {
-  if (p === "pump_fun")  return { label: "Pump.fun",  color: "#a78bfa" };
-  if (p === "pumpswap")  return { label: "PumpSwap",  color: "#34d399" };
-  if (p === "launchlab") return { label: "LaunchLab", color: "#f59e0b" };
+  if (p === "pump_fun")          return { label: "Pump.fun",  color: "#a78bfa" };
+  if (p === "pumpswap")          return { label: "PumpSwap",  color: "#34d399" };
+  if (p === "raydium_launchlab") return { label: "LaunchLab", color: "#f59e0b" };
+  if (p === "launchlab")         return { label: "LaunchLab", color: "#f59e0b" };
   return { label: p, color: "#94a3b8" };
 }
 
@@ -86,8 +92,17 @@ export default function LeaderboardPage() {
   const [tab,    setTab]    = useState<Tab>("pnl");
   const solPrice = useSolPrice();
 
-  const { data, isLoading, isError, refetch } = useGetLeaderboard(period, {
-    query: { refetchInterval: 60_000, staleTime: 60_000, queryKey: getGetLeaderboardQueryKey(period) },
+  const { data, isLoading, isError, error, refetch } = useGetLeaderboard(period, {
+    query: {
+      // When the server returns 503 (cache warming up), retry every 10 s automatically
+      // so the user doesn't have to manually click Retry — the data usually arrives
+      // within 30–60 s of a server restart.
+      refetchInterval: (query) =>
+        isWarmingUp(query.state.error) ? 10_000 : 60_000,
+      staleTime: 60_000,
+      queryKey: getGetLeaderboardQueryKey(period),
+      retry: (failureCount, err) => isWarmingUp(err) && failureCount < 12,
+    },
   });
 
   const cacheAge = useCacheAge(data?.computedAt);
@@ -169,12 +184,27 @@ export default function LeaderboardPage() {
               {isLoading ? (
                 <SkeletonRows />
               ) : isError ? (
-                <tr>
-                  <td colSpan={4} className="py-16 text-center">
-                    <p className="text-sm text-muted-foreground mb-3">Failed to load leaderboard</p>
-                    <button onClick={() => refetch()} className="text-xs underline hover:opacity-80 transition-opacity" style={{ color: "#b3b3b3" }}>Retry</button>
-                  </td>
-                </tr>
+                isWarmingUp(error) ? (
+                  /* Server is still pre-computing the cache for this period (HTTP 503).
+                     Auto-retries every 10 s — no manual action needed. */
+                  <tr>
+                    <td colSpan={4} className="py-16 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <Loader2 className="w-6 h-6 animate-spin" style={{ color: "rgba(148,163,184,0.5)" }} />
+                        <p className="text-sm" style={{ color: "rgba(148,163,184,0.65)" }}>
+                          Leaderboard warming up — refreshing shortly…
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="py-16 text-center">
+                      <p className="text-sm text-muted-foreground mb-3">Failed to load leaderboard</p>
+                      <button onClick={() => refetch()} className="text-xs underline hover:opacity-80 transition-opacity" style={{ color: "#b3b3b3" }}>Retry</button>
+                    </td>
+                  </tr>
+                )
               ) : tab === "volume" ? (
                 volRows.length === 0 ? (
                   <tr><td colSpan={4} className="py-16 text-center text-sm text-muted-foreground">No data yet</td></tr>

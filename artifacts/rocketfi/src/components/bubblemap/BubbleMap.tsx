@@ -699,6 +699,21 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
     newBubbles.sort((a, b) => b.r - a.r);
     bubblesRef.current = newBubbles;
 
+    // Reset hover so the cursor doesn't ghost-highlight a different bubble
+    // after the token list changes (index no longer maps to the same address).
+    hoverIdxRef.current = -1;
+    setTooltip({ visible: false, x: 0, y: 0, token: null });
+
+    // Prune stale entries from price/trade-timestamp caches so removed tokens
+    // don't accumulate forever and don't pollute re-appearing tokens with old data.
+    const activeAddrs = new Set(newBubbles.map(b => b.address));
+    for (const key of initPricesRef.current.keys()) {
+      if (!activeAddrs.has(key)) initPricesRef.current.delete(key);
+    }
+    for (const key of lastTradeTsRef.current.keys()) {
+      if (!activeAddrs.has(key)) lastTradeTsRef.current.delete(key);
+    }
+
     // Run layout synchronously — 300 steps balances quality vs blocking time
     runLayout(newBubbles, W, H, 300);
     layoutTimeRef.current = performance.now(); // mark layout time for fast-open lerp

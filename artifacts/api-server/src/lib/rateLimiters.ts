@@ -27,13 +27,16 @@ const MESSAGE_UPLOAD    = { error: "Too many upload requests — wait a moment a
  * Heavy DB aggregation routes (OHLCV, holders, position, top-wallets,
  * price-history, trade registration).
  *
- * 30 req / min / IP — comfortably above the highest normal polling rate
- * (OHLCV at 8 s = 7.5 req/min per tab; two tabs = 15 req/min) while
- * preventing scripted abuse of full-table aggregations.
+ * 90 req / min / IP — a real user clicking through all six coin-detail tabs
+ * (holders, top-wallets, dev, snipers, position, price-history) fires 6 heavy
+ * requests per page visit.  At 30/min the old limit was exhausted after five
+ * page visits in a minute, causing "Failed to load" errors on tab clicks.
+ * 90/min allows ~15 tab-clicks per minute (3 full page sweeps) while still
+ * blocking scripted full-table abuse.
  */
 export const heavyLimiter = rateLimit({
   windowMs: 60_000,
-  max: 30,
+  max: 90,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: MESSAGE_SLOW_DOWN,

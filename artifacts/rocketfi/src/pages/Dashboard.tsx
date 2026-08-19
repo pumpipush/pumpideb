@@ -901,10 +901,18 @@ export default function Dashboard() {
     offset: (page - 1) * activePageSize,
     platform: platformFilter === "all" ? undefined : platformFilter as ListTokensPlatform,
   };
-  const { data: rawTokens, isLoading: loadingTokens } = useListTokens(listParams, {
-    // Re-fetch every 30 s so logos and market caps that resolved after the
+  const { data: rawTokens, isLoading: loadingTokens, isError: tokensError } = useListTokens(listParams, {
+    // Re-fetch every 15 s so logos and market caps that resolved after the
     // initial load (via enrichment or IPFS fetch) appear without a manual refresh.
-    query: { refetchInterval: 15_000, staleTime: 12_000, queryKey: getListTokensQueryKey(listParams) },
+    // placeholderData keeps the previous good list visible while a background
+    // refetch is in progress — prevents the grid from flashing empty on every
+    // 15-second poll when the server is briefly slow.
+    query: {
+      refetchInterval: 15_000,
+      staleTime:       12_000,
+      queryKey:        getListTokensQueryKey(listParams),
+      placeholderData: (prev: typeof rawTokens) => prev,
+    },
   });
 
 
@@ -935,6 +943,14 @@ export default function Dashboard() {
         staleTime:            4_000,
         refetchOnWindowFocus: false,
         queryKey:             getListTokensQueryKey(bubbleListParams),
+        // Keep the previous token list visible while a refetch is in-flight or
+        // fails — this prevents the bubble map from flashing "Failed to load"
+        // on every 5-second poll when the server is briefly slow.  The map
+        // only shows the error state if it has NEVER successfully loaded at all.
+        placeholderData:      (prev: typeof bubbleRawTokens) => prev,
+        // Fail faster (1 retry instead of 3) so stale→placeholder data takes
+        // over quickly rather than hanging the UI for 45 s before giving up.
+        retry:                1,
       },
     }
   );
@@ -1368,9 +1384,18 @@ export default function Dashboard() {
             ) : !tokens || tokens.length === 0 ? (
               <div className="py-20 text-center text-muted-foreground border border-border/30 border-dashed rounded-sm bg-card/30 mt-1">
                 <Search className="w-8 h-8 mx-auto mb-3 opacity-20" />
-                <p className="text-sm">No coins match your filters.</p>
-                {activeFilterCount > 0 && (
-                  <button onClick={clearFilters} className="mt-3 text-xs text-primary hover:underline">Clear filters</button>
+                {tokensError && !activeFilterCount ? (
+                  /* API failed and no user filter is active — show a proper error, not a filter hint */
+                  <>
+                    <p className="text-sm">Could not load coins — retrying…</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm">No coins match your filters.</p>
+                    {activeFilterCount > 0 && (
+                      <button onClick={clearFilters} className="mt-3 text-xs text-primary hover:underline">Clear filters</button>
+                    )}
+                  </>
                 )}
               </div>
             ) : viewMode === "grid" ? (

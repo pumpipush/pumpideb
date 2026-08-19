@@ -40,10 +40,20 @@ const router: IRouter = Router();
 // Cache key = serialised query-param object so different sort/limit combos
 // each get their own slot.  Max entries capped at 50 to bound memory.
 const _tokenListCache = new Map<string, { payload: unknown; expiresAt: number }>();
-/** Default TTL for cached token lists. Real-time price is handled by SSE; REST only needs freshness for ranking changes. */
-const TOKEN_LIST_TTL         = 60_000;   // ms — trending / volume / graduated
+
+// Keys currently being computed.  A second concurrent request for the same
+// cache key will poll every 250 ms (up to 14 s) waiting for the first
+// computation to populate the cache rather than spawning a duplicate
+// aggregate DB query that would compete for the same connection-pool slots.
+// This prevents DB pool saturation during cold-start when the dashboard,
+// bubble map, and explore list all fire simultaneously.
+const _computingKeys = new Set<string>();
+/** Default TTL for cached token lists. Real-time price is handled by SSE; REST only needs freshness for ranking changes.
+ *  5 minutes is safe: bubble sizes / explore rankings change slowly, and the SSE live-update feed delivers
+ *  individual token price/volume ticks in real time so the REST snapshot only needs to refresh occasionally. */
+const TOKEN_LIST_TTL         = 5 * 60_000; // 5 min — trending / volume / marketcap / graduated
 /** Shorter TTL for the "newest" sort — ensures fresh tokens appear quickly on page load even before SSE events arrive. */
-const TOKEN_LIST_TTL_NEWEST  =  5_000;   // ms — newest sort only
+const TOKEN_LIST_TTL_NEWEST  =  5_000;     // 5 s  — newest sort only
 const TOKEN_LIST_MAX = 50;        // max distinct cache slots
 
 function _cacheGet(key: string): unknown | null {
@@ -152,6 +162,27 @@ router.get("/tokens", asyncWrap(async (req, res) => {
     res.json(cached);
     return;
   }
+
+  // ── In-flight deduplication ──────────────────────────────────────────────
+  // If another request is already computing this exact cache key, wait for
+  // the cache to be populated rather than running a duplicate expensive query.
+  if (_computingKeys.has(cacheKey)) {
+    const deadline = Date.now() + 14_000;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 250));
+      const fresh = _cacheGet(cacheKey);
+      if (fresh !== null) {
+        const hitTtl = sort === "newest" ? TOKEN_LIST_TTL_NEWEST : TOKEN_LIST_TTL;
+        res.setHeader("Cache-Control", `public, max-age=${Math.floor(hitTtl / 1_000)}, stale-while-revalidate=${Math.floor(hitTtl / 1_000)}`);
+        res.setHeader("X-Cache", "DEDUP");
+        res.json(fresh);
+        return;
+      }
+      if (!_computingKeys.has(cacheKey)) break; // first compute finished (may have failed)
+    }
+    // Timed out or first compute failed — fall through and compute ourselves
+  }
+  _computingKeys.add(cacheKey);
 
   // ── Trending: smart score ranking ────────────────────────────────────────────
   // Score = weighted sum of multiple signals:
@@ -316,6 +347,7 @@ router.get("/tokens", asyncWrap(async (req, res) => {
     const pctChanges = await fetch24hPctChanges(mapped.map(r => r.address));
     const payload = ListTokensResponse.parse(mapped.map(r => formatToken(r, pctChanges.get(r.address), Number(r.trades1h ?? 0))));
     _cacheSet(cacheKey, payload);
+    _computingKeys.delete(cacheKey);
     res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
     res.setHeader("X-Cache", "MISS");
     res.json(payload);
@@ -367,10 +399,11 @@ router.get("/tokens", asyncWrap(async (req, res) => {
       FROM   tokens t
       LEFT JOIN (
         SELECT token_address,
-               SUM(CAST(NULLIF(eth_amount, '') AS NUMERIC)) AS vol_sol,
-               COUNT(*)                                      AS trades,
-               COUNT(CASE WHEN is_buy  THEN 1 END)          AS buys,
-               COUNT(DISTINCT trader_address)                AS sellers
+               SUM(CASE WHEN eth_amount ~ '^[0-9]+(\.[0-9]+)?$'
+                        THEN eth_amount::numeric ELSE 0 END) AS vol_sol,
+               COUNT(*)                                       AS trades,
+               COUNT(CASE WHEN is_buy IS TRUE THEN 1 END)    AS buys,
+               COUNT(DISTINCT trader_address)                 AS sellers
         FROM   trades
         WHERE  timestamp > NOW() - INTERVAL '24 hours'
         GROUP  BY token_address
@@ -406,7 +439,9 @@ router.get("/tokens", asyncWrap(async (req, res) => {
       realEthReserves:      r["real_eth_reserves"] as string,
       marketCapEth:         r["market_cap_eth"] as string | null,
       priceEth:             r["price_eth"] as string | null,
-      volumeEth:            r["volume_eth"] as string | null,
+      // Use 24h volume (vol_sol_24h) so bubble sizes reflect TODAY's activity,
+      // not all-time accumulated volume which never changes for old tokens.
+      volumeEth:            String(r["vol_sol_24h"] ?? "0"),
       twitterUrl:           r["twitter_url"] as string | null,
       telegramUrl:          r["telegram_url"] as string | null,
       websiteUrl:           r["website_url"] as string | null,
@@ -424,6 +459,7 @@ router.get("/tokens", asyncWrap(async (req, res) => {
     const pctChanges = await fetch24hPctChanges(mapped.map(r => r.address));
     const payload = ListTokensResponse.parse(mapped.map(r => formatToken(r, pctChanges.get(r.address))));
     _cacheSet(cacheKey, payload);
+    _computingKeys.delete(cacheKey);
     res.setHeader("Cache-Control", `public, max-age=${Math.floor(TOKEN_LIST_TTL / 1_000)}, stale-while-revalidate=${Math.floor(TOKEN_LIST_TTL / 1_000)}`);
     res.setHeader("X-Cache", "MISS");
     res.json(payload);
@@ -495,6 +531,7 @@ router.get("/tokens", asyncWrap(async (req, res) => {
   const ttl = sort === "newest" ? TOKEN_LIST_TTL_NEWEST : TOKEN_LIST_TTL;
   const maxAge = Math.floor(ttl / 1_000);
   _cacheSet(cacheKey, payload, ttl);
+  _computingKeys.delete(cacheKey);
   res.setHeader("Cache-Control", `public, max-age=${maxAge}, stale-while-revalidate=${maxAge}`);
   res.setHeader("X-Cache", "MISS");
   res.json(payload);
@@ -1177,5 +1214,19 @@ function formatToken(t: typeof tokensTable.$inferSelect | Record<string, unknown
     trades1h: trades1h ?? null,
   };
 }
+
+// ── Startup cache pre-warming ─────────────────────────────────────────────────
+// Fire the two most expensive cold queries (trending + volume) once, 8 s after
+// startup, so the first real user hits the in-memory cache instead of waiting
+// 5-8 s for raw DB aggregation.  We delay to let migrations and adapters settle.
+setTimeout(async () => {
+  const port = process.env.PORT ?? 8080;
+  const base = `http://localhost:${port}`;
+  await Promise.allSettled([
+    fetch(`${base}/api/tokens?sort=trending&limit=20`),
+    fetch(`${base}/api/tokens?sort=volume&limit=30`),
+    fetch(`${base}/api/tokens?sort=marketcap&limit=20`),
+  ]);
+}, 8_000);
 
 export default router;
