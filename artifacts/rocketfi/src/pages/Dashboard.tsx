@@ -1062,15 +1062,18 @@ export default function Dashboard() {
     }
 
     // Live SSE tokens only belong on tabs where "brand new coin" is relevant:
-    //   • New      — always show live tokens (this is the point of the tab)
+    //   • New      — show only once they have ≥1 trade (filters rug/dead launches)
     //   • Trending — show on page 1 (a new coin can immediately be hot)
     //   • Volume   — NEVER: a coin just launched has zero 24h volume; showing it here
     //               contaminates the ranked list with unranked noise
     //   • Graduated — NEVER: brand-new launches haven't completed the bonding curve
-    // Live SSE tokens on the New tab: always show regardless of tradeCount or
-    // image — these are real-time events; filtering them defeats the feed's purpose.
+    // Require at least 1 confirmed trade before a new token appears in the feed.
+    // tradeCount is pulled from liveTradeStats first (updated per SSE trade event)
+    // so the card appears the moment the first trade lands — not on a polling cycle.
     const showLive = activeTab === "New";
-    const filteredLiveOnly = showLive ? liveOnly : [];
+    const filteredLiveOnly = showLive
+      ? liveOnly.filter((t) => (t.tradeCount ?? 0) >= 1)
+      : [];
     const apiLive    = apiDisplay.filter((t) => t.isLive);
     const apiNonLive = apiDisplay.filter((t) => !t.isLive);
     const combined = [...filteredLiveOnly, ...apiLive, ...apiNonLive];

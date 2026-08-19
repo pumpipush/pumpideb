@@ -150,8 +150,21 @@ export default function AppInterface({ tokenAddress: routeAddress }: AppInterfac
 
 type LaunchStep = "idle" | "uploading" | "building" | "signing" | "confirming" | "done" | "error";
 
-
 type LaunchPlatform = "pumpfun" | "raydium";
+
+/**
+ * Renders a trade timestamp that ticks every second so "0s" advances to "1s",
+ * "2s", etc. without requiring an external re-render trigger.
+ * Isolating the timer here avoids re-rendering the entire AppInterface.
+ */
+function TradeAge({ ts }: { ts: string | number }) {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => bump(n => n + 1), 1_000);
+    return () => clearInterval(id);
+  }, []);
+  return <>{timeAgo(ts)}</>;
+}
 
 function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (addr: string) => void }) {
   const [name,         setName]         = useState("");
@@ -2758,9 +2771,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                                 <div style={{ width: 3, height: "100%", minHeight: 36, background: stripColor, opacity: isLive ? 1 : 0.35 }} />
                               </td>
 
-                              {/* Time */}
+                              {/* Time — TradeAge re-renders every 1s so "0s" advances in real time */}
                               <td className="px-3 py-2.5 text-left font-mono text-[13px] whitespace-nowrap" style={{ color: "#b3b3b3" }}>
-                                {timeAgo(trade.timestamp)}
+                                <TradeAge ts={trade.timestamp} />
                               </td>
 
                               {/* Type — plain text */}
