@@ -497,9 +497,14 @@ router.get("/tokens", asyncWrap(async (req, res) => {
       conditions.push(eq(tokensTable.platform, platform));
     }
   }
-  // "newest" sort: no tradeCount gate — a newly created token appears immediately
-  // even before its first trade lands. The frontend live feed already surfaces
-  // brand-new coins, so the REST list should be consistent with that.
+  // The New tab should only show tokens after their logo metadata has resolved.
+  // Apply this server-side so pagination fills with usable tokens instead of
+  // returning a page whose slots are later removed by the frontend.
+  if (sort === "newest") {
+    conditions.push(sql`${tokensTable.imageUrl} IS NOT NULL AND BTRIM(${tokensTable.imageUrl}) <> ''`);
+  }
+  // "newest" sort intentionally has no tradeCount gate — a newly created token
+  // can appear as soon as its logo metadata is available.
 
   if (conditions.length > 0) {
     query = query.where(and(...conditions));

@@ -1089,10 +1089,12 @@ export default function Dashboard() {
     }
     // onlyGraduated toggle: for the Graduated tab the server already filters — skip to avoid double-filter
     if (onlyGraduated && activeTab !== "Graduated") apiDisplay = apiDisplay.filter((t) => t.graduated);
-    // "Has image" filter: never apply to the New tab — newly created tokens
-    // take seconds→minutes to load IPFS metadata; hiding them defeats the point
-    // of a "just launched" view. Show a placeholder image instead.
-    if (onlyWithImage && activeTab !== "New") apiDisplay = apiDisplay.filter((t) => !!t.imageUrl);
+    // New is intentionally logo-gated: a coin stays out of the tab until its
+    // metadata has produced a real image URL. The optional filter still applies
+    // to the other tabs when enabled.
+    if (activeTab === "New" || onlyWithImage) {
+      apiDisplay = apiDisplay.filter((t) => !!t.imageUrl?.trim());
+    }
     // Graduated tab: server already returned only graduated=true tokens; no client-side mcap threshold needed.
     if (minMcap.trim()) {
       const min = parseFloat(minMcap) || 0;
@@ -1117,7 +1119,7 @@ export default function Dashboard() {
     // so the card appears the moment the first trade lands — not on a polling cycle.
     const showLive = activeTab === "New";
     const filteredLiveOnly = showLive
-      ? liveOnly.filter((t) => (t.tradeCount ?? 0) >= 1)
+      ? liveOnly.filter((t) => (t.tradeCount ?? 0) >= 1 && !!t.imageUrl?.trim())
       : [];
     const apiLive    = apiDisplay.filter((t) => t.isLive);
     const apiNonLive = apiDisplay.filter((t) => !t.isLive);

@@ -30,6 +30,7 @@ vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 // ── Test-token identity ────────────────────────────────────────────────────────
 // Use a unique address so parallel test runs and leftover DB state don't collide.
 const TEST_ADDR = `TstLL${"A".repeat(32)}${Date.now().toString(36)}`.slice(0, 44);
+const NO_IMAGE_ADDR = `TstLL${"B".repeat(32)}${Date.now().toString(36)}`.slice(0, 44);
 
 // ── Server lifecycle ───────────────────────────────────────────────────────────
 let server: Server;
@@ -37,6 +38,8 @@ let base: string;
 
 beforeAll(async () => {
   // 1. Insert the test token — raydium_launchlab with placeholder symbol ???
+  //    and a logo, so the test continues to cover the existing ??? visibility
+  //    rule independently from the New-tab logo gate.
   //    Only required-without-default fields need to be provided; the rest use
   //    schema defaults (virtualTokenReserves, chain, platform, etc.).
   // Insert with tradeCount=1: in production, raydium_launchlab tokens with ???
@@ -51,9 +54,22 @@ beforeAll(async () => {
     platform:       "raydium_launchlab",
     chain:          "solana",
     tradeCount:     "1",
+    imageUrl:       "https://example.com/test-launchlab.png",
   }).onConflictDoNothing();
 
-  // 2. Start an in-process HTTP server on a random OS-assigned port.
+  // 2. Insert a second token with no logo. It must not leak into newest results.
+  await db.insert(tokensTable).values({
+    address:        NO_IMAGE_ADDR,
+    name:           "TestNoImageLaunchLab",
+    symbol:         "NOIMG",
+    creatorAddress: "TestCreator22222222222222222222T",
+    platform:       "raydium_launchlab",
+    chain:          "solana",
+    tradeCount:     "1",
+    imageUrl:       null,
+  }).onConflictDoNothing();
+
+  // 3. Start an in-process HTTP server on a random OS-assigned port.
   //    We cannot reuse port 8080 (the dev server might be running there),
   //    so `listen(0)` lets the OS pick a free port.
   server = createServer(app);
@@ -68,23 +84,24 @@ beforeAll(async () => {
 afterAll(async () => {
   // Remove the test token so it doesn't pollute the real DB.
   await db.delete(tokensTable).where(eq(tokensTable.address, TEST_ADDR));
+  await db.delete(tokensTable).where(eq(tokensTable.address, NO_IMAGE_ADDR));
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function fetchTokens(params: Record<string, string>): Promise<Array<{ address: string; symbol: string }>> {
+async function fetchTokens(params: Record<string, string>): Promise<Array<{ address: string; symbol: string; imageUrl: string | null }>> {
   const qs = new URLSearchParams({ sort: "newest", limit: "200", ...params }).toString();
   const res = await fetch(`${base}/tokens?${qs}`);
   if (!res.ok) throw new Error(`GET /tokens?${qs} returned ${res.status}`);
-  return res.json() as Promise<Array<{ address: string; symbol: string }>>;
+  return res.json() as Promise<Array<{ address: string; symbol: string; imageUrl: string | null }>>;
 }
 
-async function fetchTokensTrending(params: Record<string, string>): Promise<Array<{ address: string; symbol: string }>> {
+async function fetchTokensTrending(params: Record<string, string>): Promise<Array<{ address: string; symbol: string; imageUrl: string | null }>> {
   const qs = new URLSearchParams({ sort: "trending", limit: "200", ...params }).toString();
   const res = await fetch(`${base}/tokens?${qs}`);
   if (!res.ok) throw new Error(`GET /tokens?${qs} returned ${res.status}`);
-  return res.json() as Promise<Array<{ address: string; symbol: string }>>;
+  return res.json() as Promise<Array<{ address: string; symbol: string; imageUrl: string | null }>>;
 }
 
 function containsTestToken(tokens: Array<{ address: string }>): boolean {
@@ -103,6 +120,14 @@ describe("GET /tokens — ??? visibility with sort=newest (Drizzle ORM path)", (
     // Confirm the returned record really has ??? symbol
     const found = tokens.find(t => t.address === TEST_ADDR);
     expect(found?.symbol).toBe("???");
+  });
+
+  it("excludes tokens without a logo from the New results", async () => {
+    const tokens = await fetchTokens({ platform: "raydium_launchlab" });
+    expect(
+      tokens.some(t => t.address === NO_IMAGE_ADDR),
+      `Token ${NO_IMAGE_ADDR} without imageUrl must NOT appear in newest results`,
+    ).toBe(false);
   });
 
   it("excludes ??? token when no platform filter is provided (all-platforms view)", async () => {
