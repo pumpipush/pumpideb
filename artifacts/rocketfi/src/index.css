@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @keyframes chartSpinnerRotate { to { transform: rotate(360deg); } }
+@keyframes chartSkeletonFadeIn { from { opacity: 0; } to { opacity: 1; } }
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
 

@@ -313,6 +313,13 @@ export function KLineChartCanvas({
   const ohlcRef           = useRef<OhlcData | null>(null)
   const axisUnsubRef      = useRef<(() => void) | null>(null)
 
+  // ── Period-switch skeleton — shows a loading overlay instead of black flash ─
+  // True from the moment the period changes until onHistoryLoaded fires.
+  // prevPeriodTextRef is updated synchronously in handlePeriodChange so the
+  // guard in handlePeriodChange (no-op re-select) always compares correctly.
+  const [periodSwitching, setPeriodSwitching] = useState(false)
+  const prevPeriodTextRef = useRef(period.text)
+
   // ── Datafeed — recreated when address or retryKey changes ────────────────
   const datafeed = useMemo(() => new PumpiDatafeed(), [address, retryKey])
 
@@ -374,6 +381,8 @@ export function KLineChartCanvas({
 
   // ── Reset chart status when address or retry changes ─────────────────────
   useEffect(() => {
+    setPeriodSwitching(false)
+    prevPeriodTextRef.current = period.text
     setChartStatus('loading')
     setOhlc(null)
     ohlcRef.current = null
@@ -386,6 +395,7 @@ export function KLineChartCanvas({
     axisUnsubRef.current?.()
     axisUnsubRef.current = null
     if (lastPriceLabelRef.current) lastPriceLabelRef.current.style.display = 'none'
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, retryKey])
 
   // Cleanup timer + axis subscription on unmount
@@ -402,6 +412,8 @@ export function KLineChartCanvas({
 
   // ── Called by KLineChartProWrapper after history fetch resolves ──────────
   const handleHistoryLoaded = useCallback((count: number) => {
+    // Period switch is over — the new period's data request has completed.
+    setPeriodSwitching(false)
     // Always clear any pending timer first — handles both initial load and
     // mid-session period switches where the previous period had data.
     if (emptyTimerRef.current) {
@@ -430,6 +442,9 @@ export function KLineChartCanvas({
   // candle arriving *after* the 5-second timeout (e.g. Birdeye came back up)
   // must also dismiss the overlay.  We unconditionally set 'loaded' here and
   // clear any pending timer so both pre-timeout and post-timeout paths work.
+  // NOTE: do NOT clear periodSwitching here — the datafeed emits live candles
+  // before onHistoryLoaded resolves, so clearing here would remove the skeleton
+  // before the replacement chart has rendered the fetched bars.
   const handleOhlcChange = useCallback((data: OhlcData) => {
     ohlcRef.current = data
     setOhlc(data)
@@ -456,6 +471,29 @@ export function KLineChartCanvas({
   }, [livePrice, liveSolAmount, datafeed])
 
   // ── Toolbar handlers ──────────────────────────────────────────────────────
+
+  // ── Period change — must be synchronous to avoid black flash ──────────────
+  // Setting periodSwitching=true in the same React update as setPeriod ensures
+  // the skeleton overlay is present in the very next paint, before
+  // KLineChartProWrapper's [period.text] effect tears down and reinitialises
+  // the chart canvas.  A useEffect-based approach fires one commit too late.
+  //
+  // Guard: if the user re-selects the already-active period the chart wrapper
+  // does NOT reinitialise (its effect key is unchanged), so onHistoryLoaded
+  // will never fire — leaving the skeleton stuck visible.  Early-return to avoid
+  // a permanent overlay.
+  const handlePeriodChange = useCallback((p: Period) => {
+    if (p.text === prevPeriodTextRef.current) return
+    prevPeriodTextRef.current = p.text
+    // Cancel any in-flight "unavailable" timer for the outgoing period.
+    if (emptyTimerRef.current) {
+      clearTimeout(emptyTimerRef.current)
+      emptyTimerRef.current = null
+    }
+    setPeriodSwitching(true)
+    setPeriod(p)
+  }, [])
+
   const handlePriceModeChange = useCallback((mode: PriceMode) => {
     setPriceMode(mode)
     // priceMode state change triggers the useEffect above which applies formatter
@@ -546,7 +584,7 @@ export function KLineChartCanvas({
       {/* ── Custom toolbar (top) ── */}
       <CustomToolbar
         period={period}
-        onPeriodChange={setPeriod}
+        onPeriodChange={handlePeriodChange}
         priceMode={priceMode}
         onPriceModeChange={handlePriceModeChange}
         candleType={candleType}
@@ -572,8 +610,8 @@ export function KLineChartCanvas({
           leftOffset={drawingBarVisible ? 55 : 10}
         />
 
-        {/* Loading spinner overlay — shown while waiting for first bar after mount / period switch */}
-        {chartStatus === 'loading' && (
+        {/* Loading spinner overlay — shown while waiting for first bar after token mount */}
+        {chartStatus === 'loading' && !periodSwitching && (
           <div
             style={{
               position: 'absolute',
@@ -598,8 +636,37 @@ export function KLineChartCanvas({
           </div>
         )}
 
+        {/* Period-switch skeleton — fades over the chart while new OHLCV loads.
+            Shown only during the brief gap between period change and data arrival,
+            preventing the black flash from the chart canvas teardown/reinit. */}
+        {periodSwitching && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 10,
+              background: '#080808',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              animation: 'chartSkeletonFadeIn 0.08s ease-out',
+            }}
+          >
+            <svg
+              width="32"
+              height="32"
+              viewBox="0 0 36 36"
+              style={{ animation: 'chartSpinnerRotate 0.9s linear infinite' }}
+            >
+              <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
+              <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(41,98,255,0.60)" strokeWidth="3"
+                strokeLinecap="round" strokeDasharray="30 65" />
+            </svg>
+          </div>
+        )}
+
         {/* Chart unavailable overlay — shown when 0 bars and no live tick for 5s */}
-        {chartStatus === 'unavailable' && (
+        {chartStatus === 'unavailable' && !periodSwitching && (
           <ChartUnavailable onRetry={handleRetry} />
         )}
 
@@ -678,4 +745,3 @@ export function KLineChartCanvas({
       />
     </div>
   )
-}
