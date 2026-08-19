@@ -143,7 +143,29 @@ function setTabInUrl(tab: SortTab) {
   window.history.pushState(null, "", qs ? `?${qs}` : window.location.pathname);
 }
 
-// ─── Token image with broken-URL fallback ────────────────────────────────────
+// ─── Token image with gradient fallback ──────────────────────────────────────
+// When a token has no image yet (enrichment pending or permanently missing),
+// render a vivid gradient placeholder using the same logic as TokenAvatar so
+// every card always looks intentional — no more blank "?" boxes.
+function tokenGradientStyle(symbol: string): string {
+  // Deterministic hash of the symbol → one of 8 gradient pairs
+  let h = 0;
+  const s = symbol || "?";
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffffffff;
+  const GRADIENTS: [string, string, string][] = [
+    ["#6366f1", "#8b5cf6", "#1e1b4b"],
+    ["#3b82f6", "#06b6d4", "#0c1a2e"],
+    ["#0ea5e9", "#a855f7", "#0a1628"],
+    ["#10b981", "#3b82f6", "#0a1f18"],
+    ["#f59e0b", "#ef4444", "#1f1208"],
+    ["#ec4899", "#8b5cf6", "#1f0a1a"],
+    ["#06b6d4", "#10b981", "#081a1f"],
+    ["#a855f7", "#6366f1", "#150a1f"],
+  ];
+  const [c1, c2, bg] = GRADIENTS[Math.abs(h) % GRADIENTS.length];
+  return `radial-gradient(ellipse at 30% 25%, ${c1}cc, ${c2}99 70%), ${bg}`;
+}
+
 function TokenImage({ imageUrl, symbol, className, textSize = "text-5xl" }: {
   imageUrl?: string | null;
   symbol: string;
@@ -156,10 +178,19 @@ function TokenImage({ imageUrl, symbol, className, textSize = "text-5xl" }: {
   useEffect(() => { setBroken(false); setLoaded(false); }, [imageUrl]);
   const src = resolveImageUrl(imageUrl ?? "") ?? "";
   if (!imageUrl || broken) {
+    // Gradient placeholder — visually distinct per token, never looks broken
+    const letter = (symbol || "?").replace(/^\$/, "").charAt(0).toUpperCase();
     return (
-      <div className={cn("w-full h-full flex items-center justify-center font-bold text-white/20 select-none", textSize, className)}
-        style={{ background: "#0d0d0d" }}>
-        ?
+      <div
+        className={cn("w-full h-full flex items-center justify-center select-none", className)}
+        style={{ background: tokenGradientStyle(symbol) }}
+      >
+        <span
+          className="font-black text-white/80 leading-none"
+          style={{ fontSize: textSize === "text-5xl" ? "2.5rem" : "1.1rem" }}
+        >
+          {letter}
+        </span>
       </div>
     );
   }

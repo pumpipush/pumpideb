@@ -39,9 +39,9 @@ import { bs58Decode as _bs58Decode, decodeLabCreateParamsRaw } from "./adapters/
 import { fetchMintTotalSupply } from "./adapters/raydium-launchlab";
 import { fetchBirdeyeTokenOverview, getSolPriceUsd } from "./birdeye";
 
-const POLL_INTERVAL_MS       = 30_000;
-const IDENTITY_BATCH_SIZE    = 20;  // max tokens per identity tick
-const IMAGE_BATCH_SIZE       = 10;  // max tokens per image tick
+const POLL_INTERVAL_MS       = 10_000; // 10 s — was 30 s; faster cycle means new tokens enrich in <10 s
+const IDENTITY_BATCH_SIZE    = 50;  // was 20 — process more tokens per tick to clear backlog faster
+const IMAGE_BATCH_SIZE       = 25;  // was 10 — more image fetches per tick
 const IMAGE_RETRY_WINDOW_MS  = 2 * 60 * 60 * 1_000; // 2 hours — stop retrying image after this
 
 const log = logger.child({ module: "enrichment" });
