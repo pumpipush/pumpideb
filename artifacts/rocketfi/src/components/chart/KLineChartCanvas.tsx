@@ -306,7 +306,12 @@ export function KLineChartCanvas({
   // ── Chart status — tracks whether OHLCV data arrived ─────────────────────
   const [chartStatus, setChartStatus] = useState<'loading' | 'loaded' | 'unavailable'>('loading')
   const [retryKey,    setRetryKey]    = useState(0)
-  const emptyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const emptyTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Last-price label (colored Y-axis tag) — direct DOM, no React state ──────
+  const lastPriceLabelRef = useRef<HTMLDivElement>(null)
+  const ohlcRef           = useRef<OhlcData | null>(null)
+  const axisUnsubRef      = useRef<(() => void) | null>(null)
 
   // ── Datafeed — recreated when address or retryKey changes ────────────────
   const datafeed = useMemo(() => new PumpiDatafeed(), [address, retryKey])
@@ -328,6 +333,28 @@ export function KLineChartCanvas({
   solPriceRef.current = solPrice
   supplyRef.current   = supply
 
+  // ── Sync last-price label to Y position of current close — direct DOM ───────
+  // Called on every live candle, axis scroll/zoom, and mode switch.
+  // Uses direct DOM manipulation to avoid triggering React re-renders at 60fps.
+  const syncLastPriceLabel = useCallback(() => {
+    const el  = lastPriceLabelRef.current
+    if (!el) return
+    const data = ohlcRef.current
+    const fmt  = chartRef.current?.getMcapFmt?.()
+    if (!data || !fmt) { el.style.display = 'none'; return }
+    const y = chartRef.current?.getCloseYPixel?.(data.close)
+    if (y == null || !isFinite(y)) { el.style.display = 'none'; return }
+    // Clamp to chart pane bounds so the label stays visible even when the
+    // current price has drifted outside the visible Y range (like pump.fun).
+    const paneH = el.parentElement?.clientHeight ?? 0
+    const clampedY = paneH > 0 ? Math.max(9, Math.min(paneH - 9, Math.round(y))) : Math.round(y)
+    const color = data.close > data.open ? '#26a69a' : data.close < data.open ? '#ef5350' : '#888888'
+    el.style.display         = 'flex'
+    el.style.top             = `${clampedY}px`
+    el.style.backgroundColor = color
+    el.textContent           = fmt(data.close)
+  }, [])
+
   // ── Apply / remove Y-axis formatter on mount and on mode switch ───────────
   // Runs after child effects (chart init), so chartRef is ready on first run.
   useEffect(() => {
@@ -338,29 +365,38 @@ export function KLineChartCanvas({
     } else {
       chartRef.current?.setYAxisFormatter(null)
     }
+    // Re-sync label after formatter change (show/hide depending on mode).
+    setTimeout(syncLastPriceLabel, 50)
   // address dep: KLineChartProWrapper remounts on token switch (key={address}),
   // resetting its internal yAxisFormatterRef — re-registering here ensures the
   // new wrapper instance gets the formatter on its first onHistoryLoaded call.
-  }, [priceMode, address])
+  }, [priceMode, address, syncLastPriceLabel])
 
   // ── Reset chart status when address or retry changes ─────────────────────
   useEffect(() => {
     setChartStatus('loading')
     setOhlc(null)
+    ohlcRef.current = null
     setCrosshairOhlc(null)
     if (emptyTimerRef.current) {
       clearTimeout(emptyTimerRef.current)
       emptyTimerRef.current = null
     }
+    // Unsubscribe old axis listener so the new chart instance gets a fresh one.
+    axisUnsubRef.current?.()
+    axisUnsubRef.current = null
+    if (lastPriceLabelRef.current) lastPriceLabelRef.current.style.display = 'none'
   }, [address, retryKey])
 
-  // Cleanup timer on unmount
+  // Cleanup timer + axis subscription on unmount
   useEffect(() => {
     return () => {
       if (emptyTimerRef.current) {
         clearTimeout(emptyTimerRef.current)
         emptyTimerRef.current = null
       }
+      axisUnsubRef.current?.()
+      axisUnsubRef.current = null
     }
   }, [])
 
@@ -382,7 +418,12 @@ export function KLineChartCanvas({
         setChartStatus(prev => prev === 'loading' ? 'unavailable' : prev)
       }, 5_000)
     }
-  }, [])
+    // Subscribe to scroll/zoom once so the label stays pinned after history loads.
+    if (!axisUnsubRef.current) {
+      axisUnsubRef.current = chartRef.current?.subscribeAxisChange?.(syncLastPriceLabel) ?? null
+    }
+    syncLastPriceLabel()
+  }, [syncLastPriceLabel])
 
   // ── OHLC update — always recovers from any non-loaded state ─────────────
   // The datafeed polls even after the 'unavailable' overlay appears, so a
@@ -390,13 +431,15 @@ export function KLineChartCanvas({
   // must also dismiss the overlay.  We unconditionally set 'loaded' here and
   // clear any pending timer so both pre-timeout and post-timeout paths work.
   const handleOhlcChange = useCallback((data: OhlcData) => {
+    ohlcRef.current = data
     setOhlc(data)
     if (emptyTimerRef.current) {
       clearTimeout(emptyTimerRef.current)
       emptyTimerRef.current = null
     }
     setChartStatus('loaded')
-  }, [])
+    syncLastPriceLabel()
+  }, [syncLastPriceLabel])
 
   // ── Retry — bumps retryKey which recreates the datafeed + remounts chart ──
   const handleRetry = useCallback(() => {
@@ -529,10 +572,60 @@ export function KLineChartCanvas({
           leftOffset={drawingBarVisible ? 55 : 10}
         />
 
+        {/* Loading spinner overlay — shown while waiting for first bar after mount / period switch */}
+        {chartStatus === 'loading' && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#080808',
+              zIndex: 10,
+            }}
+          >
+            <svg
+              width="36"
+              height="36"
+              viewBox="0 0 36 36"
+              style={{ animation: 'chartSpinnerRotate 0.9s linear infinite' }}
+            >
+              <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3" />
+              <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(41,98,255,0.75)" strokeWidth="3"
+                strokeLinecap="round" strokeDasharray="30 65" />
+            </svg>
+          </div>
+        )}
+
         {/* Chart unavailable overlay — shown when 0 bars and no live tick for 5s */}
         {chartStatus === 'unavailable' && (
           <ChartUnavailable onRetry={handleRetry} />
         )}
+
+        {/* Colored last-price label — mcap value pinned to current price on Y-axis right edge.
+            Mirrors pump.fun's green/red tag. Updated via direct DOM manipulation (no re-render). */}
+        <div
+          ref={lastPriceLabelRef}
+          style={{
+            position: 'absolute',
+            right: 0,
+            display: 'none',
+            alignItems: 'center',
+            transform: 'translateY(-50%)',
+            color: '#ffffff',
+            fontSize: 11,
+            fontFamily: "'Trebuchet MS', sans-serif",
+            padding: '2px 5px',
+            borderRadius: '2px 0 0 2px',
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+            zIndex: 12,
+            lineHeight: '16px',
+            minWidth: 44,
+            letterSpacing: '0.01em',
+          }}
+        />
 
         <KLineChartProWrapper
           key={`${address}-${retryKey}`} // remount on token switch or retry

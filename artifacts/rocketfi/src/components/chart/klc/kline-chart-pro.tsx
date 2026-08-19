@@ -21,10 +21,17 @@ let _activeMcapFmt: ((rawPrice: number) => string) | null = null
 // KLC initialises the Y-axis with placeholder tick values (~1–5 SOL/token);
 // formatting those as market-cap produces nonsensical "$150 B" labels.
 let _dataIsLoaded = false
+// Tick snapshot used by getCloseYPixel for Y-pixel interpolation.
+let _lastTicks: Array<{ coord: number; value: number }> = []
 
 registerYAxis({
   name: 'mcap',
   createTicks: ({ defaultTicks }) => {
+    // Capture positive ticks for external Y-pixel queries (last-price label).
+    _lastTicks = defaultTicks
+      .map(t => ({ coord: t.coord, value: Number(t.value) }))
+      .filter(t => t.value > 0)
+
     // Always blank ticks until real OHLCV data has landed.
     // KLC starts with a placeholder 0–10 range; at precision=9 those labels
     // become "10.00000000" etc., which looks broken for any display mode.
@@ -236,6 +243,12 @@ export interface KLineChartRef {
   setCandleType:     (type: string) => void
   setYAxisFormatter: (fmt: ((val: number) => string) | null) => void
   setStyles:         (styles: any) => void
+  /** Returns Y pixel (relative to pane top) for rawPrice; null when ticks not ready. */
+  getCloseYPixel:    (rawPrice: number) => number | null
+  /** Returns the active mcap formatter, or null when in price mode. */
+  getMcapFmt:        () => ((v: number) => string) | null
+  /** Subscribes cb to scroll/zoom/range-change; returns an unsubscribe fn. */
+  subscribeAxisChange: (cb: () => void) => () => void
 }
 
 interface Props {
@@ -300,6 +313,33 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
     },
     setStyles: (styles) => {
       chartRef.current?.setStyles?.(styles)
+    },
+    getCloseYPixel: (rawPrice: number) => {
+      if (_lastTicks.length < 2 || rawPrice <= 0) return null
+      // Sort descending by value: high price → small coord (top), low price → large coord (bottom)
+      const ticks = [..._lastTicks].sort((a, b) => b.value - a.value)
+      // Interpolate within bracket
+      for (let i = 0; i < ticks.length - 1; i++) {
+        const hi = ticks[i], lo = ticks[i + 1]
+        if (rawPrice <= hi.value && rawPrice >= lo.value) {
+          const frac = (hi.value - rawPrice) / (hi.value - lo.value)
+          return hi.coord + frac * (lo.coord - hi.coord)
+        }
+      }
+      // Extrapolate outside visible range
+      const hi = ticks[0], lo = ticks[ticks.length - 1]
+      const pxPerVal = (lo.coord - hi.coord) / (lo.value - hi.value) // negative
+      return rawPrice > hi.value
+        ? hi.coord + pxPerVal * (rawPrice - hi.value)
+        : lo.coord + pxPerVal * (rawPrice - lo.value)
+    },
+    getMcapFmt: () => _activeMcapFmt,
+    subscribeAxisChange: (cb: () => void) => {
+      const klc = getKlcChart(containerRef.current!)
+      if (!klc?.subscribeAction) return () => {}
+      const events = ['onVisibleRangeChange', 'onZoom', 'onScroll'] as const
+      events.forEach(ev => klc.subscribeAction(ev, cb))
+      return () => events.forEach(ev => klc.unsubscribeAction?.(ev, cb))
     },
   }))
 
@@ -438,6 +478,7 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
       // Reset module-level flags so next mount starts clean (no stale mcap labels)
       _dataIsLoaded  = false
       _activeMcapFmt = null
+      _lastTicks     = []
       if (containerRef.current) containerRef.current.innerHTML = ''
       chartRef.current = null
     }
