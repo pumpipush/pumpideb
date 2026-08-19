@@ -1555,6 +1555,19 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   // Live SSE stream — real-time trade events
   const { liveTrades, liveToken, connected } = useTokenStream(selectedAddress);
 
+  // A PumpAPI migration snapshot can arrive before the first PumpSwap trade.
+  // Refresh the canonical token query immediately so Buy/Sell routing switches
+  // from the pump.fun bonding curve to Jupiter without waiting for its normal
+  // cache window or a page reload.
+  useEffect(() => {
+    if (
+      liveToken?.platform === "pumpswap" &&
+      (token?.platform !== "pumpswap" || !token.graduated)
+    ) {
+      void refetchToken();
+    }
+  }, [liveToken?.platform, token?.platform, token?.graduated, refetchToken]);
+
   // Re-fetch position whenever a genuinely new live trade arrives.
   // We watch liveTrades[0]?.id instead of liveTrades.length because the stream
   // caps at ~200 events — after that, length never changes but the newest
