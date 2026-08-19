@@ -999,8 +999,12 @@ const pumpApiLog = rootLogger.child({ adapter: "pumpapi_primary" });
  * actual wire format — older field names baseAmount / vBaseInBondingCurve were wrong.
  */
 export interface PumpApiEvent {
-  action?:    string;  // "buy" | "sell" | "create"
+  action?:    string;  // "buy" | "sell" | "create" | "migrate"
   pool?:      string;  // "pump" = bonding curve; "pump-amm" = PumpSwap
+  /** Origin launchpad for a pool creation/migration; Pump.fun migrations use "pump". */
+  poolCreatedBy?: string;
+  /** Destination AMM pool address, present on migration and pool-creation events. */
+  poolId?: string;
   signature?: string;
   mint?:      string;
   txSigner?:  string;  // fee payer / tx initiator
@@ -1012,6 +1016,9 @@ export interface PumpApiEvent {
   // Bonding-curve virtual reserves post-event (decimal display units)
   vTokensInBondingCurve?: number; // virtual token reserves; × 1e6 → base units
   vQuoteInBondingCurve?:  number; // virtual SOL reserves; × 1e9 → lamports
+  // AMM reserves supplied on migration / pool-creation events.
+  tokensInPool?: number;
+  quoteInPool?:  number;
   // Pre-computed market data
   price?:          number; // SOL/token — matches our priceEth storage convention
   marketCapQuote?: number; // market cap in SOL; × 1e9 → lamports for marketCapEth
@@ -1312,14 +1319,18 @@ export class PumpApiAdapter {
         if (!signature || !mint) return;
 
         // Reset the data-staleness watchdog ONLY for actions that actually
-        // represent real price-moving data (create / buy / sell).  Unknown or
+         // represent real price-moving data (create / buy / sell / Pump.fun
+         // migration). Unknown or
         // metadata-only actions from these pools do NOT reset it, so a pumpapi.io
         // routing failure that keeps emitting non-trade messages is still caught.
         //
         // Placed BEFORE dedup: a duplicate event still proves data is flowing.
         const isRealDataAction =
           (pool === "pump"              && (action === "create" || action === "buy" || action === "sell")) ||
-          (pool === "pump-amm"          && (action === "buy"    || action === "sell"))         ||
+          (pool === "pump-amm"          && (
+            action === "buy" || action === "sell" ||
+            (action === "migrate" && msg.poolCreatedBy === "pump")
+          )) ||
           (pool === "raydium-launchpad" && (action === "create" || action === "buy" || action === "sell"));
         if (isRealDataAction) {
           this._armDataStaleWatchdog(ws);
@@ -1347,7 +1358,11 @@ export class PumpApiAdapter {
             );
           }
         } else if (pool === "pump-amm") {
-          if (action === "buy" || action === "sell") {
+          if (action === "migrate" && msg.poolCreatedBy === "pump") {
+            void this._handlePumpMigration(msg).catch((err) =>
+              pumpApiLog.error({ err, signature }, "pumpapi: error in Pump.fun → PumpSwap migration")
+            );
+          } else if (action === "buy" || action === "sell") {
             void this._handlePumpAmmTrade(msg, action === "buy").catch((err) =>
               pumpApiLog.error({ err, signature }, "pumpapi: error in pump-amm trade")
             );
@@ -1702,6 +1717,69 @@ export class PumpApiAdapter {
       },
     });
   }
+  // ── Pump.fun → PumpSwap migration handler ─────────────────────────────────
+
+  /**
+   * PumpAPI emits this as `{ action: "migrate", pool: "pump-amm",
+   * poolCreatedBy: "pump" }` when a Pump.fun bonding curve reaches completion.
+   *
+   * This is deliberately an upsert: the chain fallback can discover the same
+   * migration later, and the primary stream can see a token that was created
+   * during a reconnect gap. Existing identity fields are preserved.
+   */
+  private async _handlePumpMigration(msg: PumpApiEvent): Promise<void> {
+    const mint = msg.mint;
+    if (!mint) return;
+
+    const eventTs = PumpApiAdapter._parseTs(msg.timestamp);
+    const priceEth = msg.price != null && isFinite(msg.price) && msg.price > 0
+      ? msg.price.toFixed(15)
+      : (
+        msg.tokensInPool != null && msg.tokensInPool > 0 &&
+        msg.quoteInPool != null && msg.quoteInPool > 0
+          ? (msg.quoteInPool / msg.tokensInPool).toFixed(15)
+          : null
+      );
+    const marketCapEth = msg.marketCapQuote != null && isFinite(msg.marketCapQuote)
+      ? BigInt(Math.round(msg.marketCapQuote * 1e9)).toString()
+      : null;
+
+    await db
+      .insert(tokensTable)
+      .values({
+        address:        mint,
+        name:           msg.name?.trim() || "???",
+        symbol:         msg.symbol?.trim() || "???",
+        imageUrl:       null,
+        creatorAddress: msg.txSigner ?? "unknown",
+        platform:       "pumpswap",
+        chain:          CHAIN,
+        graduated:      true,
+        graduatedAt:    eventTs,
+        ...(priceEth     ? { priceEth }     : {}),
+        ...(marketCapEth ? { marketCapEth } : {}),
+      })
+      .onConflictDoUpdate({
+        target: tokensTable.address,
+        set: {
+          platform:    "pumpswap",
+          graduated:   true,
+          graduatedAt: sql`COALESCE(${tokensTable.graduatedAt}, EXCLUDED.graduated_at)`,
+          ...(priceEth
+            ? { priceEth: sql`COALESCE(EXCLUDED.price_eth, ${tokensTable.priceEth})` }
+            : {}),
+          ...(marketCapEth
+            ? { marketCapEth: sql`COALESCE(EXCLUDED.market_cap_eth, ${tokensTable.marketCapEth})` }
+            : {}),
+        },
+      });
+
+    pumpApiLog.info(
+      { mint, signature: msg.signature, poolId: msg.poolId, graduatedAt: eventTs },
+      "pumpapi: Pump.fun token migrated to PumpSwap",
+    );
+  }
+
   // ── PumpSwap (pump-amm) trade handler ─────────────────────────────────────
 
   private async _handlePumpAmmTrade(msg: PumpApiEvent, isBuy: boolean): Promise<void> {
@@ -1778,6 +1856,11 @@ export class PumpApiAdapter {
     if (!trade) return; // duplicate
 
     await db.update(tokensTable).set({
+      // A first PumpSwap trade is the repair path if the preceding migration
+      // event was missed while the stream was reconnecting.
+      platform:       PUMPSWAP_PLATFORM,
+      graduated:      true,
+      graduatedAt:    sql`COALESCE(${tokensTable.graduatedAt}, ${eventTs})`,
       tradeCount: sql`${tokensTable.tradeCount} + 1`,
       volumeEth:  sql`CAST(CAST(${tokensTable.volumeEth} AS NUMERIC) + ${solLamports} AS TEXT)`,
       ...(priceEth     ? { priceEth }     : {}),

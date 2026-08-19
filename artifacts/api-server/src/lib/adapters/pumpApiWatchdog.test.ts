@@ -319,6 +319,34 @@ describe("PumpApiAdapter data-staleness watchdog", () => {
     adapter.stop();
   });
 
+  it("resets on an official Pump.fun → PumpSwap migration event", async () => {
+    const WATCHDOG   = 10_000;
+    const DATA_STALE = 300;
+    const { adapter, getLastWs } = makeAdapter(WATCHDOG, undefined, DATA_STALE);
+
+    adapter.start();
+    await Promise.resolve();
+
+    const ws = getLastWs()!;
+    vi.advanceTimersByTime(DATA_STALE - 50);
+
+    // PumpAPI's documented migration contract.
+    ws.receive({
+      action:        "migrate",
+      pool:          "pump-amm",
+      poolCreatedBy: "pump",
+      poolId:        "PumpSwapPool111",
+      signature:     "migration222",
+      mint:          "MINTMIGRATION222",
+      marketCapQuote: 410.77,
+    });
+
+    vi.advanceTimersByTime(100);
+    expect(ws.closed).toBe(false); // migration proves the primary stream is alive
+
+    adapter.stop();
+  });
+
   it("does NOT reset on raydium-launchpad or other pool events", async () => {
     const WATCHDOG   = 10_000;
     const DATA_STALE = 300;
