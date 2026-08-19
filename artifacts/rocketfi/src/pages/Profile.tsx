@@ -432,15 +432,18 @@ export default function ProfilePage() {
     retry: 1,
   });
 
+  // Social (Google/email) users: `address` is an internal UUID, not a Solana address.
+  // All wallet-dependent queries must use `solanaAddress` (the actual on-chain address)
+  // so they work correctly for both wallet-native and social-login users.
   const { data: history, isLoading: historyLoading } = useQuery<ActivityTrade[]>({
-    queryKey: ["wallet-activity", address],
+    queryKey: ["wallet-activity", solanaAddress],
     queryFn: async () => {
-      const res = await fetch(`/api/wallet/${address}/activity?limit=100`);
+      const res = await fetch(`/api/wallet/${solanaAddress}/activity?limit=100`);
       if (!res.ok) return [];
       return res.json() as Promise<ActivityTrade[]>;
     },
-    // Activity is the default tab — prefetch immediately so it's ready on first render
-    enabled: !!address,
+    // Only fetch when we have a real Solana address — UUIDs from social auth return empty/500
+    enabled: !!solanaAddress,
     staleTime: 20_000,
     refetchInterval: activeTab === "activity" ? 30_000 : false,
   });
@@ -453,13 +456,13 @@ export default function ProfilePage() {
     totalVolumeLamports: number;
     realizedPnlLamports: number;
   }>({
-    queryKey: ["wallet-stats", address],
+    queryKey: ["wallet-stats", solanaAddress],
     queryFn: async () => {
-      const res = await fetch(`/api/wallet/${address}/stats`);
+      const res = await fetch(`/api/wallet/${solanaAddress}/stats`);
       if (!res.ok) return { tradeCount: 0, totalVolumeLamports: 0, realizedPnlLamports: 0 };
       return res.json();
     },
-    enabled: !!address,
+    enabled: !!solanaAddress,
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
@@ -467,9 +470,9 @@ export default function ProfilePage() {
 
   // ── Creator fee balance (owner only) ─────────────────────────────────────
   const { data: claimableLamports = 0n, refetch: refetchFees } = useQuery<bigint>({
-    queryKey: ["creator-fees", address],
-    queryFn: () => fetchClaimableLamports(address),
-    enabled: isOwner && !!address,
+    queryKey: ["creator-fees", solanaAddress],
+    queryFn: () => fetchClaimableLamports(solanaAddress!),
+    enabled: isOwner && !!solanaAddress,
     staleTime: 30_000,
     refetchOnWindowFocus: true,
     refetchInterval: isOwner ? 60_000 : false,
@@ -477,13 +480,13 @@ export default function ProfilePage() {
 
   // ── Tokens created by this address ───────────────────────────────────────
   const { data: createdTokens, isLoading: createdLoading } = useQuery<CreatedToken[]>({
-    queryKey: ["created-tokens", address],
+    queryKey: ["created-tokens", solanaAddress],
     queryFn: async () => {
-      const res = await fetch(`/api/wallet/${address}/created-tokens`);
+      const res = await fetch(`/api/wallet/${solanaAddress}/created-tokens`);
       if (!res.ok) return [];
       return res.json() as Promise<CreatedToken[]>;
     },
-    enabled: activeTab === "creator-fee" && !!address,
+    enabled: activeTab === "creator-fee" && !!solanaAddress,
     staleTime: 60_000,
     refetchInterval: activeTab === "creator-fee" ? 60_000 : false,
   });

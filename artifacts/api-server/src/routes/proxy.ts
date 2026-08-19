@@ -50,11 +50,19 @@ const IPFS_GATEWAYS = [
   "https://w3s.link/ipfs/",
 ] as const;
 
-/** Extract the bare CID from any IPFS URL variant (ipfs://, https://gateway/ipfs/…). */
+/** Extract the bare CID from any IPFS URL variant (ipfs://, https://gateway/ipfs/…).
+ * Strips query strings and fragments so they don't corrupt the gateway URL. */
 function extractIpfsCid(url: string): string | null {
-  if (url.startsWith("ipfs://")) return url.slice(7);
-  const m = url.match(/\/ipfs\/(.+)$/);
-  return m?.[1] ?? null;
+  let raw: string | null = null;
+  if (url.startsWith("ipfs://")) {
+    raw = url.slice(7);
+  } else {
+    const m = url.match(/\/ipfs\/([^?#]+)/);
+    raw = m?.[1] ?? null;
+  }
+  if (!raw) return null;
+  // Strip any query string or fragment — CID is content-addressed and never has params
+  return raw.split("?")[0].split("#")[0].trim() || null;
 }
 
 const ALLOWED_HOSTS = new Set([
@@ -88,6 +96,13 @@ const ALLOWED_HOSTS = new Set([
   "ipfs.filebase.io",
   "media.discordapp.net",
   "cdn.discordapp.com",
+  // Google Cloud Storage — used by our own object storage bucket for token images
+  "storage.googleapis.com",
+  // Additional public image CDNs seen in practice
+  "pbs.twimg.com",
+  "abs.twimg.com",
+  "i.seadn.io",
+  "openseauserdata.com",
 ]);
 
 function isAllowedUrl(raw: string): boolean {
@@ -305,11 +320,17 @@ router.post("/pump-ipfs-upload", uploadLimiter, asyncWrap(async (req, res) => {
 }));
 
 router.get("/proxy-image", asyncWrap(async (req, res) => {
-  const url = req.query.url as string;
+  // Guard against ?url=a&url=b (array) — take only the first value.
+  const rawUrl = Array.isArray(req.query.url) ? req.query.url[0] : req.query.url;
+  const url = typeof rawUrl === "string" ? rawUrl : undefined;
   if (!url) return res.status(400).send("Missing url");
-  if (!isAllowedUrl(url)) return res.status(403).send("Domain not allowed");
 
-  // For IPFS URLs, race all active gateways so the fastest one serves the image.
+  // ipfs:// URIs are valid — extractIpfsCid converts them to gateway URLs.
+  // Only reject non-IPFS URLs that aren't in the allowlist.
+  const isIpfsScheme = url.startsWith("ipfs://");
+  if (!isIpfsScheme && !isAllowedUrl(url)) return res.status(403).send("Domain not allowed");
+
+  // For IPFS URLs (any scheme), race all active gateways so the fastest one serves the image.
   // This prevents ipfs.io timeouts from showing a broken logo to the user.
   const cid = extractIpfsCid(url);
   const urlsToTry: string[] = cid ? IPFS_GATEWAYS.map(g => g + cid) : [url];

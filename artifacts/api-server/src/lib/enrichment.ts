@@ -1675,7 +1675,15 @@ async function reconcileLabTradeStats(): Promise<void> {
 
 // ── Entry point ────────────────────────────────────────────────────────────────
 
+let enrichmentStarted = false;
 export function startEnrichmentLoop(): void {
+  // Idempotence guard: a second call (e.g. hot-reload or worker-lock race)
+  // must not install a second set of timers — that would double every request.
+  if (enrichmentStarted) {
+    log.warn("enrichment: startEnrichmentLoop called twice — ignoring duplicate");
+    return;
+  }
+  enrichmentStarted = true;
   log.info({ intervalMs: POLL_INTERVAL_MS }, "enrichment: background loop started");
   const swallow = (label: string) => (err: unknown) =>
     log.error({ err }, `enrichment: ${label} failed — continuing`);
@@ -1695,15 +1703,15 @@ export function startEnrichmentLoop(): void {
   // creation transaction directly from the Solana RPC with an expanded offset set.
   // Runs 10 s after startup (adapters need a moment to settle) then every 60 s.
   setTimeout(() => {
-    void enrichLabTokensFromChain();
-    setInterval(() => void enrichLabTokensFromChain(), LL_CHAIN_ENRICH_INTERVAL_MS);
+    void enrichLabTokensFromChain().catch(swallow("enrichLabTokensFromChain-init"));
+    setInterval(() => void enrichLabTokensFromChain().catch(swallow("enrichLabTokensFromChain")), LL_CHAIN_ENRICH_INTERVAL_MS);
   }, 10_000);
   // Refresh LaunchLab price + market cap from Birdeye every 60 s.
   // This gives accurate USD-derived values regardless of on-chain trade quality,
   // fixing both placeholder-MC and dust-trade price corruption for display.
   setTimeout(() => {
-    void enrichLaunchLabPrices();
-    setInterval(() => void enrichLaunchLabPrices(), LL_PRICE_ENRICH_INTERVAL_MS);
+    void enrichLaunchLabPrices().catch(swallow("enrichLaunchLabPrices-init"));
+    setInterval(() => void enrichLaunchLabPrices().catch(swallow("enrichLaunchLabPrices")), LL_PRICE_ENRICH_INTERVAL_MS);
   }, 15_000);
   // Re-sync LaunchLab bonding curve reserves from Raydium's pool API every 5 min.
   // Corrects drift that accumulated from constant-product estimation and also
@@ -1711,8 +1719,8 @@ export function startEnrichmentLoop(): void {
   // (e.g. discovered via HTTP poll fallback without a WebSocket TradeEvent).
   // Run once 30 s after startup (let the DB settle first) then on a 5-min cadence.
   setTimeout(() => {
-    void refreshLaunchLabReserves();
-    setInterval(() => void refreshLaunchLabReserves(), LL_RESERVE_REFRESH_INTERVAL_MS);
+    void refreshLaunchLabReserves().catch(swallow("refreshLaunchLabReserves-init"));
+    setInterval(() => void refreshLaunchLabReserves().catch(swallow("refreshLaunchLabReserves")), LL_RESERVE_REFRESH_INTERVAL_MS);
   }, 30_000);
   // Periodically mark LaunchLab tokens as graduated when virtual_eth_reserves
   // exceeds 115 SOL (30 virtual floor + 85 raised = graduation threshold).

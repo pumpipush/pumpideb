@@ -6,7 +6,7 @@
  * - Hover tooltip, zoom/pan, click-to-navigate
  */
 import { useEffect, useRef, useCallback, useState } from "react";
-import { formatPct } from "@/lib/utils";
+import { formatPct, resolveImageUrl } from "@/lib/utils";
 import { useLocation } from "wouter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -681,10 +681,9 @@ export default function BubbleMap({ tokens, liveUpdates, solPrice, height = 420,
         img: prev?.img,
       };
 
-      // Load logo
-      const resolvedUrl = t.imageUrl
-        ? (t.imageUrl.startsWith("http") ? t.imageUrl : `/api/proxy-image?url=${encodeURIComponent(t.imageUrl)}`)
-        : null;
+      // Load logo — resolveImageUrl routes IPFS URLs through our multi-gateway proxy
+      // so they survive ipfs.io outages, and handles ipfs:// scheme and cf-ipfs.com rewrites.
+      const resolvedUrl = resolveImageUrl(t.imageUrl);
       if (resolvedUrl && !bubble.img) {
         bubble.img = loadImage(resolvedUrl, () => {
           const b = bubblesRef.current.find(x => x.address === t.address);

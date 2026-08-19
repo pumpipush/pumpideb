@@ -113,7 +113,7 @@ export default function WalletProfile() {
   const { address } = useParams<{ address: string }>();
   const solPrice = useSolPrice();
 
-  const { data, isLoading } = useGetWalletProfile(address ?? "", {
+  const { data, isLoading, isError, refetch } = useGetWalletProfile(address ?? "", {
     query: {
       enabled: !!address && address.length >= 32,
       queryKey: getGetWalletProfileQueryKey(address ?? ""),
@@ -183,6 +183,11 @@ export default function WalletProfile() {
                 sub={solPrice ? `${fmtSol(data.summary.recent_volume_lamports)} · ${data.summary.recent_trades_label}` : data.summary.recent_trades_label}
               />
             </>
+          ) : isError ? (
+            <div className="col-span-4 py-8 text-center space-y-2">
+              <p className="text-sm" style={{ color: "#f87171" }}>Failed to load wallet data</p>
+              <button onClick={() => refetch()} className="text-xs underline" style={{ color: "#b3b3b3" }}>Retry</button>
+            </div>
           ) : (
             <div className="col-span-4 py-8 text-center text-sm" style={{ color: "rgba(148,163,184,0.5)" }}>
               No data found for this wallet

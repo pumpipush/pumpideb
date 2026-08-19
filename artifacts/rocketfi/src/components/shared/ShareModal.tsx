@@ -70,8 +70,18 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 
 async function loadImage(src: string): Promise<HTMLImageElement | null> {
   if (!src) return null;
-  // Route through our proxy so the canvas never touches a cross-origin pixel
-  const proxied = `/api/proxy-image?url=${encodeURIComponent(src)}`;
+  // resolveImageUrl normalises ipfs:// → canonical ipfs.io gateway URL and routes
+  // all IPFS URLs through our multi-gateway proxy so stale cf-ipfs.com / ipfs.io
+  // outages don't break canvas rendering. Non-IPFS http/https URLs still go through
+  // the proxy so the canvas never touches a cross-origin pixel directly.
+  const resolved = src.includes("/ipfs/") || src.startsWith("ipfs://")
+    ? `/api/proxy-image?url=${encodeURIComponent(
+        src.startsWith("ipfs://")
+          ? "https://ipfs.io/ipfs/" + src.slice(7)
+          : src.replace(/^https?:\/\/cf-ipfs\.com\/ipfs\//, "https://ipfs.io/ipfs/")
+      )}`
+    : `/api/proxy-image?url=${encodeURIComponent(src)}`;
+  const proxied = resolved;
   return new Promise(resolve => {
     const img = new Image();
     img.onload  = () => resolve(img);

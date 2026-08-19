@@ -86,7 +86,7 @@ export default function LeaderboardPage() {
   const [tab,    setTab]    = useState<Tab>("pnl");
   const solPrice = useSolPrice();
 
-  const { data, isLoading } = useGetLeaderboard(period, {
+  const { data, isLoading, isError, refetch } = useGetLeaderboard(period, {
     query: { refetchInterval: 60_000, staleTime: 60_000, queryKey: getGetLeaderboardQueryKey(period) },
   });
 
@@ -168,6 +168,13 @@ export default function LeaderboardPage() {
             <tbody>
               {isLoading ? (
                 <SkeletonRows />
+              ) : isError ? (
+                <tr>
+                  <td colSpan={4} className="py-16 text-center">
+                    <p className="text-sm text-muted-foreground mb-3">Failed to load leaderboard</p>
+                    <button onClick={() => refetch()} className="text-xs underline hover:opacity-80 transition-opacity" style={{ color: "#b3b3b3" }}>Retry</button>
+                  </td>
+                </tr>
               ) : tab === "volume" ? (
                 volRows.length === 0 ? (
                   <tr><td colSpan={4} className="py-16 text-center text-sm text-muted-foreground">No data yet</td></tr>

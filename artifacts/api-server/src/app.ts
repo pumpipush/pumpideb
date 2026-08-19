@@ -176,11 +176,10 @@ const challengeLimiter = rateLimit({
 });
 app.post("/api/profiles/challenge", challengeLimiter);
 
-app.use("/api", router);
-
 // ── Security headers ──────────────────────────────────────────────────────
-// Applied after routes so they appear on every response including errors.
-// Not using helmet to keep the dependency footprint minimal.
+// Registered BEFORE app.use("/api", router) so every successful response
+// gets these headers. Route handlers call res.json() without calling next(),
+// so a post-route middleware would be bypassed for successful responses.
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
@@ -189,6 +188,8 @@ app.use((_req, res, next) => {
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   next();
 });
+
+app.use("/api", router);
 
 // ── Global error handler ──────────────────────────────────────────────────
 import { globalErrorHandler } from "./lib/errorHandler.js";

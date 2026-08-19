@@ -19,7 +19,7 @@ export default function Tokens() {
   const [graduated, setGraduated] = useState('');
   const [hiddenFilter, setHiddenFilter] = useState('');
   
-  const { data, isLoading } = useTokens(page, search, platform, graduated, hiddenFilter);
+  const { data, isLoading, isError } = useTokens(page, search, platform, graduated, hiddenFilter);
   const { apiFetch } = useAdmin();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -143,6 +143,8 @@ export default function Tokens() {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={10} className="h-24 text-center">Loading...</TableCell></TableRow>
+            ) : isError ? (
+              <TableRow><TableCell colSpan={10} className="h-24 text-center text-destructive">Failed to load tokens</TableCell></TableRow>
             ) : !data?.rows.length ? (
               <TableRow><TableCell colSpan={10} className="h-24 text-center text-muted-foreground">No tokens found</TableCell></TableRow>
             ) : (

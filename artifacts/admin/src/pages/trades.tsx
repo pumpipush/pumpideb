@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function Trades() {
   const [page, setPage] = useState(1);
-  const { data, isLoading, isFetching } = useTrades(page);
+  const { data, isLoading, isFetching, isError } = useTrades(page);
   const { toast } = useToast();
   
   // Highlight new trades briefly
@@ -66,6 +66,8 @@ export default function Trades() {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={7} className="h-24 text-center">Loading...</TableCell></TableRow>
+            ) : isError ? (
+              <TableRow><TableCell colSpan={7} className="h-24 text-center text-destructive">Failed to load trades</TableCell></TableRow>
             ) : !data?.rows.length ? (
               <TableRow><TableCell colSpan={7} className="h-24 text-center text-muted-foreground">No trades found</TableCell></TableRow>
             ) : (
@@ -91,7 +93,7 @@ export default function Trades() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs tabular text-foreground">
-                      {formatSol(Number(trade.ethAmount))}
+                      {formatSol(parseFloat(trade.ethAmount ?? "0"))}
                     </TableCell>
                     <TableCell className="text-center">
                       <span className="text-[10px] text-muted-foreground">{getPlatformLabel(trade.platform)}</span>

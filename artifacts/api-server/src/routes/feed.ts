@@ -102,18 +102,17 @@ router.get("/feed/stream", (req: Request, res: Response) => {
   })();
 
   // ── Periodic heartbeat ─────────────────────────────────────────────────────
-  const heartbeat = setInterval(() => {
-    res.write(`data: ${JSON.stringify({ type: "ping" })}\n\n`);
-  }, HEARTBEAT_INTERVAL_MS);
+  const safeSend = (payload: unknown) => {
+    if (!res.writableEnded && !res.destroyed) {
+      try { res.write(`data: ${JSON.stringify(payload)}\n\n`); } catch { /* ignore write-after-close */ }
+    }
+  };
+
+  const heartbeat = setInterval(() => safeSend({ type: "ping" }), HEARTBEAT_INTERVAL_MS);
 
   // ── Live event forwarding ──────────────────────────────────────────────────
-  const onTrade = (event: TradeEvent) => {
-    res.write(`data: ${JSON.stringify(event)}\n\n`);
-  };
-
-  const onNewToken = (event: NewTokenEvent) => {
-    res.write(`data: ${JSON.stringify(event)}\n\n`);
-  };
+  const onTrade    = (event: TradeEvent)    => safeSend(event);
+  const onNewToken = (event: NewTokenEvent) => safeSend(event);
 
   tradeEmitter.on("trade:*", onTrade);
   tradeEmitter.on("newToken:*", onNewToken);

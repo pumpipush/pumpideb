@@ -297,19 +297,18 @@ router.get("/admin/tokens", asyncWrap(async (req: Request, res: Response) => {
     rows = (await db.execute(sql`SELECT ${cols} FROM tokens ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`)).rows;
   }
 
-  // Count query (simplified)
-  let countRows: { count: string }[];
+  // Count query — must apply the same filters as the data query so pagination total is correct.
+  const countConditions: SQL[] = [];
   if (search) {
-    countRows = (await db.execute(sql`SELECT COUNT(*) FROM tokens WHERE name ILIKE ${'%' + search + '%'} OR symbol ILIKE ${'%' + search + '%'} OR address ILIKE ${'%' + search + '%'}`)).rows as { count: string }[];
-  } else if (platform && graduated !== undefined) {
-    countRows = (await db.execute(sql`SELECT COUNT(*) FROM tokens WHERE platform = ${platform} AND graduated = ${graduated}`)).rows as { count: string }[];
-  } else if (platform) {
-    countRows = (await db.execute(sql`SELECT COUNT(*) FROM tokens WHERE platform = ${platform}`)).rows as { count: string }[];
-  } else if (graduated !== undefined) {
-    countRows = (await db.execute(sql`SELECT COUNT(*) FROM tokens WHERE graduated = ${graduated}`)).rows as { count: string }[];
-  } else {
-    countRows = (await db.execute(sql`SELECT COUNT(*) FROM tokens`)).rows as { count: string }[];
+    countConditions.push(sql`(name ILIKE ${'%' + search + '%'} OR symbol ILIKE ${'%' + search + '%'} OR address ILIKE ${'%' + search + '%'})`);
   }
+  if (platform) countConditions.push(sql`platform = ${platform}`);
+  if (graduated !== undefined) countConditions.push(sql`graduated = ${graduated}`);
+  if (hidden !== undefined) countConditions.push(sql`hidden = ${hidden}`);
+  const countWhere = countConditions.length
+    ? sql`WHERE ${sql.join(countConditions, sql` AND `)}`
+    : sql``;
+  const countRows = (await db.execute(sql`SELECT COUNT(*)::text AS count FROM tokens ${countWhere}`)).rows as { count: string }[];
 
   const total = Number(countRows[0]?.count ?? 0);
   res.json({ total, rows });
@@ -423,8 +422,10 @@ router.delete("/admin/tokens/:address/hide", asyncWrap(async (req: Request, res:
 // Top creators by tokens launched + trading volume generated. No on-chain calls.
 
 router.get("/admin/fees", asyncWrap(async (req: Request, res: Response) => {
-  const limit  = Math.min(Number(req.query.limit  ?? 50), 200);
-  const offset = Number(req.query.offset ?? 0);
+  const rawLimit  = parseInt(String(req.query.limit  ?? "50"),  10);
+  const rawOffset = parseInt(String(req.query.offset ?? "0"),   10);
+  const limit  = Number.isFinite(rawLimit)  && rawLimit  > 0 ? Math.min(rawLimit,  200) : 50;
+  const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
 
   const [leaderboard, totals] = await Promise.all([
     db.execute(sql`
@@ -480,9 +481,11 @@ router.get("/admin/fees", asyncWrap(async (req: Request, res: Response) => {
 router.get("/admin/fees/creator/:address", asyncWrap(async (req: Request, res: Response) => {
   const { address } = req.params as { address: string };
   try {
-    // Proxy to the public creator-fees endpoint logic inline
+    // Self-proxy: call the public creator-fees endpoint on the same server.
+    // Use 127.0.0.1 (explicit loopback) rather than localhost so IPv6-first systems
+    // don't resolve to [::1] while the server binds to 0.0.0.0 (IPv4 only).
     const proxyRes = await fetch(
-      `http://localhost:${process.env.PORT ?? 8080}/api/creator-fees/${address}`,
+      `http://127.0.0.1:${process.env.PORT ?? 8080}/api/creator-fees/${address}`,
       { signal: AbortSignal.timeout(10_000) },
     );
     const data = await proxyRes.json();

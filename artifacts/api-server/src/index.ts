@@ -15,7 +15,8 @@ import { logger } from "./lib/logger";
 import { startAdapters } from "./lib/adapters/index";
 import { startEnrichmentLoop } from "./lib/enrichment";
 import { startJupiterTokenSync } from "./lib/jupiter-tokens";
-import { startLaunchLabBackfill } from "./lib/launchlabBackfill";
+import { hotBackfillLaunchLabTokens } from "./lib/launchlabBackfill";
+import { startReplayBackfill } from "./lib/pumpApiReplayBackfill";
 import { runMigrations, createTrgmIndexes, pool } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
@@ -132,9 +133,14 @@ function tryBecomeWorkerPrimary(): void {
     // Download and cache Jupiter strict token list (enables "All Solana Tokens" search)
     startJupiterTokenSync();
 
-    // Backfill historical LaunchLab tokens from on-chain creation transactions.
-    // Runs 10 s after startup (to let adapters connect first), then every 10 min.
-    startLaunchLabBackfill();
+    // Historical backfill via replay.pumpapi.io (replaces failing RPC-based backfill).
+    // Covers pump.fun, PumpSwap, and LaunchLab in one streaming archive source.
+    // Runs 45 s after startup, then every 65 min to pick up the latest completed hour.
+    startReplayBackfill();
+
+    // LaunchLab hot-backfill is disabled — drpc.org (the only free RPC that supports
+    // getTransaction) has been returning HTTP 500 / per-item errors.  The replay
+    // backfill above covers the same gap with better reliability.
   } else {
     // Predecessor still holds the lock — retry after kill_timeout gives it time to exit
     _retryTimer = setTimeout(tryBecomeWorkerPrimary, 2_000);

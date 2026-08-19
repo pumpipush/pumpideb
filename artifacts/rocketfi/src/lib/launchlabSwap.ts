@@ -113,6 +113,11 @@ export async function buildLaunchLabBuyTx(
 ): Promise<LaunchLabSwapResult> {
   const { mint, user, solLamports, slippageBps, priorityFeeMicroLamports } = params;
 
+  // Guard against caller passing Infinity/NaN/negative/fractional amounts
+  if (typeof solLamports !== "bigint" || solLamports <= 0n) throw new Error("Invalid buy amount");
+  if (!Number.isFinite(slippageBps) || slippageBps < 0 || slippageBps > 10_000)
+    throw new Error(`Invalid slippageBps: ${slippageBps}`);
+
   const sdk = await _getSdk();
   const { TxVersion } = sdk;
   const raydium = await _initRaydium(user);
@@ -120,7 +125,7 @@ export async function buildLaunchLabBuyTx(
   const mintA     = new PublicKey(mint);
   const buyAmount = new BN(solLamports.toString());
   // SLIPPAGE_UNIT in SDK = 10 000 (BPS scale): pass raw BPS value directly.
-  const slippage  = new BN(slippageBps);
+  const slippage  = new BN(Math.floor(slippageBps));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result: any = await raydium.launchpad.buyToken({
@@ -151,13 +156,18 @@ export async function buildLaunchLabSellTx(
 ): Promise<LaunchLabSwapResult> {
   const { mint, user, tokenAtoms, slippageBps, priorityFeeMicroLamports } = params;
 
+  // Guard against caller passing Infinity/NaN/negative/fractional amounts
+  if (typeof tokenAtoms !== "bigint" || tokenAtoms <= 0n) throw new Error("Invalid sell amount");
+  if (!Number.isFinite(slippageBps) || slippageBps < 0 || slippageBps > 10_000)
+    throw new Error(`Invalid slippageBps: ${slippageBps}`);
+
   const sdk = await _getSdk();
   const { TxVersion } = sdk;
   const raydium = await _initRaydium(user);
 
   const mintA      = new PublicKey(mint);
   const sellAmount = new BN(tokenAtoms.toString());
-  const slippage   = new BN(slippageBps);
+  const slippage   = new BN(Math.floor(slippageBps));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result: any = await raydium.launchpad.sellToken({

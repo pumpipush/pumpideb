@@ -167,6 +167,10 @@ export function useFeedStream(): UseFeedStreamResult {
           const token: FeedToken = { ...event.token, isNew: true, tradeCount: event.token.tradeCount ?? 0 };
 
           setLiveTokens((prev) => {
+            const existing = prev.find((t) => t.address === token.address);
+            // Don't overwrite a newer record with a stale replay event.
+            // A record is "newer" when it has a higher tradeCount.
+            if (existing && (existing.tradeCount ?? 0) > (token.tradeCount ?? 0)) return prev;
             const filtered = prev.filter((t) => t.address !== token.address);
             return [token, ...filtered].slice(0, MAX_LIVE_TOKENS);
           });
@@ -187,6 +191,11 @@ export function useFeedStream(): UseFeedStreamResult {
         if (event.type === "trade" && event.token?.address) {
           const { address, priceEth, marketCapEth, volumeEth, tradeCount } = event.token;
           setLiveTradeStats((prev) => {
+            const existing = prev.get(address);
+            // Monotonic guard: skip if the incoming event has a lower tradeCount than
+            // what we already have. This prevents replay/reconnect events from clobbering
+            // newer live trade stats.
+            if (existing && (tradeCount ?? 0) < existing.tradeCount) return prev;
             const next = new Map(prev);
             next.set(address, {
               priceEth:     priceEth ?? null,

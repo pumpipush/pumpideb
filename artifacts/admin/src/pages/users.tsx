@@ -19,7 +19,7 @@ export default function Users() {
   const [banDialogUser, setBanDialogUser] = useState<string | null>(null);
   const [banReason, setBanReason] = useState('');
   
-  const { data, isLoading } = useUsers(page, search);
+  const { data, isLoading, isError } = useUsers(page, search);
   const { data: overviewData } = useOverview();
   const { apiFetch } = useAdmin();
   const queryClient = useQueryClient();
@@ -118,6 +118,8 @@ export default function Users() {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={8} className="h-24 text-center">Loading...</TableCell></TableRow>
+            ) : isError ? (
+              <TableRow><TableCell colSpan={8} className="h-24 text-center text-destructive">Failed to load users</TableCell></TableRow>
             ) : !data?.rows.length ? (
               <TableRow><TableCell colSpan={8} className="h-24 text-center text-muted-foreground">No users found</TableCell></TableRow>
             ) : (

@@ -164,15 +164,16 @@ router.post("/profiles", asyncWrap(async (req, res) => {
   const resolvedUsername = username ?? `user_${walletAddress.slice(-6).toLowerCase()}`;
 
   // 4. Atomic insert — ON CONFLICT (address) DO NOTHING eliminates the TOCTOU race.
-  //    If the profile already exists the INSERT silently skips and returns no rows.
-  //    A separate unique constraint on username means a concurrent claim of the same
-  //    handle produces a 23505 error — we surface that as a 409.
+  //    Specifying the target column ensures only address conflicts are silently skipped;
+  //    a username uniqueness violation still surfaces as a 23505 → 409 response.
+  //    Without the target, any unique violation (including on username) would be
+  //    silently swallowed, returning the wrong existing profile as 200.
   let inserted: typeof profilesTable.$inferSelect | undefined;
   try {
     [inserted] = await db
       .insert(profilesTable)
       .values({ address: walletAddress, username: resolvedUsername, ...profileFields })
-      .onConflictDoNothing()
+      .onConflictDoNothing({ target: profilesTable.address })
       .returning();
   } catch (err: unknown) {
     if ((err as { code?: string }).code === "23505") {
@@ -453,25 +454,27 @@ router.delete("/profiles/:address/follow", asyncWrap(async (req, res) => {
   }
   if (!callerAddress) { res.status(401).json({ error: "Authentication required" }); return; }
 
-  // Delete follow row
-  const deleted = await db.delete(followsTable)
-    .where(and(
-      eq(followsTable.followerAddress, callerAddress),
-      eq(followsTable.followingAddress, targetAddress),
-    ))
-    .returning();
+  // Delete follow row and decrement counters atomically.
+  // Previous code did delete then transaction separately — a concurrent follow/unfollow
+  // could interleave and leave counters inconsistent with the actual followsTable state.
+  let deleted: (typeof followsTable.$inferSelect)[] = [];
+  await db.transaction(async (tx) => {
+    deleted = await tx.delete(followsTable)
+      .where(and(
+        eq(followsTable.followerAddress, callerAddress),
+        eq(followsTable.followingAddress, targetAddress),
+      ))
+      .returning();
 
-  if (deleted.length > 0) {
-    // Decrement counters (floor at 0)
-    await db.transaction(async (tx) => {
+    if (deleted.length > 0) {
       await tx.update(profilesTable)
         .set({ followingCount: sql`GREATEST(${profilesTable.followingCount} - 1, 0)` })
         .where(eq(profilesTable.address, callerAddress));
       await tx.update(profilesTable)
         .set({ followersCount: sql`GREATEST(${profilesTable.followersCount} - 1, 0)` })
         .where(eq(profilesTable.address, targetAddress));
-    });
-  }
+    }
+  });
 
   const [updated] = await db.select({
     followersCount: profilesTable.followersCount,

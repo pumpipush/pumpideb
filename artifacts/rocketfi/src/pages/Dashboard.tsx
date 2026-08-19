@@ -894,8 +894,9 @@ export default function Dashboard() {
   const activePageSize = isNewTab ? NEW_PAGE_SIZE : isDexPlatformTrending ? 50 : PAGE_SIZE;
   const listParams = {
     sort: sortMap[activeTab],
-    // Graduated tab uses client-side mcap threshold — no server-side flag needed
-    graduated: undefined as boolean | undefined,
+    // Graduated tab asks the server to filter — correct for all platforms and makes
+    // hasMore accurate (no client-side trimming leaves ghost "Next" buttons).
+    graduated: activeTab === "Graduated" ? true : undefined as boolean | undefined,
     limit: activePageSize,
     offset: (page - 1) * activePageSize,
     platform: platformFilter === "all" ? undefined : platformFilter as ListTokensPlatform,
@@ -1039,16 +1040,13 @@ export default function Dashboard() {
         (t) => t.name.toLowerCase().includes(q) || t.symbol.toLowerCase().includes(q)
       );
     }
-    // Skip onlyGraduated toggle on the Graduated tab — it already filters by mcap threshold below
+    // onlyGraduated toggle: for the Graduated tab the server already filters — skip to avoid double-filter
     if (onlyGraduated && activeTab !== "Graduated") apiDisplay = apiDisplay.filter((t) => t.graduated);
     // "Has image" filter: never apply to the New tab — newly created tokens
     // take seconds→minutes to load IPFS metadata; hiding them defeats the point
     // of a "just launched" view. Show a placeholder image instead.
     if (onlyWithImage && activeTab !== "New") apiDisplay = apiDisplay.filter((t) => !!t.imageUrl);
-    // Graduated tab: proxy for "bonding curve completed" — filter by pump.fun graduation mcap threshold
-    if (activeTab === "Graduated") {
-      apiDisplay = apiDisplay.filter((t) => (parseFloat(t.marketCapEth ?? "0") || 0) >= PUMP_GRADUATION_LAMPORTS);
-    }
+    // Graduated tab: server already returned only graduated=true tokens; no client-side mcap threshold needed.
     if (minMcap.trim()) {
       const min = parseFloat(minMcap) || 0;
       apiDisplay = apiDisplay.filter((t) => (parseFloat(t.marketCapEth ?? "0") || 0) >= min);
@@ -1378,7 +1376,7 @@ export default function Dashboard() {
             ) : viewMode === "grid" ? (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-3 mt-1">
                 {tokens.map((token, idx) => (
-                  <TokenCard key={token.id} token={token} rank={idx + 1} solPrice={solPrice} activeTab={activeTab} />
+                  <TokenCard key={token.id} token={token} rank={(page - 1) * activePageSize + idx + 1} solPrice={solPrice} activeTab={activeTab} />
                 ))}
               </div>
             ) : (

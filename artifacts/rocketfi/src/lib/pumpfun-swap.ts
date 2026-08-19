@@ -10,7 +10,7 @@
  *
  * The platform referral fee (PLATFORM_FEE_BPS) is collected as a separate
  * SystemProgram.transfer instruction appended to the same transaction.
- * Configure via VITE_PUMP_FEE_RECIPIENT env var; if not set, fee is skipped.
+ * Configure via VITE_PLATFORM_FEE_RECIPIENT env var; if not set, fee is skipped.
  */
 
 import {

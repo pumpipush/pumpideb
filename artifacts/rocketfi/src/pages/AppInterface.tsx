@@ -257,6 +257,14 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
       toast({ title: "Name too long", description: "Token name must be 32 characters or fewer.", variant: "destructive" });
       return;
     }
+    if (symbol.trim().length > 10) {
+      toast({ title: "Ticker too long", description: "Token ticker must be 10 characters or fewer.", variant: "destructive" });
+      return;
+    }
+    if (!/^[A-Za-z0-9$_]+$/.test(symbol.trim())) {
+      toast({ title: "Invalid ticker", description: "Ticker can only contain letters, numbers, $ and _.", variant: "destructive" });
+      return;
+    }
     if (!imageFile) {
       toast({ title: "Image required", description: "Upload a token image so it displays correctly on the platform.", variant: "destructive" });
       return;
@@ -1330,6 +1338,8 @@ function LaunchTab({ wallet, onLaunch }: { wallet: string | null, onLaunch: (add
 }
 
 function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string | null, selectedAddress: string | null, onSelectToken: (addr: string) => void }) {
+  // Reactive swap settings — ensures Jupiter quote auto-refresh fires when slippage changes.
+  const { slippageBps: currentSlippageBps } = useSwapSettings();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   // Debounce: only fire API after 300ms idle — prevents a request per keystroke
@@ -1419,7 +1429,9 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     enabled: !!selectedAddress,
     refetchInterval: 30_000,
     staleTime: 25_000,
-    placeholderData: (prev) => prev,
+    // NOTE: no placeholderData here — snipers are per-token; showing the previous
+    // token's snipers while the new token loads is a visible data-leak. The brief
+    // loading skeleton is preferable.
   });
   const snipers = snipersData?.snipers ?? [];
   const snipersTotalCount = snipersData?.totalCount ?? snipers.length;
@@ -1670,7 +1682,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       clearInterval(refreshTimer);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token?.graduated, token?.platform, token?.address, token?.decimals, amount, tradeMode]);
+  }, [token?.graduated, token?.platform, token?.address, token?.decimals, amount, tradeMode, currentSlippageBps]);
 
   // Timeframe for server OHLCV query — fixed at 1m for the freshest DEX price.
   // (Chart timeframe is now owned internally by KLineChartCanvas.)
@@ -4395,7 +4407,9 @@ function PortfolioTab({ wallet, onSelectToken }: { wallet: string | null, onSele
     }[]> => {
       if (!wallet) return [];
       const res = await fetch(`/api/wallet/${wallet}/holdings`);
-      if (!res.ok) return [];
+      // Throw on non-2xx so React Query sets isError=true and the error UI is shown
+      // instead of silently returning [] (which renders "No tokens yet" — misleading).
+      if (!res.ok) throw new Error(`holdings fetch failed: ${res.status}`);
       const json = await res.json();
       return json.holdings ?? [];
     },

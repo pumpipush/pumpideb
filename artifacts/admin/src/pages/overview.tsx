@@ -6,18 +6,26 @@ import { formatNumber, formatSol } from '@/lib/utils';
 import { Users, Coins, ArrowRightLeft, Activity, ToggleLeft } from 'lucide-react';
 
 export default function Overview() {
-  const { data: overview, isLoading: overviewLoading } = useOverview();
+  const { data: overview, isLoading: overviewLoading, isError: overviewError } = useOverview();
   const { data: charts, isLoading: chartsLoading } = useDailyCharts();
   
   const [activeSeries, setActiveSeries] = useState<'volumeSol' | 'users' | 'tokens' | 'trades'>('volumeSol');
 
-  if (overviewLoading || !overview) {
+  if (overviewLoading) {
     return (
       <div className="space-y-6 animate-pulse">
         <div className="grid grid-cols-5 gap-4">
           {[1,2,3,4,5].map(i => <div key={i} className="h-24 bg-card rounded-lg border border-border"></div>)}
         </div>
         <div className="h-96 bg-card rounded-lg border border-border"></div>
+      </div>
+    );
+  }
+
+  if (overviewError || !overview) {
+    return (
+      <div className="flex items-center justify-center h-64 text-destructive text-sm">
+        Failed to load overview data
       </div>
     );
   }

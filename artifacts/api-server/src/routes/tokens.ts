@@ -253,7 +253,7 @@ router.get("/tokens", asyncWrap(async (req, res) => {
                COUNT(CASE WHEN is_buy  THEN 1 END)                    AS buy_count,
                COUNT(CASE WHEN NOT is_buy THEN 1 END)                 AS sell_count,
                COUNT(DISTINCT trader_address)                          AS unique_traders,
-               SUM(CAST(NULLIF(eth_amount, '') AS NUMERIC))           AS vol_sol
+               SUM(CASE WHEN eth_amount ~ '^[0-9]+(\.[0-9]+)?$' THEN eth_amount::numeric ELSE 0 END) AS vol_sol
         FROM   trades
         WHERE  timestamp > NOW() - INTERVAL '1 hour'
         GROUP  BY token_address
@@ -631,7 +631,7 @@ router.get("/tokens/trending", asyncWrap(async (req, res) => {
              COUNT(CASE WHEN is_buy THEN 1 END)                AS buy_count,
              COUNT(CASE WHEN NOT is_buy THEN 1 END)            AS sell_count,
              COUNT(DISTINCT trader_address)                     AS unique_traders,
-             SUM(CAST(NULLIF(eth_amount, '') AS NUMERIC))      AS vol_sol
+             SUM(CASE WHEN eth_amount ~ '^[0-9]+(\.[0-9]+)?$' THEN eth_amount::numeric ELSE 0 END) AS vol_sol
       FROM   trades
       WHERE  timestamp > NOW() - INTERVAL '1 hour'
       GROUP  BY token_address

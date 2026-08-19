@@ -161,6 +161,7 @@ const BIRDEYE_HISTORY_SECS: Record<string, number> = {
   "1m":  4  * 60 * 60,          //  4h history
   "5m":  24 * 60 * 60,          // 24h history
   "15m": 3  * 24 * 60 * 60,     //  3d history
+  "30m": 7  * 24 * 60 * 60,     //  7d history (was missing — silently fell back to 1y)
   "1H":  30 * 24 * 60 * 60,     // 30d history
   "4H":  90 * 24 * 60 * 60,     // 90d history
   "1D":  365 * 24 * 60 * 60,    //  1y history
@@ -263,12 +264,16 @@ router.get("/tokens/:address/stream", asyncWrap(async (req: Request, res: Respon
   // Must be a real "data:" SSE frame — comment lines (": ping") are invisible
   // to the browser's EventSource.onmessage and would never reset the client
   // watchdog timer, causing spurious reconnects on quiet streams.
-  const heartbeat = setInterval(() => {
-    res.write(`data: ${JSON.stringify({ type: "ping" })}\n\n`);
-  }, 10_000);
+  const safeSend = (payload: unknown) => {
+    if (!res.writableEnded && !res.destroyed) {
+      try { res.write(`data: ${JSON.stringify(payload)}\n\n`); } catch { /* ignore write-after-close */ }
+    }
+  };
 
-  const tradeHandler    = (event: TradeEvent)    => res.write(`data: ${JSON.stringify(event)}\n\n`);
-  const snapshotHandler = (event: SnapshotEvent) => res.write(`data: ${JSON.stringify(event)}\n\n`);
+  const heartbeat = setInterval(() => safeSend({ type: "ping" }), 10_000);
+
+  const tradeHandler    = (event: TradeEvent)    => safeSend(event);
+  const snapshotHandler = (event: SnapshotEvent) => safeSend(event);
 
   tradeEmitter.on(`trade:${address}`,    tradeHandler);
   tradeEmitter.on(`snapshot:${address}`, snapshotHandler);
@@ -686,12 +691,18 @@ router.get("/tokens/:address/snipers", heavyLimiter, asyncWrap(async (req, res) 
       SELECT created_at, creator_address FROM tokens WHERE address = $1
     ),
     early_buyers AS (
+      -- Find wallets whose FIRST buy for this token was within 5 minutes of launch.
+      -- The lower bound (>= created_at) prevents backfilled or pre-launch phantom trades
+      -- from being counted: without it a trade timestamped before the token was created
+      -- (due to clock skew or bad data) would falsely zero the seconds_after_launch.
       SELECT trader_address, MIN(timestamp) AS first_buy_at
       FROM trades
       WHERE token_address = $1
         AND is_buy = true
+        AND timestamp >= (SELECT created_at FROM token_start)
         AND timestamp <= (SELECT created_at FROM token_start) + INTERVAL '5 minutes'
         AND token_amount IS NOT NULL AND token_amount <> '' AND token_amount <> '0'
+        AND token_amount ~ '^[0-9]+(\.[0-9]+)?$'
         -- Exclude the creator wallet so it doesn't appear in the sniper list.
         -- Also exclude "unknown" which is a placeholder for unresolved creators.
         AND trader_address IS DISTINCT FROM (SELECT creator_address FROM token_start)
@@ -702,7 +713,7 @@ router.get("/tokens/:address/snipers", heavyLimiter, asyncWrap(async (req, res) 
       SELECT
         t.trader_address,
         eb.first_buy_at,
-        GREATEST(0, EXTRACT(EPOCH FROM (eb.first_buy_at - ts.created_at))::int) AS seconds_after_launch,
+        EXTRACT(EPOCH FROM (eb.first_buy_at - ts.created_at))::int AS seconds_after_launch,
         SUM(CASE WHEN t.is_buy THEN CAST(NULLIF(t.eth_amount,  '') AS NUMERIC) ELSE 0 END)  AS total_sol_in,
         SUM(CASE WHEN t.is_buy THEN CAST(NULLIF(t.token_amount,'') AS NUMERIC) ELSE 0 END)  AS total_bought,
         GREATEST(0, SUM(
@@ -718,8 +729,9 @@ router.get("/tokens/:address/snipers", heavyLimiter, asyncWrap(async (req, res) 
       JOIN early_buyers eb ON t.trader_address = eb.trader_address
       CROSS JOIN token_start ts
       WHERE t.token_address = $1
-        AND t.token_amount IS NOT NULL AND t.token_amount <> '' AND t.token_amount <> '0'
-        AND t.eth_amount   IS NOT NULL AND t.eth_amount   <> ''
+        -- Numeric guard — rejects malformed amounts that would cause a cast error.
+        AND t.token_amount IS NOT NULL AND t.token_amount ~ '^[0-9]+(\.[0-9]+)?$'
+        AND t.eth_amount   IS NOT NULL AND t.eth_amount   ~ '^[0-9]+(\.[0-9]+)?$'
       GROUP BY t.trader_address, eb.first_buy_at, ts.created_at
     )
     SELECT * FROM sniper_stats
@@ -774,21 +786,24 @@ router.get("/wallet/:address/holdings", asyncWrap(async (req, res) => {
       SELECT
         token_address,
         SUM(
-          CASE WHEN is_buy
-            THEN  CAST(NULLIF(token_amount, '') AS NUMERIC)
-            ELSE -CAST(NULLIF(token_amount, '') AS NUMERIC)
+          CASE WHEN is_buy IS TRUE
+            THEN  CAST(token_amount AS NUMERIC)
+            WHEN is_buy IS FALSE
+            THEN -CAST(token_amount AS NUMERIC)
+            ELSE 0  -- NULL is_buy treated as no change rather than sell
           END
         ) AS balance
       FROM trades
       WHERE trader_address = $1
-        AND token_amount IS NOT NULL
-        AND token_amount <> ''
-        AND token_amount <> '0'
+        AND token_amount ~ '^[0-9]+(\.[0-9]+)?$'
+        AND token_amount::numeric > 0
       GROUP BY token_address
       HAVING SUM(
-        CASE WHEN is_buy
-          THEN  CAST(NULLIF(token_amount, '') AS NUMERIC)
-          ELSE -CAST(NULLIF(token_amount, '') AS NUMERIC)
+        CASE WHEN is_buy IS TRUE
+          THEN  CAST(token_amount AS NUMERIC)
+          WHEN is_buy IS FALSE
+          THEN -CAST(token_amount AS NUMERIC)
+          ELSE 0
         END
       ) > 0
     ) t
@@ -846,8 +861,12 @@ router.get("/tokens/:address/position", heavyLimiter, asyncWrap(async (req, res)
     WHERE token_address  = $1
       AND trader_address = $2
       AND token_amount IS NOT NULL
-      AND token_amount <> ''
+      AND token_amount ~ '^[0-9]+(\.[0-9]+)?$'
       AND token_amount <> '0'
+      -- Numeric guard on eth_amount prevents malformed rows from causing a cast error;
+      -- the CASE expressions will produce NULL for rows excluded by NULLIF, which COALESCE catches.
+      AND eth_amount IS NOT NULL
+      AND eth_amount ~ '^[0-9]+(\.[0-9]+)?$'
   `, [tokenAddress, wallet]);
 
   const r = rows[0];
@@ -881,15 +900,16 @@ router.get("/tokens/:address/stats", asyncWrap(async (req, res) => {
       txns_sell:       string;
     }>(`
       SELECT
-        COALESCE(SUM(CAST(eth_amount AS NUMERIC)) / 1e9, 0)                                       AS vol24h_sol,
-        COALESCE(SUM(CASE WHEN is_buy     THEN CAST(eth_amount AS NUMERIC) ELSE 0 END) / 1e9, 0)  AS vol24h_buy_sol,
-        COALESCE(SUM(CASE WHEN NOT is_buy THEN CAST(eth_amount AS NUMERIC) ELSE 0 END) / 1e9, 0)  AS vol24h_sell_sol,
-        COUNT(CASE WHEN is_buy     THEN 1 END)                                                     AS txns_buy,
-        COUNT(CASE WHEN NOT is_buy THEN 1 END)                                                     AS txns_sell
+        COALESCE(SUM(CAST(eth_amount AS NUMERIC)) / 1e9, 0)                                              AS vol24h_sol,
+        COALESCE(SUM(CASE WHEN is_buy IS TRUE  THEN CAST(eth_amount AS NUMERIC) ELSE 0 END) / 1e9, 0)   AS vol24h_buy_sol,
+        COALESCE(SUM(CASE WHEN is_buy IS FALSE THEN CAST(eth_amount AS NUMERIC) ELSE 0 END) / 1e9, 0)   AS vol24h_sell_sol,
+        COUNT(CASE WHEN is_buy IS TRUE  THEN 1 END)                                                      AS txns_buy,
+        COUNT(CASE WHEN is_buy IS FALSE THEN 1 END)                                                      AS txns_sell
       FROM trades
       WHERE token_address = $1
         AND timestamp > NOW() - INTERVAL '24 hours'
-        AND CAST(eth_amount AS NUMERIC) > 0
+        AND eth_amount ~ '^[0-9]+(\.[0-9]+)?$'
+        AND eth_amount::numeric > 0
     `, [address]),
     db.select({ platform: tokensTable.platform })
       .from(tokensTable)

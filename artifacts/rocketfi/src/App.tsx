@@ -86,7 +86,7 @@ function AppShell() {
         path:     location + (search ? `?${search}` : ''),
         referrer: document.referrer || null,
       });
-      navigator.sendBeacon('/api/track', new Blob([payload], { type: 'application/json' }));
+      navigator.sendBeacon(`${import.meta.env.BASE_URL}api/track`, new Blob([payload], { type: 'application/json' }));
     } catch {
       // Never throw — analytics must not break the app.
     }
