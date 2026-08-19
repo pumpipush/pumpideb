@@ -91,6 +91,27 @@ export const chartLimiter = rateLimit({
 });
 
 /**
+ * Image proxy endpoint (GET /proxy-image).
+ *
+ * Excluded from the global 120 req/min REST bucket because the dashboard
+ * renders dozens of token images simultaneously on first load, and without
+ * a dedicated bucket those image requests exhaust the global quota and cause
+ * data endpoints (trades, holders, etc.) to receive 429s.
+ *
+ * 600 req / min / IP (10 /s) — generous enough for a full dashboard refresh
+ * with ~50 tokens in view, while still blocking scrapers.  Responses are
+ * cached browser-side for 1 year (immutable), so repeat visits don't count.
+ */
+export const imageLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 600,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: MESSAGE_SLOW_DOWN,
+  skip: () => IS_TEST,
+});
+
+/**
  * Launch-registration endpoint (POST /tokens/register-launch).
  *
  * 10 req / min / IP — each request triggers a Solana getTransaction RPC call,

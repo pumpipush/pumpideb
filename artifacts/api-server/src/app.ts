@@ -4,6 +4,7 @@ import pinoHttp from "pino-http";
 import rateLimit from "express-rate-limit";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { imageLimiter } from "./lib/rateLimiters";
 
 const app: Express = express();
 
@@ -125,7 +126,8 @@ const restLimiter = rateLimit({
     process.env.NODE_ENV === "test" ||    // bypass in test — suites easily exceed 120 req/min
     req.method === "OPTIONS" ||           // never block CORS preflight
     req.path === "/healthz" ||            // never block health checks
-    req.path.endsWith("/stream"),         // SSE streams get their own bucket below
+    req.path.endsWith("/stream") ||       // SSE streams get their own bucket below
+    req.path === "/proxy-image",          // images get their own dedicated bucket below
 });
 
 // SSE stream endpoints — much tighter (10 opens / minute per IP).
@@ -140,8 +142,12 @@ const sseLimiter = rateLimit({
   skip: () => process.env.NODE_ENV === "test",
 });
 
-// Apply REST limiter to all /api/* except SSE paths (excluded via skip above).
+// Apply REST limiter to all /api/* except SSE paths and image proxy (excluded via skip above).
 app.use("/api", restLimiter);
+
+// Image proxy gets its own generous bucket (600/min) so dashboard image loads
+// don't eat into the data-endpoint quota (trades, holders, etc.).
+app.use("/api/proxy-image", imageLimiter);
 
 // Apply SSE limiter to both stream endpoints.
 app.use("/api/feed/stream", sseLimiter);

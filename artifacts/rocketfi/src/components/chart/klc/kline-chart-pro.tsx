@@ -302,14 +302,15 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
     setYAxisFormatter: (fmt) => {
       yAxisFormatterRef.current = fmt
       if (fmt === null) {
-        // Always clear immediately — reset data-loaded guard too
         _dataIsLoaded = false
         applyMcapAxis(null)
-      } else if (_dataIsLoaded) {
-        // Data already present (e.g. user toggling Price ↔ Mcap) — apply now
+      } else {
+        // Switch pane to 'mcap' axis immediately so _activeMcapFmt is set
+        // BEFORE history loads. createTicks guards blank labels via _dataIsLoaded.
+        // Without this, setPriceVolumePrecision + scrollToRealTime in
+        // onHistoryLoaded rebuild Y-axis ticks while _activeMcapFmt is still null.
         applyMcapAxis(fmt)
       }
-      // else: chart not yet loaded — onHistoryLoaded will activate it
     },
     setStyles: (styles) => {
       chartRef.current?.setStyles?.(styles)
@@ -423,13 +424,13 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
     // Do NOT activate mcap axis here — data hasn't loaded yet.
     // onHistoryLoaded below will activate it once real bars arrive.
 
-    // After history loads: scroll to real-time first, then activate mcap axis
-    // on the NEXT animation frame so calcRange() sees the post-scroll visible
-    // bars (current price) instead of the beginning-of-history bars (which may
-    // have been at a much higher price and cause the Y-axis range to be wrong).
     datafeed.onHistoryLoaded = (count: number) => {
       const kChart = getKlcChart(containerRef.current)
       if (!kChart) return
+      // Mark data as loaded BEFORE setPriceVolumePrecision / scrollToRealTime so
+      // that any createTicks calls they trigger see _dataIsLoaded=true and use
+      // the mcap formatter rather than returning blank/default ticks.
+      if (count > 0) _dataIsLoaded = true
       // Fix: pump.fun token prices are ~2–30 × 10⁻⁸ SOL/token.  KLC defaults to
       // precision=4 → dif=0.0001, which is thousands of times larger than any
       // real bar range.  When |max−min| < dif KLC expands the axis to ±4×dif
@@ -437,17 +438,12 @@ const KLineChartProWrapper = forwardRef<KLineChartRef, Props>(function KLineChar
       // impossibly wide.  Setting precision=9 → dif=1e-9 keeps dif smaller than
       // the actual bar range (~3–10×10⁻⁹) so the axis stays tight.
       kChart.setPriceVolumePrecision(9, 4)
-      // 1. Scroll first — positions chart at current price before axis builds.
       kChart.scrollToRealTime()
-      if (count > 0) {
-        _dataIsLoaded = true
-        // 2. Apply mcap axis after one frame so KLC has rendered at the correct
-        //    scroll position before calcRange() fires for the mcap axis switch.
-        requestAnimationFrame(() => {
-          if (containerRef.current && yAxisFormatterRef.current) {
-            applyMcapAxis(yAxisFormatterRef.current)
-          }
-        })
+      // Re-apply axis after scroll so createTicks re-runs with the correct visible
+      // range and _dataIsLoaded=true.  No rAF needed — the pane was already
+      // switched to 'mcap' in setYAxisFormatter before history arrived.
+      if (count > 0 && containerRef.current && yAxisFormatterRef.current) {
+        applyMcapAxis(yAxisFormatterRef.current)
       }
       // Notify parent so it can track empty-data state.
       onHistoryLoaded?.(count)

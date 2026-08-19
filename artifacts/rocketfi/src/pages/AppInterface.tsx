@@ -4726,10 +4726,10 @@ function ExternalTokenLoader({ address, wallet }: { address: string | null; wall
           <Rocket className="w-7 h-7" style={{ color: "#4ade80" }} />
         </div>
         <div className="space-y-1">
-          <p className="font-bold text-foreground text-[16px]">Coin launched! Indexing…</p>
+          <p className="font-bold text-foreground text-[16px]">Indexing…</p>
           <p className="text-muted-foreground text-sm max-w-xs">
-            Your coin is live on-chain. This page will refresh automatically once our indexer picks it up
-            (usually within 30 seconds).
+            This coin is live on-chain. This page will refresh automatically once our indexer picks it up
+            (usually within a few seconds).
           </p>
         </div>
         <div className="flex items-center gap-2 mt-1">

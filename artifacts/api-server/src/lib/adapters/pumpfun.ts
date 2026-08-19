@@ -1458,6 +1458,10 @@ export class PumpApiAdapter {
 
     const tokenCreatedAt = PumpApiAdapter._parseTs(msg.timestamp);
 
+    // Use onConflictDoUpdate for name/symbol/creatorAddress so that if a trade
+    // event arrived first and inserted a stub (name=mint.slice(0,8), symbol="???"),
+    // the real metadata from the create event overwrites it.  Price/reserve fields
+    // are intentionally excluded — a concurrent trade may have set better values.
     await db.insert(tokensTable).values({
       address:              mint,
       name,
@@ -1473,7 +1477,14 @@ export class PumpApiAdapter {
       platform:             PLATFORM,
       chain:                CHAIN,
       createdAt:            tokenCreatedAt,
-    }).onConflictDoNothing();
+    }).onConflictDoUpdate({
+      target: tokensTable.address,
+      set: {
+        name,
+        symbol,
+        creatorAddress: creatorAddress ?? "unknown",
+      },
+    });
 
     // If the creator bought tokens at launch, emit an initial-buy trade.
     // This captures it even if no separate buy|pump event is emitted for the same tx.
@@ -1846,6 +1857,9 @@ export class PumpApiAdapter {
 
     const tokenCreatedAt = PumpApiAdapter._parseTs(msg.timestamp);
 
+    // Same race-condition fix as pump_fun create: trade events can land before
+    // the create event and insert a stub (name=mint.slice(0,8)).  onConflictDoUpdate
+    // ensures the real name/symbol always overwrites the placeholder.
     await db.insert(tokensTable).values({
       address:              mint,
       name,
@@ -1861,7 +1875,14 @@ export class PumpApiAdapter {
       platform:             LL_PLATFORM,
       chain:                CHAIN,
       createdAt:            tokenCreatedAt,
-    }).onConflictDoNothing();
+    }).onConflictDoUpdate({
+      target: tokensTable.address,
+      set: {
+        name,
+        symbol,
+        creatorAddress: creatorAddress ?? "unknown",
+      },
+    });
 
     pumpApiLog.info({ mint, name, symbol }, "pumpapi: new raydium_launchlab token ingested");
 
