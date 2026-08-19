@@ -555,22 +555,21 @@ router.get("/tokens/:address/holders", heavyLimiter, asyncWrap(async (req, res) 
     SELECT
       trader_address,
       SUM(
-        CASE WHEN is_buy
-          THEN  CAST(NULLIF(token_amount, '') AS NUMERIC)
-          ELSE -CAST(NULLIF(token_amount, '') AS NUMERIC)
+        CASE WHEN is_buy IS TRUE  THEN  token_amount::numeric
+             WHEN is_buy IS FALSE THEN -token_amount::numeric
+             ELSE 0
         END
       ) AS balance,
       COUNT(*) AS tx_count
     FROM trades
     WHERE token_address = $1
-      AND token_amount IS NOT NULL
-      AND token_amount <> ''
-      AND token_amount <> '0'
+      AND token_amount ~ '^[0-9]+(\.[0-9]+)?$'
+      AND token_amount::numeric > 0
     GROUP BY trader_address
     HAVING SUM(
-      CASE WHEN is_buy
-        THEN  CAST(NULLIF(token_amount, '') AS NUMERIC)
-        ELSE -CAST(NULLIF(token_amount, '') AS NUMERIC)
+      CASE WHEN is_buy IS TRUE  THEN  token_amount::numeric
+           WHEN is_buy IS FALSE THEN -token_amount::numeric
+           ELSE 0
       END
     ) > 1000
     ORDER BY balance DESC
@@ -607,23 +606,23 @@ router.get("/tokens/:address/dev-activity", heavyLimiter, asyncWrap(async (req, 
     ),
     dev_trades AS (
       SELECT
-        SUM(CASE WHEN t.is_buy  THEN CAST(NULLIF(t.eth_amount,   '') AS NUMERIC) ELSE 0 END) AS total_sol_bought,
-        SUM(CASE WHEN NOT t.is_buy THEN CAST(NULLIF(t.eth_amount, '') AS NUMERIC) ELSE 0 END) AS total_sol_sold,
+        SUM(CASE WHEN t.is_buy IS TRUE  THEN t.eth_amount::numeric   ELSE 0 END) AS total_sol_bought,
+        SUM(CASE WHEN t.is_buy IS FALSE THEN t.eth_amount::numeric   ELSE 0 END) AS total_sol_sold,
         GREATEST(0, SUM(
-          CASE WHEN t.is_buy
-            THEN  CAST(NULLIF(t.token_amount,'') AS NUMERIC)
-            ELSE -CAST(NULLIF(t.token_amount,'') AS NUMERIC)
+          CASE WHEN t.is_buy IS TRUE  THEN  t.token_amount::numeric
+               WHEN t.is_buy IS FALSE THEN -t.token_amount::numeric
+               ELSE 0
           END
         )) AS net_balance,
-        SUM(CASE WHEN t.is_buy THEN CAST(NULLIF(t.token_amount,'') AS NUMERIC) ELSE 0 END) AS total_bought,
-        COUNT(*) FILTER (WHERE t.is_buy)      AS buy_count,
-        COUNT(*) FILTER (WHERE NOT t.is_buy)  AS sell_count,
-        MAX(CASE WHEN NOT t.is_buy THEN t.timestamp END) AS last_sell_at
+        SUM(CASE WHEN t.is_buy IS TRUE THEN t.token_amount::numeric ELSE 0 END) AS total_bought,
+        COUNT(*) FILTER (WHERE t.is_buy IS TRUE)  AS buy_count,
+        COUNT(*) FILTER (WHERE t.is_buy IS FALSE) AS sell_count,
+        MAX(CASE WHEN t.is_buy IS FALSE THEN t.timestamp END) AS last_sell_at
       FROM trades t
       JOIN creator c ON t.trader_address = c.creator_address
       WHERE t.token_address = $1
-        AND t.token_amount IS NOT NULL AND t.token_amount <> '' AND t.token_amount <> '0'
-        AND t.eth_amount   IS NOT NULL AND t.eth_amount   <> ''
+        AND t.token_amount ~ '^[0-9]+(\.[0-9]+)?$' AND t.token_amount::numeric > 0
+        AND t.eth_amount   ~ '^[0-9]+(\.[0-9]+)?$'
     )
     SELECT
       (SELECT creator_address FROM creator) AS creator_address,
@@ -1388,28 +1387,26 @@ router.get("/tokens/:address/top-wallets", heavyLimiter, asyncWrap(async (req, r
   }>(`
     SELECT
       trader_address,
-      SUM(CASE WHEN is_buy
-        THEN  CAST(NULLIF(token_amount, '') AS NUMERIC)
-        ELSE -CAST(NULLIF(token_amount, '') AS NUMERIC)
-      END) AS balance,
-      COALESCE(SUM(CASE WHEN is_buy      THEN CAST(NULLIF(eth_amount,'') AS NUMERIC) ELSE 0 END), 0) AS total_sol_in,
-      COALESCE(SUM(CASE WHEN NOT is_buy  THEN CAST(NULLIF(eth_amount,'') AS NUMERIC) ELSE 0 END), 0) AS total_sol_out,
-      SUM(CASE WHEN is_buy      THEN 1 ELSE 0 END)::int AS buy_count,
-      SUM(CASE WHEN NOT is_buy  THEN 1 ELSE 0 END)::int AS sell_count,
+      SUM(CASE WHEN is_buy IS TRUE  THEN  token_amount::numeric
+               WHEN is_buy IS FALSE THEN -token_amount::numeric
+               ELSE 0 END) AS balance,
+      COALESCE(SUM(CASE WHEN is_buy IS TRUE  THEN eth_amount::numeric ELSE 0 END), 0) AS total_sol_in,
+      COALESCE(SUM(CASE WHEN is_buy IS FALSE THEN eth_amount::numeric ELSE 0 END), 0) AS total_sol_out,
+      SUM(CASE WHEN is_buy IS TRUE  THEN 1 ELSE 0 END)::int AS buy_count,
+      SUM(CASE WHEN is_buy IS FALSE THEN 1 ELSE 0 END)::int AS sell_count,
       COUNT(*)::int AS trade_count,
       MAX(timestamp) AS last_activity,
-      SUM(CASE WHEN is_buy THEN CAST(NULLIF(eth_amount,'') AS NUMERIC) ELSE 0 END) /
-        NULLIF(SUM(CASE WHEN is_buy THEN CAST(NULLIF(token_amount,'') AS NUMERIC) ELSE 0 END), 0)
+      SUM(CASE WHEN is_buy IS TRUE THEN eth_amount::numeric   ELSE 0 END) /
+        NULLIF(SUM(CASE WHEN is_buy IS TRUE THEN token_amount::numeric ELSE 0 END), 0)
         AS avg_entry_lamports_per_token
     FROM trades
     WHERE token_address = $1
-      AND token_amount IS NOT NULL AND token_amount <> '' AND token_amount <> '0'
-      AND eth_amount   IS NOT NULL AND eth_amount   <> ''
+      AND token_amount ~ '^[0-9]+(\.[0-9]+)?$' AND token_amount::numeric > 0
+      AND eth_amount   ~ '^[0-9]+(\.[0-9]+)?$'
     GROUP BY trader_address
-    HAVING SUM(CASE WHEN is_buy
-      THEN  CAST(NULLIF(token_amount, '') AS NUMERIC)
-      ELSE -CAST(NULLIF(token_amount, '') AS NUMERIC)
-    END) > 0
+    HAVING SUM(CASE WHEN is_buy IS TRUE  THEN  token_amount::numeric
+                    WHEN is_buy IS FALSE THEN -token_amount::numeric
+                    ELSE 0 END) > 0
     ORDER BY balance DESC
     LIMIT 50
   `, [address]);

@@ -1383,9 +1383,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
       queryKey: ["topWallets", selectedAddress],
       refetchInterval: 15_000,
       staleTime: 12_000,
-      // Keep showing last good data on 429 / any transient error — same pattern as holders
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      placeholderData: (prev: any) => prev,
+      // No placeholderData — cross-token stale wallet data is more misleading than a skeleton flash
     }
   });
   const topWallets = topWalletsData?.wallets ?? [];
@@ -1408,7 +1406,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
     enabled: !!selectedAddress,
     refetchInterval: 15_000,
     staleTime: 12_000,
-    placeholderData: (prev) => prev,
+    // No placeholderData — cross-token stale creator data is more misleading than a brief skeleton
   });
 
   // ── Snipers — wallets that bought within 5 min of launch ────────────────────
@@ -2252,7 +2250,8 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
   if (!token) return <div className="text-center py-20 text-muted-foreground font-mono">Token not found.</div>;
 
   // virtualEthReserves stores integer SOL (Pump.fun: starts with 30 virtual SOL, graduates at +85 real SOL)
-  const vSolInt = parseFloat((liveToken?.virtualEthReserves ?? token.virtualEthReserves) || "0");
+  const vSolRaw = parseFloat((liveToken?.virtualEthReserves ?? token.virtualEthReserves) || "0");
+  const vSolInt = Number.isFinite(vSolRaw) ? vSolRaw : 0;
   const realSolInCurve = Math.max(0, vSolInt - 30);
   const progressPercent = Math.min(100, (realSolInCurve / 85) * 100);
   const isGraduated = token.graduated || progressPercent >= 100;
@@ -2290,11 +2289,11 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               <span className="text-[#b3b3b3] font-mono text-sm font-semibold tracking-wide">${displaySymbol}</span>
             </div>
             <div className="flex items-center gap-2 mt-2">
-              {(token as any).twitterUrl && (
-                <a href={(token as any).twitterUrl} target="_blank" rel="noopener noreferrer" className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="X (Twitter)"><XIcon className="h-4 w-4" /></a>
+              {((liveToken as any)?.twitterUrl ?? (token as any).twitterUrl) && (
+                <a href={(liveToken as any)?.twitterUrl ?? (token as any).twitterUrl} target="_blank" rel="noopener noreferrer" className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="X (Twitter)"><XIcon className="h-4 w-4" /></a>
               )}
-              {(token as any).websiteUrl && (
-                <a href={(token as any).websiteUrl} target="_blank" rel="noopener noreferrer" className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Website"><Globe className="h-4 w-4" /></a>
+              {((liveToken as any)?.websiteUrl ?? (token as any).websiteUrl) && (
+                <a href={(liveToken as any)?.websiteUrl ?? (token as any).websiteUrl} target="_blank" rel="noopener noreferrer" className="h-8 w-8 flex items-center justify-center rounded border border-border/50 bg-muted/50 hover:bg-muted hover:text-foreground transition-colors text-muted-foreground" title="Website"><Globe className="h-4 w-4" /></a>
               )}
               {/* Address pill with copy */}
               <button
@@ -2721,8 +2720,12 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                           </td>
                         </tr>
                       ) : (() => {
-                        const historyTxHashes = new Set((history ?? []).map(t => t.txHash));
-                        const dedupedLive = liveTrades.filter(lt => !historyTxHashes.has(lt.txHash));
+                        // Only add non-null/non-undefined tx hashes to the set — undefined keys
+                        // cause every live trade with a missing hash to be filtered out.
+                        const historyTxHashes = new Set(
+                          (history ?? []).map(t => t.txHash).filter((h): h is string => !!h)
+                        );
+                        const dedupedLive = liveTrades.filter(lt => !lt.txHash || !historyTxHashes.has(lt.txHash));
                         const allTrades = [...dedupedLive, ...(history ?? [])];
                         const allRows = allTrades.slice(0, tradeDisplayLimit);
                         if (!allRows.length) {
@@ -2804,7 +2807,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
 
                               {/* Token amount */}
                               <td className="px-3 py-2.5 text-right font-mono text-[13px]" style={{ color: "#bbbbbb" }}>
-                                {formatAtomicTokenAmount(tokAmt)}
+                                {formatAtomicTokenAmount(tokAmt, token?.decimals ?? 6)}
                               </td>
 
                               {/* SOL */}
@@ -2894,7 +2897,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
               {/* Top Wallets panel */}
               {activeSubTab === "wallets" && (() => {
                 const LAMPORTS = 1e9;
-                const ATOMIC   = 1e6;
+                const ATOMIC   = Math.pow(10, token?.decimals ?? 6);
                 const creatorAddress = (token as any).creatorAddress as string | undefined;
                 const currentPriceSol = priceStats.currentPrice;
                 const maxBalance = topWallets.length > 0 ? parseFloat(topWallets[0].balance) : 1;
@@ -3034,7 +3037,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                                 <td className="px-3 py-3 text-right">
                                   <div className="flex flex-col items-end gap-1">
                                     <span className="font-mono text-[13px] font-semibold" style={{ color: "#e0e0e0" }}>
-                                      {formatAtomicTokenAmount(w.balance)}
+                                      {formatAtomicTokenAmount(w.balance, token?.decimals ?? 6)}
                                     </span>
                                     <div className="w-16 h-0.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
                                       <div style={{ width: `${pct}%`, height: "100%", background: rankColor(idx), opacity: 0.7 }} />
@@ -3237,7 +3240,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                     <div className="flex items-center justify-between px-4 py-4"
                       style={{ background: isProfit ? "rgba(74,222,128,0.06)" : "rgba(248,113,113,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                       <div>
-                        <p className="text-[12px] font-medium mb-0.5" style={{ color: "#b3b3b3" }}>Unrealized P&L</p>
+                        <p className="text-[12px] font-medium mb-0.5" style={{ color: "#b3b3b3" }}>Total P&L</p>
                         <p className="text-[22px] font-bold font-mono" style={{ color: pnlColor }}>
                           {isProfit ? "+" : ""}{fmtSol(totalPnlSol)}
                         </p>
@@ -3428,7 +3431,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                               {/* Amount */}
                               <td className="px-3 py-2.5 text-right">
                                 <span className="font-mono text-[13px]" style={{ color: "#bbbbbb" }}>
-                                  {formatAtomicTokenAmount(String(bal))}
+                                  {formatAtomicTokenAmount(String(bal), token?.decimals ?? 6)}
                                 </span>
                               </td>
 
@@ -3763,7 +3766,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                                       <span style={{ color: "#141414" }}>·</span>
                                       <span className="font-mono text-[12px] whitespace-nowrap" style={{ color: "#bbbbbb" }}>{solSpent < 0.001 ? "<0.001" : solSpent.toFixed(3)} SOL</span>
                                       <span style={{ color: "#141414" }}>·</span>
-                                      <span className="font-mono text-[12px] whitespace-nowrap" style={{ color: "#b3b3b3" }}>{formatAtomicTokenAmount(s.totalBought)}</span>
+                                      <span className="font-mono text-[12px] whitespace-nowrap" style={{ color: "#b3b3b3" }}>{formatAtomicTokenAmount(s.totalBought, token?.decimals ?? 6)}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -3811,7 +3814,7 @@ function TradeTab({ wallet, selectedAddress, onSelectToken }: { wallet: string |
                                       <span className="font-mono text-[13px]" style={{ color: "#bbbbbb" }}>{solSpent < 0.001 ? "<0.001" : solSpent.toFixed(3)} SOL</span>
                                     </td>
                                     <td className="px-3 py-2.5 text-right">
-                                      <span className="font-mono text-[13px]" style={{ color: "#b3b3b3" }}>{formatAtomicTokenAmount(s.totalBought)}</span>
+                                      <span className="font-mono text-[13px]" style={{ color: "#b3b3b3" }}>{formatAtomicTokenAmount(s.totalBought, token?.decimals ?? 6)}</span>
                                     </td>
                                     <td className="px-3 py-2.5 text-center">{statusEl}</td>
                                     <td className="pr-3 py-2.5 text-center" style={{ width: 36 }}>
