@@ -22,6 +22,7 @@
  */
 
 import { PumpApiAdapter, PumpFunChainIndexer, startZeroHealJob } from "./pumpfun.js";
+import { PumpPortalAdapter } from "./pumpportal.js";
 import { PumpSwapIndexer } from "./pumpswap.js";
 import { RaydiumLaunchLabIndexer } from "./raydium-launchlab.js";
 import { PUBLICNODE_WSS } from "./solanaRpcBase.js";
@@ -93,6 +94,7 @@ async function slackAlert(text: string): Promise<void> {
 
 class PumpStreamManager {
   private readonly _pumpApi: PumpApiAdapter;
+  private readonly _pumpPortal: PumpPortalAdapter;
 
   private _chainFallback: {
     pumpFun:  PumpFunChainIndexer;
@@ -122,10 +124,29 @@ class PumpStreamManager {
       onDataStale:    () => this._onDataStale(),
       onRealData:     () => this._onRealData(),
     });
+    this._pumpPortal = new PumpPortalAdapter({
+      onLaunch:    (event) => this._pumpApi.ingestLaunchSignal(event),
+      onMigration: (event) => this._pumpApi.ingestMigrationSignal(event),
+      onRealData: (kind, event) => {
+        managerLog.debug(
+          {
+            provider: "pumpportal",
+            kind,
+            mint: event.mint,
+            signature: event.signature,
+          },
+          "pumpApiManager: backup launch/migration data received",
+        );
+      },
+    });
   }
 
   start(): void {
     this._pumpApi.start();
+    // PumpPortal runs in parallel as a free launch/migration sentinel only. It
+    // never supplies trades and therefore never suppresses the chain-RPC trade
+    // fallback when PumpAPI is stale.
+    this._pumpPortal.start();
     // Schedule a cold-start fallback: if pumpapi.io hasn't connected within
     // COLD_START_DELAY_MS, activate the chain RPC adapters immediately.
     this._scheduleFallback(COLD_START_DELAY_MS);

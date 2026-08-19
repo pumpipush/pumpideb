@@ -1036,6 +1036,23 @@ export interface PumpApiEvent {
   breakdown?: Array<{ action?: string; trader?: string; tokenAmount?: number; quoteAmount?: number }>;
 }
 
+export type PumpIngestionSource = "pumpapi" | "pumpportal";
+
+interface PumpMigrationTokenSnapshot {
+  address:              string;
+  name:                 string | null;
+  symbol:               string | null;
+  imageUrl:             string | null;
+  priceEth:             string | null;
+  marketCapEth:         string | null;
+  volumeEth:            string;
+  virtualEthReserves:   string;
+  virtualTokenReserves: string;
+  tradeCount:           string | number;
+  platform:             string;
+  chain:                string;
+}
+
 /**
  * How long (ms) with no WebSocket messages before the watchdog force-closes
  * the connection. pumpapi.io streams all Solana pump.fun activity continuously —
@@ -1187,6 +1204,16 @@ export class PumpApiAdapter {
    * after the PumpSwap handoff and overwrite its DEX state.
    */
   private readonly _mintMutations = new Map<string, Promise<void>>();
+  /**
+   * A migration may arrive from one provider before another provider's launch.
+   * Keep that signal until the launch row exists, then reconcile it before the
+   * new-token SSE is broadcast so clients never settle on the old platform.
+   */
+  private readonly _pendingMigrations = new Map<
+    string,
+    { event: PumpApiEvent; source: PumpIngestionSource }
+  >();
+  private readonly _pendingMigrationMax = 2_000;
 
   private _trackSeen(signature: string): boolean {
     if (this._seen.has(signature)) return false;
@@ -1197,6 +1224,12 @@ export class PumpApiAdapter {
     this._seen.add(signature);
     this._seenOrder.push(signature);
     return true;
+  }
+
+  private _forgetSeen(signature: string): void {
+    this._seen.delete(signature);
+    const index = this._seenOrder.indexOf(signature);
+    if (index >= 0) this._seenOrder.splice(index, 1);
   }
 
   private _queueMintMutation(mint: string, mutation: () => Promise<void>): Promise<void> {
@@ -1211,6 +1244,86 @@ export class PumpApiAdapter {
       () => { if (this._mintMutations.get(mint) === next) this._mintMutations.delete(mint); },
     );
     return next;
+  }
+
+  private _rememberPendingMigration(
+    mint: string,
+    event: PumpApiEvent,
+    source: PumpIngestionSource,
+  ): void {
+    if (!this._pendingMigrations.has(mint) &&
+        this._pendingMigrations.size >= this._pendingMigrationMax) {
+      const oldestMint = this._pendingMigrations.keys().next().value as string | undefined;
+      if (oldestMint) this._pendingMigrations.delete(oldestMint);
+    }
+    this._pendingMigrations.set(mint, { event, source });
+  }
+
+  private async _reconcilePendingMigration(
+    mint: string,
+  ): Promise<PumpMigrationTokenSnapshot | null> {
+    const pending = this._pendingMigrations.get(mint);
+    if (!pending) return null;
+
+    const migrated = await this._handlePumpMigration(
+      pending.event,
+      pending.source,
+    );
+    if (migrated) this._pendingMigrations.delete(mint);
+    return migrated;
+  }
+
+  /**
+   * Feed a free PumpPortal launch signal through the exact same ingestion path
+   * as PumpAPI. Sharing this adapter's signature+action dedup prevents the two
+   * providers from double-counting a bundled initial buy or emitting a second
+   * launch mutation for the same Solana transaction.
+   */
+  async ingestLaunchSignal(
+    msg: PumpApiEvent,
+    source: PumpIngestionSource = "pumpportal",
+  ): Promise<boolean> {
+    const signature = msg.signature;
+    const mint = msg.mint;
+    if (!signature || !mint || !msg.name?.trim() || !msg.symbol?.trim()) return false;
+
+    const dedupKey = `${signature}|create`;
+    if (!this._trackSeen(dedupKey)) return false;
+    try {
+      await this._queueMintMutation(mint, () => this._handleCreate(msg, source));
+      return true;
+    } catch (err) {
+      // A failed provider attempt must not permanently suppress a retry from the
+      // other provider when both saw the same on-chain transaction.
+      this._forgetSeen(dedupKey);
+      throw err;
+    }
+  }
+
+  /**
+   * Feed a free PumpPortal migration signal through the canonical PumpSwap
+   * handoff. The shared dedup key makes PumpAPI/PumpPortal delivery order
+   * irrelevant while the DB platform guard keeps migration replay idempotent.
+   */
+  async ingestMigrationSignal(
+    msg: PumpApiEvent,
+    source: PumpIngestionSource = "pumpportal",
+  ): Promise<boolean> {
+    const signature = msg.signature;
+    const mint = msg.mint;
+    if (!signature || !mint) return false;
+
+    const dedupKey = `${signature}|migrate`;
+    if (!this._trackSeen(dedupKey)) return false;
+    try {
+      await this._queueMintMutation(mint, async () => {
+        await this._handlePumpMigration(msg, source);
+      });
+      return true;
+    } catch (err) {
+      this._forgetSeen(dedupKey);
+      throw err;
+    }
   }
 
   start(): void {
@@ -1368,14 +1481,17 @@ export class PumpApiAdapter {
           }
         }
 
-        // Dedup by (signature + action) — allows the same tx to emit both a
-        // "create" and a "buy" event (initial buy at launch) without dropping one.
+        // Launch and migration use the shared wrappers below so failed primary
+        // ingestion releases its claim and the PumpPortal sentinel can recover
+        // the same transaction. Other event types are claimed here directly.
         const dedupKey = `${signature}|${action}`;
-        if (!this._trackSeen(dedupKey)) return;
+        const usesSharedSignalIngestion =
+          (pool === "pump" && action === "create") || isPumpMigration;
+        if (!usesSharedSignalIngestion && !this._trackSeen(dedupKey)) return;
 
         if (pool === "pump") {
           if (action === "create") {
-            void this._queueMintMutation(mint, () => this._handleCreate(msg)).catch((err) =>
+            void this.ingestLaunchSignal(msg, "pumpapi").catch((err) =>
               pumpApiLog.error({ err, signature }, "pumpapi: error in pump create")
             );
           } else if (action === "buy" || action === "sell") {
@@ -1385,7 +1501,7 @@ export class PumpApiAdapter {
           }
         } else if (pool === "pump-amm") {
           if (isPumpMigration) {
-            void this._queueMintMutation(mint, () => this._handlePumpMigration(msg)).catch((err) =>
+            void this.ingestMigrationSignal(msg, "pumpapi").catch((err) =>
               pumpApiLog.error({ err, signature }, "pumpapi: error in pump migration")
             );
           } else if (action === "buy" || action === "sell") {
@@ -1482,7 +1598,10 @@ export class PumpApiAdapter {
 
   // ── Event handlers ─────────────────────────────────────────────────────────
 
-  private async _handleCreate(msg: PumpApiEvent): Promise<void> {
+  private async _handleCreate(
+    msg: PumpApiEvent,
+    source: PumpIngestionSource,
+  ): Promise<void> {
     const mint   = msg.mint;
     const name   = msg.name?.trim()   ?? "";
     const symbol = msg.symbol?.trim() ?? "";
@@ -1490,7 +1609,7 @@ export class PumpApiAdapter {
     const creatorAddress = msg.txSigner ?? null;
 
     if (!mint || !name || !symbol) {
-      pumpApiLog.debug({ msg }, "pumpapi: skipping create — missing mint/name/symbol");
+      pumpApiLog.debug({ msg, source }, "pump stream: skipping create — missing mint/name/symbol");
       return;
     }
 
@@ -1568,7 +1687,15 @@ export class PumpApiAdapter {
       }
     }
 
-    pumpApiLog.info({ mint, name, symbol, marketCapEth: initMCStr }, "pumpapi: new pump_fun token ingested");
+    // If a sentinel migration arrived before this launch, apply it now while we
+    // still hold the per-mint queue. Reconcile before the newToken broadcast so
+    // the global feed receives PumpSwap as the canonical platform immediately.
+    const migrated = await this._reconcilePendingMigration(mint);
+
+    pumpApiLog.info(
+      { source, mint, name, symbol, marketCapEth: initMCStr },
+      "pump stream: new pump_fun token ingested",
+    );
 
     const broadcastToken = (imageUrl: string | null) => {
       emitNewToken({
@@ -1580,9 +1707,9 @@ export class PumpApiAdapter {
           imageUrl,
           // Use the actual event values — not the protocol-default constants —
           // so the Explore "New" feed shows the real price/mcap at launch time.
-          priceEth:     initPriceEth,
-          marketCapEth: initMCStr,
-          platform:     PLATFORM,
+          priceEth:     migrated?.priceEth     ?? initPriceEth,
+          marketCapEth: migrated?.marketCapEth ?? initMCStr,
+          platform:     migrated?.platform     ?? PLATFORM,
           chain:        CHAIN,
           createdAt:    tokenCreatedAt.toISOString(),
         },
@@ -1764,9 +1891,12 @@ export class PumpApiAdapter {
    * graduated on the old bonding-curve platform (or vice versa). The stream's
    * timestamp is the authoritative graduation boundary for charts and UI routing.
    */
-  private async _handlePumpMigration(msg: PumpApiEvent): Promise<void> {
+  private async _handlePumpMigration(
+    msg: PumpApiEvent,
+    source: PumpIngestionSource,
+  ): Promise<PumpMigrationTokenSnapshot | null> {
     const mint = msg.mint;
-    if (!mint) return;
+    if (!mint) return null;
 
     const graduatedAt = PumpApiAdapter._parseTs(msg.timestamp);
     const poolAddress = PumpApiAdapter._poolAddress(msg);
@@ -1814,12 +1944,33 @@ export class PumpApiAdapter {
       });
 
     if (!updated) {
-      // A missed create is repaired by the first PumpSwap trade, which has the
-      // metadata/trade data required to create a useful row. Do not add a blank
-      // migration-only token to explorer rankings.
-      pumpApiLog.debug({ mint, signature: msg.signature }, "pumpapi: migration arrived before token record");
-      return;
+      const [existing] = await db
+        .select({
+          address:   tokensTable.address,
+          platform:  tokensTable.platform,
+          graduated: tokensTable.graduated,
+        })
+        .from(tokensTable)
+        .where(eq(tokensTable.address, mint))
+        .limit(1);
+
+      if (!existing) {
+        // Do not insert a blank migration-only token. Retain the signal so a
+        // delayed launch from either provider can reconcile it immediately.
+        this._rememberPendingMigration(mint, msg, source);
+        pumpApiLog.debug(
+          { source, mint, signature: msg.signature },
+          "pump stream: migration retained until token launch arrives",
+        );
+      } else {
+        // A replay after an already-complete PumpSwap handoff is idempotent and
+        // must not remain queued as a pending migration.
+        this._pendingMigrations.delete(mint);
+      }
+      return null;
     }
+
+    this._pendingMigrations.delete(mint);
 
     // Let an already-open token detail page switch its quote/trade path before
     // the first PumpSwap swap lands. The client refetches its canonical token
@@ -1833,9 +1984,10 @@ export class PumpApiAdapter {
     });
 
     pumpApiLog.info(
-      { mint, poolAddress, quoteMint, graduatedAt: graduatedAt.toISOString() },
-      "pumpapi: pump_fun token migrated to pumpswap",
+      { source, mint, poolAddress, quoteMint, graduatedAt: graduatedAt.toISOString() },
+      "pump stream: pump_fun token migrated to pumpswap",
     );
+    return updated;
   }
 
   /**
